@@ -13,6 +13,14 @@ Shared V2 MUST treat a committed vendor-pool / timeout / rate-limit / overload f
 - **AND** after the first delay the client MUST send the resume prompt as a new user message on the same target
 - **AND** the client MUST NOT replay the previous user text or images
 
+#### Scenario: vendor 401 invalid key is treated as pool rotation
+
+- **GIVEN** a Shared session whose last attempt committed failed with `unexpected status 401 Unauthorized` and `INVALID_API_KEY`
+- **AND** retry is enabled with `maxAttempts >= 1`
+- **WHEN** the send path unlocks the composer
+- **THEN** the classifier MUST treat it as retryable pool failure
+- **AND** the canvas MUST start the same wait-then-resend series as a pool 403
+
 #### Scenario: user stop does not auto-resend
 
 - **GIVEN** the current attempt was interrupted by the local stop control

@@ -38,6 +38,11 @@ describe("classifier collision: intended hits", () => {
     ["soft cancel", "Turn cancelled", "soft-cancel"],
     ["zh wrap soft cancel", "会话失败：Turn cancelled", "soft-cancel"],
     ["HTTP 500 prose", "upstream returned HTTP 500", "server"],
+    [
+      "xmapi 401 invalid key",
+      '会话失败：unexpected status 401 Unauthorized: {"code":"INVALID_API_KEY","message":"Invalid API key"}',
+      "pool",
+    ],
   ] as const)("%s → %s", (_name, message, kind) => {
     expect(classify(message, { wasLocalInterrupt: false })).toMatchObject({
       disposition: "retryable",
@@ -81,9 +86,8 @@ describe("classifier collision: known misses", () => {
     });
   });
 
-  it("does not treat bare 403 / invalid key / local network as retryable", () => {
+  it("does not treat bare 403 / local network as retryable", () => {
     expect(classify("API Error: 403 Forbidden").disposition).toBe("ignore");
-    expect(classify("invalid api key").disposition).toBe("ignore");
     expect(classify("connection refused").disposition).toBe("ignore");
     expect(classify("tls handshake failed").disposition).toBe("ignore");
     expect(classify("getaddrinfo ENOTFOUND api.anthropic.com").disposition).toBe(

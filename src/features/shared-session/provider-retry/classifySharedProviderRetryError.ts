@@ -82,7 +82,9 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
   if (
     /not assigned to any group/.test(text) ||
     /api key is not assigned/.test(text) ||
-    (/failed to authenticate/.test(text) && /403/.test(text))
+    (/failed to authenticate/.test(text) && /403/.test(text)) ||
+    /\b401\b/.test(text) ||
+    /invalid[_ -]?api[_ -]?key/.test(text)
   ) {
     return { disposition: "retryable", kind: "pool", reason: "号池" };
   }

@@ -41,6 +41,12 @@ describe("classifySharedProviderRetryError", () => {
           "No initial response within 30s. Network, proxy, or upstream service load may be causing delay. Please retry.",
       }),
     ).toMatchObject({ disposition: "retryable", kind: "timeout" });
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          '会话失败：unexpected status 401 Unauthorized: {"code":"INVALID_API_KEY","message":"Invalid API key"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool", reason: "号池" });
   });
 
   it("does not treat tool permission, window capacity, or filename 5xx as retryable", () => {

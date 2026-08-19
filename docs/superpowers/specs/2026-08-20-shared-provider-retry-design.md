@@ -113,7 +113,7 @@ user send
 
 | kind | reason | 匹配（大小写不敏感，命中任一） |
 |---|---|---|
-| `pool` | 号池 | `not assigned to any group`；`api key is not assigned`；`failed to authenticate` 且含 `403` |
+| `pool` | 号池 | `not assigned to any group`；`api key is not assigned`；`failed to authenticate` 且含 `403`；`401`；`invalid_api_key` / `invalid api key` |
 | `rate` | 请求过多 | `429`；`too many requests`；`rate limit` / `rate-limit` / `rate_limited` |
 | `timeout` | 超时 | 现有 `classifyNetworkError === "timeout"`；`FIRST_PACKET_TIMEOUT:`；`deadline exceeded`；`no initial response within`；中文「超时/超時」 |
 | `overload` | 过载 | `overloaded`；`at/no/out of/without capacity`；`capacity exceeded/exhausted/limit`；`busy, please retry` |
