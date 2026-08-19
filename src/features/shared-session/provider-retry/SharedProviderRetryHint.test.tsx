@@ -55,6 +55,8 @@ describe("SharedProviderRetryHint", () => {
         lastMessage: "403",
         providerProfileId: "p1",
         model: "sonnet",
+        seriesStartedAtMs: 1,
+        batchStartedAtMs: 1,
       },
     });
     render(<SharedProviderRetryHint workspaceId="ws" threadId="shared:a" />);
@@ -82,6 +84,8 @@ describe("SharedProviderRetryHint", () => {
         lastMessage: "timeout",
         providerProfileId: null,
         model: "gpt-5",
+        seriesStartedAtMs: 1,
+        batchStartedAtMs: 1,
       },
     });
     render(<SharedProviderRetryHint workspaceId="ws" threadId="shared:a" />);

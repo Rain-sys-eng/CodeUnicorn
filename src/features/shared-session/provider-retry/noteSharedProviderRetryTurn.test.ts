@@ -75,6 +75,7 @@ describe("noteSharedProviderRetryTurn", () => {
       WORKSPACE,
       THREAD,
       SHARED_PROVIDER_RETRY_DEFAULTS.resumePrompt,
+      expect.objectContaining({ attempt: 1, atMs: expect.any(Number) }),
     );
     expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)?.phase).toBe("sending");
   });
@@ -109,7 +110,10 @@ describe("noteSharedProviderRetryTurn", () => {
       originKind: "shared-provider-retry",
       attemptId: "attempt-2",
     });
-    expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)?.phase).toBe("exhausted");
+    const exhausted = getSharedProviderRetryOverlay(WORKSPACE, THREAD);
+    expect(exhausted?.phase).toBe("exhausted");
+    expect(exhausted?.seriesStartedAtMs).toBeGreaterThan(0);
+    expect(exhausted?.batchStartedAtMs).toBeGreaterThan(0);
     startSharedProviderRetryManually(
       failedNotice("API Key is not assigned to any group"),
     );

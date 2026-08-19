@@ -1694,7 +1694,22 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       const isUserMessage = isUserMessageItem(item);
       const isOptimisticUser = isUserMessage && isOptimisticUserMessageId(item.id);
       let generatedImagesToReinsertAfterUser: GeneratedImageItem[] = [];
+      let inheritedProviderRetry:
+        | Pick<
+            Extract<ConversationItem, { kind: "message"; role: "user" }>,
+            "originKind" | "providerRetryAttempt" | "providerRetryAtMs"
+          >
+        | null = null;
       if (isUserMessage && !isOptimisticUser) {
+        inheritedProviderRetry =
+          list.find(
+            (
+              entry,
+            ): entry is Extract<ConversationItem, { kind: "message"; role: "user" }> =>
+              isUserMessageItem(entry) &&
+              isOptimisticUserMessageId(entry.id) &&
+              entry.originKind === "shared-provider-retry",
+          ) ?? null;
         const optimisticReplacement =
           replaceOptimisticUserAndExtractAnchoredGeneratedImages(list, item);
         list = optimisticReplacement.items;
@@ -1722,6 +1737,18 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         }
       }
       let nextItem = ensureUniqueReviewId(list, item);
+      if (
+        inheritedProviderRetry &&
+        nextItem.kind === "message" &&
+        nextItem.originKind !== "shared-provider-retry"
+      ) {
+        nextItem = {
+          ...nextItem,
+          originKind: "shared-provider-retry",
+          providerRetryAttempt: inheritedProviderRetry.providerRetryAttempt,
+          providerRetryAtMs: inheritedProviderRetry.providerRetryAtMs,
+        };
+      }
       let didMergeEquivalentAssistantSnapshot = false;
       if (
         nextItem.kind === "generatedImage" &&

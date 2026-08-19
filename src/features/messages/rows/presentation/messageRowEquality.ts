@@ -138,6 +138,8 @@ export function areMessageItemsEqual(previous: MessageItem, next: MessageItem) {
       previous.selectedAgentName === next.selectedAgentName &&
       previous.selectedAgentIcon === next.selectedAgentIcon &&
       previous.originKind === next.originKind &&
+      previous.providerRetryAttempt === next.providerRetryAttempt &&
+      previous.providerRetryAtMs === next.providerRetryAtMs &&
       previous.browserContextAttachment === next.browserContextAttachment &&
       areIntentCanvasAttachmentsEqual(
         previous.intentCanvasContextAttachments,

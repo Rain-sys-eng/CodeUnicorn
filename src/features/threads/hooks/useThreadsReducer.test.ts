@@ -816,6 +816,48 @@ describe("threadReducer", () => {
     });
   });
 
+  it("keeps shared provider retry mark metadata when replacing the optimistic user", () => {
+    const base: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "thread-1": [
+          {
+            id: "optimistic-user-1",
+            kind: "message",
+            role: "user",
+            text: "继续。上一轮因供应商暂时失败中断",
+            originKind: "shared-provider-retry",
+            providerRetryAttempt: 2,
+            providerRetryAtMs: 1_774_329_600_000,
+          },
+        ],
+      },
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 1 }],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "继续。上一轮因供应商暂时失败中断",
+      },
+      hasCustomName: false,
+    });
+
+    expect(next.itemsByThread["thread-1"]?.[0]).toMatchObject({
+      id: "user-1",
+      originKind: "shared-provider-retry",
+      providerRetryAttempt: 2,
+      providerRetryAtMs: 1_774_329_600_000,
+    });
+  });
+
   it("reconciles optimistic user bubble when backend payload wraps user input marker", () => {
     const base: ThreadState = {
       ...initialState,

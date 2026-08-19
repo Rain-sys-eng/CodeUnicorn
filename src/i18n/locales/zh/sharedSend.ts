@@ -177,7 +177,7 @@ const sharedSend = {
     providerRetryNow: "立即",
     providerRetryStop: "停止",
     providerRetryAgain: "再试",
-    providerRetryAutoMark: "自动续跑",
+    providerRetryAutoMark: "第 {{n}} 次自动续跑 · {{date}}",
     providerRetryReasonPool: "号池",
     providerRetryReasonRate: "请求过多",
     providerRetryReasonTimeout: "超时",

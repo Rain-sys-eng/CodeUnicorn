@@ -160,7 +160,7 @@ const sharedSend = {
     providerRetryNow: "Now",
     providerRetryStop: "Stop",
     providerRetryAgain: "Retry",
-    providerRetryAutoMark: "Auto resume",
+    providerRetryAutoMark: "Auto resume #{{n}} · {{date}}",
     providerRetryReasonPool: "key pool",
     providerRetryReasonRate: "rate limit",
     providerRetryReasonTimeout: "timeout",

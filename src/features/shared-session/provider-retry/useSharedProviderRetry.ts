@@ -20,6 +20,7 @@ type UseSharedProviderRetryInput = {
     workspaceId: string,
     threadId: string,
     text: string,
+    meta: { attempt: number; atMs: number },
   ) => void | Promise<unknown>;
 };
 
@@ -37,7 +38,7 @@ export function useSharedProviderRetry({
     return registerSharedProviderRetrySubmitter(
       workspaceId,
       threadId,
-      (nextWorkspaceId, nextThreadId, rawPrompt) => {
+      (nextWorkspaceId, nextThreadId, rawPrompt, meta) => {
         const settings = getSharedProviderRetrySettings(
           nextWorkspaceId,
           nextThreadId,
@@ -47,6 +48,7 @@ export function useSharedProviderRetry({
           nextWorkspaceId,
           nextThreadId,
           resolveSharedProviderRetryResumePrompt(rawPrompt || settings.resumePrompt),
+          meta,
         );
       },
     );

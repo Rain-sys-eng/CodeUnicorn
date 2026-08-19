@@ -1499,11 +1499,20 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
     collabUi && collabUi.phase !== "idle" && collabUi.phase !== "done",
   );
   const sendSharedProviderRetryResume = useEventCallback(
-    (workspaceId: string, threadId: string, text: string) => {
+    (
+      workspaceId: string,
+      threadId: string,
+      text: string,
+      meta: { attempt: number; atMs: number },
+    ) => {
       if (workspaceId !== options.activeWorkspaceId || threadId !== options.activeThreadId) {
         return;
       }
-      return options.onSend(text, [], { originKind: "shared-provider-retry" });
+      return options.onSend(text, [], {
+        originKind: "shared-provider-retry",
+        providerRetryAttempt: meta.attempt,
+        providerRetryAtMs: meta.atMs,
+      });
     },
   );
   useSharedProviderRetry({

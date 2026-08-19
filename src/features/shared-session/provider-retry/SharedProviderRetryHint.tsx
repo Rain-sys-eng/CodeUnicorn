@@ -1,4 +1,7 @@
 import { useTranslation } from "react-i18next";
+import Play from "lucide-react/dist/esm/icons/play";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Square from "lucide-react/dist/esm/icons/square";
 
 import { resolveEngineLabel } from "../../../utils/turnBadge";
 import {
@@ -102,6 +105,7 @@ export function SharedProviderRetryHint({
             className="shared-provider-retry-hint__btn"
             onClick={() => fireSharedProviderRetry(workspaceId, threadId)}
           >
+            <Play size={10} strokeWidth={2.6} aria-hidden />
             {t("sharedSend.providerRetryNow")}
           </button>
         ) : null}
@@ -111,6 +115,7 @@ export function SharedProviderRetryHint({
             className="shared-provider-retry-hint__btn"
             onClick={() => cancelSharedProviderRetry(workspaceId, threadId)}
           >
+            <Square size={8} strokeWidth={2.6} aria-hidden />
             {t("sharedSend.providerRetryStop")}
           </button>
         ) : null}
@@ -131,6 +136,7 @@ export function SharedProviderRetryHint({
               })
             }
           >
+            <RefreshCw size={10} strokeWidth={2.4} aria-hidden />
             {t("sharedSend.providerRetryAgain")}
           </button>
         ) : null}

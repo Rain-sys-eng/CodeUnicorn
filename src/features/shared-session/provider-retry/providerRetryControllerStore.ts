@@ -24,6 +24,8 @@ export type SharedProviderRetryOverlay = {
   lastMessage: string | null;
   providerProfileId: string | null;
   model: string | null;
+  seriesStartedAtMs: number;
+  batchStartedAtMs: number;
 };
 
 export type SharedProviderRetrySeries = {
@@ -34,6 +36,7 @@ export type SharedProviderRetrySeries = {
   attempt: number;
   lastAttemptId: string | null;
   originUserMessageId: string | null;
+  startedAtMs: number;
 };
 
 type ThreadRetryState = {

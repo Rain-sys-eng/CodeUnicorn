@@ -36,6 +36,7 @@ import {
   buildEngineTaskOutputSnapshot,
   buildTaskOutputSourceFromNotification,
 } from "../../../engine-task-output/utils/engineTaskOutputProjection";
+import { formatSharedProviderRetryDate } from "../../../shared-session/provider-retry/formatSharedProviderRetryElapsed";
 import { BackgroundTaskNotificationFold } from "./BackgroundTaskNotificationFold";
 import {
   CollapsibleUserTextBlock,
@@ -807,6 +808,15 @@ export const MessageRow = memo(function MessageRow({
           />
         )
       )}
+      {item.role === "user" && item.originKind === "shared-provider-retry" ? (
+        <span className="message-user-retry-mark">
+          <RefreshCw size={10} strokeWidth={2.4} aria-hidden />
+          {t("sharedSend.providerRetryAutoMark", {
+            n: item.providerRetryAttempt ?? 1,
+            date: formatSharedProviderRetryDate(item.providerRetryAtMs ?? Date.now()),
+          })}
+        </span>
+      ) : null}
       {item.role === "user" && !agentTaskNotification ? userActionNode : null}
       {lightboxIndex !== null && lightboxImages.length > 0 && (
         <ImageLightbox
@@ -1391,15 +1401,8 @@ export const MessageRow = memo(function MessageRow({
   if (!memorySummaryNode && !noteCardSummaryNode && !browserContextSummaryNode && !intentCanvasContextSummaryNode && !dshGoalSummaryNode && !codeAnnotationContextNode && !shouldRenderBubble && !backgroundTaskFoldNode) {
     return null;
   }
-  const retryOriginMark =
-    item.role === "user" && item.originKind === "shared-provider-retry" ? (
-      <span className="message-user-retry-mark">
-        {t("sharedSend.providerRetryAutoMark")}
-      </span>
-    ) : null;
   const primaryContent = (
     <>
-      {retryOriginMark}
       {backgroundTaskFoldNode}
       {shouldRenderBubble ? bubbleNode : null}
     </>

@@ -327,6 +327,8 @@ type SendMessageOptions = {
   sharedExecutionTarget?: SharedQueuedExecutionTarget;
   squadRequest?: true;
   originKind?: "shared-provider-retry";
+  providerRetryAttempt?: number;
+  providerRetryAtMs?: number;
 };
 
 export type ThreadMessageDispatchResult =
@@ -1172,6 +1174,14 @@ export function useThreadMessaging({
           originKind:
             options?.originKind === "shared-provider-retry"
               ? "shared-provider-retry"
+              : undefined,
+          providerRetryAttempt:
+            options?.originKind === "shared-provider-retry"
+              ? options.providerRetryAttempt
+              : undefined,
+          providerRetryAtMs:
+            options?.originKind === "shared-provider-retry"
+              ? options.providerRetryAtMs
               : undefined,
         };
         if (threadKind === "shared") {

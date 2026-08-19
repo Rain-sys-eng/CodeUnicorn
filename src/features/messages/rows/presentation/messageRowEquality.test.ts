@@ -87,6 +87,8 @@ describe("areMessageItemsEqual", () => {
     ["agent name", { selectedAgentName: "Builder" }],
     ["agent icon", { selectedAgentIcon: "codicon-tools" }],
     ["origin kind", { originKind: "shared-provider-retry" as const }],
+    ["retry attempt", { providerRetryAttempt: 2 }],
+    ["retry time", { providerRetryAtMs: 1_700_000_000_000 }],
     ["images", { images: ["data:image/png;base64,BBBB"] }],
     ["browser context", { browserContextAttachment: { ...browserAttachment } }],
     ["intent context", { intentCanvasContextAttachments: [{ ...intentAttachment }] }],

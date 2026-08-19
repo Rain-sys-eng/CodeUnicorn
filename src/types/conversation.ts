@@ -158,6 +158,8 @@ export type ConversationItem =
       intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
       presentationMetadata?: MessagePresentationMetadata;
       originKind?: "shared-provider-retry";
+      providerRetryAttempt?: number;
+      providerRetryAtMs?: number;
     }
   | {
       id: string;
@@ -556,6 +558,8 @@ export type MessageSendOptions = {
   /** DSH create-time Agent Preset; ignored by other engines. */
   dshAgentPreset?: string | null;
   originKind?: "shared-provider-retry";
+  providerRetryAttempt?: number;
+  providerRetryAtMs?: number;
 };
 
 export type SelectedAgentOption = {

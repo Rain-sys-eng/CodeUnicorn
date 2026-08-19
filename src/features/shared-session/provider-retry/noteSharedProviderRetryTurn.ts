@@ -34,10 +34,16 @@ export type SharedProviderRetryTurnNotice = {
   originKind?: string | null;
 };
 
+export type SharedProviderRetrySubmitMeta = {
+  attempt: number;
+  atMs: number;
+};
+
 export type SharedProviderRetrySubmit = (
   workspaceId: string,
   threadId: string,
   text: string,
+  meta: SharedProviderRetrySubmitMeta,
 ) => void | Promise<unknown>;
 
 const submitters = new Map<string, SharedProviderRetrySubmit>();
@@ -111,6 +117,9 @@ function enterWait(
     notice.threadId,
     notice.engine,
   );
+  const now = Date.now();
+  const seriesStartedAtMs = series.startedAtMs;
+  const batchStartedAtMs = now;
   if (!isSharedProviderRetryAutoSendEnabled(settings)) {
     setSharedProviderRetryState(notice.workspaceId, notice.threadId, {
       series: null,
@@ -126,6 +135,8 @@ function enterWait(
         lastMessage: notice.message ?? null,
         providerProfileId: notice.providerProfileId ?? null,
         model: notice.model ?? null,
+        seriesStartedAtMs,
+        batchStartedAtMs,
       },
     });
     return;
@@ -145,6 +156,8 @@ function enterWait(
         lastMessage: notice.message ?? null,
         providerProfileId: notice.providerProfileId ?? null,
         model: notice.model ?? null,
+        seriesStartedAtMs,
+        batchStartedAtMs,
       },
     });
     return;
@@ -161,6 +174,8 @@ function enterWait(
     lastMessage: notice.message ?? null,
     providerProfileId: notice.providerProfileId ?? null,
     model: notice.model ?? null,
+    seriesStartedAtMs,
+    batchStartedAtMs,
   };
   setSharedProviderRetryState(notice.workspaceId, notice.threadId, {
     series,
@@ -224,6 +239,7 @@ export function fireSharedProviderRetry(
   patchSharedProviderRetryOverlay(workspaceId, threadId, {
     phase: "sending",
     seconds: 0,
+    batchStartedAtMs: Date.now(),
   });
   const submit = submitters.get(noticeKey(workspaceId, threadId));
   if (!submit) {
@@ -235,6 +251,10 @@ export function fireSharedProviderRetry(
       workspaceId,
       threadId,
       resolveSharedProviderRetryResumePrompt(settings.resumePrompt),
+      {
+        attempt: current.overlay.attempt,
+        atMs: Date.now(),
+      },
     ),
   ).catch(() => {
     // sendMessageToThread already notes the failure; keep overlay for that path.
@@ -310,6 +330,9 @@ export function noteSharedProviderRetryTurnSettled(
         lastMessage: notice.message ?? current.overlay?.lastMessage ?? null,
         providerProfileId: notice.providerProfileId ?? current.series?.providerProfileId ?? null,
         model: notice.model ?? current.series?.model ?? null,
+        seriesStartedAtMs:
+          current.overlay?.seriesStartedAtMs ?? current.series?.startedAtMs ?? Date.now(),
+        batchStartedAtMs: current.overlay?.batchStartedAtMs ?? Date.now(),
       },
     });
     scheduleOverlayClear(notice.workspaceId, notice.threadId);
@@ -348,6 +371,9 @@ export function noteSharedProviderRetryTurnSettled(
         providerProfileId:
           notice.providerProfileId ?? current.overlay?.providerProfileId ?? null,
         model: notice.model ?? current.overlay?.model ?? null,
+        seriesStartedAtMs:
+          current.overlay?.seriesStartedAtMs ?? current.series?.startedAtMs ?? Date.now(),
+        batchStartedAtMs: current.overlay?.batchStartedAtMs ?? Date.now(),
       },
     });
     return;
@@ -373,6 +399,9 @@ export function noteSharedProviderRetryTurnSettled(
         lastMessage: notice.message ?? null,
         providerProfileId: notice.providerProfileId ?? null,
         model: notice.model ?? null,
+        seriesStartedAtMs:
+          current.overlay?.seriesStartedAtMs ?? current.series?.startedAtMs ?? Date.now(),
+        batchStartedAtMs: current.overlay?.batchStartedAtMs ?? Date.now(),
       },
     });
     return;
@@ -392,17 +421,19 @@ export function noteSharedProviderRetryTurnSettled(
   }
 
   const nextAttempt = inSeries && current.series ? current.series.attempt + 1 : 1;
+  const now = Date.now();
   const series: SharedProviderRetrySeries = {
     seriesId:
       inSeries && current.series
         ? current.series.seriesId
-        : `retry-${Date.now().toString(36)}`,
+        : `retry-${now.toString(36)}`,
     engine: notice.engine,
     providerProfileId: notice.providerProfileId ?? null,
     model: notice.model ?? null,
     attempt: nextAttempt,
     lastAttemptId: notice.attemptId ?? null,
     originUserMessageId: current.series?.originUserMessageId ?? null,
+    startedAtMs: current.series?.startedAtMs ?? now,
   };
   enterWait(notice, series, classification);
 }
