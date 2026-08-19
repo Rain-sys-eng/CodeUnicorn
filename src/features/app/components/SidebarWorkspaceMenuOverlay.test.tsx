@@ -97,6 +97,63 @@ describe("SidebarWorkspaceMenuOverlay", () => {
     expect(sharedAction.onSelect).not.toHaveBeenCalled();
   });
 
+  it("still opens an unavailable parent submenu so the user can pick another provider", () => {
+    const claudeAction: WorkspaceMenuAction = {
+      id: "new-session-claude",
+      label: "Claude Code",
+      iconKind: "engine-claude",
+      unavailable: true,
+      statusLabel: "Provider unavailable",
+      onSelect: vi.fn(),
+      children: [
+        {
+          id: "provider-local",
+          label: "Local",
+          iconKind: "engine-claude",
+          keepMenuOpen: true,
+          onSelect: vi.fn(),
+        },
+        {
+          id: "provider-dead",
+          label: "DS-zkp",
+          iconKind: "engine-claude",
+          unavailable: true,
+          keepMenuOpen: true,
+          onSelect: vi.fn(),
+        },
+      ],
+    };
+    const onAction = vi.fn();
+
+    render(
+      <SidebarWorkspaceMenuOverlay
+        menu={{
+          x: 32,
+          y: 28,
+          groups: [
+            {
+              id: "new-session",
+              label: "New session",
+              actions: [claudeAction],
+            },
+          ],
+        }}
+        t={t}
+        onClose={vi.fn()}
+        onAction={onAction}
+        renderIcon={() => null}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: /Claude Code/ }),
+    );
+
+    expect(screen.getByRole("menuitemradio", { name: "Local" })).toBeTruthy();
+    expect(onAction).not.toHaveBeenCalled();
+    expect(claudeAction.onSelect).not.toHaveBeenCalled();
+  });
+
   it("defaults workspace actions to collapsed and toggles them from the group header", () => {
     const reloadAction: WorkspaceMenuAction = {
       id: "reload-threads",

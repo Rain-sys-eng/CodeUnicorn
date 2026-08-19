@@ -16,6 +16,7 @@ import {
 import { applyOptimisticActiveProvider } from "../applyOptimisticActiveProvider";
 import { VENDOR_ACTIVE_PROVIDER_CHANGED_EVENT } from "../vendorActiveProviderEvents";
 import { notifyProviderTargetCatalogChanged } from "../../composer/components/ChatInputBox/hooks/useProviderTargetCatalogOwners";
+import { forgetDeletedLastProviderProfile } from "../lastProviderProfileMemory";
 
 /** List load options. `silent` skips list-level loading UI (switch / external events). */
 export type CodexProviderLoadOptions = {
@@ -345,6 +346,7 @@ export function useCodexProviderManagement() {
 
     try {
       await deleteCodexProvider(provider.id);
+      forgetDeletedLastProviderProfile("codex", provider.id);
       setCodexProviderError(null);
       await loadCodexProviders();
       notifyProviderTargetCatalogChanged();

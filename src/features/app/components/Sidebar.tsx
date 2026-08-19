@@ -133,6 +133,7 @@ import type {
   EngineProviderProfileOption,
   EngineProviderProfileSelection,
 } from "../../threads/constants/codexProviderProfiles";
+import { PROVIDER_TARGET_CATALOG_INVALIDATED_EVENT } from "../../composer/components/ChatInputBox/hooks/useProviderTargetCatalogOwners";
 import {
   runWithLoadingProgress,
   type LoadingProgressController,
@@ -924,13 +925,24 @@ function SidebarImpl({
         }
       }
     };
-    void loadProfiles("claude", getClaudeProviders, setClaudeProviderProfiles);
-    void loadProfiles("codex", getCodexProviders, setCodexProviderProfiles);
-    void loadProfiles("kimi", getKimiProviders, setKimiProviderProfiles);
-    void loadProfiles("grok", getGrokProviders, setGrokProviderProfiles);
-    void loadProfiles("opencode", getOpenCodeProviders, setOpenCodeProviderProfiles);
+    const reloadAllProfiles = () => {
+      void loadProfiles("claude", getClaudeProviders, setClaudeProviderProfiles);
+      void loadProfiles("codex", getCodexProviders, setCodexProviderProfiles);
+      void loadProfiles("kimi", getKimiProviders, setKimiProviderProfiles);
+      void loadProfiles("grok", getGrokProviders, setGrokProviderProfiles);
+      void loadProfiles("opencode", getOpenCodeProviders, setOpenCodeProviderProfiles);
+    };
+    reloadAllProfiles();
+    window.addEventListener(
+      PROVIDER_TARGET_CATALOG_INVALIDATED_EVENT,
+      reloadAllProfiles,
+    );
     return () => {
       cancelled = true;
+      window.removeEventListener(
+        PROVIDER_TARGET_CATALOG_INVALIDATED_EVENT,
+        reloadAllProfiles,
+      );
     };
   }, []);
 

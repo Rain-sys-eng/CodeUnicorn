@@ -12,6 +12,11 @@ import {
 } from "../../../services/tauri";
 import type { ProviderConfig } from "../types";
 import { DISABLED_PROVIDER_ID, LOCAL_SETTINGS_PROVIDER_ID } from "../types";
+import { CLAUDE_LOCAL_PROVIDER_PROFILE_ID } from "../../threads/constants/codexProviderProfiles";
+import {
+  readLastProviderProfileId,
+  writeLastProviderProfileId,
+} from "../lastProviderProfileMemory";
 import { useProviderManagement } from "./useProviderManagement";
 
 vi.mock("../../../services/tauri", () => ({
@@ -200,6 +205,24 @@ describe("useProviderManagement reorder", () => {
       action: "delete",
       message: expect.stringContaining("delete failed"),
     });
+  });
+
+  it("falls back the remembered create-menu provider after a successful delete", async () => {
+    vi.mocked(getClaudeProviders).mockResolvedValue(initialProviders);
+    vi.mocked(deleteClaudeProvider).mockResolvedValueOnce(undefined);
+    writeLastProviderProfileId("claude", "b");
+    const { result } = renderHook(() => useProviderManagement());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.handleDeleteProvider(initialProviders[2]!));
+    await act(async () => {
+      await result.current.confirmDeleteProvider();
+    });
+
+    expect(deleteClaudeProvider).toHaveBeenCalledWith("b");
+    expect(readLastProviderProfileId("claude")).toBe(
+      CLAUDE_LOCAL_PROVIDER_PROFILE_ID,
+    );
   });
 });
 

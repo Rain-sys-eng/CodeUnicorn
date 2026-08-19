@@ -1070,6 +1070,73 @@ describe("useSidebarMenus", () => {
       await action?.onSelect();
     });
     expect(handlers.onAddAgent).not.toHaveBeenCalled();
+    expect(action?.children?.some((child) => child.unavailable !== true)).toBe(
+      true,
+    );
+  });
+
+  it("syncs remembered provider after settings delete falls back to local", async () => {
+    window.localStorage.setItem("claudeLastProviderProfileId", "provider-missing");
+    const handlers = createHandlers();
+    const { result } = renderHook(() =>
+      useSidebarMenus({
+        ...handlers,
+        claudeProviderProfiles: [
+          {
+            id: "__local_settings_json__",
+            name: "Local",
+            source: "managed",
+          },
+        ],
+      }),
+    );
+
+    await act(async () => {
+      result.current.showWorkspaceMenu(
+        {
+          clientX: 160,
+          clientY: 120,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        } as unknown as Parameters<typeof result.current.showWorkspaceMenu>[0],
+        workspace,
+      );
+    });
+
+    expect(
+      result.current.workspaceMenuState?.groups
+        .find((group) => group.id === "new-session")
+        ?.actions.find((entry) => entry.id === "new-session-claude")
+        ?.unavailable,
+    ).toBe(true);
+
+    await act(async () => {
+      window.localStorage.setItem(
+        "claudeLastProviderProfileId",
+        "__local_settings_json__",
+      );
+      window.dispatchEvent(new CustomEvent("ccgui:last-provider-profile-changed"));
+    });
+
+    await act(async () => {
+      result.current.showWorkspaceMenu(
+        {
+          clientX: 160,
+          clientY: 120,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        } as unknown as Parameters<typeof result.current.showWorkspaceMenu>[0],
+        workspace,
+      );
+    });
+
+    const action = result.current.workspaceMenuState?.groups
+      .find((group) => group.id === "new-session")
+      ?.actions.find((entry) => entry.id === "new-session-claude");
+    expect(action?.unavailable).not.toBe(true);
+    expect(action?.children?.find((child) => child.selected)?.id).toBe(
+      "new-session-claude-provider-__local_settings_json__",
+    );
   });
 
   it("cannot trigger session creation through a hidden Gemini entry", async () => {

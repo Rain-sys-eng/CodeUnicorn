@@ -65,6 +65,13 @@ import {
   activateEngineProviderProfileAndNotify,
   isActivatableProviderEngine,
 } from "../../vendors/activateEngineProviderProfile";
+import {
+  LAST_PROVIDER_PROFILE_CHANGED_EVENT,
+  LAST_PROVIDER_PROFILE_KEYS,
+  type LastProviderEngine,
+  readLastProviderProfileId,
+  writeLastProviderProfileId,
+} from "../../vendors/lastProviderProfileMemory";
 
 /** 新建会话菜单项 id → 对应 CLI engine；用于 CLI 配置管理启停过滤。 */
 const NEW_SESSION_ENGINE_ACTION_IDS: Readonly<Record<string, EngineType>> = {
@@ -78,14 +85,7 @@ const NEW_SESSION_ENGINE_ACTION_IDS: Readonly<Record<string, EngineType>> = {
   "new-session-dsh": "dsh",
 };
 
-const LAST_PROVIDER_PROFILE_KEYS = {
-  claude: "claudeLastProviderProfileId",
-  codex: "codexLastProviderProfileId",
-  kimi: "kimiLastProviderProfileId",
-  grok: "grokLastProviderProfileId",
-  opencode: "opencodeLastProviderProfileId",
-} as const;
-type ProviderEngine = keyof typeof LAST_PROVIDER_PROFILE_KEYS;
+type ProviderEngine = LastProviderEngine;
 
 export type ProviderContinuationDialogState = {
   workspaceId: string;
@@ -124,22 +124,6 @@ function providerContinuationRecoveryMessage(errorCode: string | null): string {
 const PINNABLE_WORKSPACE_ACTION_ID_SET = new Set<string>(
   PINNABLE_WORKSPACE_ACTION_IDS,
 );
-
-function readLastProviderProfileId(engine: ProviderEngine): string | null {
-  try {
-    return window.localStorage.getItem(LAST_PROVIDER_PROFILE_KEYS[engine]);
-  } catch {
-    return null;
-  }
-}
-
-function writeLastProviderProfileId(engine: ProviderEngine, id: string) {
-  try {
-    window.localStorage.setItem(LAST_PROVIDER_PROFILE_KEYS[engine], id);
-  } catch {
-    // ignore storage write failures
-  }
-}
 
 /**
  * 新建菜单「选供应商 = 启用启动」统一入口。
@@ -1381,6 +1365,39 @@ export function useSidebarMenus({
   const [opencodeSelectedProfileId, setOpencodeSelectedProfileId] = useState<string | null>(
     () => readLastProviderProfileId("opencode"),
   );
+
+  useEffect(() => {
+    const syncRememberedProfiles = () => {
+      setClaudeSelectedProfileId(readLastProviderProfileId("claude"));
+      setCodexSelectedProfileId(readLastProviderProfileId("codex"));
+      setKimiSelectedProfileId(readLastProviderProfileId("kimi"));
+      setGrokSelectedProfileId(readLastProviderProfileId("grok"));
+      setOpencodeSelectedProfileId(readLastProviderProfileId("opencode"));
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key &&
+        !Object.values(LAST_PROVIDER_PROFILE_KEYS).includes(
+          event.key as (typeof LAST_PROVIDER_PROFILE_KEYS)[LastProviderEngine],
+        )
+      ) {
+        return;
+      }
+      syncRememberedProfiles();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(
+      LAST_PROVIDER_PROFILE_CHANGED_EVENT,
+      syncRememberedProfiles,
+    );
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(
+        LAST_PROVIDER_PROFILE_CHANGED_EVENT,
+        syncRememberedProfiles,
+      );
+    };
+  }, []);
 
   const buildSessionMenuGroup = useCallback(
     (

@@ -11,6 +11,7 @@ import {
 import { applyOptimisticActiveProvider } from "../applyOptimisticActiveProvider";
 import { VENDOR_ACTIVE_PROVIDER_CHANGED_EVENT } from "../vendorActiveProviderEvents";
 import { notifyProviderTargetCatalogChanged } from "../../composer/components/ChatInputBox/hooks/useProviderTargetCatalogOwners";
+import { forgetDeletedLastProviderProfile } from "../lastProviderProfileMemory";
 
 /** List load options. `silent` skips list-level loading UI (switch / external events). */
 export type OpenCodeProviderLoadOptions = {
@@ -201,6 +202,7 @@ export function useOpenCodeProviderManagement() {
 
     try {
       await deleteOpenCodeProvider(provider.id);
+      forgetDeletedLastProviderProfile("opencode", provider.id);
       await loadOpenCodeProviders();
       setOpenCodeProviderError(null);
       notifyProviderTargetCatalogChanged();
