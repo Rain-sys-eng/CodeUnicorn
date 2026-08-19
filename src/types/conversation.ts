@@ -157,6 +157,7 @@ export type ConversationItem =
       browserContextAttachment?: BrowserContextSendAttachment | null;
       intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
       presentationMetadata?: MessagePresentationMetadata;
+      originKind?: "shared-provider-retry";
     }
   | {
       id: string;
@@ -554,6 +555,7 @@ export type MessageSendOptions = {
   squadRequest?: true;
   /** DSH create-time Agent Preset; ignored by other engines. */
   dshAgentPreset?: string | null;
+  originKind?: "shared-provider-retry";
 };
 
 export type SelectedAgentOption = {

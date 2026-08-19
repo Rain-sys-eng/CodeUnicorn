@@ -39,7 +39,7 @@ const FULLY_AVAILABLE: TurnBadgeAvailability = {
 export const LOCAL_PROVIDER_LABEL = "本地配置";
 export const LOCAL_PROVIDER_SOURCE = "disk";
 
-function resolveEngineLabel(engine: EngineType): string {
+export function resolveEngineLabel(engine: EngineType): string {
   switch (engine) {
     case "claude":
       return "Claude Code";

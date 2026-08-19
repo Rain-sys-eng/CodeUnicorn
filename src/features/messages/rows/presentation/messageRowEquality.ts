@@ -137,6 +137,7 @@ export function areMessageItemsEqual(previous: MessageItem, next: MessageItem) {
       previous.finalOutputTokens === next.finalOutputTokens &&
       previous.selectedAgentName === next.selectedAgentName &&
       previous.selectedAgentIcon === next.selectedAgentIcon &&
+      previous.originKind === next.originKind &&
       previous.browserContextAttachment === next.browserContextAttachment &&
       areIntentCanvasAttachmentsEqual(
         previous.intentCanvasContextAttachments,

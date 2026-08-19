@@ -31,6 +31,10 @@ import {
 import { previewThreadName } from "../../../utils/threadItems";
 import { resolveThreadStabilityDiagnostic } from "../utils/stabilityDiagnostics";
 import type { TurnExecutionSnapshot } from "../../shared-session/target/types";
+import { noteSharedProviderRetryTurnSettled } from "../../shared-session/provider-retry/noteSharedProviderRetryTurn";
+import { getSharedTargetState } from "../../shared-session/target/targetStore";
+import { isSharedSessionThreadId } from "../../shared-session/utils/sharedSessionIdentity";
+import type { EngineType } from "../../../types";
 import {
   hasCodexBackgroundHelperPreview,
   hasCommitMessageHelperPreview,
@@ -54,6 +58,35 @@ import type { ThreadAction } from "./useThreadsReducer";
  * Claude/Gemini/Kimi/OpenCode threads use "<engine>:" or "<engine>-pending-" prefixes.
  */
 const inferEngineFromThreadId = inferEngineFromLegacyThreadId;
+
+function noteSharedRetryFromTurn(
+  workspaceId: string,
+  threadId: string,
+  input: {
+    outcome: "completed" | "failed" | "cancelled";
+    message?: string | null;
+    wasLocalInterrupt?: boolean;
+    snapshot?: TurnExecutionSnapshot | null;
+    attemptId?: string | null;
+  },
+): void {
+  if (!isSharedSessionThreadId(threadId)) {
+    return;
+  }
+  const stored = getSharedTargetState(workspaceId, threadId);
+  const snapshot = input.snapshot ?? stored.activeTurnTarget ?? stored.selectedNextTarget;
+  noteSharedProviderRetryTurnSettled({
+    workspaceId,
+    threadId,
+    engine: (snapshot?.engine ?? inferEngineFromThreadId(threadId)) as EngineType,
+    providerProfileId: snapshot?.providerProfileId ?? null,
+    model: snapshot?.model ?? null,
+    attemptId: input.attemptId ?? null,
+    outcome: input.outcome,
+    message: input.message ?? null,
+    wasLocalInterrupt: input.wasLocalInterrupt ?? false,
+  });
+}
 
 /**
  * Terminal 路径（完成/失败/稳定性诊断）在 markProcessing(false) 前必须把
@@ -596,6 +629,10 @@ export function useThreadTurnEvents({
         currentActiveTurnId: activeTurnId,
         targetThreadCount: targetSnapshots.length,
       });
+      noteSharedRetryFromTurn(workspaceId, threadId, {
+        outcome: "completed",
+        attemptId: turnId || null,
+      });
       return true;
     },
     [
@@ -821,6 +858,13 @@ export function useThreadTurnEvents({
         } else {
           pushThreadErrorMessage(workspaceId, threadId, message);
         }
+        noteSharedRetryFromTurn(workspaceId, threadId, {
+          outcome: wasInterrupted ? "cancelled" : "failed",
+          message: payload.message,
+          wasLocalInterrupt: wasInterrupted,
+          snapshot: payload.executionTargetSnapshot,
+          attemptId: turnId || null,
+        });
         pushThreadFailureRuntimeNotice({
           workspaceId,
           threadId,
@@ -949,6 +993,11 @@ export function useThreadTurnEvents({
           )
         : t(isFusionStalled ? "threads.fusionTurnStalled" : "threads.turnStalled");
       pushThreadErrorMessage(workspaceId, threadId, message);
+      noteSharedRetryFromTurn(workspaceId, threadId, {
+        outcome: "failed",
+        message: payload.message,
+        attemptId: turnId || null,
+      });
       pushThreadFailureRuntimeNotice({
         workspaceId,
         threadId,

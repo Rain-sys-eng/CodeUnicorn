@@ -1391,8 +1391,15 @@ export const MessageRow = memo(function MessageRow({
   if (!memorySummaryNode && !noteCardSummaryNode && !browserContextSummaryNode && !intentCanvasContextSummaryNode && !dshGoalSummaryNode && !codeAnnotationContextNode && !shouldRenderBubble && !backgroundTaskFoldNode) {
     return null;
   }
+  const retryOriginMark =
+    item.role === "user" && item.originKind === "shared-provider-retry" ? (
+      <span className="message-user-retry-mark">
+        {t("sharedSend.providerRetryAutoMark")}
+      </span>
+    ) : null;
   const primaryContent = (
     <>
+      {retryOriginMark}
       {backgroundTaskFoldNode}
       {shouldRenderBubble ? bubbleNode : null}
     </>

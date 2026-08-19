@@ -291,6 +291,11 @@ import { useCodexMessageRecovery } from "./useCodexMessageRecovery";
 import { assertEngineExecutionEnabled } from "../../../utils/engineExecutionPolicy";
 import { resolveSelectedAgentForSend } from "../utils/resolveSelectedAgentForSend";
 import { BUILT_IN_AGENT_RESOLUTION_FAILED_EVENT } from "../../agent-catalog/events";
+import {
+  noteSharedProviderRetryTurnSettled,
+  noteSharedProviderRetryUserSend,
+  cancelSharedProviderRetry,
+} from "../../shared-session/provider-retry/noteSharedProviderRetryTurn";
 
 type SendMessageOptions = {
   skillInvocations?: SkillInvocation[];
@@ -321,6 +326,7 @@ type SendMessageOptions = {
   autoSession?: AutoSessionMetadata | null;
   sharedExecutionTarget?: SharedQueuedExecutionTarget;
   squadRequest?: true;
+  originKind?: "shared-provider-retry";
 };
 
 export type ThreadMessageDispatchResult =
@@ -1163,7 +1169,18 @@ export function useThreadMessaging({
           browserContextAttachment: options?.browserContextAttachment ?? null,
           intentCanvasContextAttachments:
             options?.intentCanvasContextAttachments,
+          originKind:
+            options?.originKind === "shared-provider-retry"
+              ? "shared-provider-retry"
+              : undefined,
         };
+        if (threadKind === "shared") {
+          noteSharedProviderRetryUserSend({
+            workspaceId: workspace.id,
+            threadId,
+            originKind: options?.originKind ?? null,
+          });
+        }
         dispatch({
           type: "upsertItem",
           workspaceId: workspace.id,
@@ -2336,6 +2353,7 @@ export function useThreadMessaging({
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
             safeMessageActivity();
+            cancelSharedProviderRetry(workspace.id, threadId, "idle");
             return response as SendSharedSessionTurnV2Result;
           }
           const sharedNativeThreadId = asString(
@@ -3358,6 +3376,29 @@ export function useThreadMessaging({
         }
         safeMessageActivity();
         if (threadKind === "shared") {
+          noteSharedProviderRetryTurnSettled({
+            workspaceId: workspace.id,
+            threadId,
+            engine: resolvedEngine,
+            providerProfileId:
+              supportedStoredSharedTarget?.providerProfileId ??
+              getSharedTargetState(workspace.id, threadId).selectedNextTarget
+                ?.providerProfileId ??
+              null,
+            model:
+              supportedStoredSharedTarget?.model ??
+              getSharedTargetState(workspace.id, threadId).selectedNextTarget
+                ?.model ??
+              null,
+            message: rawMessage,
+            outcome: "failed",
+            wasLocalInterrupt: workspaceScopedHas(
+              interruptedThreadsRef.current,
+              workspace.id,
+              threadId,
+            ),
+            originKind: options?.originKind ?? null,
+          });
           return {
             status: "ambiguous-error",
             reason: rawMessage,
@@ -3664,6 +3705,9 @@ export function useThreadMessaging({
         return;
       }
       const reason = options?.reason ?? "user-stop";
+      if (activeWorkspace && activeThreadId) {
+        cancelSharedProviderRetry(activeWorkspace.id, activeThreadId, "stopped");
+      }
       const activeThreadKind = resolveThreadKind(
         activeWorkspace.id,
         activeThreadId,

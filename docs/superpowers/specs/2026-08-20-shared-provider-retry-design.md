@@ -79,8 +79,8 @@ user send
 |---|---|---|---|
 | `enabled` | `true` | on/off | 关 = 不自动倒计时、不自动发 |
 | `maxAttempts` | `3` | 0–10 | `0` 等价于关闭自动发；pill 仍可打开 |
-| `baseDelaySec` | `3` | 1–60 | 第一次等待 |
-| `maxDelaySec` | `20` | 1–120 | 单次等待上限 |
+| `baseDelaySec` | `3` | 1–1200 | 第一次失败后，再发第一枪前要等的秒数 |
+| `maxDelaySec` | `20` | 1–1200 | 单次等待上限；指数退避翻倍后也不会超过它 |
 | `backoff` | `exponential` | `exponential` \| `fixed` | 指数 ×2 或固定间隔 |
 | `resumePrompt` | 见下 | 非空字符串 | **发给 CLI 的正文**，不是幕布提示 |
 
@@ -114,10 +114,10 @@ user send
 | kind | reason | 匹配（大小写不敏感，命中任一） |
 |---|---|---|
 | `pool` | 号池 | `not assigned to any group`；`api key is not assigned`；`failed to authenticate` 且含 `403` |
-| `rate` | 请求过多 | `429`；`too many requests`；`rate limit`；`rate-limited` |
-| `timeout` | 超时 | 现有 `classifyNetworkError === "timeout"`；`FIRST_PACKET_TIMEOUT:`；`deadline exceeded` |
-| `overload` | 过载 | `overloaded`；`capacity`；`busy, please retry` |
-| `server` | 服务错误 | `\b5\d\d\b`；`bad gateway`；`service unavailable`；`upstream` + `retry` |
+| `rate` | 请求过多 | `429`；`too many requests`；`rate limit` / `rate-limit` / `rate_limited` |
+| `timeout` | 超时 | 现有 `classifyNetworkError === "timeout"`；`FIRST_PACKET_TIMEOUT:`；`deadline exceeded`；`no initial response within`；中文「超时/超時」 |
+| `overload` | 过载 | `overloaded`；`at/no/out of/without capacity`；`capacity exceeded/exhausted/limit`；`busy, please retry` |
+| `server` | 服务错误 | `5xx` 且附近有 `error/http/status/upstream/gateway`；`bad gateway`；`service unavailable`；`upstream` + `retry/error/fail` |
 | `soft-cancel` | 暂时中断 | `turn cancelled` / `canceled`，且 **没有** 本地 interrupt 证据 |
 
 号池 403 是主场景：供应商后台可能已切号，下一枪有机会打中可用 key。

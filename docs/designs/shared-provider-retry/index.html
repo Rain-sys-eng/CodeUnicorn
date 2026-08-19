@@ -255,43 +255,98 @@
       position: absolute;
       right: 44px;
       bottom: 42px;
-      width: 292px;
-      padding: 10px 12px 12px;
+      width: 320px;
+      padding: 11px 12px 12px;
       border: 1px solid var(--line-strong);
       border-radius: 12px;
       background: #1c212b;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+      box-shadow: 0 20px 48px rgba(0,0,0,0.32);
       z-index: 4;
     }
-    .pop h3 {
-      margin: 0 0 4px;
+    .pop-head {
+      display: flex;
+      gap: 8px;
+      margin: 0 0 10px;
+    }
+    .pop-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      background: rgba(77,141,255,0.16);
+      color: var(--accent);
       font-size: 12px;
-      font-weight: 620;
+    }
+    .pop h3 {
+      margin: 0 0 3px;
+      font-size: 13px;
+      font-weight: 650;
     }
     .pop .sub {
-      margin: 0 0 10px;
+      margin: 0;
       color: var(--faint);
       font-size: 11px;
       line-height: 1.4;
     }
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 10px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(20,25,34,0.72);
+    }
+    .switch-row strong { display: block; font-size: 12px; }
+    .switch-row em { color: var(--faint); font-size: 11px; font-style: normal; }
+    .switch {
+      width: 32px;
+      height: 18px;
+      padding: 2px;
+      border: 0;
+      border-radius: 999px;
+      background: #3a4150;
+      cursor: pointer;
+    }
+    .switch.on { background: var(--accent); }
+    .switch i {
+      display: block;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      transform: translateX(0);
+    }
+    .switch.on i { transform: translateX(14px); }
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
     .field label {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 5px;
       margin-bottom: 4px;
       color: var(--quiet);
       font-size: 11px;
     }
-    .field input, .field select, .field textarea {
+    .field input, .field textarea, .select-btn {
       width: 100%;
-      padding: 6px 7px;
+      padding: 7px 8px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 8px;
       background: #141922;
       font-size: 12px;
+    }
+    .select-btn {
+      display: flex;
+      justify-content: space-between;
+      text-align: left;
     }
     .field.full { grid-column: 1 / -1; }
     .field textarea {
@@ -320,30 +375,43 @@
       <div class="thread" id="thread"></div>
       <div class="composer">
         <div class="pop" id="pop" hidden>
-          <h3>供应商失败自动重试</h3>
-          <p class="sub" id="popSub">当前 CLI：Claude。只对这个 Shared 会话的 Claude 生效，刷新后回到默认。</p>
+          <div class="pop-head">
+            <span class="pop-mark">↻</span>
+            <div>
+              <h3>供应商失败自动重试</h3>
+              <p class="sub" id="popSub">当前 CLI：Claude。只对这个 Shared 会话的 Claude 生效，刷新后回到默认。</p>
+            </div>
+          </div>
+          <div class="switch-row">
+            <div>
+              <strong>自动再试</strong>
+              <em id="switchHint">重试 3次</em>
+            </div>
+            <button class="switch on" id="enabledSwitch" type="button" aria-label="自动再试"><i></i></button>
+          </div>
           <div class="grid">
             <div class="field">
-              <label>次数</label>
+              <label>↻ 次数</label>
               <input id="maxAttempts" type="number" min="0" max="10" />
             </div>
             <div class="field">
-              <label>退避</label>
-              <select id="backoff">
+              <label>⟳ 退避</label>
+              <select id="backoff" hidden>
                 <option value="exp">指数 ×2</option>
                 <option value="fixed">固定</option>
               </select>
+              <button class="select-btn" id="backoffBtn" type="button">指数 ×2</button>
             </div>
             <div class="field">
-              <label>首次等待</label>
-              <input id="baseDelay" type="number" min="1" max="60" />
+              <label>⏱ 第一次等（秒）</label>
+              <input id="baseDelay" type="number" min="1" max="1200" />
             </div>
             <div class="field">
-              <label>最长等待</label>
-              <input id="maxDelay" type="number" min="1" max="120" />
+              <label>⏲ 最长再等（秒）</label>
+              <input id="maxDelay" type="number" min="1" max="1200" />
             </div>
             <div class="field full">
-              <label>发给 CLI 的续跑指令</label>
+              <label>T 发给 CLI 的续跑指令</label>
               <textarea id="resumePrompt"></textarea>
             </div>
           </div>
@@ -454,7 +522,10 @@
       $("maxDelay").value = s.cap;
       $("backoff").value = s.backoff;
       $("resumePrompt").value = s.prompt;
-      $("retryPill").textContent = `重试 ${s.max}次`;
+      $("backoffBtn").textContent = s.backoff === "fixed" ? "固定" : "指数 ×2";
+      $("enabledSwitch").classList.toggle("on", s.enabled !== false);
+      $("switchHint").textContent = s.enabled === false || s.max <= 0 ? "重试 关" : `重试 ${s.max}次`;
+      $("retryPill").textContent = s.enabled === false || s.max <= 0 ? "重试 关" : `重试 ${s.max}次`;
       $("retryPill").classList.toggle("on", state.popOpen);
       $("pop").hidden = !state.popOpen;
       $("popSub").textContent = `当前 CLI：${cliName()}。只对这个 Shared 会话的 ${cliName()} 生效，刷新后回到默认。`;
@@ -572,16 +643,25 @@
     });
     function writeCfg() {
       memory[state.cli] = {
+        enabled: $("enabledSwitch").classList.contains("on"),
         max: clamp(Number($("maxAttempts").value), 0, 10),
-        base: clamp(Number($("baseDelay").value), 1, 60),
-        cap: clamp(Number($("maxDelay").value), 1, 120),
+        base: clamp(Number($("baseDelay").value), 1, 1200),
+        cap: clamp(Number($("maxDelay").value), 1, 1200),
         backoff: $("backoff").value,
         prompt: $("resumePrompt").value,
       };
       render();
     }
-    ["maxAttempts", "baseDelay", "maxDelay", "backoff", "resumePrompt"]
+    ["maxAttempts", "baseDelay", "maxDelay", "resumePrompt"]
       .forEach((id) => $(id).addEventListener("input", writeCfg));
+    $("enabledSwitch").addEventListener("click", () => {
+      $("enabledSwitch").classList.toggle("on");
+      writeCfg();
+    });
+    $("backoffBtn").addEventListener("click", () => {
+      $("backoff").value = $("backoff").value === "fixed" ? "exp" : "fixed";
+      writeCfg();
+    });
     $("hardStop").addEventListener("click", stopRetry);
     document.addEventListener("mousedown", (event) => {
       if (!state.popOpen) return;

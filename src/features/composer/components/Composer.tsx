@@ -200,6 +200,7 @@ import {
   isMultiAgentTargetSupported,
   MultiAgentComposerToggle,
 } from "../../multi-agent/components/ComposerToggle";
+import { SharedProviderRetryToggle } from "../../shared-session/provider-retry/SharedProviderRetryToggle";
 
 
 type RewindExecutionOptions = {
@@ -3755,6 +3756,12 @@ function ComposerImpl({
                             setAgentArmed((armed) => !armed);
                           }}
                           onArm={() => setAgentArmed(true)}
+                        />
+                        <SharedProviderRetryToggle
+                          workspaceId={activeWorkspaceId}
+                          threadId={activeThreadId}
+                          engine={selectedAtomicTarget?.engine ?? selectedEngine}
+                          disabled={collabRunActive}
                         />
                       </div>
                     ) : null}

@@ -86,6 +86,7 @@ describe("areMessageItemsEqual", () => {
     ["final output tokens", { finalOutputTokens: 50 }],
     ["agent name", { selectedAgentName: "Builder" }],
     ["agent icon", { selectedAgentIcon: "codicon-tools" }],
+    ["origin kind", { originKind: "shared-provider-retry" as const }],
     ["images", { images: ["data:image/png;base64,BBBB"] }],
     ["browser context", { browserContextAttachment: { ...browserAttachment } }],
     ["intent context", { intentCanvasContextAttachments: [{ ...intentAttachment }] }],

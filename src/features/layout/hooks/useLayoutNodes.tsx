@@ -130,8 +130,11 @@ import {
 import { buildShellRuntimeSummary } from "./layoutShellSummary";
 import { buildConversationCanvasNode } from "./conversationCanvasNode";
 import { CollabTimelineWaiting } from "../../multi-agent/components/CollabTimelineWaiting";
-import { useLayoutTopbarSessionTabs } from "./useLayoutTopbarSessionTabs";
+import { useCollabUiState } from "../../multi-agent/store/collabUiStore";
+import { SharedProviderRetryHint } from "../../shared-session/provider-retry/SharedProviderRetryHint";
+import { useSharedProviderRetry } from "../../shared-session/provider-retry/useSharedProviderRetry";
 import { resolveIsSharedSession } from "../../shared-session/utils/sharedSessionIdentity";
+import { useLayoutTopbarSessionTabs } from "./useLayoutTopbarSessionTabs";
 import {
   buildCompactEmptyNode,
   buildCompactGitBackNode,
@@ -1311,10 +1314,16 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
         isProviderContinuation:
           activeThreadSummary?.originKind === "provider-continuation",
         timelineTrailingNode: (
-          <CollabTimelineWaiting
-            workspaceId={options.activeWorkspaceId}
-            threadId={options.activeThreadId ?? null}
-          />
+          <>
+            <CollabTimelineWaiting
+              workspaceId={options.activeWorkspaceId}
+              threadId={options.activeThreadId ?? null}
+            />
+            <SharedProviderRetryHint
+              workspaceId={options.activeWorkspaceId}
+              threadId={options.activeThreadId ?? null}
+            />
+          </>
         ),
         continuationContextNode:
           activeThreadSummary?.originKind === "provider-continuation" ? (
@@ -1482,6 +1491,32 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
     isSharedSession,
   );
   const sharedSendState = isSharedSession ? sharedSendEntry.state : "idle";
+  const collabUi = useCollabUiState(
+    options.activeWorkspaceId,
+    options.activeThreadId,
+  );
+  const collabRunActive = Boolean(
+    collabUi && collabUi.phase !== "idle" && collabUi.phase !== "done",
+  );
+  const sendSharedProviderRetryResume = useEventCallback(
+    (workspaceId: string, threadId: string, text: string) => {
+      if (workspaceId !== options.activeWorkspaceId || threadId !== options.activeThreadId) {
+        return;
+      }
+      return options.onSend(text, [], { originKind: "shared-provider-retry" });
+    },
+  );
+  useSharedProviderRetry({
+    workspaceId: options.activeWorkspaceId,
+    threadId: options.activeThreadId,
+    engine:
+      activeThreadSummary?.selectedEngine ??
+      activeThreadSummary?.engineSource ??
+      conversationEngine ??
+      null,
+    collabRunActive,
+    sendResume: sendSharedProviderRetryResume,
+  });
   const gitStatusError = options.gitStatus.error;
   const gitStatusFiles = options.gitStatus.files;
   // deriveRewindWorkspaceGitState 每次 render 返回新对象；它是 renderComposerNode
