@@ -439,6 +439,44 @@ describe("sharedSessionSummaries", () => {
     ).toBe(true);
   });
 
+  it("hides Shared Codex Raman when parent is the protocol owner file uuid", () => {
+    const owner = "019fdaa8-262e-7981-8572-ce0884b61784";
+    const keys = buildSharedSidebarHiddenParentKeys(
+      [
+        {
+          id: "shared:89d8becf-c13a-4cad-94e8-2815d4cb179a",
+          name: "Shared",
+          updatedAt: 1,
+          engineSource: "codex",
+          threadKind: "shared",
+          nativeThreadIds: ["codex:default"],
+        },
+      ],
+      [owner, `codex:${owner}`],
+    );
+    expect(
+      isSharedSidebarHiddenPup(
+        { id: "codex:raman-child" },
+        owner,
+        keys,
+      ),
+    ).toBe(true);
+    expect(
+      isSharedSidebarHiddenPup(
+        { id: "codex:kierkegaard-child" },
+        `codex:${owner}`,
+        keys,
+      ),
+    ).toBe(true);
+    expect(
+      isSharedSidebarHiddenPup(
+        { id: "codex:raman-child" },
+        "codex:default",
+        keys,
+      ),
+    ).toBe(true);
+  });
+
   it("keeps local Codex TUI/Desktop pups visible", () => {
     const keys = buildSharedSidebarHiddenParentKeys(
       [

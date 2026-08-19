@@ -2203,6 +2203,37 @@ fn parse_codex_session_summary_skips_agents_md_bootstrap_title() {
 }
 
 #[test]
+fn parse_codex_session_summary_skips_environment_context_then_keeps_mossx() {
+    let root = make_temp_sessions_root();
+    let day_key = "2026-08-07";
+    let workspace_path = Path::new("S:\\AIWorker\\zen_proxy");
+    let session_path = write_named_session_file(
+        &root,
+        day_key,
+        "rollout-2026-08-07T13-18-00-019fdaa8-262e-7981-8572-ce0884b61784",
+        &[
+            r#"{"timestamp":"2026-08-07T05:18:00.000Z","type":"session_meta","payload":{"id":"019fdaa8-262e-7981-8572-ce0884b61784","cwd":"S:\\AIWorker\\zen_proxy","source":"vscode","originator":"codex-tui"}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-08-07T05:18:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\n  <cwd>S:\\AIWorker\\zen_proxy</cwd>\n</environment_context>"}]}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-08-07T05:18:15.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"MOSSX_CONTEXT_PACKAGE:sha256:eb6589d935390f007135fd0d0826a8ecd0f533feac376e82518036c88affe030:sha256:dead\nMOSSX_SHARED_CONTEXT_V1\nsession:89d8becf-c13a-4cad-94e8-2815d4cb179a\nbinding:codex:default\n\nCurrent user request:\n继续"}]}}"#
+                .to_string(),
+        ],
+    );
+
+    let summary = parse_codex_session_summary(session_path.as_path(), Some(workspace_path))
+        .expect("parse summary")
+        .expect("summary exists");
+    assert_eq!(summary.session_id, "019fdaa8-262e-7981-8572-ce0884b61784");
+    let title = summary.summary.as_deref().unwrap_or("");
+    assert!(
+        title.starts_with("MOSSX_CONTEXT_PACKAGE"),
+        "env context must not become title: {title}"
+    );
+    assert!(!title.contains("environment_context"));
+}
+
+#[test]
 fn parse_codex_session_summary_keeps_normal_agents_md_question() {
     let root = make_temp_sessions_root();
     let day_key = "2026-01-19";

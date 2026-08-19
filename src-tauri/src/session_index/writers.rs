@@ -328,8 +328,12 @@ pub(crate) fn should_omit_codex_index_title(title: &str) -> bool {
     if trimmed.is_empty() || is_generic_codex_session_title(trimmed) {
         return true;
     }
-    is_mossx_program_control_text(trimmed)
-        || crate::local_usage::is_codex_background_helper_text(trimmed)
+    // Shared 协议 owner 必须留在 Index，供 protocol hide 收录文件 uuid。
+    // Windows Codex 首条常是 <environment_context>，标题扫描会落到后续 MOSSX 包。
+    if is_mossx_program_control_text(trimmed) {
+        return false;
+    }
+    crate::local_usage::is_codex_background_helper_text(trimmed)
 }
 
 fn collect_codex_index_rows(
@@ -2190,7 +2194,7 @@ mod tests {
         assert!(should_omit_codex_index_title(""));
         assert!(should_omit_codex_index_title("Codex Session"));
         assert!(should_omit_codex_index_title("codex session"));
-        assert!(should_omit_codex_index_title("MOSSX_CONTEXT_PACKAGE:sha25"));
+        assert!(!should_omit_codex_index_title("MOSSX_CONTEXT_PACKAGE:sha25"));
         assert!(should_omit_codex_index_title(
             "Generate a concise title for a coding chat thread from the first user message."
         ));
@@ -2218,8 +2222,10 @@ mod tests {
             "/tmp/ws",
         );
         let kept: Vec<&str> = rows.iter().map(|row| row.session_id.as_str()).collect();
-        assert_eq!(kept, vec!["real", "nick"]);
+        assert_eq!(kept, vec!["mossx", "real", "nick"]);
         let omitted_ids: Vec<&str> = omitted.iter().map(|(_, id)| id.as_str()).collect();
-        assert_eq!(omitted_ids, vec!["empty", "generic", "mossx", "helper"]);
+        assert_eq!(omitted_ids, vec!["empty", "generic", "helper"]);
+        let mossx_row = rows.iter().find(|row| row.session_id == "mossx").expect("keep");
+        assert!(mossx_row.title.starts_with("MOSSX_CONTEXT_PACKAGE"));
     }
 }
