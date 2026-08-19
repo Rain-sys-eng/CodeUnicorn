@@ -1696,16 +1696,14 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       let generatedImagesToReinsertAfterUser: GeneratedImageItem[] = [];
       let inheritedProviderRetry:
         | Pick<
-            Extract<ConversationItem, { kind: "message"; role: "user" }>,
+            Extract<ConversationItem, { kind: "message" }>,
             "originKind" | "providerRetryAttempt" | "providerRetryAtMs"
           >
         | null = null;
       if (isUserMessage && !isOptimisticUser) {
         inheritedProviderRetry =
           list.find(
-            (
-              entry,
-            ): entry is Extract<ConversationItem, { kind: "message"; role: "user" }> =>
+            (entry): entry is Extract<ConversationItem, { kind: "message" }> =>
               isUserMessageItem(entry) &&
               isOptimisticUserMessageId(entry.id) &&
               entry.originKind === "shared-provider-retry",
