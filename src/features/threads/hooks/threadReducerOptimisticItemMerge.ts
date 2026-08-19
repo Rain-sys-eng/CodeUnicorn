@@ -9,7 +9,10 @@ import {
 import { isProcessingGeneratedImageItem } from "../utils/generatedImagePlaceholder";
 import { shouldPreserveProcessingGeneratedImage } from "../utils/generatedImagePlaceholderMatching";
 import { isOptimisticUserMessageId } from "../utils/queuedHandoffBubble";
-import { insertUnmatchedIncomingByNeighbor } from "./insertUnmatchedIncomingByNeighbor";
+import {
+  insertUnmatchedIncomingByNeighbor,
+  isUnmatchedExploreOrInProgressCommand,
+} from "./insertUnmatchedIncomingByNeighbor";
 import {
   buildOptimisticUserReplacementMap,
   insertGeneratedImagesAfterAnchors,
@@ -259,6 +262,17 @@ export function mergeThreadItemsPreservingOptimisticUsers(
         : matchedLocalMetadata.selectedAgentIcon,
     };
   });
+
+  if (
+    localItems.length === 0 &&
+    !mergedItems.some(isUserMessageItem)
+  ) {
+    // 空幕布没有 user turn：incoming 里的 explore / in-progress command
+    // 是别的会话残留，不是本 tab 的首屏历史。
+    mergedItems = mergedItems.filter(
+      (item) => !isUnmatchedExploreOrInProgressCommand(item),
+    );
+  }
 
   if (localItems.length > 0) {
     let lastRealUserIndex = -1;

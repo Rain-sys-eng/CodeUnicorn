@@ -134,12 +134,15 @@ export function suppressOrphanExploringItemsBeforeLatestUserTurn(
   options?: { enableCollaborationBadge?: boolean },
 ) {
   const latestUserIndex = findLatestOrdinaryUserQuestionIndex(items, options);
-  if (latestUserIndex <= 0) {
+  // 无 user turn：空幕布上的 exploring 是别的会话残留，不是当前轮。
+  // 有 user 时只藏 latest user 之前的 orphan，保留其后的当前轮 Exploring。
+  const cutoff = latestUserIndex < 0 ? items.length : latestUserIndex;
+  if (cutoff <= 0) {
     return items;
   }
   let changed = false;
   const filteredItems = items.filter((item, index) => {
-    if (index >= latestUserIndex) {
+    if (index >= cutoff) {
       return true;
     }
     const shouldSuppress =

@@ -556,6 +556,70 @@ describe("Messages explore rows", () => {
     expect(container.textContent ?? "").toContain("Read reducers.ts");
   });
 
+  it("hides leftover exploring on an empty grok canvas", async () => {
+    const leftoverItems: ConversationItem[] = [
+      {
+        id: "foreign-explore",
+        kind: "explore",
+        status: "exploring",
+        entries: [{ kind: "list", label: "remnants" }],
+      },
+      {
+        id: "foreign-explore-2",
+        kind: "explore",
+        status: "exploring",
+        entries: [{ kind: "list", label: "remnants" }],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={leftoverItems}
+        threadId="grok-pending-empty"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="grok"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".explore-inline").length).toBe(0);
+    });
+    expect(container.textContent ?? "").not.toContain("Exploring");
+    expect(container.textContent ?? "").not.toContain("remnants");
+    expect(container.textContent ?? "").toContain("messages.emptyThread");
+  });
+
+  it("hides leftover exploring on an empty gemini canvas", async () => {
+    const leftoverItems: ConversationItem[] = [
+      {
+        id: "foreign-explore",
+        kind: "explore",
+        status: "exploring",
+        entries: [{ kind: "list", label: "remnants" }],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={leftoverItems}
+        threadId="gemini-pending-empty"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="gemini"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".explore-inline").length).toBe(0);
+    });
+    expect(container.textContent ?? "").not.toContain("Exploring");
+  });
+
   it("hides leftover exploring above the latest grok user", async () => {
     const leftoverItems: ConversationItem[] = [
       {

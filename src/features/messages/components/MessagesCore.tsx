@@ -1050,17 +1050,16 @@ export const MessagesCore = memo(function MessagesCore({
     ],
   );
   const timelineSourceItems = useMemo(() => {
-    if (activeEngine === "codex" && isThinking) {
-      return suppressCompletedExploreItemsBetweenLatestUserTurns(visibleItems, {
-        enableCollaborationBadge,
-      });
-    }
-    if (activeEngine === "grok") {
-      return suppressOrphanExploringItemsBeforeLatestUserTurn(visibleItems, {
-        enableCollaborationBadge,
-      });
-    }
-    return visibleItems;
+    const itemsWithoutCompletedExploreBetweenTurns =
+      activeEngine === "codex" && isThinking
+        ? suppressCompletedExploreItemsBetweenLatestUserTurns(visibleItems, {
+            enableCollaborationBadge,
+          })
+        : visibleItems;
+    return suppressOrphanExploringItemsBeforeLatestUserTurn(
+      itemsWithoutCompletedExploreBetweenTurns,
+      { enableCollaborationBadge },
+    );
   }, [activeEngine, enableCollaborationBadge, isThinking, visibleItems]);
   const { timelineItems, phases: processPhases } = useMemo(
     () =>

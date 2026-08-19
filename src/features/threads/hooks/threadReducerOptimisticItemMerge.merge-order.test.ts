@@ -135,6 +135,60 @@ describe("mergeThreadItemsPreservingOptimisticUsers leftover order", () => {
     ]);
   });
 
+  it("drops explore-only leftovers when hydrating an empty canvas", () => {
+    const incoming: ConversationItem[] = [
+      {
+        id: "foreign-explore",
+        kind: "explore",
+        status: "exploring",
+        entries: [{ kind: "list", label: "remnants" }],
+      },
+      {
+        id: "foreign-explore-2",
+        kind: "explore",
+        status: "exploring",
+        entries: [{ kind: "list", label: "remnants" }],
+      },
+      {
+        id: "foreign-ls",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: ls remnants",
+        detail: "",
+        status: "inProgress",
+      },
+    ];
+
+    const merged = mergeThreadItemsPreservingOptimisticUsers([], incoming, {
+      isProcessing: false,
+    });
+
+    expect(merged).toEqual([]);
+  });
+
+  it("keeps a real history window that starts with explore when the canvas is empty", () => {
+    const incoming: ConversationItem[] = [
+      {
+        id: "same-session-explore",
+        kind: "explore",
+        status: "explored",
+        entries: [{ kind: "list", label: "remnants" }],
+      },
+      userMessage("hist-1", "看看 remnants"),
+      assistantMessage("a-1", "列完了"),
+    ];
+
+    const merged = mergeThreadItemsPreservingOptimisticUsers([], incoming, {
+      isProcessing: false,
+    });
+
+    expect(merged.map((item) => item.id)).toEqual([
+      "same-session-explore",
+      "hist-1",
+      "a-1",
+    ]);
+  });
+
   it("does not splice a foreign unmatched explore window above a new optimistic user", () => {
     const local: ConversationItem[] = [
       userMessage("optimistic-user-only", "在吗"),
