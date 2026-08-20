@@ -631,6 +631,116 @@ llm-pi-ai:
 }
 
 #[test]
+fn dsh_official_vendor_without_base_url_uses_known_host_and_own_key() {
+    let home = write_temp_dir("dsh-official-no-base");
+    std::fs::write(
+        home.join("settings.yaml"),
+        r#"
+llm-pi-ai:
+  providers:
+    gork-zhu:
+      baseURL: https://fufei.mossx.ai/v1
+      apiKeyEnv: GORK_ZHU_API_KEY
+    kimi-coding:
+      apiKeyEnv: KIMI_CODING_API_KEY
+      models:
+        - id: k3
+    minimax-cn:
+      apiKeyEnv: MINIMAX_CN_API_KEY
+      models:
+        - id: MiniMax-M2.7
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".credentials.yaml"),
+        "GORK_ZHU_API_KEY: sk-custom\nKIMI_CODING_API_KEY: sk-kimi\nMINIMAX_CN_API_KEY: sk-minimax\n",
+    )
+    .unwrap();
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("minimax-cn/MiniMax-M2.7"),
+        &empty_env,
+    )
+    .expect("official minimax");
+    assert_eq!(base, "https://api.minimaxi.com");
+    assert_eq!(key, "sk-minimax");
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("kimi-coding/k3"),
+        &empty_env,
+    )
+    .expect("official kimi");
+    assert_eq!(base, "https://api.kimi.com/coding");
+    assert_eq!(key, "sk-kimi");
+
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("gork-zhu"), &empty_env)
+            .expect("custom vendor still uses its own base");
+    assert_eq!(base, "https://fufei.mossx.ai/v1");
+    assert_eq!(key, "sk-custom");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn dsh_later_official_vendor_without_allowlist_row_still_resolves() {
+    let home = write_temp_dir("dsh-official-later");
+    std::fs::write(
+        home.join("settings.yaml"),
+        r#"
+llm-pi-ai:
+  providers:
+    openai:
+      apiKeyEnv: OPENAI_API_KEY
+"#,
+    )
+    .unwrap();
+    std::fs::write(home.join(".credentials.yaml"), "OPENAI_API_KEY: sk-openai\n").unwrap();
+
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("openai/gpt-5"), &empty_env)
+            .expect("later official openai");
+    assert_eq!(base, "https://api.openai.com/v1");
+    assert_eq!(key, "sk-openai");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn dsh_unknown_vendor_without_base_url_does_not_invent_a_host() {
+    let home = write_temp_dir("dsh-unknown-vendor");
+    std::fs::write(
+        home.join("settings.yaml"),
+        r#"
+llm-pi-ai:
+  providers:
+    future-official:
+      apiKeyEnv: FUTURE_OFFICIAL_API_KEY
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".credentials.yaml"),
+        "FUTURE_OFFICIAL_API_KEY: sk-future\n",
+    )
+    .unwrap();
+
+    let err = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("future-official/model-x"),
+        &empty_env,
+    )
+    .expect_err("unknown host must not be invented");
+    assert!(err.contains("future-official"), "{err}");
+    assert!(err.contains("missing"), "{err}");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn dsh_env_overrides_credentials_yaml() {
     let home = write_temp_dir("dsh-env");
     std::fs::write(

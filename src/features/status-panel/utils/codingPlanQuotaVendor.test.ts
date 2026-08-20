@@ -45,6 +45,20 @@ describe("codingPlanQuotaVendor", () => {
         selectedModel: "deepseek-official/deepseek-v4-flash",
       }),
     ).toBe("deepseek-official");
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "dsh",
+        providerProfileId: "__dsh_host_catalog__",
+        selectedModel: "minimax-cn/MiniMax-M2.7",
+      }),
+    ).toBe("minimax-cn");
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "dsh",
+        providerProfileId: "__dsh_host_catalog__",
+        selectedModel: "kimi-coding/k3",
+      }),
+    ).toBe("kimi-coding");
   });
 
   it("does not fall back to another dsh vendor when model is missing", () => {

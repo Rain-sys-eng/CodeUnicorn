@@ -54,6 +54,51 @@ fn official_known_base_url(vendor: &str) -> Option<&'static str> {
     }
 }
 
+fn official_default_api_key_env(vendor: &str) -> Option<&'static str> {
+    match vendor.trim().to_ascii_lowercase().as_str() {
+        "deepseek" | "deepseek-official" => Some(DSH_OFFICIAL_DEEPSEEK_KEY_ENV),
+        "kimi-coding" => Some("KIMI_CODING_API_KEY"),
+        "minimax" => Some("MINIMAX_API_KEY"),
+        "minimax-cn" => Some("MINIMAX_CN_API_KEY"),
+        "zai" => Some("ZAI_API_KEY"),
+        "zai-coding-cn" => Some("ZAI_CODING_CN_API_KEY"),
+        "anthropic" => Some("ANTHROPIC_API_KEY"),
+        "openai" => Some("OPENAI_API_KEY"),
+        "xai" | "grok" => Some("XAI_API_KEY"),
+        _ => None,
+    }
+}
+
+fn derived_vendor_api_key_env(vendor: &str) -> String {
+    let slug = vendor
+        .trim()
+        .to_ascii_uppercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .collect::<String>();
+    let slug = slug.trim_matches('_');
+    if slug.is_empty() {
+        "API_KEY".to_string()
+    } else {
+        format!("{slug}_API_KEY")
+    }
+}
+
+fn resolve_vendor_api_key_env(
+    vendor: &str,
+    profile: Option<&serde_yaml::Mapping>,
+) -> String {
+    if let Some(env_name) = profile.and_then(|map| yaml_str(map, "apiKeyEnv")) {
+        return env_name;
+    }
+    if let Some(env_name) = official_default_api_key_env(vendor) {
+        return env_name.to_string();
+    }
+    crate::engine::pi_auth::pi_catalog_env_var(vendor)
+        .map(str::to_string)
+        .unwrap_or_else(|| derived_vendor_api_key_env(vendor))
+}
+
 fn env_lookup(name: &str) -> Option<String> {
     std::env::var(name)
         .ok()
@@ -141,37 +186,28 @@ pub(crate) fn resolve_dsh_base_url_and_key_from_home(
         return Ok((base_url, api_key));
     }
 
-    if let Some(profile) = settings
+    // Official DSH routes (`kimi-coding`, `minimax-cn`, later `openai`, …) live
+    // under `llm-pi-ai.providers` with `apiKeyEnv` and no `baseURL`. Custom
+    // vendors keep their own `baseURL`. Never invent an unknown host, and never
+    // fall back to `agent-default-model`.
+    let profile = settings
         .as_ref()
         .and_then(|root| yaml_child(root, DSH_CUSTOM_NS))
         .and_then(|namespace| yaml_child(namespace, "providers"))
         .and_then(|providers| providers.get(&yaml_key(&vendor)))
-        .and_then(serde_yaml::Value::as_mapping)
-    {
-        let base_url = yaml_str(profile, "baseURL").unwrap_or_default();
-        let api_key = yaml_str(profile, "apiKeyEnv")
-            .map(|env_name| lookup_env_or_credentials(&env_name, env_lookup, credentials.as_ref()))
-            .unwrap_or_default();
-        return Ok((base_url, api_key));
-    }
-
-    // Known official host alias only. Never invent unknown hosts, and never
-    // fall back to `agent-default-model` when the selected vendor is missing.
-    let Some(base_url) = official_known_base_url(&vendor) else {
+        .and_then(serde_yaml::Value::as_mapping);
+    let base_url = profile
+        .and_then(|map| yaml_str(map, "baseURL"))
+        .or_else(|| official_known_base_url(&vendor).map(str::to_string))
+        .unwrap_or_default();
+    if base_url.is_empty() {
         return Err(format!(
             "dsh coding-plan vendor {vendor} credentials missing"
         ));
-    };
-    let api_key = if vendor.eq_ignore_ascii_case("deepseek") {
-        lookup_env_or_credentials(
-            DSH_OFFICIAL_DEEPSEEK_KEY_ENV,
-            env_lookup,
-            credentials.as_ref(),
-        )
-    } else {
-        String::new()
-    };
-    Ok((base_url.to_string(), api_key))
+    }
+    let key_env = resolve_vendor_api_key_env(&vendor, profile);
+    let api_key = lookup_env_or_credentials(&key_env, env_lookup, credentials.as_ref());
+    Ok((base_url, api_key))
 }
 
 fn pi_agent_dir() -> Option<PathBuf> {
