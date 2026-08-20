@@ -21,6 +21,7 @@ export type ThreadSelectChromeInput = {
   preserveEditor: boolean;
   requestedCollapseRightPanel?: boolean;
   engineSource?: unknown;
+  threadId?: string;
 };
 
 export type ThreadSelectChromeActions = {
@@ -38,6 +39,20 @@ export type ThreadSelectChromeActions = {
   setActiveEngine?: (engine: EngineType) => void;
 };
 
+const PREFIXED_NATIVE_ENGINE = /^(claude|gemini|grok|kimi|opencode|pi|dsh):/i;
+
+export function resolveThreadSelectEngine(
+  engineSource: unknown,
+  threadId?: string,
+): EngineType | null {
+  if (isEngineType(engineSource)) {
+    return engineSource;
+  }
+  const id = String(threadId ?? "").trim().toLowerCase();
+  const match = PREFIXED_NATIVE_ENGINE.exec(id);
+  return match ? (match[1] as EngineType) : null;
+}
+
 export function applyThreadSelectIdentity(
   input: ThreadSelectIdentityInput,
   actions: ThreadSelectIdentityActions,
@@ -50,8 +65,9 @@ export function applyThreadSelectChrome(
   input: ThreadSelectChromeInput,
   actions: ThreadSelectChromeActions,
 ): void {
-  if (actions.setActiveEngine && isEngineType(input.engineSource)) {
-    actions.setActiveEngine(input.engineSource);
+  const engine = resolveThreadSelectEngine(input.engineSource, input.threadId);
+  if (actions.setActiveEngine && engine) {
+    actions.setActiveEngine(engine);
   }
   actions.closeSettings?.();
   const diffCleanupAction = getThreadSelectDiffCleanupAction(

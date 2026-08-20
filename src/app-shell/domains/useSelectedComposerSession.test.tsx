@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComposerEnginePrefs } from "../../types";
 import { useSelectedComposerSession } from "./useSelectedComposerSession";
+import { seedDshComposerSelectionFromHost } from "./selectedComposerSession";
 
 type Store = Record<string, unknown>;
 
@@ -767,6 +768,42 @@ describe("useSelectedComposerSession", () => {
       expect(result.current.selectedComposerSelection).toEqual({
         modelId: "grok-4.5",
         effort: "medium",
+      });
+    });
+  });
+
+  it("rebinding a polluted DSH ledger from host seed prefers the store over memory cache", async () => {
+    composerStore["selectedModelByThread.ws-a:dsh:session-1"] = {
+      modelId: "gpt-5.5",
+      effort: null,
+    };
+    const { result } = renderHook(() =>
+      useSelectedComposerSession({
+        activeWorkspaceId: "ws-a",
+        activeThreadId: "dsh:session-1",
+        resolveCanonicalThreadId: (threadId: string) => threadId,
+      }),
+    );
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gpt-5.5",
+        effort: null,
+      });
+    });
+
+    act(() => {
+      seedDshComposerSelectionFromHost({
+        workspaceId: "ws-a",
+        threadId: "dsh:session-1",
+        catalogId: "gork-zhu/grok-4.6",
+        effort: "low",
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gork-zhu/grok-4.6",
+        effort: "low",
       });
     });
   });

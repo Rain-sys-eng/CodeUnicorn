@@ -107,6 +107,24 @@ describe("resolveComposerAtomicSelectedModelId", () => {
       ).toBe("gpt-5.5");
     });
 
+    it("does not inherit a global native model on a DSH target without identity", () => {
+      expect(
+        resolveComposerAtomicSelectedModelId({
+          isSharedSession: false,
+          executionTarget: {
+            engine: "dsh",
+            providerProfileId: null,
+            modelCatalogEntryId: null,
+            model: null,
+            reasoning: null,
+            providerProfileNameSnapshot: "本地配置",
+            providerProfileSource: "disk",
+          },
+          globalSelectedModelId: "gpt-5.5",
+        }),
+      ).toBe("");
+    });
+
     it("falls back to global selectedModelId when atomic target lacks model", () => {
       expect(
         resolveComposerAtomicSelectedModelId({

@@ -1,4 +1,10 @@
 import { getComposerEnginePrefForEngine } from "../../features/composer/hooks/composerEnginePrefsStore";
+import { isTrustedDshCatalogId } from "../../features/threads/hooks/threadMessagingHelpers";
+import {
+  getClientStoreSync,
+  isClientStoreReady,
+  writeClientStoreValue,
+} from "../../services/clientStorage";
 
 export type ComposerSessionSelection = {
   modelId: string | null;
@@ -239,4 +245,65 @@ export function fillPendingComposerSelectionEffortFromEnginePref(
     modelId: selection.modelId,
     effort: prefEffort,
   });
+}
+
+const dshComposerSelectionSeedListeners = new Set<() => void>();
+
+export function subscribeDshComposerSelectionSeeded(
+  listener: () => void,
+): () => void {
+  dshComposerSelectionSeedListeners.add(listener);
+  return () => {
+    dshComposerSelectionSeedListeners.delete(listener);
+  };
+}
+
+function notifyDshComposerSelectionSeeded() {
+  for (const listener of dshComposerSelectionSeedListeners) {
+    listener();
+  }
+}
+
+/**
+ * Seed a DSH thread ledger from host history `{provider}/{model}` only when
+ * the existing ledger is missing or not a trusted DSH catalog id.
+ * Never uses global `composerEnginePrefs.dsh.modelId`.
+ */
+export function seedDshComposerSelectionFromHost(input: {
+  workspaceId: string | null;
+  threadId: string;
+  catalogId: string | null | undefined;
+  effort?: string | null;
+}): boolean {
+  if (!input.threadId.startsWith("dsh:")) {
+    return false;
+  }
+  const catalogId = input.catalogId?.trim() || "";
+  if (!isTrustedDshCatalogId(catalogId)) {
+    return false;
+  }
+  const sessionKey = getThreadComposerSelectionStorageKey(
+    input.workspaceId,
+    input.threadId,
+  );
+  const stored = isClientStoreReady("composer")
+    ? getClientStoreSync<unknown>("composer", sessionKey)
+    : undefined;
+  const existing = normalizeComposerSessionSelectionForThread(
+    input.threadId,
+    stored,
+  );
+  if (isTrustedDshCatalogId(existing?.modelId)) {
+    return false;
+  }
+  const next = normalizeComposerSessionSelectionForThread(input.threadId, {
+    modelId: catalogId,
+    effort: existing?.effort ?? input.effort ?? null,
+  });
+  if (!next || !isClientStoreReady("composer")) {
+    return false;
+  }
+  writeClientStoreValue("composer", sessionKey, next);
+  notifyDshComposerSelectionSeeded();
+  return true;
 }

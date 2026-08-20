@@ -102,6 +102,7 @@ export function useAppShellComposerModelSection({
   }, [activeEngine, engineModelsAsOptions, activeEngineSelectedModelId]);
 
   const hasActiveComposerThread = activeThreadId !== null;
+  const activeThreadEngine = resolveThreadEngine(activeThreadId ?? "");
   const effectiveSelectedModelId = useMemo(() => {
     return getEffectiveSelectedModelId({
       activeEngine,
@@ -110,8 +111,12 @@ export function useAppShellComposerModelSection({
       hasActiveThread: hasActiveComposerThread,
       // Codex/Claude：允许会话级自由/自定义模型名（含本地配置、catalog 未登记项），
       // 避免 Atomic picker 选中后被 repair 静默回退。
+      // DSH：账本是 host `{provider}/{model}`，切回时空/残留 catalog 不得回落默认。
       allowUnknownActiveThreadModel:
-        activeEngine === "codex" || activeEngine === "claude",
+        activeEngine === "codex" ||
+        activeEngine === "claude" ||
+        activeEngine === "dsh" ||
+        activeThreadEngine === "dsh",
       codexModels: effectiveModels,
       engineModelsAsOptions,
       engineSelectedModelIdByType,
@@ -125,6 +130,7 @@ export function useAppShellComposerModelSection({
     hasActiveComposerThread,
     selectedComposerSelection,
     selectedModelId,
+    activeThreadEngine,
   ]);
   const effectiveSelectedModel = useMemo(() => {
     return effectiveModels.find((model) => model.id === effectiveSelectedModelId) ?? null;
@@ -431,8 +437,12 @@ export function useAppShellComposerModelSection({
   // freeform（allowUnknown）会保留 catalog 外 modelId——这是业务能力，不是 #185 缺口；
   // 这里只收敛 effort/model 的有效投影，禁止无变化 persist 触发反馈环。
   useEffect(() => {
+    const threadEngine = resolveThreadEngine(activeThreadId ?? "");
+    // Unprefixed local Codex ids have no engine prefix; only skip when the
+    // active thread is a known non-Codex native session (DSH switch window).
     if (
       activeEngine !== "codex" ||
+      (threadEngine !== null && threadEngine !== "codex") ||
       !activeThreadId ||
       !selectedComposerSelection ||
       !modelsReady

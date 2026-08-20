@@ -1,8 +1,11 @@
+import { seedDshComposerSelectionFromHost } from "../../../app-shell-parts/selectedComposerSession";
 import type { ThreadTokenUsage } from "../../../types";
 import type { HistoryLoader } from "../contracts/conversationCurtainContracts";
 import { normalizeHistorySnapshot } from "../contracts/conversationCurtainContracts";
+import { isTrustedDshCatalogId } from "../hooks/threadMessagingHelpers";
 import {
   asNumber,
+  asString,
   normalizeDshSessionStats,
   normalizeDshTodos,
 } from "../utils/threadNormalize";
@@ -81,6 +84,15 @@ export function createDshHistoryLoader({
           hasMore?: boolean;
           nextCursor?: string | null;
         };
+        const currentModel = extractDshHistoryCurrentModel(result);
+        if (currentModel) {
+          seedDshComposerSelectionFromHost({
+            workspaceId,
+            threadId,
+            catalogId: currentModel.catalogId,
+            effort: currentModel.effort,
+          });
+        }
         return normalizeHistorySnapshot({
           engine: "dsh",
           workspaceId,
@@ -110,6 +122,32 @@ export function createDshHistoryLoader({
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+export function extractDshHistoryCurrentModel(
+  result: unknown,
+): { catalogId: string; effort: string | null } | null {
+  const record = asRecord(result);
+  const current = asRecord(record?.currentModel ?? record?.current_model);
+  if (!current) {
+    return null;
+  }
+  const provider = asString(current.provider).trim();
+  const model = asString(current.model).trim();
+  if (!provider || !model) {
+    return null;
+  }
+  const catalogId = `${provider}/${model}`;
+  if (!isTrustedDshCatalogId(catalogId)) {
+    return null;
+  }
+  const effort = asString(
+    current.reasoningEffort ?? current.reasoning_effort,
+  ).trim();
+  return {
+    catalogId,
+    effort: effort || null,
+  };
 }
 
 export function extractDshHistoryTodos(result: unknown): ThreadTokenUsage["dshTodos"] | undefined {

@@ -524,6 +524,7 @@ describe("useEngineController", () => {
       "kimi",
       "opencode",
       "pi",
+      "dsh",
     ]);
     expect(
       result.current.availableEngines.every(
@@ -710,6 +711,7 @@ describe("useEngineController", () => {
       "kimi",
       "opencode",
       "pi",
+      "dsh",
     ]);
     expect(result.current.activeEngine).toBe("opencode");
   });
@@ -1646,6 +1648,145 @@ describe("useEngineController", () => {
     expect(switchEngineMock).toHaveBeenCalledWith("codex");
     expect(runCodexDoctorMock).not.toHaveBeenCalled();
     expect(result.current.activeEngine).toBe("codex");
+  });
+
+  it("optimistically switches activeEngine before switchEngine settles", async () => {
+    const dshModels: EngineStatus["models"] = [
+      {
+        id: "gork-zhu/grok-4.6",
+        displayName: "gork-zhu / grok-4.6",
+        description: "",
+        isDefault: true,
+      },
+    ];
+    detectEnginesMock.mockResolvedValue([
+      createEngineStatus("codex", true, [
+        {
+          id: "gpt-5.5",
+          displayName: "GPT-5.5",
+          description: "",
+          isDefault: true,
+        },
+      ]),
+      createEngineStatus("dsh", true, dshModels),
+    ]);
+    getActiveEngineMock.mockResolvedValue("codex");
+    getEngineModelsMock.mockResolvedValue(dshModels);
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    await act(async () => {
+      await result.current.setActiveEngine("codex");
+    });
+    expect(result.current.activeEngine).toBe("codex");
+    const catalogCallsBeforeDshSwitch = getEngineModelsMock.mock.calls.length;
+
+    const switchDeferred = createDeferred<void>();
+    switchEngineMock.mockReturnValueOnce(switchDeferred.promise);
+    let switchPromise!: Promise<void>;
+    act(() => {
+      switchPromise = result.current.setActiveEngine("dsh");
+    });
+    await waitFor(() => expect(result.current.activeEngine).toBe("dsh"));
+    expect(result.current.engineModels.map((model) => model.id)).toEqual([
+      "gork-zhu/grok-4.6",
+    ]);
+    expect(getEngineModelsMock.mock.calls.length).toBe(
+      catalogCallsBeforeDshSwitch,
+    );
+
+    switchDeferred.resolve();
+    await act(async () => {
+      await switchPromise;
+    });
+    expect(result.current.activeEngine).toBe("dsh");
+    expect(getEngineModelsMock.mock.calls.length).toBe(
+      catalogCallsBeforeDshSwitch,
+    );
+  });
+
+  it("rolls back optimistic engine chrome when switchEngine fails", async () => {
+    detectEnginesMock.mockResolvedValue([
+      createEngineStatus("codex", true),
+      createEngineStatus("dsh", true),
+    ]);
+    getActiveEngineMock.mockResolvedValue("codex");
+    getEngineModelsMock.mockResolvedValue([]);
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    await act(async () => {
+      await result.current.setActiveEngine("codex");
+    });
+    expect(result.current.activeEngine).toBe("codex");
+
+    switchEngineMock.mockReset();
+    switchEngineMock.mockImplementation(() =>
+      Promise.reject(new Error("switch failed")),
+    );
+    await act(async () => {
+      await result.current.setActiveEngine("dsh");
+    });
+    expect(result.current.activeEngine).toBe("codex");
+    switchEngineMock.mockReset();
+    switchEngineMock.mockResolvedValue(undefined);
+  });
+
+  it("does not let a stale switchEngine failure roll back a later DSH switch", async () => {
+    const dshModels: EngineStatus["models"] = [
+      {
+        id: "gork-zhu/grok-4.6",
+        displayName: "gork-zhu / grok-4.6",
+        description: "",
+        isDefault: true,
+      },
+    ];
+    detectEnginesMock.mockResolvedValue([
+      createEngineStatus("codex", true),
+      createEngineStatus("claude", true),
+      createEngineStatus("dsh", true, dshModels),
+    ]);
+    getActiveEngineMock.mockResolvedValue("codex");
+    getEngineModelsMock.mockResolvedValue(dshModels);
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    await act(async () => {
+      await result.current.setActiveEngine("codex");
+    });
+
+    const claudeDeferred = createDeferred<void>();
+    switchEngineMock.mockReset();
+    switchEngineMock.mockReturnValueOnce(claudeDeferred.promise);
+    switchEngineMock.mockResolvedValueOnce(undefined);
+
+    let claudePromise!: Promise<void>;
+    act(() => {
+      claudePromise = result.current.setActiveEngine("claude");
+    });
+    await waitFor(() => expect(result.current.activeEngine).toBe("claude"));
+
+    await act(async () => {
+      await result.current.setActiveEngine("dsh");
+    });
+    expect(result.current.activeEngine).toBe("dsh");
+
+    claudeDeferred.reject(new Error("stale claude switch failed"));
+    await act(async () => {
+      await claudePromise;
+    });
+    expect(result.current.activeEngine).toBe("dsh");
+    expect(result.current.engineModels.map((model) => model.id)).toEqual([
+      "gork-zhu/grok-4.6",
+    ]);
+    switchEngineMock.mockReset();
+    switchEngineMock.mockResolvedValue(undefined);
   });
 
   it("adds Codex doctor evidence when refreshed status is still unavailable", async () => {

@@ -72,6 +72,17 @@ describe("shouldSpawnNativeThreadForEngineMismatch", () => {
     },
   );
 
+  it("does not spawn when returning to a DSH thread after visiting Codex", () => {
+    expect(
+      shouldSpawnNativeThreadForEngineMismatch({
+        threadEngine: "dsh",
+        currentEngine: "dsh",
+        threadIdCompatible: true,
+        explicitEngine: "codex",
+      }),
+    ).toBe(false);
+  });
+
   it("does not spawn when the consumed mark is for a different engine", () => {
     expect(
       shouldSpawnNativeThreadForEngineMismatch({

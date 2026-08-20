@@ -66,6 +66,15 @@ pub struct DshContextCategoryUsage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct DshSessionCurrentModel {
+    pub provider: String,
+    pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct DshSessionUsage {
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
@@ -93,6 +102,9 @@ pub struct DshSessionLoadResult {
     /// Host `todos` snapshot when present, including an explicit empty list.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub todos: Option<Value>,
+    /// Last-wins `{provider, model}` from already-loaded history events.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_model: Option<DshSessionCurrentModel>,
     #[serde(default)]
     pub has_more: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -237,6 +249,7 @@ where
         messages,
         usage,
         todos,
+        current_model: current_model_from_history_events(&loaded.events),
         has_more: loaded.has_more,
         next_cursor: next_cursor_from_events(&loaded.events, loaded.has_more),
     })
@@ -732,6 +745,70 @@ fn flush_assistant(
             source_kind: None,
         });
     }
+}
+
+fn current_model_from_history_events(events: &[Value]) -> Option<DshSessionCurrentModel> {
+    let mut current: Option<DshSessionCurrentModel> = None;
+    for entry in events {
+        let event = entry.get("event").unwrap_or(entry);
+        let event_type = event.get("type").and_then(Value::as_str).unwrap_or("");
+        let data = event.get("data").unwrap_or(&Value::Null);
+        match event_type {
+            "request/context" => {
+                if let Some(next) = selection_from_provider_model(
+                    data.get("provider"),
+                    data.get("model"),
+                    None,
+                ) {
+                    current = Some(next);
+                }
+            }
+            "request/header" => {
+                let config = data
+                    .pointer("/header/config")
+                    .or_else(|| data.get("config"))
+                    .unwrap_or(&Value::Null);
+                if let Some(next) = selection_from_provider_model(
+                    config.get("provider"),
+                    config.get("model"),
+                    config
+                        .get("reasoningEffort")
+                        .or_else(|| config.get("reasoning_effort")),
+                ) {
+                    current = Some(next);
+                }
+            }
+            _ => {}
+        }
+    }
+    current
+}
+
+fn selection_from_provider_model(
+    provider: Option<&Value>,
+    model: Option<&Value>,
+    reasoning_effort: Option<&Value>,
+) -> Option<DshSessionCurrentModel> {
+    let provider = provider
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let model = model
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let reasoning_effort = reasoning_effort
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    Some(DshSessionCurrentModel {
+        provider,
+        model,
+        reasoning_effort,
+    })
 }
 
 fn snapshots_from_history_page(page: &Value) -> (Option<DshSessionUsage>, Option<Value>) {
@@ -1306,6 +1383,69 @@ mod tests {
     #[test]
     fn history_page_without_projections_is_none() {
         assert!(usage_from_history_page(&json!({ "events": [] })).is_none());
+    }
+
+    #[test]
+    fn history_events_fold_current_model_last_wins() {
+        let events = vec![
+            json!({
+                "event": {
+                    "type": "request/header",
+                    "data": {
+                        "header": {
+                            "config": {
+                                "provider": "deepseek-official",
+                                "model": "deepseek-v4-flash",
+                                "reasoningEffort": "high"
+                            }
+                        }
+                    }
+                }
+            }),
+            json!({
+                "event": {
+                    "type": "request/context",
+                    "data": {
+                        "provider": "gork-zhu",
+                        "model": "grok-4.6"
+                    }
+                }
+            }),
+        ];
+        let current = current_model_from_history_events(&events).expect("current");
+        assert_eq!(current.provider, "gork-zhu");
+        assert_eq!(current.model, "grok-4.6");
+        assert_eq!(current.reasoning_effort, None);
+    }
+
+    #[test]
+    fn history_header_keeps_reasoning_when_it_is_last() {
+        let events = vec![
+            json!({
+                "event": {
+                    "type": "request/context",
+                    "data": { "provider": "gork-zhu", "model": "grok-4.6" }
+                }
+            }),
+            json!({
+                "event": {
+                    "type": "request/header",
+                    "data": {
+                        "header": {
+                            "config": {
+                                "provider": "gork-zhu",
+                                "model": "grok-4.6",
+                                "reasoningEffort": "low"
+                            }
+                        }
+                    }
+                }
+            }),
+        ];
+        let current = current_model_from_history_events(&events).expect("current");
+        assert_eq!(current.provider, "gork-zhu");
+        assert_eq!(current.model, "grok-4.6");
+        assert_eq!(current.reasoning_effort.as_deref(), Some("low"));
     }
 
     #[test]

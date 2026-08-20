@@ -16,6 +16,7 @@ import {
   shouldApplyDraftComposerSelectionToThread,
   shouldInheritComposerSelectionFromClaudeForkParent,
   shouldMigrateComposerSelectionBetweenThreadIds,
+  subscribeDshComposerSelectionSeeded,
   type ComposerSessionSelection,
 } from "./selectedComposerSession";
 
@@ -263,16 +264,30 @@ export function useSelectedComposerSession({
 
     let candidate: ComposerSessionSelection | null = null;
     let hasCandidate = false;
+    const stored = readStoredThreadComposerSelectionEntryBySessionKey(sessionKey);
+    const storedSelection = normalizeComposerSessionSelectionForThread(
+      activeThreadId,
+      stored.value,
+    );
     const selectionCache = selectedComposerSelectionBySessionKeyRef.current;
-    if (Object.prototype.hasOwnProperty.call(selectionCache, sessionKey)) {
+    if (stored.exists) {
+      // Host DSH seed writes the composer store directly. Prefer store over a
+      // stale in-memory cache so returning to a cold/polluted ledger rebinds.
+      candidate = storedSelection;
+      hasCandidate = true;
+      if (
+        !selectionsEqual(selectionCache[sessionKey] ?? null, storedSelection)
+      ) {
+        cacheSelectionForSessionKey(sessionKey, storedSelection);
+      }
+    } else if (Object.prototype.hasOwnProperty.call(selectionCache, sessionKey)) {
       candidate = normalizeComposerSessionSelectionForThread(
         activeThreadId,
         selectionCache[sessionKey] ?? null,
       );
       hasCandidate = true;
     } else {
-      const stored = readStoredThreadComposerSelectionEntryBySessionKey(sessionKey);
-      candidate = normalizeComposerSessionSelectionForThread(activeThreadId, stored.value);
+      candidate = storedSelection;
       hasCandidate = stored.exists;
       const parentThreadId = extractClaudeForkParentThreadId(activeThreadId);
       const parentSessionKey = parentThreadId
@@ -474,6 +489,12 @@ export function useSelectedComposerSession({
       if (store === "composer") {
         reloadSelectedComposerSelection();
       }
+    });
+  }, [reloadSelectedComposerSelection]);
+
+  useEffect(() => {
+    return subscribeDshComposerSelectionSeeded(() => {
+      reloadSelectedComposerSelection();
     });
   }, [reloadSelectedComposerSelection]);
 

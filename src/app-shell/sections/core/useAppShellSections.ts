@@ -226,6 +226,7 @@ export function useAppShellSections(input: UseAppShellSectionsInput) {
           preserveEditor,
           requestedCollapseRightPanel: true,
           engineSource: thread?.engineSource,
+          threadId,
         },
         {
           setSelectedDiffPath,

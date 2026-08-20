@@ -1366,7 +1366,11 @@ export function useAppShellLayoutNodesSection(
           selectWorkspace,
           setActiveThreadId,
         },
-        { preserveEditor, engineSource: thread?.engineSource },
+        {
+          preserveEditor,
+          engineSource: thread?.engineSource,
+          threadId,
+        },
         {
           closeSettings,
           setSelectedDiffPath,

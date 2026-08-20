@@ -190,6 +190,38 @@ describe("modelSelection", () => {
     ).toBe("engine-alt");
   });
 
+  it("keeps a trusted DSH thread catalog id when the leftover catalog does not match", () => {
+    expect(
+      getEffectiveSelectedModelId({
+        activeEngine: "dsh",
+        selectedModelId: "gpt-5.5",
+        activeThreadSelectedModelId: "gork-zhu/grok-4.6",
+        hasActiveThread: true,
+        allowUnknownActiveThreadModel: true,
+        codexModels,
+        engineModelsAsOptions: [
+          createModel("gpt-5.5", { isDefault: true }),
+        ],
+        engineSelectedModelIdByType: {},
+      }),
+    ).toBe("gork-zhu/grok-4.6");
+  });
+
+  it("still falls back Claude unknown ids to catalog default unless allowUnknown", () => {
+    expect(
+      getEffectiveSelectedModelId({
+        activeEngine: "claude",
+        selectedModelId: null,
+        activeThreadSelectedModelId: "k3",
+        hasActiveThread: true,
+        allowUnknownActiveThreadModel: false,
+        codexModels,
+        engineModelsAsOptions: engineModels,
+        engineSelectedModelIdByType: {},
+      }),
+    ).toBe("engine-default");
+  });
+
   it("falls back to the engine default when the saved non-codex selection is invalid", () => {
     const engineSelectedModelIdByType: Partial<Record<EngineType, string | null>> = {
       opencode: "missing-model",

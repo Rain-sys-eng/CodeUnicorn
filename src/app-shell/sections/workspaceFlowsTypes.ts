@@ -38,6 +38,7 @@ export function isEngineType(value: unknown): value is EngineType {
     value === "grok" ||
     value === "kimi" ||
     value === "opencode" ||
-    value === "pi"
+    value === "pi" ||
+    value === "dsh"
   );
 }

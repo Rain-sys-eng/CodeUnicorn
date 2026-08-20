@@ -28,9 +28,11 @@ import { parseGrokHistoryMessages } from "../loaders/grokHistoryParser";
 import { parseKimiHistoryMessages } from "../loaders/kimiHistoryParser";
 import {
   DSH_UI_HISTORY_WINDOW,
+  extractDshHistoryCurrentModel,
   extractDshHistoryTodos,
   extractDshHistoryTokenUsage,
 } from "../loaders/dshHistoryLoader";
+import { seedDshComposerSelectionFromHost } from "../../../app-shell-parts/selectedComposerSession";
 import { parseDshHistoryMessages } from "../loaders/dshHistoryParser";
 import { parsePiHistoryMessages } from "../loaders/piHistoryParser";
 import {
@@ -1680,6 +1682,17 @@ export function useThreadActionsResumeThreadForWorkspace(
             });
             if (!isCurrentResumeRequest()) {
               return threadId;
+            }
+            const restoredCurrentModel = extractDshHistoryCurrentModel(
+              staged?.result ?? null,
+            );
+            if (restoredCurrentModel) {
+              seedDshComposerSelectionFromHost({
+                workspaceId,
+                threadId,
+                catalogId: restoredCurrentModel.catalogId,
+                effort: restoredCurrentModel.effort,
+              });
             }
             const restoredTokenUsage = extractDshHistoryTokenUsage(
               staged?.result ?? null,

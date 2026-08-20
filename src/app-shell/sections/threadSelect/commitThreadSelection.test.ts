@@ -4,6 +4,7 @@ import {
   applyThreadSelectChrome,
   applyThreadSelectIdentity,
   commitThreadSelection,
+  resolveThreadSelectEngine,
 } from "./commitThreadSelection";
 
 function createIdentityActions() {
@@ -98,6 +99,47 @@ describe("commitThreadSelection", () => {
       "thread-1",
       "ws-1",
     );
+  });
+
+  it("applies DSH engine chrome when selecting a DSH thread", () => {
+    const chromeActions = createChromeActions();
+
+    applyThreadSelectChrome(
+      {
+        preserveEditor: false,
+        engineSource: "dsh",
+      },
+      chromeActions,
+    );
+
+    expect(chromeActions.setActiveEngine).toHaveBeenCalledWith("dsh");
+  });
+
+  it("infers DSH from a dsh: thread id when engineSource is missing", () => {
+    const chromeActions = createChromeActions();
+
+    applyThreadSelectChrome(
+      {
+        preserveEditor: false,
+        threadId: "dsh:session-1",
+      },
+      chromeActions,
+    );
+
+    expect(chromeActions.setActiveEngine).toHaveBeenCalledWith("dsh");
+  });
+
+  it("does not infer Codex from an unprefixed thread id", () => {
+    expect(resolveThreadSelectEngine(undefined, "thread-local-codex")).toBeNull();
+    const chromeActions = createChromeActions();
+    applyThreadSelectChrome(
+      {
+        preserveEditor: false,
+        threadId: "thread-local-codex",
+      },
+      chromeActions,
+    );
+    expect(chromeActions.setActiveEngine).not.toHaveBeenCalled();
   });
 
   it("ignores unknown engine sources on chrome", () => {

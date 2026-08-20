@@ -123,6 +123,9 @@ export function resolveEngineType(
   if (id.startsWith("opencode:")) {
     return "opencode";
   }
+  if (id.startsWith("dsh:")) {
+    return "dsh";
+  }
   return "codex";
 }
 

@@ -85,6 +85,12 @@ export function useEngineController({
   const detectPromiseRef = useRef<Promise<EngineRefreshResult | void> | null>(null);
   const visibleCatalogRequestKeyRef = useRef<string | null>(null);
   const lastGoodModelsByScopeRef = useRef(new Map<string, EngineModelInfo[]>());
+  const engineSwitchGenerationRef = useRef(0);
+  const engineChromeRef = useRef<{
+    engine: EngineType;
+    models: EngineModelInfo[];
+  }>({ engine: activeEngine, models: engineModels });
+  engineChromeRef.current = { engine: activeEngine, models: engineModels };
   const lastWorkspaceId = useRef<string | null>(null);
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
@@ -435,21 +441,27 @@ export function useEngineController({
         payload: { from: activeEngine, to: engineType },
       });
 
+      const previousChrome = engineChromeRef.current;
+      const lastGoodTargetModels =
+        lastGoodModelsByScopeRef.current.get(`${engineType}:__global__`) ?? [];
+      const optimisticModels =
+        targetStatus.models.length > 0
+          ? targetStatus.models.map((model) => normalizeEngineModelEntry(model))
+          : lastGoodTargetModels.map((model) => normalizeEngineModelEntry(model));
+      const generation = ++engineSwitchGenerationRef.current;
+      // Optimistic chrome: thread-select must not wait on switch_engine IPC
+      // or the first frame still binds the previous native composer.
+      engineChromeRef.current = { engine: engineType, models: optimisticModels };
+      setActiveEngineState(engineType);
+      persistEngineSelection(engineType);
+      setEngineModels(optimisticModels);
+      visibleCatalogRequestKeyRef.current = `${engineType}:__global__`;
+
       try {
         await switchEngine(engineType);
-        setActiveEngineState(engineType);
-        persistEngineSelection(engineType);
-        // Immediately switch visible model list to target engine snapshot to avoid
-        // showing stale models from previous engine while CLI refresh is in flight.
-        setEngineModels(
-          targetStatus.models.length > 0
-            ? targetStatus.models.map((model) => normalizeEngineModelEntry(model))
-            : [],
-        );
-
-        // Always refresh models from CLI and keep status models as fallback.
-        await refreshEngineModels(engineType);
-
+        if (engineSwitchGenerationRef.current !== generation) {
+          return;
+        }
         onDebug?.({
           id: `${Date.now()}-engine-switch-success`,
           timestamp: Date.now(),
@@ -458,6 +470,13 @@ export function useEngineController({
           payload: { engine: engineType, models: targetStatus.models },
         });
       } catch (error) {
+        if (engineSwitchGenerationRef.current === generation) {
+          engineChromeRef.current = previousChrome;
+          setActiveEngineState(previousChrome.engine);
+          persistEngineSelection(previousChrome.engine);
+          setEngineModels(previousChrome.models);
+          visibleCatalogRequestKeyRef.current = `${previousChrome.engine}:__global__`;
+        }
         onDebug?.({
           id: `${Date.now()}-engine-switch-error`,
           timestamp: Date.now(),
@@ -467,7 +486,7 @@ export function useEngineController({
         });
       }
     },
-    [activeEngine, enabledEngineTypes, engineStatuses, onDebug, refreshEngineModels],
+    [activeEngine, enabledEngineTypes, engineStatuses, onDebug],
   );
 
   /**

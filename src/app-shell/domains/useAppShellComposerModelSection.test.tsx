@@ -255,6 +255,82 @@ describe("useAppShellComposerModelSection handleSelectModel", () => {
     );
   });
 
+  it("does not persist Codex repair onto a Claude thread during the switch window", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    renderSection({
+      activeEngine: "codex",
+      activeThreadId: "claude:session-1",
+      persistComposerSelectionForThread,
+      models: [makeModel("gpt-5.5", { isDefault: true })],
+      selectedComposerSelection: {
+        modelId: "claude-sonnet-4-6",
+        effort: null,
+      },
+    });
+    expect(persistComposerSelectionForThread).not.toHaveBeenCalled();
+  });
+
+  it("does not persist Codex repair onto a DSH thread during the switch window", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    const { result } = renderSection({
+      activeEngine: "codex",
+      activeThreadId: "dsh:session-1",
+      activeWorkspaceId: "workspace-1",
+      persistComposerSelectionForThread,
+      models: [makeModel("gpt-5.5", { isDefault: true })],
+      engineModelsAsOptions: [],
+      selectedComposerSelection: {
+        modelId: "gork-zhu/grok-4.6",
+        effort: null,
+      },
+    });
+
+    expect(result.current.effectiveSelectedModelId).toBe("gork-zhu/grok-4.6");
+    expect(persistComposerSelectionForThread).not.toHaveBeenCalled();
+  });
+
+  it("still runs Codex repair on an unprefixed local thread without rewriting unknown ids", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    const { result } = renderSection({
+      activeEngine: "codex",
+      activeThreadId: "thread-local-codex",
+      persistComposerSelectionForThread,
+      models: [makeModel("gpt-5.5", { isDefault: true })],
+      selectedComposerSelection: {
+        modelId: "custom-codex-spark",
+        effort: "high",
+      },
+    });
+    // Codex allowUnknown keeps freeform ids; repair may still persist effort
+    // onto the unprefixed thread. The DSH skip must not swallow this path.
+    expect(result.current.effectiveSelectedModelId).toBe("custom-codex-spark");
+    expect(persistComposerSelectionForThread).toHaveBeenCalledWith(
+      null,
+      "thread-local-codex",
+      {
+        modelId: "custom-codex-spark",
+        effort: null,
+      },
+    );
+  });
+
+  it("keeps a DSH ledger id when the leftover catalog is another engine", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    const { result } = renderSection({
+      activeEngine: "dsh",
+      activeThreadId: "dsh:session-1",
+      persistComposerSelectionForThread,
+      engineModelsAsOptions: [makeModel("gpt-5.5", { isDefault: true })],
+      selectedComposerSelection: {
+        modelId: "gork-zhu/grok-4.6",
+        effort: null,
+      },
+    });
+
+    expect(result.current.effectiveSelectedModelId).toBe("gork-zhu/grok-4.6");
+    expect(persistComposerSelectionForThread).not.toHaveBeenCalled();
+  });
+
   it("keeps a provider-only Codex selection without model repair", () => {
     const persistComposerSelectionForThread = vi.fn();
     const { result } = renderSection({
