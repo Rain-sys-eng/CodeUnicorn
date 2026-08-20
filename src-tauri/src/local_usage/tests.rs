@@ -2016,6 +2016,38 @@ fn parse_codex_session_summary_reads_camel_case_subagent_path_title() {
 }
 
 #[test]
+fn parse_codex_session_summary_reads_payload_level_thread_source_subagent() {
+    let root = make_temp_sessions_root();
+    let day_key = "2026-08-20";
+    let workspace_path = Path::new("/tmp/project-alpha");
+    let session_path = write_named_session_file(
+        &root,
+        day_key,
+        "rollout-2026-08-20T10-50-09-01a01d13-7328-7153-99f3-faf8693a30cb",
+        &[
+            r#"{"timestamp":"2026-08-20T02:50:09.337Z","type":"session_meta","payload":{"id":"01a01d13-7328-7153-99f3-faf8693a30cb","parent_thread_id":"01a01b3c-db39-7362-9505-3e3535f4b878","thread_source":"subagent","agent_nickname":"Socrates","cwd":"/tmp/project-alpha","originator":"codex-tui"}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-08-20T02:50:10.000Z","type":"event_msg","payload":{"type":"user_message","message":"审计这条不变量。"}}"#
+                .to_string(),
+        ],
+    );
+
+    let summary = parse_codex_session_summary(session_path.as_path(), Some(workspace_path))
+        .expect("parse summary")
+        .expect("summary exists");
+
+    assert_eq!(
+        summary.session_id,
+        "01a01d13-7328-7153-99f3-faf8693a30cb"
+    );
+    assert_eq!(
+        summary.parent_session_id.as_deref(),
+        Some("01a01b3c-db39-7362-9505-3e3535f4b878")
+    );
+    assert_eq!(summary.summary.as_deref(), Some("Socrates"));
+}
+
+#[test]
 fn parse_codex_session_summary_falls_back_to_filename_when_session_meta_id_missing() {
     let root = make_temp_sessions_root();
     let day_key = "2026-01-19";

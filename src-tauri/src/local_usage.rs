@@ -1897,43 +1897,64 @@ fn extract_codex_subagent_metadata_from_session_value(
         });
 
     for object in [Some(root), payload, session_meta].into_iter().flatten() {
-        let Some(source) = object
-            .get("source")
-            .or_else(|| object.get("sessionSource"))
-            .and_then(Value::as_object)
-        else {
-            continue;
-        };
-        let Some(subagent) = source
-            .get("subagent")
-            .or_else(|| source.get("subAgent"))
-            .and_then(Value::as_object)
-        else {
-            continue;
-        };
-        let Some(thread_spawn) = subagent
-            .get("thread_spawn")
-            .or_else(|| subagent.get("threadSpawn"))
-            .and_then(Value::as_object)
-        else {
-            continue;
-        };
-        let Some(parent_session_id) =
-            read_string_from_object(thread_spawn, &["parent_thread_id", "parentThreadId"])
-        else {
-            continue;
-        };
-        return Some(CodexSubagentSessionMetadata {
-            parent_session_id,
-            agent_nickname: read_string_from_object(
-                thread_spawn,
-                &["agent_nickname", "agentNickname"],
-            ),
-            agent_path: read_string_from_object(thread_spawn, &["agent_path", "agentPath"]),
-        });
+        if let Some(metadata) = extract_codex_subagent_metadata_from_object(object) {
+            return Some(metadata);
+        }
     }
 
     None
+}
+
+fn extract_codex_subagent_metadata_from_object(
+    object: &serde_json::Map<String, Value>,
+) -> Option<CodexSubagentSessionMetadata> {
+    if let Some(source) = object
+        .get("source")
+        .or_else(|| object.get("sessionSource"))
+        .and_then(Value::as_object)
+    {
+        if let Some(subagent) = source
+            .get("subagent")
+            .or_else(|| source.get("subAgent"))
+            .and_then(Value::as_object)
+        {
+            if let Some(thread_spawn) = subagent
+                .get("thread_spawn")
+                .or_else(|| subagent.get("threadSpawn"))
+                .and_then(Value::as_object)
+            {
+                if let Some(metadata) = read_codex_subagent_metadata(thread_spawn) {
+                    return Some(metadata);
+                }
+            }
+        }
+    }
+
+    let thread_source = object
+        .get("thread_source")
+        .or_else(|| object.get("threadSource"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .map(|value| value.eq_ignore_ascii_case("subagent"))
+        .unwrap_or(false);
+    if thread_source {
+        if let Some(metadata) = read_codex_subagent_metadata(object) {
+            return Some(metadata);
+        }
+    }
+    None
+}
+
+fn read_codex_subagent_metadata(
+    object: &serde_json::Map<String, Value>,
+) -> Option<CodexSubagentSessionMetadata> {
+    let parent_session_id =
+        read_string_from_object(object, &["parent_thread_id", "parentThreadId"])?;
+    Some(CodexSubagentSessionMetadata {
+        parent_session_id,
+        agent_nickname: read_string_from_object(object, &["agent_nickname", "agentNickname"]),
+        agent_path: read_string_from_object(object, &["agent_path", "agentPath"]),
+    })
 }
 
 fn codex_subagent_display_title(metadata: &CodexSubagentSessionMetadata) -> Option<String> {

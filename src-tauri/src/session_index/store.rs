@@ -436,6 +436,11 @@ fn list_slice_for_workspace_engine(
     engine: &str,
     limit: usize,
 ) -> Result<Vec<SessionIndexRow>, String> {
+    let fetch_limit = if engine == "codex" {
+        (limit.saturating_mul(8)).clamp(limit, 500)
+    } else {
+        limit
+    };
     let mut statement = connection
         .prepare(
             "SELECT engine, session_id, title, native_title, updated_at, created_at,
@@ -449,12 +454,76 @@ fn list_slice_for_workspace_engine(
              LIMIT ?3",
         )
         .map_err(|error| error.to_string())?;
-    let rows = statement
-        .query_map(params![workspace_key, engine, limit as i64], map_row)
+    let mut rows = statement
+        .query_map(params![workspace_key, engine, fetch_limit as i64], map_row)
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
+    if engine == "codex" {
+        hydrate_missing_codex_parents(connection, workspace_key, &mut rows)?;
+        retain_codex_parent_tree_within_limit(&mut rows, limit);
+    }
     Ok(rows)
+}
+
+fn hydrate_missing_codex_parents(
+    connection: &Connection,
+    workspace_key: &str,
+    rows: &mut Vec<SessionIndexRow>,
+) -> Result<(), String> {
+    let mut existing = std::collections::HashSet::<String>::new();
+    for row in rows.iter() {
+        existing.insert(row.session_id.clone());
+        let bare = strip_known_engine_prefix(&row.session_id);
+        if !bare.is_empty() {
+            existing.insert(bare.to_string());
+        }
+        if let Some(uuid) = extract_codex_canonical_session_id(&row.session_id) {
+            existing.insert(uuid);
+        }
+    }
+    let missing: Vec<String> = rows
+        .iter()
+        .filter_map(|row| row.parent_session_id.clone())
+        .filter(|parent| {
+            let bare = strip_known_engine_prefix(parent);
+            if existing.contains(parent) || existing.contains(bare) {
+                return false;
+            }
+            extract_codex_canonical_session_id(parent)
+                .map(|uuid| !existing.contains(&uuid))
+                .unwrap_or(true)
+        })
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let mut statement = connection
+        .prepare(
+            "SELECT engine, session_id, title, native_title, updated_at, created_at,
+                    cwd, workspace_path, physical_path, parent_session_id, size_bytes,
+                    provider_profile_id, provider_profile_name
+             FROM session_index
+             WHERE engine = 'codex'
+               AND tombstoned_at IS NULL
+               AND (workspace_path = ?1 OR cwd = ?1)
+               AND (session_id = ?2 OR session_id = ?3)",
+        )
+        .map_err(|error| error.to_string())?;
+    for parent in missing {
+        let bare = strip_known_engine_prefix(&parent);
+        let fetched = statement
+            .query_map(params![workspace_key, parent, bare], map_row)
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        for row in fetched {
+            if existing.insert(row.session_id.clone()) {
+                rows.push(row);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn row_matches_workspace(row: &SessionIndexRow, key: &str) -> bool {
@@ -852,6 +921,164 @@ pub(crate) fn delete_engine_session_rows(
     Ok(deleted)
 }
 
+fn strip_known_engine_prefix(id: &str) -> &str {
+    const PREFIXES: [&str; 8] = [
+        "codex:", "claude:", "kimi:", "grok:", "opencode:", "pi:", "gemini:", "dsh:",
+    ];
+    let lower = id.to_ascii_lowercase();
+    for prefix in PREFIXES {
+        if lower.starts_with(prefix) {
+            return id[prefix.len()..].trim();
+        }
+    }
+    id
+}
+
+fn looks_like_uuid(value: &str) -> bool {
+    if value.len() != 36 {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        if index == 8 || index == 13 || index == 18 || index == 23 {
+            if byte != b'-' {
+                return false;
+            }
+            continue;
+        }
+        if !byte.is_ascii_hexdigit() {
+            return false;
+        }
+    }
+    true
+}
+
+fn extract_codex_canonical_session_id(id: &str) -> Option<String> {
+    let bare = strip_known_engine_prefix(id);
+    if looks_like_uuid(bare) {
+        return Some(bare.to_ascii_lowercase());
+    }
+    let Some(suffix) = bare.strip_prefix("rollout-") else {
+        return None;
+    };
+    let Some((_, uuid)) = suffix.rsplit_once('-') else {
+        return None;
+    };
+    if looks_like_uuid(uuid) {
+        Some(uuid.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+fn remember_codex_identity_keys(
+    visible_id_by_identifier: &mut std::collections::HashMap<String, String>,
+    visible_id: &str,
+) {
+    visible_id_by_identifier
+        .entry(visible_id.to_string())
+        .or_insert_with(|| visible_id.to_string());
+    let bare = strip_known_engine_prefix(visible_id);
+    if !bare.is_empty() {
+        visible_id_by_identifier
+            .entry(bare.to_string())
+            .or_insert_with(|| visible_id.to_string());
+    }
+    if let Some(uuid) = extract_codex_canonical_session_id(visible_id) {
+        visible_id_by_identifier
+            .entry(uuid.clone())
+            .or_insert_with(|| visible_id.to_string());
+        visible_id_by_identifier
+            .entry(format!("codex:{uuid}"))
+            .or_insert_with(|| visible_id.to_string());
+    }
+}
+
+fn resolve_visible_parent_id(
+    parent_session_id: &str,
+    visible_id_by_identifier: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    if let Some(visible) = visible_id_by_identifier.get(parent_session_id) {
+        return Some(visible.clone());
+    }
+    let bare = strip_known_engine_prefix(parent_session_id);
+    if let Some(visible) = visible_id_by_identifier.get(bare) {
+        return Some(visible.clone());
+    }
+    let uuid = extract_codex_canonical_session_id(parent_session_id)?;
+    visible_id_by_identifier
+        .get(&uuid)
+        .cloned()
+        .or_else(|| visible_id_by_identifier.get(&format!("codex:{uuid}")).cloned())
+}
+
+fn retain_codex_parent_tree_within_limit(rows: &mut Vec<SessionIndexRow>, requested_limit: usize) {
+    if rows.is_empty() || requested_limit == 0 {
+        rows.clear();
+        return;
+    }
+
+    let mut visible_id_by_identifier = std::collections::HashMap::<String, String>::new();
+    for row in rows.iter() {
+        remember_codex_identity_keys(&mut visible_id_by_identifier, &row.session_id);
+    }
+
+    let mut keep: Vec<String> = Vec::new();
+    let mut keep_set = std::collections::HashSet::<String>::new();
+    let mut kept_roots = 0usize;
+    for row in rows.iter() {
+        let parent_id = row
+            .parent_session_id
+            .as_deref()
+            .and_then(|parent| resolve_visible_parent_id(parent, &visible_id_by_identifier))
+            .filter(|parent| parent != &row.session_id);
+        if parent_id.is_some() {
+            continue;
+        }
+        if kept_roots >= requested_limit {
+            continue;
+        }
+        if keep_set.insert(row.session_id.clone()) {
+            keep.push(row.session_id.clone());
+            kept_roots += 1;
+        }
+    }
+
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for row in rows.iter() {
+            if keep_set.contains(&row.session_id) {
+                continue;
+            }
+            let Some(parent_id) = row
+                .parent_session_id
+                .as_deref()
+                .and_then(|parent| resolve_visible_parent_id(parent, &visible_id_by_identifier))
+            else {
+                continue;
+            };
+            if keep_set.contains(&parent_id) && keep_set.insert(row.session_id.clone()) {
+                keep.push(row.session_id.clone());
+                grew = true;
+            }
+        }
+    }
+
+    let order: std::collections::HashMap<String, usize> = keep
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (id.clone(), index))
+        .collect();
+    rows.retain(|row| keep_set.contains(&row.session_id));
+    rows.sort_by(|left, right| {
+        order
+            .get(&left.session_id)
+            .cmp(&order.get(&right.session_id))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+    });
+}
+
 fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionIndexRow> {
     Ok(SessionIndexRow {
         engine: row.get(0)?,
@@ -1149,6 +1376,70 @@ mod tests {
         assert!(
             listed.is_empty(),
             "bare-id tombstone markers must cover every known engine"
+        );
+    }
+
+    #[test]
+    fn list_keeps_codex_parent_when_philosopher_pups_are_newer() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        let parent_id = "01a01b3c-db39-7362-9505-3e3535f4b878";
+        let mut rows = vec![index_row("codex", parent_id, 100)];
+        for (index, name) in [
+            "Socrates",
+            "Beauvoir",
+            "Faraday",
+            "Heisenberg",
+            "Bohr",
+            "Anscombe",
+            "Volta",
+            "Cicero",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut child = index_row("codex", &format!("pup-{index}-{name}"), 400 + index as i64);
+            child.title = name.into();
+            child.parent_session_id = Some(parent_id.into());
+            rows.push(child);
+        }
+        rows.push(index_row("claude", "claude-recent", 500));
+        upsert_rows(&connection, &rows).expect("upsert");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2).expect("list");
+        assert!(
+            listed.iter().any(|row| row.session_id == parent_id),
+            "parent must survive newer Codex philosopher pups"
+        );
+        assert!(listed.iter().any(|row| row.session_id == "claude-recent"));
+        assert!(
+            listed
+                .iter()
+                .any(|row| row.parent_session_id.as_deref() == Some(parent_id)),
+            "visible pups stay nested under the retained parent"
+        );
+    }
+
+    #[test]
+    fn list_hydrates_older_codex_parent_outside_mtime_window() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        let parent_id = "01a01b3c-db39-7362-9505-3e3535f4b878";
+        let mut rows = vec![index_row("codex", parent_id, 1)];
+        for index in 0..20 {
+            let mut child = index_row("codex", &format!("pup-{index}"), 1000 + index);
+            child.parent_session_id = Some(parent_id.into());
+            rows.push(child);
+        }
+        upsert_rows(&connection, &rows).expect("upsert");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2).expect("list");
+        assert!(
+            listed.iter().any(|row| row.session_id == parent_id),
+            "parent outside the mtime window must still be hydrated"
+        );
+        assert!(
+            listed
+                .iter()
+                .any(|row| row.parent_session_id.as_deref() == Some(parent_id))
         );
     }
 

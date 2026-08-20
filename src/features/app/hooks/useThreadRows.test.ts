@@ -274,4 +274,51 @@ describe("useThreadRows", () => {
       ]),
     );
   });
+
+  it("nests Codex philosopher pups by uuid/rollout identity and hides orphan pups", () => {
+    const parentCanonical = "01a01b3c-db39-7362-9505-3e3535f4b878";
+    const parent: ThreadSummary = {
+      id: `codex:rollout-2026-08-20T02-16-08-${parentCanonical}`,
+      name: "any",
+      updatedAt: 100,
+      engineSource: "codex",
+    };
+    const socrates: ThreadSummary = {
+      id: "01a01d13-7328-7153-99f3-faf8693a30cb",
+      name: "Socrates",
+      parentThreadId: parentCanonical,
+      updatedAt: 400,
+      engineSource: "codex",
+    };
+    const beauvoir: ThreadSummary = {
+      id: "codex:01a01d24-29c1-7741-8941-e17e7a5b5e85",
+      name: "Beauvoir",
+      parentThreadId: `codex:${parentCanonical}`,
+      updatedAt: 390,
+      engineSource: "codex",
+    };
+    const orphanFaraday: ThreadSummary = {
+      id: "01a01d2d-a9c0-73e2-a507-603c2dd048da",
+      name: "Faraday",
+      parentThreadId: "01a01c67-d7e4-7cc0-a638-74a21cc47767",
+      updatedAt: 380,
+      engineSource: "codex",
+    };
+    const { result } = renderHook(() => useThreadRows({}));
+    const rows = result.current.getThreadRows(
+      [parent, socrates, beauvoir, orphanFaraday],
+      true,
+      "ws-codex-pups",
+      getPinTimestamp,
+    );
+    const visible = rows.unpinnedRows.map((row) => [row.thread.name, row.depth]);
+    expect(visible).toEqual([
+      ["any", 0],
+      ["Socrates", 1],
+      ["Beauvoir", 1],
+    ]);
+    expect(rows.unpinnedRows.map((row) => row.thread.name)).not.toContain(
+      "Faraday",
+    );
+  });
 });
