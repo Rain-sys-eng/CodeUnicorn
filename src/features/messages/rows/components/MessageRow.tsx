@@ -83,7 +83,11 @@ import {
   useDeferredMessageImages,
 } from "../hooks/useDeferredMessageImages";
 import { buildMessageRowPresentation } from "../presentation/messageRowPresentation";
-import { resolveTurnBadge } from "../../../../utils/turnBadge";
+import {
+  buildRuntimeReceiptPanelRows,
+  resolveTurnBadge,
+  resolveTurnRuntimeReceipt,
+} from "../../../../utils/turnBadge";
 
 type MessageRowProps = MessageRowEqualityProps;
 
@@ -239,6 +243,7 @@ export const MessageRow = memo(function MessageRow({
     detailLoading?: boolean;
   } | null>(null);
   const [isAgentBadgeExpanded, setIsAgentBadgeExpanded] = useState(false);
+  const [isRuntimeReceiptOpen, setIsRuntimeReceiptOpen] = useState(false);
   const [inspectedTaskOutput, setInspectedTaskOutput] =
     useState<EngineTaskOutputSnapshot | null>(null);
   const inspectedTaskOutputState = useEngineTaskOutputSnapshot({
@@ -596,6 +601,12 @@ export const MessageRow = memo(function MessageRow({
           runtimeAvailable: true,
         })
       : null;
+  const runtimeReceipt = turnBadge
+    ? resolveTurnRuntimeReceipt({
+        model: item.runtimeReceipt?.model,
+        contextWindowTokens: item.runtimeReceipt?.contextWindowTokens,
+      })
+    : null;
 
   const bubbleNode = (
     <div className={`bubble message-bubble${agentTaskNotification && !suppressSubagentAgentTaskCard ? " message-bubble-agent-task" : ""}`}>
@@ -605,11 +616,72 @@ export const MessageRow = memo(function MessageRow({
           data-testid="message-turn-target-badge"
           title={turnBadge.unavailable ? t("sidebar.unavailableTag") : undefined}
         >
-          <span>{turnBadge.engineLabel}</span>
-          <span>{turnBadge.providerLabel}</span>
-          {turnBadge.modelLabel ? <span>{turnBadge.modelLabel}</span> : null}
-          {turnBadge.reasoningLabel ? <span>{turnBadge.reasoningLabel}</span> : null}
-          {turnBadge.unavailable ? <span>{t("sidebar.unavailableTag")}</span> : null}
+          <div className="message-turn-target-badge-line">
+            <span>{turnBadge.engineLabel}</span>
+            <span>{turnBadge.providerLabel}</span>
+            {turnBadge.modelLabel ? <span>{turnBadge.modelLabel}</span> : null}
+            {turnBadge.reasoningLabel ? <span>{turnBadge.reasoningLabel}</span> : null}
+            {runtimeReceipt?.show ? (
+              <button
+                type="button"
+                className={`message-turn-runtime-receipt${isRuntimeReceiptOpen ? " is-open" : ""}`}
+                data-testid="message-turn-runtime-receipt"
+                aria-label="runtime receipt"
+                aria-expanded={isRuntimeReceiptOpen}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsRuntimeReceiptOpen((open) => !open);
+                }}
+              >
+                <span className="message-turn-runtime-receipt-arrow" aria-hidden="true">
+                  →
+                </span>
+                <span className="message-turn-runtime-receipt-mark" aria-hidden="true">
+                  R
+                </span>
+                <span className="message-turn-runtime-receipt-model">
+                  {runtimeReceipt.model}
+                </span>
+                {runtimeReceipt.windowLabel ? (
+                  <span className="message-turn-runtime-receipt-window">
+                    {runtimeReceipt.windowLabel}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+            {turnBadge.unavailable ? <span>{t("sidebar.unavailableTag")}</span> : null}
+          </div>
+          {isRuntimeReceiptOpen && runtimeReceipt?.show ? (
+            <div
+              className="message-turn-runtime-receipt-panel"
+              data-testid="message-turn-runtime-receipt-panel"
+            >
+              {buildRuntimeReceiptPanelRows({
+                engineLabel: turnBadge.engineLabel,
+                providerLabel: turnBadge.providerLabel,
+                providerSource: item.executionTargetSnapshot?.providerProfileSource,
+                requestModel: item.executionTargetSnapshot?.model ?? turnBadge.modelLabel,
+                catalogId: item.executionTargetSnapshot?.modelCatalogEntryId,
+                reasoning: turnBadge.reasoningLabel,
+                runtimeModel: runtimeReceipt.model,
+                modelSource: item.runtimeReceipt?.modelSource,
+                windowLabel: runtimeReceipt.windowLabel,
+                windowTokens: item.runtimeReceipt?.contextWindowTokens,
+                windowSource: item.runtimeReceipt?.contextWindowSource,
+                durationMs: item.finalDurationMs,
+                inputTokens: item.finalInputTokens,
+                outputTokens: item.finalOutputTokens,
+              }).map((row) => (
+                <div key={row.label}>
+                  <span>{row.label}</span>
+                  <div>
+                    <code>{row.value}</code>
+                    {row.note ? <small>{row.note}</small> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {agentTaskNotification && agentTaskDisplay ? (

@@ -66,6 +66,7 @@ import {
   freezeTurnSnapshot,
   isResolvedExecutionTarget,
 } from "../../shared-session/target/types";
+import { rememberRuntimeReceipt } from "../utils/runtimeModelReceipt";
 import { requestAgentPlan } from "../../multi-agent/runtime/executor";
 import { injectCollabSkillContext } from "../../multi-agent/runtime/skillContextInjection";
 import { injectMainCanvasContext } from "../../multi-agent/runtime/mainCanvasContextInjection";
@@ -2335,6 +2336,10 @@ export function useThreadMessaging({
           if (!sharedV2SendEnabled && !supportedStoredSharedTarget) {
             selectNextTarget(workspace.id, threadId, sharedNextTarget);
           }
+          rememberRuntimeReceipt(workspace.id, threadId, {
+            model: sharedNextTarget.model ?? undefined,
+            modelSource: "send.request",
+          });
           response = (await sendSharedSessionTurnRouted({
             workspaceId: workspace.id,
             threadId,

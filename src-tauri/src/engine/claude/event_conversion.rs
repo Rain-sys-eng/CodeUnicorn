@@ -323,6 +323,16 @@ impl ClaudeSession {
                     || event.get("mcpServers").is_some();
 
                 if has_init_payload {
+                    let init_model = event
+                        .get("model")
+                        .and_then(|value| value.as_str())
+                        .or_else(|| {
+                            event
+                                .get("message")
+                                .and_then(|message| message.get("model"))
+                                .and_then(|value| value.as_str())
+                        });
+                    self.maybe_emit_runtime_model(turn_id, init_model, "system.init.model");
                     return Some(EngineEvent::Raw {
                         workspace_id: self.workspace_id.clone(),
                         engine: EngineType::Claude,
@@ -361,6 +371,15 @@ impl ClaudeSession {
             "assistant" => {
                 // Extract text content from the message
                 if let Some(message) = event.get("message") {
+                    let assistant_model = message
+                        .get("model")
+                        .and_then(|value| value.as_str())
+                        .or_else(|| event.get("model").and_then(|value| value.as_str()));
+                    self.maybe_emit_runtime_model(
+                        turn_id,
+                        assistant_model,
+                        "assistant.message.model",
+                    );
                     if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
                         let reasoning_text = concat_reasoning_blocks(content);
 

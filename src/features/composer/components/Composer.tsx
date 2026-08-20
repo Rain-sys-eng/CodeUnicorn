@@ -2939,11 +2939,32 @@ function ComposerImpl({
       selectedEngine === "dsh"
         ? finiteNonNegative(contextUsage.contextUsedTokens)
         : resolveClaudeWindowUsedTokens(contextUsage);
+    const latestRuntimeReceipt = isSharedSessionThreadId(activeThreadId)
+      ? [...items]
+          .reverse()
+          .find(
+            (
+              item,
+            ): item is Extract<ConversationItem, { kind: "message" }> & {
+              role: "assistant";
+              runtimeReceipt: NonNullable<
+                Extract<ConversationItem, { kind: "message" }>["runtimeReceipt"]
+              >;
+            } =>
+              item.kind === "message" &&
+              item.role === "assistant" &&
+              Boolean(item.runtimeReceipt),
+          )?.runtimeReceipt
+      : undefined;
     // CLI 没上报窗口总量时按模型估算兜底，让占用百分比可以计算。
+    // 该 turn 已有 runtime receipt 时，优先用 live 窗口或 receipt.model，避免 picker 别名把 1M 网关估成 200K。
     const contextWindow =
       finitePositive(contextUsage.modelContextWindow) ??
+      finitePositive(latestRuntimeReceipt?.contextWindowTokens) ??
       (selectedEngine === "claude" && usedTokens !== null
-        ? estimateClaudeContextWindow(selectedModelId)
+        ? estimateClaudeContextWindow(
+            latestRuntimeReceipt?.model ?? selectedModelId,
+          )
         : null);
     const totalTokens = finiteNonNegative(contextUsage.total.totalTokens);
     const inputTokens = finiteNonNegative(contextUsage.total.inputTokens);
@@ -2983,7 +3004,7 @@ function ComposerImpl({
       toolUsages: contextUsage.contextToolUsages ?? null,
       toolUsagesTruncated: contextUsage.contextToolUsagesTruncated ?? null,
     };
-  }, [contextUsage, selectedEngine, selectedModelId]);
+  }, [activeThreadId, contextUsage, items, selectedEngine, selectedModelId]);
 
   const legacyContextUsage = useMemo(() => {
     if (!contextUsage) {
@@ -2994,10 +3015,30 @@ function ComposerImpl({
         selectedEngine === "dsh"
           ? finiteNonNegative(contextUsage.contextUsedTokens)
           : resolveClaudeWindowUsedTokens(contextUsage);
+      const latestRuntimeReceipt = isSharedSessionThreadId(activeThreadId)
+        ? [...items]
+            .reverse()
+            .find(
+              (
+                item,
+              ): item is Extract<ConversationItem, { kind: "message" }> & {
+                role: "assistant";
+                runtimeReceipt: NonNullable<
+                  Extract<ConversationItem, { kind: "message" }>["runtimeReceipt"]
+                >;
+              } =>
+                item.kind === "message" &&
+                item.role === "assistant" &&
+                Boolean(item.runtimeReceipt),
+            )?.runtimeReceipt
+        : undefined;
       const contextWindow =
         finitePositive(contextUsage.modelContextWindow) ??
+        finitePositive(latestRuntimeReceipt?.contextWindowTokens) ??
         (selectedEngine === "claude"
-          ? estimateClaudeContextWindow(selectedModelId)
+          ? estimateClaudeContextWindow(
+              latestRuntimeReceipt?.model ?? selectedModelId,
+            )
           : null);
       return usedTokens !== null && contextWindow !== null
         ? { used: usedTokens, total: contextWindow }
@@ -3007,7 +3048,7 @@ function ComposerImpl({
       used: contextUsage.total.totalTokens,
       total: contextUsage.modelContextWindow ?? 0,
     };
-  }, [contextUsage, selectedEngine, selectedModelId]);
+  }, [activeThreadId, contextUsage, items, selectedEngine, selectedModelId]);
 
   const dualContextUsage = useMemo(
     () =>

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRuntimeReceiptPanelRows,
   buildTurnTargetBadgeKey,
   buildTurnTargetBadgeVisibleItemIds,
+  formatRuntimeReceiptWindowLabel,
+  resolveTurnRuntimeReceipt,
+  sanitizeRuntimeReceiptModel,
   type TurnBadgeSnapshot,
 } from "./turnBadge";
 
@@ -116,5 +120,106 @@ describe("buildTurnTargetBadgeVisibleItemIds", () => {
       assistant("a2", grokLocal),
     ]);
     expect([...visible]).toEqual(["a1", "a2"]);
+  });
+});
+
+describe("resolveTurnRuntimeReceipt", () => {
+  it("hides synthetic and empty models", () => {
+    expect(sanitizeRuntimeReceiptModel("<synthetic>")).toBeNull();
+    expect(sanitizeRuntimeReceiptModel("  ")).toBeNull();
+    expect(resolveTurnRuntimeReceipt({ model: "<synthetic>" }).show).toBe(false);
+  });
+
+  it("formats live 1M windows and keeps unknown as question mark", () => {
+    expect(formatRuntimeReceiptWindowLabel(1_000_000)).toBe("1M");
+    expect(formatRuntimeReceiptWindowLabel(128_400)).toBe("128K");
+    expect(formatRuntimeReceiptWindowLabel(null, "haiku")).toBe("?");
+    expect(
+      formatRuntimeReceiptWindowLabel(null, "deepseek-v4-pro-0813[1m]"),
+    ).toBeNull();
+  });
+
+  it("shows runtime model without faking 200K", () => {
+    expect(
+      resolveTurnRuntimeReceipt({
+        model: "deepseek-v4-pro-0813[1m]",
+        contextWindowTokens: 1_000_000,
+      }),
+    ).toEqual({
+      model: "deepseek-v4-pro-0813[1m]",
+      windowLabel: "1M",
+      show: true,
+    });
+    expect(
+      resolveTurnRuntimeReceipt({
+        model: "gateway/custom-77",
+        contextWindowTokens: null,
+      }),
+    ).toEqual({
+      model: "gateway/custom-77",
+      windowLabel: "?",
+      show: true,
+    });
+  });
+});
+
+describe("buildRuntimeReceiptPanelRows", () => {
+  it("explains matching request/runtime and missing window instead of repeating ?", () => {
+    const rows = buildRuntimeReceiptPanelRows({
+      engineLabel: "Claude Code",
+      providerLabel: "dpsk",
+      providerSource: "managed",
+      requestModel: "deepseek-v4-flash",
+      runtimeModel: "deepseek-v4-flash",
+      modelSource: "system.init.model",
+      windowLabel: "?",
+      windowTokens: null,
+      windowSource: null,
+    });
+    expect(rows.map((row) => row.label)).toEqual([
+      "CLI",
+      "供应商",
+      "请求模型",
+      "实际模型",
+      "回执来源",
+      "上下文窗口",
+    ]);
+    expect(rows.find((row) => row.label === "实际模型")).toMatchObject({
+      value: "deepseek-v4-flash",
+      note: "与请求名一致",
+    });
+    expect(rows.find((row) => row.label === "回执来源")).toMatchObject({
+      value: "CLI 初始化事件",
+    });
+    expect(rows.find((row) => row.label === "上下文窗口")).toMatchObject({
+      value: "未上报",
+      note: "CLI 没给 model_context_window，不按 picker 估 200K",
+    });
+  });
+
+  it("shows mapped runtime, live window tokens, and turn usage", () => {
+    const rows = buildRuntimeReceiptPanelRows({
+      engineLabel: "Claude Code",
+      providerLabel: "DeepSeek",
+      requestModel: "sonnet",
+      catalogId: "catalog-sonnet",
+      reasoning: "high",
+      runtimeModel: "deepseek-v4-pro-0813[1m]",
+      modelSource: "assistant.message.model",
+      windowLabel: "1M",
+      windowTokens: 1_000_000,
+      windowSource: "live",
+      durationMs: 4200,
+      inputTokens: 12840,
+      outputTokens: 910,
+    });
+    expect(rows.find((row) => row.label === "实际模型")?.note).toContain("sonnet");
+    expect(rows.find((row) => row.label === "上下文窗口")).toMatchObject({
+      value: "1,000,000 tokens",
+      note: "占用环 / live tokenUsage 上报",
+    });
+    expect(rows.find((row) => row.label === "本轮用量")?.value).toContain("4.2s");
+    expect(rows.find((row) => row.label === "本轮用量")?.value).toContain("入 12,840");
+    expect(rows.find((row) => row.label === "思考档位")?.value).toBe("high");
   });
 });

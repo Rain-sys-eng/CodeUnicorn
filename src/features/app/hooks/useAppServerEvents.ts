@@ -33,6 +33,11 @@ import {
 import { isSharedV2SendEnabled } from "../../shared-session/runtime/sharedV2SendFlag";
 import type { SharedSessionNativeBinding } from "../../shared-session/runtime/sharedSessionBridge";
 import { getActiveTurnTargetForAttempt } from "../../shared-session/target/targetStore";
+import {
+  extractRuntimeModelFromPayload,
+  getRuntimeReceipt,
+  rememberRuntimeReceipt,
+} from "../../threads/utils/runtimeModelReceipt";
 import { updateSharedSessionNativeBinding as updateSharedSessionNativeBindingService } from "../../shared-session/services/sharedSessions";
 import { noteThreadAppServerEventReceived } from "../../threads/utils/streamLatencyDiagnostics";
 import {
@@ -268,6 +273,13 @@ export type AppServerEventHandlers = {
     threadId: string,
     tokenUsage: Record<string, unknown>,
   ) => void;
+  onAssistantRuntimeReceipt?: (
+    workspaceId: string,
+    threadId: string,
+    runtimeReceipt: NonNullable<
+      Extract<import("../../../types").ConversationItem, { kind: "message" }>["runtimeReceipt"]
+    >,
+  ) => void;
   onAccountRateLimitsUpdated?: (
     workspaceId: string,
     rateLimits: Record<string, unknown>,
@@ -307,6 +319,80 @@ const DEFAULT_APP_SERVER_EVENT_BATCH_CHUNK_SIZE = 64;
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value ? String(value) : "";
+}
+
+function emitAssistantRuntimeReceipt(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  incoming: Parameters<typeof rememberRuntimeReceipt>[2],
+) {
+  const receipt = rememberRuntimeReceipt(workspaceId, threadId, incoming);
+  if (!receipt) {
+    return;
+  }
+  handlers.onAssistantRuntimeReceipt?.(workspaceId, threadId, receipt);
+}
+
+function maybeCaptureRuntimeReceipt(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  method: string,
+  params: Record<string, unknown>,
+  sharedThreadId?: string | null,
+  options?: { skip?: boolean },
+) {
+  if (options?.skip) {
+    return;
+  }
+  const isRaw = method.endsWith("/raw");
+  const isTurnCompleted = method === "turn/completed";
+  if (!isRaw && !isTurnCompleted) {
+    return;
+  }
+  const rawType = asString(params.type).trim().toLowerCase();
+  const subtype = asString(params.subtype).trim().toLowerCase();
+  const isRuntimeModelSidecar = rawType === "runtime_model";
+  const isAssistantIdentity =
+    rawType === "assistant" ||
+    subtype === "assistant.message.model" ||
+    subtype.includes("assistant");
+  const isInitIdentity =
+    rawType === "system" ||
+    subtype === "system.init.model" ||
+    subtype.includes("init");
+  if (isRaw && !isRuntimeModelSidecar && !isAssistantIdentity && !isInitIdentity) {
+    return;
+  }
+  const threadId = sharedThreadId || extractThreadIdFromParams(params);
+  if (!threadId || !threadId.startsWith("shared:")) {
+    return;
+  }
+  const result = asRecord(params.result);
+  const model = extractRuntimeModelFromPayload(params) ??
+    extractRuntimeModelFromPayload(result);
+  if (!model) {
+    return;
+  }
+  const modelSource = isTurnCompleted
+    ? "turn.completed"
+    : isRuntimeModelSidecar && isInitIdentity
+      ? "system.init.model"
+      : isAssistantIdentity || isRuntimeModelSidecar
+        ? "assistant.message.model"
+        : isInitIdentity
+          ? "system.init.model"
+          : "assistant.message.model";
+  emitAssistantRuntimeReceipt(handlers, workspaceId, threadId, {
+    model,
+    modelSource,
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function parseOptionalBoolean(value: unknown): boolean | null {
@@ -1578,6 +1664,9 @@ function tryRouteNormalizedRealtimeEvent({
     return false;
   }
   const isSharedOwnerProjection = effectiveThreadId.startsWith("shared:");
+  const runtimeReceipt = isSharedOwnerProjection
+    ? getRuntimeReceipt(workspaceId, effectiveThreadId)
+    : null;
   if (shouldInjectThreadId || isSharedOwnerProjection) {
     // agent-canvas: 事件写到隔离 thread，但 activeTurn 挂在 shared: 上
     const activeTurnThreadId = isAgentCanvasThreadId(effectiveThreadId)
@@ -1593,14 +1682,18 @@ function tryRouteNormalizedRealtimeEvent({
             sharedBinding.attemptId,
           )
         : null);
-    normalized.threadId = effectiveThreadId;
+    if (shouldInjectThreadId || isSharedOwnerProjection) {
+      normalized.threadId = effectiveThreadId;
+    }
     normalized.item = {
       ...normalized.item,
       engineSource: engine,
-      ...(executionTargetSnapshot &&
-      normalized.item.kind === "message" &&
+      ...(normalized.item.kind === "message" &&
       normalized.item.role === "assistant"
-        ? { executionTargetSnapshot }
+        ? {
+            ...(executionTargetSnapshot ? { executionTargetSnapshot } : {}),
+            ...(runtimeReceipt ? { runtimeReceipt } : {}),
+          }
         : {}),
     };
     if (normalized.rawItem) {
@@ -1719,6 +1812,18 @@ export function dispatchAppServerEvent(
     (realtimeThreadId
       ? resolveSharedSessionBindingByNativeThread(workspace_id, realtimeThreadId)
       : null);
+  maybeCaptureRuntimeReceipt(
+    handlers,
+    workspace_id,
+    method,
+    params,
+    sharedBridge?.sharedThreadId ?? null,
+    {
+      skip:
+        isAgentAttempt(sharedBridge?.attemptId) ||
+        Boolean(sharedBridge?.bindingKey?.startsWith("squad:")),
+    },
+  );
   // Multi-Agent worker realtime：不进主幕 shared: 时间线，但必须复用主幕同源
   // adapter + liveAssistantTextChannel（agent-canvas: 作用域）。禁止旁路抠字。
   if (
@@ -2546,6 +2651,7 @@ export function dispatchAppServerEvent(
         ) {
           return false;
         }
+        const runtimeReceipt = getRuntimeReceipt(workspace_id, threadId);
         handlers.onNormalizedRealtimeEvent({
           engine: sharedBridge.engine,
           workspaceId: workspace_id,
@@ -2561,6 +2667,7 @@ export function dispatchAppServerEvent(
             isFinal: true,
             engineSource: sharedBridge.engine,
             executionTargetSnapshot: sharedBridge.executionTargetSnapshot,
+            ...(runtimeReceipt ? { runtimeReceipt } : {}),
           },
           operation: "completeAgentMessage",
           sourceMethod: method,
@@ -2804,6 +2911,22 @@ export function dispatchAppServerEvent(
       (params.token_usage as Record<string, unknown> | undefined);
     if (threadId && tokenUsage) {
       handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
+      const windowTokens = Number(
+        tokenUsage.modelContextWindow ?? tokenUsage.model_context_window,
+      );
+      if (
+        threadId.startsWith("shared:") &&
+        !isAgentAttempt(sharedBridge?.attemptId) &&
+        !sharedBridge?.bindingKey?.startsWith("squad:") &&
+        Number.isFinite(windowTokens) &&
+        windowTokens > 0
+      ) {
+        emitAssistantRuntimeReceipt(handlers, workspace_id, threadId, {
+          model: getRuntimeReceipt(workspace_id, threadId)?.model,
+          contextWindowTokens: windowTokens,
+          contextWindowSource: "live",
+        });
+      }
     }
     return;
   }

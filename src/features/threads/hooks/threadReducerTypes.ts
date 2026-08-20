@@ -163,6 +163,14 @@ export type ThreadAction =
         { kind: "message" }
       >["executionTargetSnapshot"];
     }
+  | {
+      type: "patchAssistantRuntimeReceipt";
+      threadId: string;
+      runtimeReceipt: Extract<
+        ConversationItem,
+        { kind: "message" }
+      >["runtimeReceipt"];
+    }
   | { type: "setThreadName"; workspaceId: string; threadId: string; name: string }
   | {
       type: "setThreadEngine";

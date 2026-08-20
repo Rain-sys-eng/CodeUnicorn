@@ -120,6 +120,22 @@ export type MessagePresentationMetadata = {
   contexts: ConversationPresentationContext[];
 };
 
+export type RuntimeModelReceiptSource =
+  | "send.request"
+  | "assistant.message.model"
+  | "system.init.model"
+  | "turn.completed";
+
+export type RuntimeModelReceiptWindowSource = "live" | "init" | "unknown";
+
+/** stream / JSONL 回写的真实模型与窗口；不得覆盖 executionTargetSnapshot.model。 */
+export type RuntimeModelReceipt = {
+  model: string;
+  modelSource: RuntimeModelReceiptSource;
+  contextWindowTokens?: number | null;
+  contextWindowSource?: RuntimeModelReceiptWindowSource | null;
+};
+
 export type ConversationItem =
   | {
       id: string;
@@ -139,6 +155,7 @@ export type ConversationItem =
         runtimeCapabilityFingerprint?: string | null;
         providerAvailable?: boolean;
       };
+      runtimeReceipt?: RuntimeModelReceipt;
       isFinal?: boolean;
       finalCompletedAt?: number;
       finalDurationMs?: number;

@@ -17,7 +17,8 @@ import type { ConversationItem } from "../../../../types/conversation";
 import type { EngineType } from "../../../../types/engine";
 import { BUILTIN_ENGINE_TYPES } from "../../../engine/engineRegistry";
 import type { SharedProjectionItem } from "./types";
-import { LOCAL_PROVIDER_LABEL } from "../../../../utils/turnBadge";
+import { LOCAL_PROVIDER_LABEL, sanitizeRuntimeReceiptModel } from "../../../../utils/turnBadge";
+import type { RuntimeModelReceipt } from "../../../../types/conversation";
 import { buildConversationItem } from "../../../../utils/threadItems";
 import { isMultiAgentSettledSummaryItemId } from "../../../multi-agent/utils/canvasItems";
 
@@ -417,6 +418,46 @@ function readExecutionTargetSnapshot(
   };
 }
 
+function readRuntimeReceipt(
+  content: Record<string, unknown>,
+): RuntimeModelReceipt | undefined {
+  const value = content.runtimeReceipt;
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const receipt = value as Record<string, unknown>;
+  const model = sanitizeRuntimeReceiptModel(
+    typeof receipt.model === "string" ? receipt.model : null,
+  );
+  if (!model) {
+    return undefined;
+  }
+  const modelSource =
+    receipt.modelSource === "send.request" ||
+    receipt.modelSource === "assistant.message.model" ||
+    receipt.modelSource === "system.init.model" ||
+    receipt.modelSource === "turn.completed"
+      ? receipt.modelSource
+      : "send.request";
+  const contextWindowTokens =
+    typeof receipt.contextWindowTokens === "number" &&
+    Number.isFinite(receipt.contextWindowTokens) &&
+    receipt.contextWindowTokens > 0
+      ? receipt.contextWindowTokens
+      : null;
+  return {
+    model,
+    modelSource,
+    contextWindowTokens,
+    contextWindowSource:
+      receipt.contextWindowSource === "live" ||
+      receipt.contextWindowSource === "init" ||
+      receipt.contextWindowSource === "unknown"
+        ? receipt.contextWindowSource
+        : null,
+  };
+}
+
 function toConversationItem(item: SharedProjectionItem): ConversationItem | null {
   const { id, kind, content } = item;
   const engineSource = readEngineSource(content);
@@ -432,6 +473,16 @@ function toConversationItem(item: SharedProjectionItem): ConversationItem | null
         content,
         item.fidelity,
       );
+      const runtimeReceipt =
+        readRuntimeReceipt(content) ??
+        (executionTargetSnapshot?.model
+          ? {
+              model: executionTargetSnapshot.model,
+              modelSource: "send.request" as const,
+              contextWindowTokens: null,
+              contextWindowSource: null,
+            }
+          : undefined);
       const rawImages = Array.isArray(content.images) ? content.images : [];
       const images = rawImages
         .filter((image): image is string => typeof image === "string")
@@ -446,6 +497,7 @@ function toConversationItem(item: SharedProjectionItem): ConversationItem | null
         engineSource,
         ...(images.length > 0 ? { images } : {}),
         ...(executionTargetSnapshot ? { executionTargetSnapshot } : {}),
+        ...(runtimeReceipt ? { runtimeReceipt } : {}),
         isFinal: content.isFinal === true,
         ...(typeof content.finalCompletedAt === "number"
           ? { finalCompletedAt: content.finalCompletedAt }

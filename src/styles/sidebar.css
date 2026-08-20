@@ -2726,10 +2726,6 @@
   color: var(--text-strong);
 }
 
-.thread-engine-badge.thread-engine-shared {
-  color: #f59e0b;
-}
-
 /* Running state is indicated by the meta-area breathing status dot, not icon color.
    Do not recolor/opacity-boost the engine icon while processing — otherwise
    selecting another thread changes the icon tone (active rule vs processing blue). */

@@ -1474,6 +1474,89 @@ describe("conversationAssembler", () => {
     ]);
   });
 
+  it("keeps picker snapshot and upgrades runtime receipt across first delta, live, and complete", () => {
+    let state = createState();
+    state = appendEvent(
+      state,
+      createEvent({
+        eventId: "delta-1",
+        operation: "appendAgentMessageDelta",
+        delta: "hello",
+        item: {
+          id: "assistant-receipt-1",
+          kind: "message",
+          role: "assistant",
+          text: "hello",
+          executionTargetSnapshot: { engine: "claude", model: "k3" },
+          runtimeReceipt: {
+            model: "k3",
+            modelSource: "send.request",
+          },
+        },
+      }),
+    );
+    const afterDelta = state.items[0];
+    expect(afterDelta).toMatchObject({
+      executionTargetSnapshot: { model: "k3" },
+      runtimeReceipt: { model: "k3", modelSource: "send.request" },
+    });
+
+    state = appendEvent(
+      state,
+      createEvent({
+        eventId: "live-1",
+        operation: "itemUpdated",
+        item: {
+          id: "assistant-receipt-1",
+          kind: "message",
+          role: "assistant",
+          text: "hello world",
+          executionTargetSnapshot: { engine: "claude", model: "k3" },
+          runtimeReceipt: {
+            model: "deepseek-v4-flash",
+            modelSource: "system.init.model",
+            contextWindowTokens: 1_000_000,
+            contextWindowSource: "live",
+          },
+        },
+      }),
+    );
+    expect(state.items[0]).toMatchObject({
+      executionTargetSnapshot: { model: "k3" },
+      runtimeReceipt: {
+        model: "deepseek-v4-flash",
+        modelSource: "system.init.model",
+        contextWindowTokens: 1_000_000,
+      },
+    });
+
+    const afterLive = state;
+    state = appendEvent(
+      state,
+      createEvent({
+        eventId: "complete-1",
+        operation: "completeAgentMessage",
+        sourceMethod: "item/completed",
+        item: {
+          id: "assistant-receipt-1",
+          kind: "message",
+          role: "assistant",
+          text: "hello world",
+        },
+      }),
+    );
+    expect(state.items[0]).toMatchObject({
+      text: "hello world",
+      executionTargetSnapshot: { model: "k3" },
+      runtimeReceipt: {
+        model: "deepseek-v4-flash",
+        modelSource: "system.init.model",
+        contextWindowTokens: 1_000_000,
+      },
+    });
+    expect(state.items).toBe(afterLive.items);
+  });
+
   it("keeps short distinct reasoning snapshots separate when one is only a loose substring", () => {
     let state = createState();
     state = appendEvent(

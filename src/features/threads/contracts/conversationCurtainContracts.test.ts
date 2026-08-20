@@ -65,6 +65,27 @@ describe("conversationCurtainContracts", () => {
     );
   });
 
+  it("does not stamp native assistant history with engine snapshot", () => {
+    const snapshot = normalizeHistorySnapshot({
+      engine: "codex",
+      workspaceId: "ws-3",
+      threadId: "codex:session-1",
+      items: [
+        { id: "u1", kind: "message", role: "user", text: "hi" },
+        { id: "a1", kind: "message", role: "assistant", text: "hello" },
+      ],
+      userInputQueue: [],
+      plan: null,
+    });
+    expect(snapshot.items[1]).toMatchObject({
+      id: "a1",
+      role: "assistant",
+      text: "hello",
+    });
+    expect(snapshot.items[1]).not.toHaveProperty("executionTargetSnapshot");
+    expect(snapshot.items[1]).not.toHaveProperty("runtimeReceipt");
+  });
+
   it("keeps dictionary mappings for tool and reasoning aliases", () => {
     expect(NORMALIZED_EVENT_DICTIONARY.tool_call).toBe("tool");
     expect(NORMALIZED_EVENT_DICTIONARY.reasoning_delta).toBe("reasoning");

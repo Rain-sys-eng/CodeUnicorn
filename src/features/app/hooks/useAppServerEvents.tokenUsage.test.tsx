@@ -7,6 +7,11 @@ import {
   subscribeAppServerEvents,
   subscribeRawAppServerEvents,
 } from "../../../services/events";
+import {
+  clearSharedSessionBindingsForSharedThread,
+  registerSharedSessionNativeBinding,
+} from "../../shared-session/runtime/sharedSessionBridge";
+import { registerAgentAttempt } from "../../multi-agent/store/agentStore";
 import { useAppServerEvents } from "./useAppServerEvents";
 
 vi.mock("../../../services/events", async (importOriginal) => {
@@ -513,6 +518,177 @@ describe("useAppServerEvents token usage", () => {
         }),
       },
     );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("captures Shared turn completed model as an assistant receipt", async () => {
+    const handlers: Handlers = {
+      onAssistantRuntimeReceipt: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    await act(async () => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "shared:session-1",
+            result: { model: "gpt-5-codex" },
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(handlers.onAssistantRuntimeReceipt).toHaveBeenCalledWith(
+      "ws-1",
+      "shared:session-1",
+      expect.objectContaining({
+        model: "gpt-5-codex",
+        modelSource: "turn.completed",
+      }),
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("ignores unrelated Shared raw payloads that happen to contain a model field", async () => {
+    const handlers: Handlers = {
+      onAssistantRuntimeReceipt: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    await act(async () => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "codex/raw",
+          params: {
+            threadId: "shared:session-1",
+            type: "event",
+            model: "gpt-5-codex",
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(handlers.onAssistantRuntimeReceipt).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("ignores native Claude runtime model sidecar", async () => {
+    const handlers: Handlers = {
+      onAssistantRuntimeReceipt: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    await act(async () => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "claude/raw",
+          params: {
+            threadId: "claude:session-1",
+            type: "runtime_model",
+            subtype: "assistant.message.model",
+            model: "deepseek-v4-pro-0813[1m]",
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(handlers.onAssistantRuntimeReceipt).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("captures Shared Claude runtime model sidecar as an assistant receipt", async () => {
+    const handlers: Handlers = {
+      onAssistantRuntimeReceipt: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    await act(async () => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "claude/raw",
+          params: {
+            threadId: "shared:session-1",
+            type: "runtime_model",
+            subtype: "assistant.message.model",
+            model: "deepseek-v4-pro-0813[1m]",
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(handlers.onAssistantRuntimeReceipt).toHaveBeenCalledWith(
+      "ws-1",
+      "shared:session-1",
+      expect.objectContaining({
+        model: "deepseek-v4-pro-0813[1m]",
+        modelSource: "assistant.message.model",
+      }),
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("does not write Multi-Agent worker runtime models onto the Shared owner thread", async () => {
+    const handlers: Handlers = {
+      onAssistantRuntimeReceipt: vi.fn(),
+    };
+    registerAgentAttempt("attempt-worker-1", {
+      workspaceId: "ws-1",
+      threadId: "shared:session-owner",
+      phase: "running",
+      bindingKey: "squad:run-1:worker-1",
+    });
+    registerSharedSessionNativeBinding({
+      workspaceId: "ws-1",
+      sharedThreadId: "shared:session-owner",
+      nativeThreadId: "claude:worker-1",
+      engine: "claude",
+      attemptId: "attempt-worker-1",
+      bindingKey: "squad:run-1:worker-1",
+    });
+    const { root } = await mount(handlers);
+
+    await act(async () => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "claude/raw",
+          params: {
+            threadId: "claude:worker-1",
+            type: "runtime_model",
+            subtype: "assistant.message.model",
+            model: "worker-model",
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(handlers.onAssistantRuntimeReceipt).not.toHaveBeenCalled();
+    clearSharedSessionBindingsForSharedThread("ws-1", "shared:session-owner");
 
     await act(async () => {
       root.unmount();

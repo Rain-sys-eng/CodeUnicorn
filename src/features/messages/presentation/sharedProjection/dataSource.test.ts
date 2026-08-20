@@ -249,6 +249,41 @@ describe("toSharedConversationItems", () => {
         model: "claude-sonnet-4-5",
         reasoning: { effort: "high" },
       },
+      runtimeReceipt: {
+        model: "claude-sonnet-4-5",
+        modelSource: "send.request",
+      },
+    });
+  });
+
+  it("preserves runtime receipt beside the picker snapshot", () => {
+    const [item] = toSharedConversationItems([
+      makeItem({
+        id: "2:assistant:receipt",
+        kind: "message",
+        content: {
+          role: "assistant",
+          text: "done",
+          executionTargetSnapshot: {
+            engine: "claude",
+            model: "sonnet",
+          },
+          runtimeReceipt: {
+            model: "deepseek-v4-pro-0813[1m]",
+            modelSource: "assistant.message.model",
+            contextWindowTokens: 1_000_000,
+            contextWindowSource: "live",
+          },
+        },
+      }),
+    ]);
+    expect(item).toMatchObject({
+      executionTargetSnapshot: { model: "sonnet" },
+      runtimeReceipt: {
+        model: "deepseek-v4-pro-0813[1m]",
+        modelSource: "assistant.message.model",
+        contextWindowTokens: 1_000_000,
+      },
     });
   });
 

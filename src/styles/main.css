@@ -981,7 +981,7 @@ body[data-panel-resizing="true"] .main {
 }
 
 .topbar-shared-session-icon {
-  color: #f59e0b;
+  color: inherit;
 }
 
 .topbar-session-tab-label {

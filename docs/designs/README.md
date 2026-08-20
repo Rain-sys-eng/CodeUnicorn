@@ -21,6 +21,7 @@ status: active
 | [`sidebar-pinned-fold/index.html`](sidebar-pinned-fold/index.html) | 侧栏置顶按 `yyyy-mm-dd` 分组：日期头做最外层，不要今天/昨天/更早 | 浏览器打开，点日期头 |
 | [`fluid-motion-presets/index.html`](fluid-motion-presets/index.html) | 流体背景动势五选：流动 / 太极 / 暴风雨 / 龙卷风 / 游走（双龙，配色正交，含深灰白，工作台减速） | 浏览器打开，点卡片或芯片切换 |
 | [`shared-provider-retry/index.html`](shared-provider-retry/index.html) | Shared 供应商失败后同一家再发一轮：倒计时 / 立即再试 / 停止，可改次数、等待和话术 | 浏览器打开，点右侧失败类型和设置 |
+| [`runtime-model-identity/05-receipt-r-mark.html`](runtime-model-identity/05-receipt-r-mark.html) | 采纳稿 B：Shared turn badge 前半 picker 不动；后半高亮 `→` + 圆形 R + runtime 模型/窗口 | 浏览器打开，点回执下滑 |
 
 存量 `docs/previews/`、`docs/prototypes/` 因高 fan-out 引用暂不搬迁。新设计稿一律进本目录，不要放仓库根 `designs/` 或 `.artifacts/`。
 

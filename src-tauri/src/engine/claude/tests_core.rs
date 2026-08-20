@@ -89,6 +89,49 @@ fn convert_event_preserves_replayed_user_message_as_raw_ack_evidence() {
 }
 
 #[test]
+fn convert_event_emits_runtime_model_sidecar_once_from_assistant_message() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut receiver = session.subscribe();
+    let event = json!({
+        "type": "assistant",
+        "message": {
+            "model": "deepseek-v4-pro-0813[1m]",
+            "content": [{ "type": "text", "text": "hello" }]
+        }
+    });
+
+    let converted = session.convert_event("turn-model", &event);
+    match converted {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "hello"),
+        other => panic!("expected text delta, got {:?}", other),
+    }
+
+    let sidecar = receiver
+        .try_recv()
+        .expect("expected runtime model sidecar");
+    match sidecar.event {
+        EngineEvent::Raw { data, .. } => {
+            assert_eq!(data["type"], "runtime_model");
+            assert_eq!(data["subtype"], "assistant.message.model");
+            assert_eq!(data["model"], "deepseek-v4-pro-0813[1m]");
+        }
+        other => panic!("expected raw sidecar, got {:?}", other),
+    }
+
+    let _ = session.convert_event(
+        "turn-model",
+        &json!({
+            "type": "assistant",
+            "message": {
+                "model": "deepseek-v4-pro-0813[1m]",
+                "content": [{ "type": "text", "text": "hello world" }]
+            }
+        }),
+    );
+    assert!(receiver.try_recv().is_err(), "duplicate model must not emit another sidecar");
+}
+
+#[test]
 fn convert_event_emits_live_context_window_usage_from_snake_case_payload() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
     let mut receiver = session.subscribe();

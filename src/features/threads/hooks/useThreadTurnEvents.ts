@@ -31,6 +31,7 @@ import {
 import { previewThreadName } from "../../../utils/threadItems";
 import { resolveThreadStabilityDiagnostic } from "../utils/stabilityDiagnostics";
 import type { TurnExecutionSnapshot } from "../../shared-session/target/types";
+import { renameRuntimeReceipt } from "../utils/runtimeModelReceipt";
 import { noteSharedProviderRetryTurnSettled } from "../../shared-session/provider-retry/noteSharedProviderRetryTurn";
 import { getSharedTargetState } from "../../shared-session/target/targetStore";
 import { isSharedSessionThreadId } from "../../shared-session/utils/sharedSessionIdentity";
@@ -665,6 +666,23 @@ export function useThreadTurnEvents({
     [dispatch],
   );
 
+  const onAssistantRuntimeReceipt = useCallback(
+    (
+      _workspaceId: string,
+      threadId: string,
+      runtimeReceipt: NonNullable<
+        Extract<import("../../../types").ConversationItem, { kind: "message" }>["runtimeReceipt"]
+      >,
+    ) => {
+      dispatch({
+        type: "patchAssistantRuntimeReceipt",
+        threadId,
+        runtimeReceipt,
+      });
+    },
+    [dispatch],
+  );
+
   const onThreadTokenUsageUpdated = useCallback(
     (workspaceId: string, threadId: string, tokenUsage: Record<string, unknown>) => {
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
@@ -848,12 +866,13 @@ export function useThreadTurnEvents({
         const message = payload.message
           ? t("threads.turnFailedWithMessage", { message: payload.message })
           : t("threads.turnFailed");
-        if (payload.executionTargetSnapshot) {
+        const errorSnapshot = payload.executionTargetSnapshot ?? undefined;
+        if (errorSnapshot) {
           pushThreadErrorMessage(
             workspaceId,
             threadId,
             message,
-            payload.executionTargetSnapshot,
+            errorSnapshot,
           );
         } else {
           pushThreadErrorMessage(workspaceId, threadId, message);
@@ -862,7 +881,7 @@ export function useThreadTurnEvents({
           outcome: wasInterrupted ? "cancelled" : "failed",
           message: payload.message,
           wasLocalInterrupt: wasInterrupted,
-          snapshot: payload.executionTargetSnapshot,
+          snapshot: errorSnapshot,
           attemptId: turnId || null,
         });
         pushThreadFailureRuntimeNotice({
@@ -1483,6 +1502,12 @@ export function useThreadTurnEvents({
       // 才能继续读到累计文本。
       renameLiveAssistantTextThread(sourceThreadId, newThreadId);
       renameLiveItemDeltaThread(sourceThreadId, newThreadId);
+      if (
+        sourceThreadId.startsWith("shared:") ||
+        newThreadId.startsWith("shared:")
+      ) {
+        renameRuntimeReceipt(workspaceId, sourceThreadId, newThreadId);
+      }
       renameCustomNameKey(workspaceId, sourceThreadId, newThreadId);
       renameAutoTitlePendingKey(workspaceId, sourceThreadId, newThreadId);
       renamePendingMemoryCaptureKey(sourceThreadId, newThreadId);
@@ -1511,6 +1536,7 @@ export function useThreadTurnEvents({
     onTurnCompleted,
     onTurnPlanUpdated,
     onThreadTokenUsageUpdated,
+    onAssistantRuntimeReceipt,
     onAccountRateLimitsUpdated,
     onTurnError,
     onTurnStalled,

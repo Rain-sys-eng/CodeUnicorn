@@ -130,6 +130,7 @@ export function areMessageItemsEqual(previous: MessageItem, next: MessageItem) {
       previous.text === next.text &&
       previous.engineSource === next.engineSource &&
       previous.executionTargetSnapshot === next.executionTargetSnapshot &&
+      previous.runtimeReceipt === next.runtimeReceipt &&
       previous.isFinal === next.isFinal &&
       previous.finalCompletedAt === next.finalCompletedAt &&
       previous.finalDurationMs === next.finalDurationMs &&

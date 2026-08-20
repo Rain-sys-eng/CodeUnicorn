@@ -38,6 +38,7 @@ import {
 } from "./threadReducerReasoningGuards";
 import { areEquivalentAssistantMessageTexts } from "../assembly/conversationNormalization";
 import { resolveMergedThreadCreatedAt } from "../utils/threadSummarySort";
+import { mergeRuntimeReceipt } from "../utils/runtimeModelReceipt";
 import {
   addSummaryBoundary,
   findDuplicateReasoningSnapshotIndex,
@@ -1331,6 +1332,67 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         itemsByThread: {
           ...state.itemsByThread,
           [action.threadId]: prepareThreadItems([...list, message]),
+        },
+      };
+    }
+    case "patchAssistantRuntimeReceipt": {
+      const receipt = action.runtimeReceipt;
+      if (!receipt?.model) {
+        return state;
+      }
+      const list = state.itemsByThread[action.threadId] ?? [];
+      let lastUserIndex = -1;
+      for (let index = list.length - 1; index >= 0; index -= 1) {
+        const item = list[index];
+        if (item?.kind === "message" && item.role === "user") {
+          lastUserIndex = index;
+          break;
+        }
+      }
+      let targetIndex = -1;
+      for (let index = list.length - 1; index > lastUserIndex; index -= 1) {
+        const item = list[index];
+        if (item?.kind !== "message" || item.role !== "assistant") {
+          continue;
+        }
+        if (item.id.startsWith("memory-pick-empty-")) {
+          continue;
+        }
+        if (!item.executionTargetSnapshot && !item.runtimeReceipt) {
+          continue;
+        }
+        targetIndex = index;
+        break;
+      }
+      if (targetIndex < 0) {
+        return state;
+      }
+      const target = list[targetIndex];
+      if (!target || target.kind !== "message") {
+        return state;
+      }
+      const existing = target.runtimeReceipt;
+      const merged = mergeRuntimeReceipt(existing, receipt);
+      if (
+        !merged ||
+        (existing &&
+          existing.model === merged.model &&
+          existing.modelSource === merged.modelSource &&
+          existing.contextWindowTokens === merged.contextWindowTokens &&
+          existing.contextWindowSource === merged.contextWindowSource)
+      ) {
+        return state;
+      }
+      const next = [...list];
+      next[targetIndex] = {
+        ...target,
+        runtimeReceipt: merged,
+      };
+      return {
+        ...state,
+        itemsByThread: {
+          ...state.itemsByThread,
+          [action.threadId]: prepareThreadItems(next),
         },
       };
     }
