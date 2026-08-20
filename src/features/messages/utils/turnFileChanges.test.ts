@@ -114,6 +114,65 @@ describe("buildTurnFileChangesByBoundaryId", () => {
     });
   });
 
+  it("scores DSH write fileChange items whose arguments arrived as a JSON string", () => {
+    const items: ConversationItem[] = [
+      userMessage("u1"),
+      {
+        id: "t-dsh-write",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "write",
+        detail: "Pending changes",
+        status: "completed",
+        changes: [
+          {
+            path: "src/KiwiController.java",
+            kind: "modified",
+            diff: [
+              "diff --git a/src/KiwiController.java b/src/KiwiController.java",
+              "--- a/src/KiwiController.java",
+              "+++ b/src/KiwiController.java",
+              "@@ -0,0 +1,1 @@",
+              "+class KiwiController {}",
+            ].join("\n"),
+          },
+        ],
+      },
+      finalAssistant("a1"),
+    ];
+    const summary = buildTurnFileChangesByBoundaryId(items).get("a1");
+    expect(summary?.files).toEqual([
+      {
+        path: "src/KiwiController.java",
+        additions: 1,
+        deletions: 0,
+        status: "completed",
+      },
+    ]);
+  });
+
+  it("falls back to write detail JSON when fileChange changes have no unified diff", () => {
+    const items: ConversationItem[] = [
+      userMessage("u1"),
+      {
+        id: "t-dsh-path-only",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "write",
+        detail: JSON.stringify({
+          file_path: "src/KiwiService.java",
+          content: "class KiwiService {}\nclass Extra {}\n",
+        }),
+        status: "completed",
+        changes: [{ path: "src/KiwiService.java", kind: "modified" }],
+      },
+      finalAssistant("a1"),
+    ];
+    const summary = buildTurnFileChangesByBoundaryId(items).get("a1");
+    expect(summary?.files[0]?.path).toBe("src/KiwiService.java");
+    expect(summary?.files[0]?.additions).toBeGreaterThan(0);
+  });
+
   it("counts unified patch stats and splits multi-file fileChange items", () => {
     const items: ConversationItem[] = [
       userMessage("u1"),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildTurnFileChangesByBoundaryId } from "../../messages/utils/turnFileChanges";
 import { parseDshHistoryMessages } from "./dshHistoryParser";
 
 describe("parseDshHistoryMessages", () => {
@@ -38,6 +39,7 @@ describe("parseDshHistoryMessages", () => {
         kind: "message",
         role: "assistant",
         text: "hi",
+        isFinal: true,
       }),
     );
   });
@@ -342,5 +344,67 @@ describe("parseDshHistoryMessages", () => {
         role: "user",
       }),
     );
+  });
+
+  it("marks the last assistant of each turn as final so file edits survive the next user", () => {
+    const items = parseDshHistoryMessages([
+      {
+        id: "dsh-user-1",
+        kind: "message",
+        role: "user",
+        text: "create kiwi crud",
+      },
+      {
+        id: "dsh-write-1",
+        kind: "tool",
+        title: "write",
+        toolInput: {
+          file_path: "src/KiwiController.java",
+          content: "class KiwiController {}\n",
+        },
+        toolOutput: "Created file",
+      },
+      {
+        id: "dsh-assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "created controller",
+      },
+      {
+        id: "dsh-user-2",
+        kind: "message",
+        role: "user",
+        text: "also add a service",
+      },
+      {
+        id: "dsh-write-2",
+        kind: "tool",
+        title: "write",
+        toolInput: {
+          file_path: "src/KiwiService.java",
+          content: "class KiwiService {}\n",
+        },
+        toolOutput: "Created file",
+      },
+      {
+        id: "dsh-assistant-2",
+        kind: "message",
+        role: "assistant",
+        text: "created service",
+      },
+    ]);
+
+    const assistant1 = items.find((item) => item.id === "dsh-assistant-1");
+    const assistant2 = items.find((item) => item.id === "dsh-assistant-2");
+    expect(assistant1).toEqual(expect.objectContaining({ isFinal: true }));
+    expect(assistant2).toEqual(expect.objectContaining({ isFinal: true }));
+
+    const summaries = buildTurnFileChangesByBoundaryId(items);
+    expect(summaries.get("dsh-assistant-1")?.files.map((file) => file.path)).toEqual([
+      "src/KiwiController.java",
+    ]);
+    expect(summaries.get("dsh-assistant-2")?.files.map((file) => file.path)).toEqual([
+      "src/KiwiService.java",
+    ]);
   });
 });

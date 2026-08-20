@@ -141,6 +141,11 @@ function isStructuredFieldPathToken(token: string) {
   if (!segments.every((segment) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(segment))) {
     return false;
   }
+  const extension = segments[segments.length - 1] ?? "";
+  // `CLAUDE.md` / `README.md` look like CamelCase.field but are root files.
+  if (segments.length === 2 && /^[A-Za-z0-9]{1,8}$/.test(extension)) {
+    return false;
+  }
   return segments.some((segment) => /[A-Z_]/.test(segment));
 }
 
@@ -1037,6 +1042,19 @@ export function inferFileChangesFromPayload(value: unknown): FileChangeEntry[] {
       return;
     }
     if (typeof payload === "string") {
+      const trimmed = payload.trim();
+      // DSH live `arguments` is the raw model JSON string, not a unified patch.
+      if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      ) {
+        try {
+          visit(JSON.parse(trimmed) as unknown);
+          return;
+        } catch {
+          // Fall through to patch / status parsers.
+        }
+      }
       for (const parsed of [
         ...parseApplyPatchEntries(payload),
         ...parsePatchFileEntries(payload),
@@ -1083,25 +1101,48 @@ export function inferFileChangesFromPayload(value: unknown): FileChangeEntry[] {
   return Array.from(byPath.values());
 }
 
+function firstStringValue(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 function buildSyntheticDiffFromRecord(
   filePath: string,
   record: Record<string, unknown>,
 ): string | undefined {
-  const oldString = typeof record.old_string === "string" ? record.old_string : "";
-  const newStringCandidate =
-    typeof record.new_string === "string"
-      ? record.new_string
-      : typeof record.content === "string"
-        ? record.content
-        : "";
-  const hasStructuredEditPayload =
-    typeof record.old_string === "string" ||
-    typeof record.new_string === "string" ||
-    typeof record.content === "string";
-  if (!hasStructuredEditPayload) {
-    return undefined;
+  const oldString = firstStringValue(record, [
+    "old_string",
+    "oldString",
+    "old_str",
+    "oldText",
+  ]);
+  const newString = firstStringValue(record, [
+    "new_string",
+    "newString",
+    "new_str",
+    "newText",
+  ]);
+  const content = firstStringValue(record, [
+    "content",
+    "file_text",
+    "new_content",
+    "newContent",
+  ]);
+  if (oldString !== undefined || newString !== undefined) {
+    return buildSyntheticUnifiedDiff(filePath, oldString ?? "", newString ?? "");
   }
-  return buildSyntheticUnifiedDiff(filePath, oldString, newStringCandidate);
+  if (content !== undefined) {
+    return buildSyntheticUnifiedDiff(filePath, "", content);
+  }
+  return undefined;
 }
 
 function buildSyntheticUnifiedDiff(

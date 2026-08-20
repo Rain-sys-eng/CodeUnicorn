@@ -695,6 +695,14 @@ function preferConcreteToolType(
   return incoming;
 }
 
+function isPlaceholderFileChangeDetail(detail: string): boolean {
+  return detail.trim() === "Pending changes";
+}
+
+function fileChangeHasDiff(changes: Extract<ConversationItem, { kind: "tool" }>["changes"]): boolean {
+  return Boolean(changes?.some((change) => Boolean(change.diff?.trim())));
+}
+
 function mergeToolItemPreservingSnapshot(
   existing: Extract<ConversationItem, { kind: "tool" }>,
   incoming: Extract<ConversationItem, { kind: "tool" }>,
@@ -704,14 +712,28 @@ function mergeToolItemPreservingSnapshot(
   const hasOutput =
     typeof incoming.output === "string" && incoming.output.trim().length > 0;
   const hasChanges = Array.isArray(incoming.changes) && incoming.changes.length > 0;
+  const keepExistingDetail =
+    isPlaceholderFileChangeDetail(incoming.detail) &&
+    existing.detail.trim().length > 0 &&
+    !isPlaceholderFileChangeDetail(existing.detail);
+  const keepExistingChanges =
+    fileChangeHasDiff(existing.changes) && !fileChangeHasDiff(incoming.changes);
   return {
     ...existing,
     ...incoming,
     toolType: preferConcreteToolType(existing.toolType, incoming.toolType),
     title: hasTitle ? preferHumanToolTitle(existing.title, incoming.title) : existing.title,
-    detail: hasDetail ? incoming.detail : existing.detail,
+    detail: keepExistingDetail
+      ? existing.detail
+      : hasDetail
+        ? incoming.detail
+        : existing.detail,
     output: hasOutput ? incoming.output : existing.output,
-    changes: hasChanges ? incoming.changes : existing.changes,
+    changes: keepExistingChanges
+      ? existing.changes
+      : hasChanges
+        ? incoming.changes
+        : existing.changes,
   };
 }
 
@@ -1268,10 +1290,11 @@ export function buildConversationItem(
       : Array.isArray(item.files)
         ? item.files
         : [];
-    const inferredChanges =
-      changes.length > 0
-        ? inferFileChangesFromPayload(item.input ?? item.arguments ?? null)
-        : inferFileChangesFromPayload(item.input ?? item.arguments ?? item);
+    const rawArgsPayload = item.input ?? item.arguments ?? null;
+    const parsedArgsPayload = parseToolArgumentsRecord(rawArgsPayload);
+    const inferPayload =
+      parsedArgsPayload ?? rawArgsPayload ?? (changes.length > 0 ? null : item);
+    const inferredChanges = inferFileChangesFromPayload(inferPayload);
     const inferredChangeByPath = new Map(
       inferredChanges.map((change) => [change.path, change]),
     );
@@ -1339,7 +1362,10 @@ export function buildConversationItem(
       toolType: type,
       // Prefer runtime tool name (write_file / Edit / …) for specialized EditToolBlock polish.
       title: namedTitle || "File changes",
-      detail: paths || "Pending changes",
+      detail:
+        paths ||
+        stringifyToolArguments(parsedArgsPayload ?? rawArgsPayload) ||
+        "Pending changes",
       status: asString(item.status ?? ""),
       output: preferExplicitOutput ? explicitOutput : diffOutput || explicitOutput,
       changes: normalizedChanges,
