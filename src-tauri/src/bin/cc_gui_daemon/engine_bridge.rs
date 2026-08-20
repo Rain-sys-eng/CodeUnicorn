@@ -642,6 +642,10 @@ pub struct ModelInfo {
     pub lifecycle: Option<String>,
     #[serde(default = "default_model_source")]
     pub source: String,
+    #[serde(default)]
+    pub supported_reasoning_efforts: Vec<String>,
+    #[serde(default)]
+    pub default_reasoning_effort: Option<String>,
 }
 
 fn default_model_source() -> String {
@@ -665,6 +669,8 @@ impl ModelInfo {
             last_verified_at: None,
             lifecycle: None,
             source: default_model_source(),
+            supported_reasoning_efforts: Vec::new(),
+            default_reasoning_effort: None,
         }
     }
 
@@ -675,6 +681,16 @@ impl ModelInfo {
 
     pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
         self.provider = Some(provider.into());
+        self
+    }
+
+    pub fn with_reasoning(
+        mut self,
+        supported_reasoning_efforts: Vec<String>,
+        default_reasoning_effort: Option<String>,
+    ) -> Self {
+        self.supported_reasoning_efforts = supported_reasoning_efforts;
+        self.default_reasoning_effort = default_reasoning_effort;
         self
     }
 
