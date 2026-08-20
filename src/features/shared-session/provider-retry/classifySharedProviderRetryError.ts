@@ -78,18 +78,29 @@ function classifyPermanent(text: string): SharedProviderRetryClassification | nu
   return null;
 }
 
+function hasStatusOrCode(text: string, code: number): boolean {
+  const token = String(code);
+  return (
+    new RegExp(`\\b${token}\\b`).test(text) ||
+    new RegExp(`["']code["']\\s*[:=]\\s*["']?${token}\\b`).test(text)
+  );
+}
+
 function classifyRetryable(text: string): SharedProviderRetryClassification | null {
   if (
     /not assigned to any group/.test(text) ||
     /api key is not assigned/.test(text) ||
     (/failed to authenticate/.test(text) && /403/.test(text)) ||
-    /\b401\b/.test(text) ||
+    hasStatusOrCode(text, 401) ||
     /invalid[_ -]?api[_ -]?key/.test(text)
   ) {
     return { disposition: "retryable", kind: "pool", reason: "号池" };
   }
+  if (hasStatusOrCode(text, 405) || hasStatusOrCode(text, 424)) {
+    return { disposition: "retryable", kind: "pool", reason: "号池" };
+  }
   if (
-    /\b429\b/.test(text) ||
+    hasStatusOrCode(text, 429) ||
     /too many requests/.test(text) ||
     /rate[-_ ]?limit(?:ed|s)?/.test(text)
   ) {
@@ -114,6 +125,7 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
     return { disposition: "retryable", kind: "overload", reason: "过载" };
   }
   if (
+    hasStatusOrCode(text, 502) ||
     /(?:\bhttp(?:\s*status)?(?:\s*code)?[:\s-]*)\b5\d\d\b/.test(text) ||
     (/\b5\d\d\b/.test(text) &&
       /(?:error|status|upstream|gateway|unavailable|bad gateway)/.test(text))

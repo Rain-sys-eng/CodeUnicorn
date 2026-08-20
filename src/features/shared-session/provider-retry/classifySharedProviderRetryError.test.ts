@@ -47,6 +47,26 @@ describe("classifySharedProviderRetryError", () => {
           '会话失败：unexpected status 401 Unauthorized: {"code":"INVALID_API_KEY","message":"Invalid API key"}',
       }),
     ).toMatchObject({ disposition: "retryable", kind: "pool", reason: "号池" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '会话失败：unexpected status 405: {"code":"405"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool", reason: "号池" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":"424","message":"Failed Dependency"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool", reason: "号池" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":429}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "rate" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":"502"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "server" });
   });
 
   it("does not treat tool permission, window capacity, or filename 5xx as retryable", () => {

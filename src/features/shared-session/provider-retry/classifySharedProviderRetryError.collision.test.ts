@@ -43,6 +43,10 @@ describe("classifier collision: intended hits", () => {
       '会话失败：unexpected status 401 Unauthorized: {"code":"INVALID_API_KEY","message":"Invalid API key"}',
       "pool",
     ],
+    ["json code 405", '{"code":"405"}', "pool"],
+    ["json code 424", '{"code":424}', "pool"],
+    ["json code 429", '{"code":"429"}', "rate"],
+    ["json code 502", '{"code":"502"}', "server"],
   ] as const)("%s → %s", (_name, message, kind) => {
     expect(classify(message, { wasLocalInterrupt: false })).toMatchObject({
       disposition: "retryable",
