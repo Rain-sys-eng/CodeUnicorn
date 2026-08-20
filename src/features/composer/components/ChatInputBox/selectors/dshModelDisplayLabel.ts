@@ -2,6 +2,12 @@ import type { ModelInfo } from "../types";
 
 const PROVIDER_LABEL_SEPARATOR = " / ";
 
+export type DshModelVendorSection<T extends Pick<ModelInfo, "id" | "label"> & Partial<Pick<ModelInfo, "provider">>> = {
+  key: string;
+  label: string;
+  models: T[];
+};
+
 export type DshModelDisplayLabelOptions = {
   /** Closed trigger shows `provider / lastSegment` so it cannot collide with other CLI names. */
   closed?: boolean;
@@ -61,4 +67,50 @@ function firstPathSegment(value: string): string {
 function lastPathSegment(value: string): string {
   const slash = value.lastIndexOf("/");
   return (slash >= 0 ? value.slice(slash + 1) : value).trim();
+}
+
+/**
+ * Official DSH picker sections by host catalog `group.name`. mossx flattens
+ * that catalog to `{provider} / {model}` labels, so recover the vendor heading
+ * from the catalog label prefix, then `provider`, then the catalog id.
+ */
+export function groupDshModelsByVendor<
+  T extends Pick<ModelInfo, "id" | "label"> & Partial<Pick<ModelInfo, "provider">>,
+>(models: readonly T[]): DshModelVendorSection<T>[] {
+  const sections: DshModelVendorSection<T>[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const model of models) {
+    const label = resolveDshVendorSectionLabel(model);
+    const key = model.provider?.trim() || firstPathSegment(model.id) || label;
+    const existing = indexByKey.get(key);
+    if (existing !== undefined) {
+      sections[existing].models.push(model);
+      continue;
+    }
+    indexByKey.set(key, sections.length);
+    sections.push({ key, label, models: [model] });
+  }
+
+  return sections;
+}
+
+export function resolveDshVendorSectionLabel(
+  model: Pick<ModelInfo, "id" | "label"> & Partial<Pick<ModelInfo, "provider">>,
+): string {
+  const fromLabel = takeBeforeProviderSeparator(model.label);
+  if (fromLabel) {
+    return fromLabel;
+  }
+  const fromProvider = model.provider?.trim();
+  if (fromProvider) {
+    return fromProvider;
+  }
+  return firstPathSegment(model.id) || model.id;
+}
+
+function takeBeforeProviderSeparator(label?: string): string {
+  const value = label?.trim() ?? "";
+  const index = value.lastIndexOf(PROVIDER_LABEL_SEPARATOR);
+  return index >= 0 ? value.slice(0, index).trim() : "";
 }

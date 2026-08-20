@@ -274,9 +274,10 @@ describe("Provider target catalog owners", () => {
       {
         id: "deepseek/deepseek-v4-pro",
         model: "deepseek-v4-pro",
-        displayName: "DeepSeek V4 Pro",
+        displayName: "DeepSeek / DeepSeek V4 Pro",
         description: "",
         isDefault: true,
+        provider: "deepseek",
       },
     ]);
     const { result } = renderHook(() =>
@@ -305,6 +306,8 @@ describe("Provider target catalog owners", () => {
       expect.objectContaining({
         id: "deepseek/deepseek-v4-pro",
         model: "deepseek-v4-pro",
+        provider: "deepseek",
+        label: "DeepSeek / DeepSeek V4 Pro",
       }),
     ]);
   });

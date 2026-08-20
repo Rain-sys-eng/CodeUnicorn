@@ -7,7 +7,10 @@ import type { ModelInfo, ProviderId } from '../types';
 import {
   resolveAtomicReasoningEffort,
 } from '../../../../models/atomicModelReasoning';
-import { formatDshModelDisplayLabel } from './dshModelDisplayLabel';
+import {
+  formatDshModelDisplayLabel,
+  groupDshModelsByVendor,
+} from './dshModelDisplayLabel';
 import type { ProviderModelGroup } from '../modelOptions';
 import type { ProviderTargetGroup } from '../hooks/useProviderTargetCatalogOwners';
 import type { ExecutionTarget } from '../../../../shared-session/target/types';
@@ -397,6 +400,34 @@ type PickerModelGroup = {
   /** Atomic 目标组的全部渠道,用于子菜单底栏渠道选择弹窗 */
   profiles: PickerProfileOption[];
 };
+
+type PickerModelRow =
+  | { kind: 'heading'; key: string; sectionKey: string; label: string }
+  | { kind: 'model'; key: string; model: ModelInfo };
+
+function pickerRowsForGroup(group: PickerModelGroup): PickerModelRow[] {
+  if (group.providerId !== 'dsh') {
+    return group.models.map((model) => ({
+      kind: 'model' as const,
+      key: `${group.providerId}:${model.id}`,
+      model,
+    }));
+  }
+
+  return groupDshModelsByVendor(group.models).flatMap((section) => [
+    {
+      kind: 'heading' as const,
+      key: `dsh-vendor:${section.key}`,
+      sectionKey: section.key,
+      label: section.label,
+    },
+    ...section.models.map((model) => ({
+      kind: 'model' as const,
+      key: `${group.providerId}:${section.key}:${model.id}`,
+      model,
+    })),
+  ]);
+}
 
 /**
  * Each CLI's native brand mark (when it has a lobehub SVG). Used to detect
@@ -1292,12 +1323,24 @@ export const ModelSelect = memo(({
                             </div>
                           </DropdownMenuItem>
                         )}
-                      {group.models.map((model) => {
+                      {pickerRowsForGroup(group).map((entry) => {
+                        if (entry.kind === 'heading') {
+                          return (
+                            <DropdownMenuLabel
+                              key={entry.key}
+                              data-dsh-vendor-group={entry.sectionKey}
+                              className="px-2 py-1 text-xs font-medium text-muted-foreground"
+                            >
+                              {entry.label}
+                            </DropdownMenuLabel>
+                          );
+                        }
+                        const { model } = entry;
                         const isSelected = isGroupModelSelected(group, model);
                         const description = getModelDescription(model);
                         return (
                           <DropdownMenuItem
-                            key={`${group.providerId}:${model.id}`}
+                            key={entry.key}
                             data-model-id={model.id}
                             data-selected={isSelected ? 'true' : undefined}
                             onSelect={(event) => {

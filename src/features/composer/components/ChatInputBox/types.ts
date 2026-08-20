@@ -329,6 +329,11 @@ export interface ModelInfo {
   label: string;
   description?: string;
   source?: string;
+  /**
+   * DSH host catalog vendor id (`llm.models` group.id). Used to section
+   * the DeepSeek Harness submenu the same way the official picker does.
+   */
+  provider?: string;
   providerProfileId?: string;
   /**
    * Atomic / Shared 模型↔思考联动：Codex catalog 或 custom 播种。

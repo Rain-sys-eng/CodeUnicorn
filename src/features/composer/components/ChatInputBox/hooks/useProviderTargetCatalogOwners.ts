@@ -306,6 +306,7 @@ function toModelInfo(
     label: model.displayName || model.id,
     description: model.description,
     source: model.source,
+    provider: model.provider?.trim() || undefined,
     providerProfileId: model.providerProfileId ?? undefined,
   };
   return enrichModelInfoWithAtomicReasoning(engine ?? null, base);

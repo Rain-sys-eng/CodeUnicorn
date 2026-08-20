@@ -2172,7 +2172,12 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
             loading: false,
             error: null,
             models: [
-              { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro" },
+              {
+                id: "deepseek-official/deepseek-v4-pro",
+                model: "deepseek-v4-pro",
+                label: "DeepSeek / DeepSeek-V4-Pro",
+                provider: "deepseek-official",
+              },
             ],
           },
         ],
@@ -2210,8 +2215,100 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
       screen.queryByRole("button", { name: "models.addModel" }),
     ).toBeNull();
     expect(
-      screen.getByRole("menuitem", { name: /DeepSeek V4 Pro/ }),
+      screen.getByRole("menuitem", { name: /deepseek-v4-pro/ }),
     ).toBeTruthy();
+    expect(
+      document.querySelector("[data-dsh-vendor-group='deepseek-official']")
+        ?.textContent,
+    ).toBe("DeepSeek");
+  });
+
+  it("groups DSH host catalog models by vendor like the official picker", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const groups: ProviderTargetGroup[] = [
+      ...buildAtomicGroups(),
+      {
+        providerId: "dsh",
+        providerLabel: "DeepSeek Harness",
+        enabled: true,
+        profiles: [
+          {
+            id: "__dsh_host_catalog__",
+            label: "本地配置",
+            source: "disk",
+            loading: false,
+            error: null,
+            models: [
+              {
+                id: "deepseek-official/deepseek-v4-flash",
+                model: "deepseek-v4-flash",
+                label: "DeepSeek / DeepSeek-V4-Flash",
+                provider: "deepseek-official",
+              },
+              {
+                id: "gork-zhu/grok-4.6",
+                model: "grok-4.6",
+                label: "gork-zhu / Grok 4.6",
+                provider: "gork-zhu",
+              },
+              {
+                id: "kimi-coding/k3",
+                model: "k3",
+                label: "kimi-coding / Kimi K3",
+                provider: "kimi-coding",
+              },
+              {
+                id: "minimax-cn/MiniMax-M2.7",
+                model: "MiniMax-M2.7",
+                label: "minimax-cn / MiniMax-M2.7",
+                provider: "minimax-cn",
+              },
+              {
+                id: "mmm3/MiniMax-M3",
+                model: "MiniMax-M3",
+                label: "mmm3 / MiniMax-M3",
+                provider: "mmm3",
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    render(
+      <ModelSelect
+        value="claude-opus-4-8"
+        currentProvider="claude"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onExecutionTargetChange={vi.fn()}
+        executionTarget={atomicExecutionTarget}
+        targetGroups={groups}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:Opus 4.8" }),
+    );
+    await screen.findByRole("menuitem", { name: /DeepSeek Harness/ });
+    openPickerSubmenu(/DeepSeek Harness/);
+
+    expect(
+      [...document.querySelectorAll("[data-dsh-vendor-group]")].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual([
+      "DeepSeek",
+      "gork-zhu",
+      "kimi-coding",
+      "minimax-cn",
+      "mmm3",
+    ]);
+    expect(
+      screen.getByRole("menuitem", { name: /deepseek-v4-flash/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /grok-4.6/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /k3/ })).toBeTruthy();
   });
 
   it("emits a complete DSH host catalog target when picking grok-4.6 / Grok 4.5", async () => {
