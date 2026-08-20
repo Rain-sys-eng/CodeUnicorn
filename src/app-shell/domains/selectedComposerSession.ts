@@ -16,6 +16,8 @@ const CLAUDE_FORK_THREAD_PREFIX = "claude-fork:";
 const CLAUDE_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 /** Keep aligned with `GROK_REASONING_OPTIONS` / grok.rs allowlist. */
 const GROK_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
+/** DSH host deepseek adapter reasoning efforts (llm.models reasoning.efforts). */
+const DSH_REASONING_EFFORTS = new Set(["off", "low", "high", "max"]);
 
 export function resolveThreadEngine(
   threadId: string,
@@ -100,6 +102,8 @@ export function normalizeComposerSessionSelectionForThread(
     effort = effort && CLAUDE_REASONING_EFFORTS.has(effort) ? effort : null;
   } else if (engine === "grok") {
     effort = effort && GROK_REASONING_EFFORTS.has(effort) ? effort : null;
+  } else if (engine === "dsh") {
+    effort = effort && DSH_REASONING_EFFORTS.has(effort) ? effort : null;
   } else if (engine === "gemini" || engine === "kimi" || engine === "opencode" || engine === "pi") {
     effort = null;
   }
@@ -293,8 +297,26 @@ export function seedDshComposerSelectionFromHost(input: {
     input.threadId,
     stored,
   );
+  const hostEffort = input.effort?.trim() || null;
   if (isTrustedDshCatalogId(existing?.modelId)) {
-    return false;
+    // 模型一致时只回填 host 当前 thinking effort（官方切档或他端改档后仍能还原）；
+    // 模型不一致时整条回填。用户显式选择以 ledger 为准，host 只在空档时补位。
+    if (!existing || existing.modelId !== catalogId || existing.effort === hostEffort) {
+      return false;
+    }
+    if (!hostEffort) {
+      return false;
+    }
+    const next = normalizeComposerSessionSelectionForThread(input.threadId, {
+      modelId: existing.modelId,
+      effort: hostEffort,
+    });
+    if (!next || !isClientStoreReady("composer")) {
+      return false;
+    }
+    writeClientStoreValue("composer", sessionKey, next);
+    notifyDshComposerSelectionSeeded();
+    return true;
   }
   const next = normalizeComposerSessionSelectionForThread(input.threadId, {
     modelId: catalogId,

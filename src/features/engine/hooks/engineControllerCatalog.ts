@@ -48,6 +48,10 @@ export function normalizeEngineModelEntry(
     lastVerifiedAt: model.lastVerifiedAt?.trim() || null,
     lifecycle: model.lifecycle?.trim() || null,
     providerProfileId: model.providerProfileId?.trim() || null,
+    supportedReasoningEfforts: (model.supportedReasoningEfforts ?? []).map((id) =>
+      id.trim().length > 0 ? id.trim() : null,
+    ).filter((id): id is string => id !== null),
+    defaultReasoningEffort: model.defaultReasoningEffort?.trim() || null,
     isDefault: Boolean(model.isDefault),
   };
 }
@@ -78,9 +82,20 @@ export function areEngineModelCatalogsEqual(
       model.lastVerifiedAt === candidate.lastVerifiedAt &&
       model.lifecycle === candidate.lifecycle &&
       model.providerProfileId === candidate.providerProfileId &&
-      model.isDefault === candidate.isDefault
+      model.isDefault === candidate.isDefault &&
+      areStringListsEqual(
+        model.supportedReasoningEfforts ?? [],
+        candidate.supportedReasoningEfforts ?? [],
+      ) &&
+      (model.defaultReasoningEffort ?? null) === (candidate.defaultReasoningEffort ?? null)
     );
   });
+}
+
+function areStringListsEqual(left: readonly string[], right: readonly string[]): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
 }
 
 function getEngineModelIdentity(
@@ -236,8 +251,10 @@ export function engineModelToOption(model: EngineModelInfo): ModelOption {
     lastVerifiedAt: normalized.lastVerifiedAt ?? null,
     lifecycle: normalized.lifecycle ?? null,
     providerProfileId: normalized.providerProfileId ?? null,
-    supportedReasoningEfforts: [],
-    defaultReasoningEffort: null,
+    supportedReasoningEfforts: (normalized.supportedReasoningEfforts ?? []).map(
+      (reasoningEffort) => ({ reasoningEffort, description: "" }),
+    ),
+    defaultReasoningEffort: normalized.defaultReasoningEffort ?? null,
     isDefault: normalized.isDefault,
   };
 }

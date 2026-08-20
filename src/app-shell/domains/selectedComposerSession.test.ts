@@ -192,6 +192,33 @@ describe("selectedComposerSession", () => {
       modelId: "composer-2",
       effort: null,
     });
+    expect(
+      normalizeComposerSessionSelectionForThread("dsh:session-1", {
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: " high ",
+      }),
+    ).toEqual({
+      modelId: "deepseek-official/deepseek-v4-flash",
+      effort: "high",
+    });
+    expect(
+      normalizeComposerSessionSelectionForThread("dsh:session-1", {
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: "off",
+      }),
+    ).toEqual({
+      modelId: "deepseek-official/deepseek-v4-flash",
+      effort: "off",
+    });
+    expect(
+      normalizeComposerSessionSelectionForThread("dsh:session-1", {
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: "medium",
+      }),
+    ).toEqual({
+      modelId: "deepseek-official/deepseek-v4-flash",
+      effort: null,
+    });
   });
 
   describe("fillPendingComposerSelectionEffortFromEnginePref", () => {
@@ -339,6 +366,48 @@ describe("selectedComposerSession", () => {
           catalogId: "gork-zhu/grok-4.6",
         }),
       ).toBe(false);
+    });
+
+    it("refreshes the host effort when the ledger model matches and effort differs", () => {
+      composerStore["selectedModelByThread.ws-a:dsh:session-1"] = {
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: "low",
+      };
+      expect(
+        seedDshComposerSelectionFromHost({
+          workspaceId: "ws-a",
+          threadId: "dsh:session-1",
+          catalogId: "deepseek-official/deepseek-v4-flash",
+          effort: "max",
+        }),
+      ).toBe(true);
+      expect(
+        composerStore["selectedModelByThread.ws-a:dsh:session-1"],
+      ).toEqual({
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: "max",
+      });
+    });
+
+    it("keeps the ledger effort when the host has no effort to restore", () => {
+      composerStore["selectedModelByThread.ws-a:dsh:session-1"] = {
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: "low",
+      };
+      expect(
+        seedDshComposerSelectionFromHost({
+          workspaceId: "ws-a",
+          threadId: "dsh:session-1",
+          catalogId: "deepseek-official/deepseek-v4-flash",
+          effort: null,
+        }),
+      ).toBe(false);
+      expect(
+        composerStore["selectedModelByThread.ws-a:dsh:session-1"],
+      ).toEqual({
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: "low",
+      });
     });
 
     it("does not use the global DSH engine pref as a restore source", () => {

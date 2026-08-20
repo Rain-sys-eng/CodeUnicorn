@@ -7,6 +7,10 @@ const reasoning = {
     claudeDefault: "默认 (Default)",
     grokDefault: "默认 (Default)",
     defaultDescription: "使用引擎默认思考行为",
+    off: {
+      label: "关闭 (Off)",
+      description: "关闭思考，快速响应",
+    },
     low: {
       label: "较少 (Low)",
       description: "快速响应，基础推理",

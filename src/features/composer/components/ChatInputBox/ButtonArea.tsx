@@ -572,20 +572,28 @@ export const ButtonArea = ({
           ) : null}
           {(currentProvider === 'codex' ||
             currentProvider === 'claude' ||
-            currentProvider === 'grok') && (
+            currentProvider === 'grok' ||
+            // dsh：仅当选中模型在 host catalog 声明了 reasoning efforts
+            // （deepseek 模型 off/low/high/max）时才显示思考强度；
+            // 切到无档位模型时隐藏，保持与官方 DSH 交互一致。
+            (currentProvider === 'dsh' && (reasoningOptions?.length ?? 0) > 0)) && (
             <ReasoningSelect
               value={reasoningEffort}
               onChange={onReasoningChange ?? NOOP_REASONING}
               options={reasoningOptions}
               showDefaultOption={
-                currentProvider === 'claude' || currentProvider === 'grok'
+                currentProvider === 'claude' ||
+                currentProvider === 'grok' ||
+                currentProvider === 'dsh'
               }
               defaultLabel={
                 currentProvider === 'claude'
                   ? t('reasoning.claudeDefault', { defaultValue: 'Default' })
                   : currentProvider === 'grok'
                     ? t('reasoning.grokDefault', { defaultValue: 'Default' })
-                    : undefined
+                    : currentProvider === 'dsh'
+                      ? t('reasoning.default', { defaultValue: 'Default' })
+                      : undefined
               }
             />
           )}

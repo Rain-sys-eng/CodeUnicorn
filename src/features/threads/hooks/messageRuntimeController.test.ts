@@ -13,6 +13,9 @@ describe("messageRuntimeController", () => {
     expect(normalizeEngineScopedEffort("grok", "high")).toBe("high");
     expect(normalizeEngineScopedEffort("grok", "xhigh")).toBeNull();
     expect(normalizeEngineScopedEffort("codex", "max")).toBe("max");
+    expect(normalizeEngineScopedEffort("dsh", "off")).toBe("off");
+    expect(normalizeEngineScopedEffort("dsh", "high")).toBe("high");
+    expect(normalizeEngineScopedEffort("dsh", "medium")).toBeNull();
     expect(normalizeEngineScopedEffort("gemini", "high")).toBeNull();
   });
 

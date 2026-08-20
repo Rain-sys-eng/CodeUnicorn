@@ -504,6 +504,72 @@ describe("modelSelection", () => {
     ).toBeNull();
   });
 
+  it("exposes DSH reasoning support only when the model declares efforts", () => {
+    expect(getEffectiveReasoningSupported("dsh", true)).toBe(true);
+    expect(getEffectiveReasoningSupported("dsh", false)).toBe(false);
+    expect(isReasoningEffortSupportedForEngine("dsh", ["off", "low", "high", "max"])).toBe(true);
+    expect(isReasoningEffortSupportedForEngine("dsh", [])).toBe(false);
+    expect(getEffectiveReasoningOptions("dsh", ["off", "low", "high", "max"])).toEqual([
+      "off",
+      "low",
+      "high",
+      "max",
+    ]);
+  });
+
+  it("keeps a valid DSH thread effort and falls back to model default otherwise", () => {
+    const options = ["off", "low", "high", "max"];
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "dsh",
+        hasActiveThread: true,
+        selectedEffort: "low",
+        activeThreadSelection: {
+          modelId: "deepseek-official/deepseek-v4-flash",
+          effort: "high",
+        },
+        reasoningOptions: options,
+      }),
+    ).toBe("high");
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "dsh",
+        hasActiveThread: false,
+        selectedEffort: "max",
+        activeThreadSelection: null,
+        reasoningOptions: options,
+      }),
+    ).toBe("max");
+    // 非法档位（模型不支持）回落模型第一档，而不是透传
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "dsh",
+        hasActiveThread: true,
+        selectedEffort: "medium",
+        activeThreadSelection: {
+          modelId: "deepseek-official/deepseek-v4-flash",
+          effort: "medium",
+        },
+        reasoningOptions: options,
+      }),
+    ).toBe("off");
+  });
+
+  it("derives DSH reasoning options from the model catalog", () => {
+    const model = createModel("deepseek-official/deepseek-v4-flash", {
+      supportedReasoningEfforts: [
+        { reasoningEffort: "off", description: "" },
+        { reasoningEffort: "low", description: "" },
+        { reasoningEffort: "high", description: "" },
+        { reasoningEffort: "max", description: "" },
+      ],
+      defaultReasoningEffort: "high",
+    });
+    expect(getReasoningOptionsForModel(model)).toEqual(["off", "low", "high", "max"]);
+    const plain = createModel("gork-zhu/grok-4.6");
+    expect(getReasoningOptionsForModel(plain)).toEqual([]);
+  });
+
   it("drops stale reasoning effort for unsupported engines", () => {
     expect(
       getEffectiveSelectedEffort({

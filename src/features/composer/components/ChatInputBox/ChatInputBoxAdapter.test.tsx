@@ -1012,6 +1012,22 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.reasoningOptions).toEqual(['high', 'ultra', 'max']);
   });
 
+  it('keeps the DSH off effort while dropping unknown values', async () => {
+    renderAdapter({
+      selectedEffort: 'off',
+      reasoningOptions: ['off', 'low', 'high', 'max', 'turbo'],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      reasoningEffort?: string | null;
+      reasoningOptions?: string[];
+    };
+    expect(latest.reasoningEffort).toBe('off');
+    expect(latest.reasoningOptions).toEqual(['off', 'low', 'high', 'max']);
+  });
+
   it('preserves explicit empty reasoning options instead of falling back to every level', async () => {
     renderAdapter({
       selectedEngine: 'codex',

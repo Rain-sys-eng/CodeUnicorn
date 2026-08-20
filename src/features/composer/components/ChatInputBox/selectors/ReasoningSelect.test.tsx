@@ -73,6 +73,25 @@ describe('ReasoningSelect', () => {
     expect(screen.queryByText('Max')).toBeNull();
   });
 
+  it('renders and selects the DSH off effort', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onChange = vi.fn();
+    render(
+      <ReasoningSelect
+        value="high"
+        onChange={onChange}
+        options={['off', 'low', 'high', 'max']}
+        showDefaultOption
+        defaultLabel="Default"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'High' }));
+    await user.click(await screen.findByText('Off'));
+
+    expect(onChange).toHaveBeenCalledWith('off');
+  });
+
   it('renders and selects the runtime ultra effort', async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();

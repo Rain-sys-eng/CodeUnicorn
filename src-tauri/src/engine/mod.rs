@@ -247,6 +247,13 @@ pub struct ModelInfo {
     /// Discovery/configuration source for diagnostics.
     #[serde(default = "default_model_source")]
     pub source: String,
+    /// Adapter-owned reasoning effort ids exposed by the host catalog
+    /// (e.g. DSH llm.models reasoning.efforts: off/low/high/max).
+    #[serde(default)]
+    pub supported_reasoning_efforts: Vec<String>,
+    /// Model default reasoning effort, when the host declares one.
+    #[serde(default)]
+    pub default_reasoning_effort: Option<String>,
 }
 
 fn default_model_source() -> String {
@@ -270,6 +277,8 @@ impl ModelInfo {
             last_verified_at: None,
             lifecycle: None,
             source: default_model_source(),
+            supported_reasoning_efforts: Vec::new(),
+            default_reasoning_effort: None,
         }
     }
 
@@ -315,6 +324,16 @@ impl ModelInfo {
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    pub fn with_reasoning(
+        mut self,
+        supported_reasoning_efforts: Vec<String>,
+        default_reasoning_effort: Option<String>,
+    ) -> Self {
+        self.supported_reasoning_efforts = supported_reasoning_efforts;
+        self.default_reasoning_effort = default_reasoning_effort;
         self
     }
 

@@ -9,6 +9,10 @@ const reasoning = {
     "claudeDefault": "既定",
     "grokDefault": "既定",
     "defaultDescription": "エンジン既定の推論動作を使用します",
+    "off": {
+      "label": "オフ (Off)",
+      "description": "思考を無効化"
+    },
     "low": {
       "label": "低",
       "description": "基本的な推論による素早い応答"

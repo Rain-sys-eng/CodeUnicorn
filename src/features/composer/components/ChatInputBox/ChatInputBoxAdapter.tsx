@@ -775,6 +775,8 @@ function normalizeReasoningEffort(effort?: string | null): ReasoningEffort | nul
   }
   const normalizedEffort = effort.trim();
   switch (normalizedEffort) {
+    case 'off':
+      return 'off';
     case 'low':
       return 'low';
     case 'medium':

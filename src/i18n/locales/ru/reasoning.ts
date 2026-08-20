@@ -9,6 +9,10 @@ const reasoning = {
     "claudeDefault": "По умолчанию",
     "grokDefault": "По умолчанию",
     "defaultDescription": "Использовать поведение рассуждений движка по умолчанию",
+    "off": {
+      "label": "Выкл. (Off)",
+      "description": "Рассуждение отключено"
+    },
     "low": {
       "label": "Низкая",
       "description": "Быстрые ответы с базовыми рассуждениями"
