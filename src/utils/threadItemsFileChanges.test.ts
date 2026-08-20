@@ -281,4 +281,28 @@ describe("threadItemsFileChanges.mergeToolChanges", () => {
     expect(inferred[0]?.diff).toContain("-apple");
     expect(inferred[0]?.diff).toContain("+kiwi");
   });
+
+  it("does not treat a JSON todos payload as file changes", () => {
+    expect(
+      inferFileChangesFromPayload(
+        JSON.stringify({
+          todos: [{ content: "write KiwiController", status: "in_progress" }],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("still parses apply_patch text that is not a JSON object", () => {
+    const inferred = inferFileChangesFromPayload(
+      [
+        "*** Begin Patch",
+        "*** Update File: src/a.ts",
+        "@@",
+        "-old",
+        "+new",
+        "*** End Patch",
+      ].join("\n"),
+    );
+    expect(inferred.some((entry) => entry.path === "src/a.ts")).toBe(true);
+  });
 });

@@ -151,6 +151,49 @@ describe("buildTurnFileChangesByBoundaryId", () => {
     ]);
   });
 
+  it("does not score todo_write tools as turn file changes", () => {
+    const items: ConversationItem[] = [
+      userMessage("u1"),
+      {
+        id: "t-todo",
+        kind: "tool",
+        toolType: "mcpToolCall",
+        title: "todo_write",
+        detail: JSON.stringify({
+          todos: [{ content: "edit SecurityConfig.java", status: "completed" }],
+        }),
+        status: "completed",
+      },
+      finalAssistant("a1"),
+    ];
+    expect(buildTurnFileChangesByBoundaryId(items).size).toBe(0);
+  });
+
+  it("keeps a file with real patch stats when a sibling path-only change is empty", () => {
+    const items: ConversationItem[] = [
+      userMessage("u1"),
+      {
+        id: "t-mixed",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "write",
+        detail: "M src/a.ts, M src/noop.ts",
+        status: "completed",
+        changes: [
+          {
+            path: "src/a.ts",
+            kind: "modified",
+            diff: "@@ -1,1 +1,1 @@\n-old\n+new\n",
+          },
+          { path: "src/noop.ts", kind: "modified" },
+        ],
+      },
+      finalAssistant("a1"),
+    ];
+    const summary = buildTurnFileChangesByBoundaryId(items).get("a1");
+    expect(summary?.files.map((file) => file.path)).toEqual(["src/a.ts"]);
+  });
+
   it("falls back to write detail JSON when fileChange changes have no unified diff", () => {
     const items: ConversationItem[] = [
       userMessage("u1"),
