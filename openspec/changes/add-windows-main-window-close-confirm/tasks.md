@@ -15,6 +15,7 @@
 - [x] 3.1 标题栏：确认 close / 取消 / 连点
 - [x] 3.2 dialog 组件测
 - [x] 3.3 focused vitest 通过
+- [x] 3.4 light / system-light 确认按钮对比度：`.primary` 用 `--primary-foreground`，system-light 补 `--bg-primary`
 
 ## 4. OpenSpec
 

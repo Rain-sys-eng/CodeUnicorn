@@ -167,7 +167,7 @@
   gap: 5px;
   padding: 5px 14px;
   border-radius: 999px;
-  color: var(--bg-primary);
+  color: var(--primary-foreground, #ffffff);
   background: var(--text-primary);
   font-weight: 700;
   box-shadow: none;
@@ -179,7 +179,7 @@
 }
 
 .intent-canvas-manager-hero .intent-canvas-manager-actions button.is-primary:hover {
-  color: var(--bg-primary);
+  color: var(--primary-foreground, #ffffff);
   background: var(--text-strong);
 }
 

@@ -106,6 +106,35 @@
     --sidebar-accent: oklch(0.967 0.001 286.375);
     --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
 
+    /* Tool-block / invert-fill tokens — must override dark :root defaults.
+       Global `.primary` historically used `color: var(--bg-primary)`. System-light
+       flipped `--text-primary` to #18181b but left `--bg-primary` on the dark
+       oklch surface, so close-confirm "关闭" vanished into a black pill. */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f3f3f3;
+    --bg-tertiary: #e8e8e8;
+    --bg-hover: #e0e0e0;
+    --bg-active: #d6d6d6;
+    --text-secondary: #1a1a1a;
+    --text-tertiary: #666666;
+    --border-primary: #d0d0d0;
+    --border-color: rgba(24, 24, 27, 0.14);
+    --border-hover: rgba(24, 24, 27, 0.25);
+    --color-success: #107c10;
+    --color-warning: #f7630c;
+    --color-error: #e81123;
+    --color-tool-bg: rgba(0, 0, 0, 0.04);
+    --color-tool-icon: #0078d4;
+    --color-tool-name: #0066cc;
+    --color-tool-summary: #666666;
+    --color-tool-file-link: #107c10;
+    --success: rgba(30, 155, 110, 0.9);
+    --success-foreground: #ffffff;
+    --warning: rgba(215, 120, 20, 0.9);
+    --warning-foreground: #18181b;
+    --info: rgba(45, 93, 170, 0.7);
+    --info-foreground: #ffffff;
+
     /* App dropdown/tooltip tokens — must override dark :root defaults.
        Codex dual-view usage tooltip lives outside .chat-input-box, so it
        inherits these :root tokens. Missing light overrides produced a black

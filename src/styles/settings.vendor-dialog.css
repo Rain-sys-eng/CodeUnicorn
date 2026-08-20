@@ -972,7 +972,7 @@ pre.vendor-official-code-editor {
   appearance: none;
   border: 0;
   background: var(--text-primary);
-  color: var(--surface-card, #fff);
+  color: var(--primary-foreground, #fff);
   font: inherit;
   font-size: 12px;
   font-weight: 550;
