@@ -17,6 +17,11 @@ import {
   upsertEngineSelectedModelId,
 } from "./modelSelection";
 import { resolveClaudeManagedRuntimeModel } from "../../features/models/claudeManagedRuntimeModel";
+import {
+  findDshCatalogModel,
+  resolveDshNativeRuntimeModel,
+  resolveDshPickerTargetEngine,
+} from "../../features/composer/utils/dshNativeModelSelection";
 import { resolveThreadEngine } from "./selectedComposerSession";
 
 export function useAppShellComposerModelSection({
@@ -228,9 +233,25 @@ export function useAppShellComposerModelSection({
         return;
       }
       let targetEngine = activeEngine;
+      const threadEngine = resolveThreadEngine(activeThreadId ?? "");
+      const dshCatalogModels =
+        activeEngine === "dsh"
+          ? effectiveModels
+          : ((providerModelCatalogs.dsh as ModelOption[] | undefined) ?? []);
       // 本 catalog 先按 id 或 runtime `.model` 命中，避免 DSH `{provider}/{model}`
       // 的 last-segment / runtime 被其它 CLI catalog id 抢走。
-      let nextSelectedModel = findModelById(effectiveModels, id);
+      let nextSelectedModel: ModelOption | null = null;
+      if (threadEngine === "dsh" || activeEngine === "dsh") {
+        const dshHit = findDshCatalogModel(dshCatalogModels, id);
+        if (dshHit) {
+          nextSelectedModel = dshHit;
+          targetEngine = "dsh";
+        } else {
+          nextSelectedModel = findModelById(effectiveModels, id);
+        }
+      } else {
+        nextSelectedModel = findModelById(effectiveModels, id);
+      }
       if (!nextSelectedModel) {
         // Cross-engine pick from the grouped provider dropdown: exact catalog
         // id only. Do not match `.model` across catalogs — that is how
@@ -244,8 +265,17 @@ export function useAppShellComposerModelSection({
               (model: any) => model.id === id,
             ) ?? null;
           if (found) {
-            targetEngine = engine;
-            nextSelectedModel = found;
+            targetEngine = resolveDshPickerTargetEngine({
+              requestedId: id,
+              threadEngine,
+              activeEngine,
+              dshModels: dshCatalogModels,
+              foreignEngine: engine as typeof targetEngine,
+            });
+            nextSelectedModel =
+              targetEngine === "dsh"
+                ? (findDshCatalogModel(dshCatalogModels, id) ?? found)
+                : found;
             break;
           }
         }
@@ -257,9 +287,26 @@ export function useAppShellComposerModelSection({
         if (!freeformId) {
           return;
         }
+        const keepOnDsh =
+          resolveDshPickerTargetEngine({
+            requestedId: freeformId,
+            threadEngine,
+            activeEngine,
+            dshModels: dshCatalogModels,
+            foreignEngine: targetEngine,
+          }) === "dsh";
+        if (keepOnDsh) {
+          targetEngine = "dsh";
+        }
         nextSelectedModel = {
           id: freeformId,
-          model: freeformId,
+          model: keepOnDsh
+            ? (findDshCatalogModel(dshCatalogModels, freeformId)?.model?.trim() ||
+              resolveDshNativeRuntimeModel({
+                catalogEntryId: freeformId,
+              }) ||
+              freeformId)
+            : freeformId,
           displayName: freeformId,
           description: "",
           source: "custom",
@@ -272,7 +319,6 @@ export function useAppShellComposerModelSection({
       // Stay-on-thread: skip is about thread ownership, not drifted
       // `activeEngine`. When the user is on a DSH thread and the pick
       // belongs to another engine, keep the DSH ledger / send resolver.
-      const threadEngine = resolveThreadEngine(activeThreadId ?? "");
       const skipDshThreadLedger =
         threadEngine === "dsh" && targetEngine !== "dsh";
       const nextSelectedEffort =

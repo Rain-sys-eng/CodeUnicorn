@@ -51,6 +51,10 @@ import { persistSharedSessionSelectedTarget } from "../../shared-session/service
 import { shouldSuppressSharedTargetPersistToast } from "../../shared-session/target/sharedTargetPersistErrors";
 import { resolveComposerAtomicSelectedModelId } from "../utils/resolveComposerAtomicSelectedModelId";
 import { resolveDefaultCreationExecutionTarget } from "../utils/resolveDefaultCreationExecutionTarget";
+import {
+  resolveDshAtomicCatalogIdForSend,
+  resolveDshNativeRuntimeModel,
+} from "../utils/dshNativeModelSelection";
 import { isSharedSessionThreadId } from "../../shared-session/utils/sharedSessionIdentity";
 import { dispatchSharedSendEvent } from "../../shared-session/runtime/sharedSendStateStore";
 import { requestProviderContinuationDialog } from "../../threads/services/providerContinuationRequests";
@@ -839,14 +843,20 @@ function ComposerImpl({
     const catalogRuntime = catalogEntry?.model?.trim() || null;
     const atomicRuntime = nativeAtomicSelection?.model?.trim() || null;
     const runtimeModel =
-      catalogRuntime ||
-      (atomicRuntime &&
-      atomicRuntime !== modelCatalogEntryId &&
-      !/^k3$/i.test(atomicRuntime) &&
-      !/^kimi-/i.test(atomicRuntime)
-        ? atomicRuntime
-        : null) ||
-      null;
+      selectedEngine === "dsh"
+        ? resolveDshNativeRuntimeModel({
+            catalogEntryId: modelCatalogEntryId,
+            catalogRuntime,
+            overlayRuntime: atomicRuntime,
+          })
+        : catalogRuntime ||
+          (atomicRuntime &&
+          atomicRuntime !== modelCatalogEntryId &&
+          !/^k3$/i.test(atomicRuntime) &&
+          !/^kimi-/i.test(atomicRuntime)
+            ? atomicRuntime
+            : null) ||
+          null;
     return {
       engine: selectedEngine,
       providerProfileId: profileId,
@@ -2659,6 +2669,13 @@ function ComposerImpl({
               effort: effectiveCreationTarget.reasoning?.effort ?? null,
             }
           : null;
+      const dshSendCatalogId = resolveDshAtomicCatalogIdForSend(
+        selectedAtomicTarget ?? {
+          engine: selectedEngine,
+          modelCatalogEntryId: selectedModelId,
+          model: null,
+        },
+      );
       const sendOptions: MessageSendOptions | undefined =
         skillInvocations.length > 0 ||
         selectedMemoryIds.length > 0 ||
@@ -2670,7 +2687,10 @@ function ComposerImpl({
         (selectedAtomicTarget?.engine ?? selectedEngine) === "dsh"
           ? {
               ...((selectedAtomicTarget?.engine ?? selectedEngine) === "dsh"
-                ? { dshAgentPreset: resolvedDshAgentPreset }
+                ? {
+                    dshAgentPreset: resolvedDshAgentPreset,
+                    ...(dshSendCatalogId ? { model: dshSendCatalogId } : {}),
+                  }
                 : {}),
               ...(skillInvocations.length > 0 ? { skillInvocations } : {}),
               ...(shouldPassMemoryReference

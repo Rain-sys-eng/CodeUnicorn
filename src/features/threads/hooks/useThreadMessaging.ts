@@ -1845,8 +1845,10 @@ export function useThreadMessaging({
           ? (sanitizedOpenCodeModel ?? "openai/gpt-5.3-codex")
           : resolvedEngine === "dsh"
             ? resolveDshModelForSend({
-                catalogId: selectedModelId,
-                runtimeModel: sanitizedOpenCodeModel,
+                // Picker catalog id first: official kimi/minimax must not lose
+                // to a stale DeepSeek ledger after a same-id PI catalog collision.
+                catalogId: modelFromOptions ?? selectedModelId,
+                runtimeModel: selectedModelId ?? sanitizedOpenCodeModel,
                 fallbackCatalogId: resolveDshSendFallbackCatalogId(
                   threadId,
                   getComposerEnginePrefForEngine("dsh").modelId,
