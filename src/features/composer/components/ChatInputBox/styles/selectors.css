@@ -1175,7 +1175,13 @@
 /* ── Session Control HUD (Metrics dual-pane) ── */
 .composer-session-control-hud {
   padding: 0;
-  overflow: hidden;
+  /* Keep overflow visible so icon-only CSS tooltips (mail / rewind / enhance)
+     can escape the HUD. Inner panes still clip their own content.
+     Set both axes explicitly: a non-visible overflow-x would force overflow-y
+     to compute as auto even when overflow-y is visible. */
+  overflow: visible;
+  overflow-x: visible;
+  overflow-y: visible;
   width: var(--composer-session-hud-width, 100%);
 }
 
@@ -1184,6 +1190,10 @@
   grid-template-columns: minmax(0, 1.2fr) minmax(168px, 0.85fr);
   align-items: stretch;
   min-height: 0;
+  /* Clip dual-pane corners here so the HUD root can stay overflow:visible
+     for the top-row icon tooltips. */
+  overflow: hidden;
+  border-radius: 0 0 14px 14px;
 }
 
 .composer-session-hud-left {
@@ -1338,6 +1348,8 @@
   border-bottom: 1px solid
     color-mix(in srgb, var(--composer-tool-popover-border, var(--dropdown-border, #353540)) 70%, transparent);
   padding: 6px 6px 4px;
+  overflow: visible;
+  border-radius: 14px 14px 0 0;
   background: color-mix(
     in srgb,
     var(--composer-tool-popover-bg, var(--dropdown-bg)) 94%,

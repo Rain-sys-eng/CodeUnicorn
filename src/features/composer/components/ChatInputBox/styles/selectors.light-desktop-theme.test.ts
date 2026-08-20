@@ -76,4 +76,21 @@ describe("selector light desktop theme guards", () => {
       "background: var(--composer-tool-popover-bg, var(--dropdown-bg, #1f2028)) !important;",
     );
   });
+
+  it("lets HUD top-row icon tooltips escape the menu instead of clipping them", () => {
+    // Regression: mail / rewind / enhance use CSS ::after tooltips that sit
+    // above the button. HUD overflow:hidden clipped them against the rounded
+    // menu edge even though the parent .composer-tool-menu is overflow:visible.
+    // Tailwind `overflow-x-hidden` on DropdownMenuContent would also force the
+    // visible axis to compute as auto, so both axes must stay visible.
+    expect(selectorsCss).toMatch(
+      /\.composer-session-control-hud \{[\s\S]*?overflow: visible;[\s\S]*?overflow-x: visible;[\s\S]*?overflow-y: visible;/,
+    );
+    expect(selectorsCss).toMatch(
+      /\.composer-session-hud-footer \{[\s\S]*?overflow: visible;/,
+    );
+    expect(selectorsCss).toMatch(
+      /\.composer-session-hud-main \{[\s\S]*?overflow: hidden;/,
+    );
+  });
 });
