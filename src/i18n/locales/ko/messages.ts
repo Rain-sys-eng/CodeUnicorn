@@ -90,6 +90,7 @@ const messages = {
     "totalDuration": "소요 시간",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "입력 {{input}} / 출력 {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "입력 {{input}} token / 출력 {{output}} token",
     "messageActions": "메시지 작업",
     "copyMessage": "메시지 복사",

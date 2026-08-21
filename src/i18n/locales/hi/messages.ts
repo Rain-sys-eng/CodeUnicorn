@@ -90,6 +90,7 @@ const messages = {
     "totalDuration": "अवधि",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "इन {{input}} / आउट {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "In {{input}} token / Out {{output}} token",
     "messageActions": "संदेश क्रियाएँ",
     "copyMessage": "संदेश कॉपी करें",

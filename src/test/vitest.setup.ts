@@ -234,6 +234,7 @@ const mockTranslate = (key: string, params?: Record<string, unknown>) => {
         "messages.totalDuration": "本次耗时",
         "messages.durationSeconds": "耗时{{duration}}",
         "messages.tokenUsage": "输入 {{input}} / 输出 {{output}}",
+        "messages.liveTokenUsage": "{{tokens}} tokens",
         "messages.tokenUsageTooltip": "输入 {{input}} token / 输出 {{output}} token",
         "messages.finalMessageBoundary": "Final Message",
         "messages.rowRenderFailedTitle": "This message could not be rendered.",

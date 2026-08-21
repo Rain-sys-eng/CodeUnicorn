@@ -4,11 +4,40 @@ import { ProxyStatusBadge } from "../../../../components/ProxyStatusBadge";
 import type { PresentationProfile } from "../../../../conversation-presentation/presentationProfile";
 import { isWindowsPlatform } from "../../../../utils/platform";
 import {
+  useActiveCanvasSelector,
+  type ActiveCanvasSnapshot,
+} from "../../../layout/hooks/activeCanvasStore";
+import {
   formatDurationMs,
+  formatTokenCount,
   type MessagesEngine,
   OPENCODE_NON_STREAMING_HINT_DELAY_MS,
   shouldDisplayWorkingActivityLabel,
 } from "../../utils/messagesRenderUtils";
+import {
+  resolveWorkingIndicatorLiveTokenCount,
+  selectWorkingIndicatorLiveTokenSnapshot,
+  type WorkingIndicatorLiveTokenSnapshot,
+} from "../../utils/workingIndicatorLiveTokens";
+
+function selectLiveTokenSnapshot(
+  snapshot: ActiveCanvasSnapshot,
+): WorkingIndicatorLiveTokenSnapshot {
+  return selectWorkingIndicatorLiveTokenSnapshot(
+    snapshot.activeTokenUsage,
+    snapshot.activeThreadStatus?.lastTokenUsageUpdatedAt ?? null,
+  );
+}
+
+function areLiveTokenSnapshotsEqual(
+  left: WorkingIndicatorLiveTokenSnapshot,
+  right: WorkingIndicatorLiveTokenSnapshot,
+) {
+  return (
+    left.tokenCount === right.tokenCount &&
+    left.usageUpdatedAt === right.usageUpdatedAt
+  );
+}
 
 export const WORKING_GLYPH_FRAMES = [
   "⠋",
@@ -88,8 +117,11 @@ type WorkingIndicatorProps = {
 
 /**
  * Unified working indicator — Claude Code style.
- * Spinner + timer + fixed "响应中..." status always; special primary / tool activity optional.
+ * Spinner + timer + optional live tokens + fixed "响应中..." status always;
+ * special primary / tool activity optional.
  * Does not echo reasoning first-line (that belongs in ReasoningRow).
+ * Live tokens are read from the canvas selector so usage jitter stays off the
+ * Messages root props lane.
  */
 export const WorkingIndicator = memo(function WorkingIndicator({
   isThinking,
@@ -108,6 +140,16 @@ export const WorkingIndicator = memo(function WorkingIndicator({
 }: WorkingIndicatorProps) {
   const { t } = useTranslation();
   const [elapsedMs, setElapsedMs] = useState(0);
+  const liveTokenSnapshot = useActiveCanvasSelector(
+    selectLiveTokenSnapshot,
+    areLiveTokenSnapshotsEqual,
+  );
+  const liveTokenCount = resolveWorkingIndicatorLiveTokenCount({
+    isThinking,
+    tokenCount: liveTokenSnapshot.tokenCount,
+    usageUpdatedAt: liveTokenSnapshot.usageUpdatedAt,
+    processingStartedAt,
+  });
 
   useEffect(() => {
     if (!isThinking || !processingStartedAt) {
@@ -140,6 +182,18 @@ export const WorkingIndicator = memo(function WorkingIndicator({
   const displayPrimaryLabel = primaryLabel?.trim()
     ? primaryLabel
     : defaultRespondingLabel;
+  const compactLiveTokenCount =
+    liveTokenCount != null ? formatTokenCount(liveTokenCount) : null;
+  const translatedLiveTokenLabel =
+    compactLiveTokenCount == null
+      ? null
+      : t("messages.liveTokenUsage", { tokens: compactLiveTokenCount });
+  const liveTokenLabel =
+    compactLiveTokenCount == null
+      ? null
+      : translatedLiveTokenLabel === "messages.liveTokenUsage"
+        ? compactLiveTokenCount + " tokens"
+        : translatedLiveTokenLabel;
   const nonStreamingHintText = t("messages.nonStreamingHint");
   const resolvedNonStreamingHint =
     nonStreamingHintText === "messages.nonStreamingHint"
@@ -209,6 +263,14 @@ export const WorkingIndicator = memo(function WorkingIndicator({
           <WorkingSpinner />
           <div className="working-timer">
             <span className="working-timer-clock">{formatDurationMs(elapsedMs)}</span>
+            {liveTokenLabel ? (
+              <>
+                <span className="working-timer-separator" aria-hidden>
+                  ·
+                </span>
+                <span className="working-timer-tokens">{liveTokenLabel}</span>
+              </>
+            ) : null}
           </div>
           <span className="working-text">{displayPrimaryLabel}</span>
           {showActivityLabel && <span className="working-activity">{activityLabel}</span>}

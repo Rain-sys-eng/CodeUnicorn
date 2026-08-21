@@ -114,6 +114,7 @@ const messages = {
     totalDuration: "Duration",
     durationSeconds: "took {{duration}}",
     tokenUsage: "In {{input}} / Out {{output}}",
+    liveTokenUsage: "{{tokens}} tokens",
     tokenUsageTooltip: "In {{input}} token / Out {{output}} token",
     messageActions: "Message actions",
     copyMessage: "Copy message",

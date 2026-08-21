@@ -99,6 +99,7 @@ const messages = {
     totalDuration: "本次耗时",
     durationSeconds: "耗时{{duration}}",
     tokenUsage: "输入 {{input}} / 输出 {{output}}",
+    liveTokenUsage: "{{tokens}} tokens",
     tokenUsageTooltip: "输入 {{input}} token / 输出 {{output}} token",
     messageActions: "消息操作",
     copyMessage: "复制消息",

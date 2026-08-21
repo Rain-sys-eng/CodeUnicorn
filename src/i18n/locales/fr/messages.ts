@@ -90,6 +90,7 @@ const messages = {
     "totalDuration": "Durée",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "Entrée {{input}} / Sortie {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "Entrée {{input}} token / Sortie {{output}} token",
     "messageActions": "Actions du message",
     "copyMessage": "Copier le message",

@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -42,5 +45,20 @@ describe("conversationCanvasNode", () => {
 
     expect(lifecycle.mounts).toBe(1);
     expect(lifecycle.unmounts).toBe(0);
+  });
+
+  it("keeps activeTokenUsage off the Messages root selector", () => {
+    const sourcePath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "conversationCanvasNode.tsx",
+    );
+    const source = readFileSync(sourcePath, "utf8");
+    const selectorStart = source.indexOf("const selectActiveCanvasMessagesProps");
+    const selectorEnd = source.indexOf("function ActiveCanvasMessages");
+    expect(selectorStart).toBeGreaterThan(-1);
+    expect(selectorEnd).toBeGreaterThan(selectorStart);
+    const selector = source.slice(selectorStart, selectorEnd);
+    expect(selector).not.toContain("activeTokenUsage");
+    expect(selector).not.toContain("heartbeatPulse");
   });
 });
