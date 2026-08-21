@@ -113,7 +113,7 @@
   padding: 0 10px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-default) 64%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 56%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 56%, transparent);
 }
 
 .git-history-fallback-label {
@@ -348,7 +348,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   padding: 4px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 54%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 54%, transparent);
 }
 
 .git-history-overview-icon-chip {
@@ -560,7 +560,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   height: 36px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 65%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 65%, transparent);
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
@@ -642,7 +642,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   padding: 0 var(--git-filetree-row-pad-x);
   border: 1px solid color-mix(in srgb, var(--border-default) 34%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 32%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 32%, transparent);
 }
 
 .git-history-worktree-summary-lines {
@@ -887,7 +887,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   min-height: 18px;
   border-radius: var(--git-filetree-badge-radius);
   border: 1px solid color-mix(in srgb, var(--border-default) 58%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 64%, transparent);
   font-family: var(--code-font-family);
   font-variant-numeric: tabular-nums;
 }
@@ -925,7 +925,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   height: 20px;
   border-radius: 7px;
   border-color: color-mix(in srgb, var(--border-default) 72%, var(--text-muted, #64748b));
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 82%, var(--surface-card));
+  background: color-mix(in srgb, var(--surface-control) 82%, var(--surface-card));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--surface-card) 72%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--text-inverse, #ffffff) 18%, transparent);
@@ -963,7 +963,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   height: 20px;
   border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--border-default) 68%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 68%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 68%, transparent);
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;

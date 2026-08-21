@@ -14,7 +14,7 @@
 .project-map-panel {
   --project-map-toolbar-control-height: 22px;
   --project-map-compact-chrome-height: 28px;
-  --project-map-bg: var(--surface-messages, var(--background, #0d0f14));
+  --project-map-bg: var(--surface-messages, var(--background, #0d0d0d));
   --project-map-surface: var(--surface-card, var(--card, #1f2028));
   --project-map-surface-strong: var(--surface-card-strong, var(--card, #262830));
   --project-map-surface-muted: var(--surface-card-muted, var(--muted, #181a22));

@@ -425,7 +425,7 @@ export function StartupGateOverlay() {
   // competes with first-paint layout.  A separate opacity layer on top of a
   // solid theme background avoids the shader cost.
   const gateBgStyle = {
-    backgroundColor: 'var(--surface-messages, #0d0f14)',
+    backgroundColor: 'var(--surface-messages, #0d0d0d)',
     opacity: 0.92,
   } as const;
 

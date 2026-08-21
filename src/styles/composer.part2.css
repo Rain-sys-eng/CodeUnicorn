@@ -1741,7 +1741,7 @@
   padding: 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-elevated) 96%, #0b1020);
+  background: color-mix(in srgb, var(--surface-elevated, var(--surface-card)) 96%, var(--surface-messages));
   backdrop-filter: blur(8px);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
 }

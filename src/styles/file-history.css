@@ -147,7 +147,7 @@
   position: relative;
   cursor: col-resize;
   touch-action: none;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 58%, transparent);
   /* ponytail: 8px hit area matches VERTICAL_SPLITTER_SIZE used by FileHistoryView. */
 }
 

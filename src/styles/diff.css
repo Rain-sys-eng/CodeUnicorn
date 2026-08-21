@@ -867,7 +867,7 @@ button.diff-section-indicator:focus-visible {
   min-width: 8px;
   cursor: col-resize;
   touch-action: none;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 58%, transparent);
 }
 
 .read-only-compare-resizer::after {

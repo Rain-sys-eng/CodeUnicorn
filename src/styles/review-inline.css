@@ -158,7 +158,7 @@
 }
 
 .review-inline-action-start:hover:not(:disabled) {
-  color: color-mix(in srgb, var(--review-inline-accent) 80%, #0f172a);
+  color: color-mix(in srgb, var(--review-inline-accent) 80%, var(--text-strong));
   background: transparent;
 }
 

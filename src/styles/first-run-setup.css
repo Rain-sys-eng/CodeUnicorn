@@ -65,7 +65,7 @@
 
 :root[data-theme="dark"] .first-run-fluid::after,
 :root[data-theme="dim"] .first-run-fluid::after {
-  background: color-mix(in srgb, #0d0f14 46%, transparent);
+  background: color-mix(in srgb, #0d0d0d 46%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

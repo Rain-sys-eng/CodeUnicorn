@@ -19,7 +19,7 @@
   --runtime-console-token-java-class: #63b3d3;
   --runtime-console-token-java-meta: #7f8da5;
   --runtime-console-token-java: #6aa7c6;
-  --runtime-console-log-bg: color-mix(in srgb, var(--surface-raised) 90%, #0b1220 10%);
+  --runtime-console-log-bg: color-mix(in srgb, var(--surface-raised, var(--surface-card)) 90%, var(--surface-messages) 10%);
   --runtime-console-log-font-size: 12px;
   --runtime-console-log-line-height: 1.45;
   display: flex;

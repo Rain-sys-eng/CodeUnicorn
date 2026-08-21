@@ -32,7 +32,10 @@ describe("desktop shell theme contract", () => {
     expect(darkThemeCss).toContain("--text-fainter: #a3a3a3;");
     expect(darkThemeCss).toContain("--text-tertiary: var(--text-faint);");
     expect(darkThemeCss).toContain("--color-thinking-text: var(--text-faint);");
-    expect(darkThemeCss).toContain("--muted-foreground: oklch(0.78 0.008 286);");
+    expect(darkThemeCss).toContain("--muted-foreground: oklch(0.78 0 0);");
+    expect(darkThemeCss).toContain("--surface-messages: oklch(0.145 0 0);");
+    expect(darkThemeCss).not.toContain("285.823");
+    expect(darkThemeCss).not.toContain("0.004 286");
     expect(darkThemeCss).not.toContain("--text-faint: #808080;");
     expect(darkThemeCss).not.toContain("--color-thinking-text: rgb(115, 115, 115);");
     expect(lightThemeCss).toContain("--text-faint: rgba(24, 24, 27, 0.5);");
@@ -60,7 +63,7 @@ describe("desktop shell theme contract", () => {
 
     expect(collapsedRule).toBeDefined();
     expect(collapsedRule).not.toContain("#ffffff");
-    expect(collapsedRule).toContain("var(--surface-messages, #0d0f14)");
+    expect(collapsedRule).toContain("var(--surface-messages, #0d0d0d)");
   });
 
   it("preserves explicit-light and system-light collapsed shell overrides", () => {

@@ -12,7 +12,7 @@
 .git-history-create-pr-backdrop {
   position: fixed;
   z-index: 68;
-  background: #0b1220;
+  background: color-mix(in srgb, var(--surface-messages) 82%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -21,7 +21,7 @@
   width: min(440px, 100%);
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-default) 78%, transparent);
-  background: color-mix(in srgb, var(--surface-card-muted, #111725) 92%, #0b1220);
+  background: var(--surface-card-muted, var(--surface-card));
   box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
   padding: 14px;
   display: flex;
@@ -36,7 +36,7 @@
   border: 1px solid color-mix(in srgb, var(--border-default) 88%, transparent);
   background-color: var(--surface-sidebar-opaque, #ffffff);
   box-shadow:
-    0 18px 46px color-mix(in srgb, #0f172a 26%, transparent),
+    0 18px 46px color-mix(in srgb, var(--surface-messages) 26%, transparent),
     0 1px 0 color-mix(in srgb, #ffffff 36%, transparent) inset;
   padding: 14px;
   display: flex;
@@ -246,7 +246,7 @@
   line-height: 1.32;
   font-size: 13px;
   font-weight: 680;
-  color: color-mix(in srgb, var(--text-primary) 96%, #0f172a 4%);
+  color: color-mix(in srgb, var(--text-primary) 96%, var(--text-strong) 4%);
 }
 
 .git-history-create-pr-picker-value-hint {
@@ -262,7 +262,7 @@
   border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 52%, transparent);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--accent-primary, #2563eb) 17%, transparent),
-    0 8px 20px color-mix(in srgb, #0f172a 8%, transparent);
+    0 8px 20px color-mix(in srgb, var(--surface-messages) 8%, transparent);
 }
 
 .git-history-create-pr-picker-dropdown {
@@ -277,7 +277,7 @@
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   border-radius: 11px;
   background-color: var(--surface-sidebar-opaque, #ffffff);
-  box-shadow: 0 14px 28px color-mix(in srgb, #0f172a 18%, transparent);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--surface-messages) 18%, transparent);
   display: flex;
   flex-direction: column;
   overflow: hidden;

@@ -21,7 +21,7 @@
   max-height: calc(100vh - 64px);
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-strong, var(--border-default)) 82%, transparent);
-  background: var(--surface-popover, var(--surface-messages, #0d0f14));
+  background: var(--surface-popover, var(--surface-messages, #0d0d0d));
   color: var(--text-primary);
   box-shadow: 0 22px 64px rgba(0, 0, 0, 0.4);
   overflow: hidden;
@@ -110,7 +110,7 @@
   height: 26px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 72%, transparent);
   color: var(--text-emphasis, #111827);
   display: inline-flex;
   align-items: center;
@@ -189,7 +189,7 @@
   height: 26px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 72%, transparent);
   color: var(--text-emphasis, #111827);
   display: inline-flex;
   align-items: center;
@@ -236,7 +236,7 @@
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 56%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 56%, transparent);
   white-space: pre;
   font-family: var(--code-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }

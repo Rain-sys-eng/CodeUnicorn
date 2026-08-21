@@ -6,29 +6,29 @@
 .app.reduced-transparency {
   --surface-sidebar: #121212;
   --surface-sidebar-opaque: #121212;
-  --surface-topbar: #0f1118;
-  --surface-right-panel: #0e1018;
-  --surface-composer: #0f1118;
-  --surface-messages: #0d0f14;
-  --surface-card: #1f2028;
-  --surface-card-strong: #262830;
-  --surface-card-muted: #181a22;
-  --surface-item: #1c1e26;
-  --surface-control: #282c37;
-  --surface-control-hover: #363c48;
-  --surface-control-disabled: #282c37;
-  --surface-hover: #2e3240;
-  --surface-active: #1e2a38;
-  --surface-approval: #0c101a;
-  --surface-debug: #0c101a;
-  --surface-command: #0c0e14;
-  --surface-diff-card: #0e121c;
-  --surface-bubble: #2a2e3a;
+  --surface-topbar: #111111;
+  --surface-right-panel: #101010;
+  --surface-composer: #111111;
+  --surface-messages: #0d0d0d;
+  --surface-card: #1f1f1f;
+  --surface-card-strong: #272727;
+  --surface-card-muted: #181818;
+  --surface-item: #1c1c1c;
+  --surface-control: #2b2b2b;
+  --surface-control-hover: #3a3a3a;
+  --surface-control-disabled: #2b2b2b;
+  --surface-hover: #323232;
+  --surface-active: #2a2a2a;
+  --surface-approval: #101010;
+  --surface-debug: #101010;
+  --surface-command: #0c0c0c;
+  --surface-diff-card: #111111;
+  --surface-bubble: #2c2c2c;
   --surface-bubble-user: #005fb8;
   --color-message-user-bg: #005fb8;
   --color-message-user-text: #ffffff;
-  --surface-context-core: #10141e;
-  --surface-popover: #10141e;
+  --surface-context-core: #121212;
+  --surface-popover: #141414;
 }
 
 .popover-surface {
@@ -183,7 +183,7 @@ body {
   height: 100%;
   display: grid;
   grid-template-columns: var(--sidebar-width, 210px) 1fr;
-  background: var(--surface-messages, #0d0f14);
+  background: var(--surface-messages, #0d0d0d);
   border-radius: 0;
   overflow: hidden;
   position: relative;
