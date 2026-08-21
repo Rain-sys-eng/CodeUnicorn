@@ -81,6 +81,12 @@ export const ModeSelect = memo(({
         return { ...mode, disabled: true };
       });
     }
+    if (provider === 'dsh') {
+      return AVAILABLE_MODES.map((mode) => ({
+        ...mode,
+        disabled: mode.id !== 'default' && mode.id !== 'bypassPermissions',
+      }));
+    }
     // Keep non-Claude providers on the existing restricted path.
     return AVAILABLE_MODES.map((mode) => {
       if (mode.id !== 'bypassPermissions') {
@@ -109,6 +115,11 @@ export const ModeSelect = memo(({
       const claudeKey = `claudeModes.${modeId}.${field}`;
       const fallbackKey = `modes.${modeId}.${field}`;
       return t(claudeKey, { defaultValue: t(fallbackKey) });
+    }
+    if (provider === 'dsh') {
+      const dshKey = `dshModes.${modeId}.${field}`;
+      const fallbackKey = `modes.${modeId}.${field}`;
+      return t(dshKey, { defaultValue: t(fallbackKey) });
     }
 
     return t(`modes.${modeId}.${field}`);

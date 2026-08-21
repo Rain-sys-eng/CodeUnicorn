@@ -22,6 +22,8 @@ const approval = {
     "noteLabel": "Примечание",
     "none": "Нет",
     "noExtraDetails": "Нет дополнительных деталей.",
+    "showDebugDetails": "Показать сведения о запросе",
+    "hideDebugDetails": "Скрыть сведения о запросе",
     "decline": "Отклонить",
     "close": "Закрыть",
     "approveTurnBatch": "Одобрить всё в этой партии ({{count}})",

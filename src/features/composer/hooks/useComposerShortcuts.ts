@@ -22,9 +22,11 @@ type UseComposerShortcutsOptions = {
   selectedEffort: string | null;
   onSelectEffort: (effort: string) => void;
   reasoningSupported: boolean;
+  selectedEngine?: string | null;
 };
 
 const ACCESS_ORDER: AccessMode[] = ["full-access"];
+const DSH_ACCESS_ORDER: AccessMode[] = ["default", "full-access"];
 
 export function useComposerShortcuts({
   textareaRef,
@@ -44,6 +46,7 @@ export function useComposerShortcuts({
   selectedEffort,
   onSelectEffort,
   reasoningSupported,
+  selectedEngine,
 }: UseComposerShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -68,9 +71,12 @@ export function useComposerShortcuts({
       }
       if (matchesShortcutForPlatform(event, accessShortcut)) {
         event.preventDefault();
-        const currentIndex = ACCESS_ORDER.indexOf(accessMode);
-        const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % ACCESS_ORDER.length : 0;
-        const nextAccess = ACCESS_ORDER[nextIndex];
+        const accessOrder =
+          selectedEngine === "dsh" ? DSH_ACCESS_ORDER : ACCESS_ORDER;
+        const currentIndex = accessOrder.indexOf(accessMode);
+        const nextIndex =
+          currentIndex >= 0 ? (currentIndex + 1) % accessOrder.length : 0;
+        const nextAccess = accessOrder[nextIndex];
         if (nextAccess) {
           onSelectAccessMode(nextAccess);
         }
@@ -127,6 +133,7 @@ export function useComposerShortcuts({
     reasoningSupported,
     selectedCollaborationModeId,
     selectedEffort,
+    selectedEngine,
     selectedModelId,
     textareaRef,
   ]);

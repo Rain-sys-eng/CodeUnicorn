@@ -2631,6 +2631,7 @@ impl DaemonState {
                     resume_id,
                     continue_session,
                     dsh_agent_preset.as_deref(),
+                    access_mode.as_deref(),
                 )
                 .await?;
                 self.record_auto_session_metadata_if_present(
@@ -3090,6 +3091,7 @@ impl DaemonState {
                     resume_id,
                     continue_session,
                     dsh_agent_preset.as_deref(),
+                    access_mode.as_deref(),
                 )
                 .await?;
                 let (_snapshot, client) = engine::dsh::ensure_ready(&runtime).await?;

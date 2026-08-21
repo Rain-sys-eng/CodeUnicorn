@@ -3154,7 +3154,9 @@ function ComposerImpl({
         modeLabel:
           selectedEngine === "codex" && _selectedCollaborationModeId === "plan"
             ? t("codexModes.plan.label")
-            : t(`modes.${selectedPermissionMode}.label`),
+            : selectedEngine === "dsh"
+              ? t(`dshModes.${selectedPermissionMode}.label`)
+              : t(`modes.${selectedPermissionMode}.label`),
         modeImpactLabel: t(
           `composer.readinessModeImpact.${composerReadinessAccessMode}`,
         ),

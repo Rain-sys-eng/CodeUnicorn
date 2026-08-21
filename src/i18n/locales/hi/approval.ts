@@ -22,6 +22,8 @@ const approval = {
     "noteLabel": "नोट",
     "none": "कोई नहीं",
     "noExtraDetails": "कोई अतिरिक्त विवरण नहीं।",
+    "showDebugDetails": "अनुरोध विवरण दिखाएँ",
+    "hideDebugDetails": "अनुरोध विवरण छिपाएँ",
     "decline": "अस्वीकार करें",
     "close": "बंद करें",
     "approveTurnBatch": "इस बैच में सभी स्वीकृत करें ({{count}})",

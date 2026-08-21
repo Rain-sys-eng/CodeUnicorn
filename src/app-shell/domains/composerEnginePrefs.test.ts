@@ -160,4 +160,23 @@ describe("resolveRestoredAccessMode", () => {
       "current",
     );
   });
+
+  it("starts blank DSH sessions on default instead of global full-access", () => {
+    expect(resolveRestoredAccessMode("dsh", null, "full-access")).toBe(
+      "default",
+    );
+    expect(resolveRestoredAccessMode("dsh", null, undefined)).toBe("default");
+    expect(resolveRestoredAccessMode("dsh", "current", "full-access")).toBe(
+      "default",
+    );
+  });
+
+  it("keeps an explicit DSH auto-mode pin", () => {
+    expect(resolveRestoredAccessMode("dsh", "full-access", "default")).toBe(
+      "full-access",
+    );
+    expect(resolveRestoredAccessMode("dsh", "default", "full-access")).toBe(
+      "default",
+    );
+  });
 });

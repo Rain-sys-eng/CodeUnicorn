@@ -6,6 +6,7 @@ import claudeModes from "./claudeModes";
 import clientDocumentation from "./clientDocumentation";
 import codexModes from "./codexModes";
 import debug from "./debug";
+import dshModes from "./dshModes";
 import engineTaskOutput from "./engineTaskOutput";
 import intentCanvas from "./intentCanvas";
 import memory from "./memory";
@@ -28,6 +29,7 @@ const deferred = {
   ...clientDocumentation,
   ...codexModes,
   ...debug,
+  ...dshModes,
   ...engineTaskOutput,
   ...intentCanvas,
   ...memory,

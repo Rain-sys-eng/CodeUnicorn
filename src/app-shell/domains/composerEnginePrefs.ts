@@ -115,12 +115,20 @@ export function upsertComposerEnginePref(
  * Resolve the access mode to restore when switching to an engine. Claude's
  * permission menu keeps acceptEdits ("current") disabled, so a stored or
  * default "current" degrades to the approval-required "default" instead.
+ * DSH auto mode is an explicit session pin to danger-full-access; blank DSH
+ * conversations stay on workspace-write unless the user already chose auto.
  */
 export function resolveRestoredAccessMode(
   engine: EngineType,
   stored: AccessMode | null,
   defaultAccessMode: AccessMode | undefined,
 ): AccessMode {
+  if (engine === "dsh") {
+    if (stored === "full-access" || stored === "default") {
+      return stored;
+    }
+    return "default";
+  }
   const restored = stored ?? defaultAccessMode ?? "full-access";
   if (engine === "claude" && restored === "current") {
     return "default";

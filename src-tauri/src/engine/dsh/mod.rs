@@ -204,6 +204,7 @@ pub async fn send_user_turn(
     resume_id: Option<&str>,
     continue_session: bool,
     agent_preset: Option<&str>,
+    access_mode: Option<&str>,
 ) -> Result<DshSendOutcome, String> {
     if let Some(handle) = app.as_ref() {
         events::set_app_handle(handle.clone()).await;
@@ -287,6 +288,18 @@ pub async fn send_user_turn(
             );
         };
         image_admission::ensure_image_admission(&client, &provider, &model_id).await?;
+    }
+
+    // Permission preset is a live session switch, independent of Agent
+    // Preset. Create still pins the host default (usually workspace-write
+    // + ask); auto mode must overwrite it before the first tool call.
+    // Skip the switch while a turn is still open: /permission injects into
+    // the live agent inbox and can flip ask/never under in-flight tools.
+    if session::should_set_permission_preset(
+        continue_session,
+        events::session_has_open_turn(&native_session_id).await,
+    ) {
+        session::set_permission_preset(&client, &native_session_id, access_mode).await?;
     }
 
     // Subscribe immediately before prompt so this turn's `turn/end` cannot

@@ -30,6 +30,8 @@ const approval = {
     noteLabel: "Note",
     none: "None",
     noExtraDetails: "No extra details.",
+    showDebugDetails: "Show request details",
+    hideDebugDetails: "Hide request details",
     decline: "Decline",
     close: "Close",
     approveTurnBatch: "Approve all in this batch ({{count}})",

@@ -41,6 +41,7 @@ struct MuxHub {
     bindings: HashMap<String, DshSessionBinding>,
     goal_states: HashMap<String, DshGoalSessionState>,
     turn_waiters: HashMap<String, Vec<oneshot::Sender<String>>>,
+    open_turns: HashMap<String, bool>,
     pending_questions: HashMap<String, Value>,
     app: Option<AppHandle>,
     stop: Option<oneshot::Sender<()>>,
@@ -55,6 +56,7 @@ fn mux() -> &'static Mutex<MuxHub> {
             bindings: HashMap::new(),
             goal_states: HashMap::new(),
             turn_waiters: HashMap::new(),
+            open_turns: HashMap::new(),
             pending_questions: HashMap::new(),
             app: None,
             stop: None,
@@ -72,6 +74,17 @@ pub async fn unbind_session(session_id: &str) {
     let mut hub = mux().lock().await;
     hub.bindings.remove(session_id);
     hub.goal_states.remove(session_id);
+    hub.open_turns.remove(session_id);
+}
+
+pub async fn session_has_open_turn(session_id: &str) -> bool {
+    mux()
+        .lock()
+        .await
+        .open_turns
+        .get(session_id)
+        .copied()
+        .unwrap_or(false)
 }
 
 pub async fn session_ids_for_workspace(workspace_id: &str) -> Vec<String> {
@@ -149,6 +162,7 @@ impl DshTurnWaiter {
 }
 
 fn notify_turn_end(session_id: &str, kind: &str, hub: &mut MuxHub) {
+    hub.open_turns.insert(session_id.to_string(), false);
     if let Some(waiters) = hub.turn_waiters.remove(session_id) {
         for waiter in waiters {
             let _ = waiter.send(kind.to_string());
@@ -420,6 +434,12 @@ async fn dispatch_mux_text(text: &str) {
             &session_id,
             rpc_id.as_deref(),
         );
+        if projected
+            .iter()
+            .any(|event| matches!(event, EngineEvent::TurnStarted { .. }))
+        {
+            hub.open_turns.insert(session_id.clone(), true);
+        }
         if let Some(kind) = projected.iter().find_map(turn_end_kind) {
             notify_turn_end(&session_id, kind, &mut hub);
         }
@@ -436,6 +456,7 @@ async fn dispatch_mux_text(text: &str) {
         if should_unbind {
             hub.bindings.remove(&session_id);
             hub.goal_states.remove(&session_id);
+            hub.open_turns.remove(&session_id);
         }
         (binding, app, events)
     };

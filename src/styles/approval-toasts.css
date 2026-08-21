@@ -280,6 +280,21 @@
   color: var(--text-muted);
 }
 
+.approval-toast-debug {
+  display: grid;
+  gap: 8px;
+}
+
+.approval-toast-debug-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .approval-toast-actions {
   display: flex;
   gap: 8px;

@@ -22,6 +22,8 @@ const approval = {
     "noteLabel": "メモ",
     "none": "なし",
     "noExtraDetails": "追加の詳細はありません。",
+    "showDebugDetails": "リクエスト詳細を表示",
+    "hideDebugDetails": "リクエスト詳細を隠す",
     "decline": "却下",
     "close": "閉じる",
     "approveTurnBatch": "このバッチ内のすべてを承認 ({{count}})",

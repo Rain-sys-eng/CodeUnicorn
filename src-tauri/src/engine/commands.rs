@@ -3456,6 +3456,7 @@ pub async fn engine_send_message(
                 resume_id,
                 continue_session,
                 dsh_agent_preset.as_deref(),
+                access_mode.as_deref(),
             )
             .await?;
             record_auto_session_metadata_if_present(
@@ -4171,6 +4172,7 @@ pub async fn engine_send_message_sync(
                 resume_id,
                 continue_session,
                 dsh_agent_preset.as_deref(),
+                access_mode.as_deref(),
             )
             .await?;
             let (_snapshot, client) = crate::engine::dsh::ensure_ready(&runtime).await?;

@@ -544,6 +544,7 @@ export function useAppShellComposerModelSection({
     selectedEffort: effectiveSelectedEffort,
     onSelectEffort: handleSelectComposerEffort,
     reasoningSupported: effectiveReasoningSupported,
+    selectedEngine: activeEngine,
   });
   useComposerMenuActions({
     models: effectiveModels,
@@ -559,6 +560,7 @@ export function useAppShellComposerModelSection({
     onSelectEffort: handleSelectComposerEffort,
     reasoningSupported: effectiveReasoningSupported,
     onFocusComposer: () => composerInputRef.current?.focus(),
+    selectedEngine: activeEngine,
   });
 
   return {

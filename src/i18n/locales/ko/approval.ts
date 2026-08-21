@@ -22,6 +22,8 @@ const approval = {
     "noteLabel": "메모",
     "none": "없음",
     "noExtraDetails": "추가 세부 정보가 없습니다.",
+    "showDebugDetails": "요청 세부정보 표시",
+    "hideDebugDetails": "요청 세부정보 숨기기",
     "decline": "거절",
     "close": "닫기",
     "approveTurnBatch": "이 배치의 모든 항목 승인 ({{count}})",
