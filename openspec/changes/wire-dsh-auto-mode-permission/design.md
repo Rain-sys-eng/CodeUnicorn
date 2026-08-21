@@ -18,7 +18,7 @@ DSH host permission 是独立于 Agent Preset 的 session 旋钮。官方两档�
 
 | 时机 | RPC | 说明 |
 |---|---|---|
-| create 之后、prompt 之前 | `POST /api/commands/execute` | payload `{ args: { agentId, line } }`，`line = "/permission danger-full-access"` 或 `"/permission workspace-write"` |
+| create 之后、prompt 之前 | `POST /api/commands/execute` | payload `{ args: { agentId, line, images: [] } }`，`line = "/permission danger-full-access"` 或 `"/permission workspace-write"`。`images` 是 DSH `0.1.1-rc.2` Typert 必填键，`/permission` 发空数组。 |
 | 续聊同一 session（idle） | 同上，prompt 前 | host `set()` 对已是目标 preset 的 session 是 no-op |
 | 续聊同一 session（turn 仍开着） | **跳过** `/permission` | slash command 会 inject 进 live agent inbox，不能在 in-flight tools 下面改 ask/never |
 | Settings defaultPreset | 不写 | Web Full access 要额外确认；mossx 只改当前 session |
@@ -33,7 +33,8 @@ DSH host permission 是独立于 Agent Preset 的 session 旋钮。官方两档�
   "payload": {
     "args": {
       "agentId": "session-...",
-      "line": "/permission danger-full-access"
+      "line": "/permission danger-full-access",
+      "images": []
     }
   }
 }
@@ -74,5 +75,5 @@ create 时 host 仍会 pin 部署默认（通常 `workspace-write`）。mossx �
 
 ## 测试
 
-- Rust：accessMode → command line 映射；payload 带 `args.agentId` + `args.line`。
+- Rust：accessMode → command line 映射；payload 带 `args.agentId` + `args.line` + `args.images: []`（Typert exact key set）。
 - Frontend：DSH 可选 default / auto；plan / acceptEdits disabled。
