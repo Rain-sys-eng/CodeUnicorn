@@ -67,6 +67,17 @@ describe("classifySharedProviderRetryError", () => {
         message: '{"code":"502"}',
       }),
     ).toMatchObject({ disposition: "retryable", kind: "server" });
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          "会话失败：Claude exited with status: exit code: 1. Diagnostics: input_format=stream-json, include_hook_events=true, permission_mode=full-access. No stdout/stderr diagnostics were observed.",
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "soft-cancel", reason: "暂时中断" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "Kimi exited with status: exit status: 1",
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "soft-cancel" });
   });
 
   it("does not treat tool permission, window capacity, or filename 5xx as retryable", () => {
@@ -97,6 +108,13 @@ describe("classifySharedProviderRetryError", () => {
     expect(
       classifySharedProviderRetryError({
         message: "Turn cancelled: Session stopped.",
+        wasLocalInterrupt: true,
+      }),
+    ).toMatchObject({ disposition: "abort", kind: "user-stop" });
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          "Claude exited with status: exit code: 1. Diagnostics: input_format=stream-json, include_hook_events=true, permission_mode=full-access. No stdout/stderr diagnostics were observed.",
         wasLocalInterrupt: true,
       }),
     ).toMatchObject({ disposition: "abort", kind: "user-stop" });

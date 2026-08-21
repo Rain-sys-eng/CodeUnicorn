@@ -86,6 +86,27 @@ function hasStatusOrCode(text: string, code: number): boolean {
   );
 }
 
+const SILENT_CLI_PROCESS_EXIT_RE =
+  /\b(?:claude|codex|kimi|grok|opencode|pi|gemini)\s+exited with status(?::|\s)/;
+
+const SIGNAL_PROCESS_EXIT_RE =
+  /(?:exited with status|exit code)[:\s-]*(?:exit(?:ed)?(?:\s+(?:with\s+)?(?:status|code))?[:\s-]*)?(?:130|137|143)\b/;
+
+function isSilentCliProcessExit(text: string): boolean {
+  // Shared CLI 进程已经落账失败，但 stderr 为空：供应商瞬断 / 子进程崩溃常见，
+  // 下一枪同一家经常能打通。用户停止走 wasLocalInterrupt；130/137/143 当信号退出 fail-closed。
+  if (!SILENT_CLI_PROCESS_EXIT_RE.test(text)) {
+    return false;
+  }
+  if (/session stopped/.test(text)) {
+    return false;
+  }
+  if (SIGNAL_PROCESS_EXIT_RE.test(text)) {
+    return false;
+  }
+  return true;
+}
+
 function classifyRetryable(text: string): SharedProviderRetryClassification | null {
   if (
     /not assigned to any group/.test(text) ||
@@ -111,6 +132,8 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
     /first_packet_timeout:/.test(text) ||
     /deadline exceeded/.test(text) ||
     /no initial response within/.test(text) ||
+    /stream-json startup timed out/.test(text) ||
+    /stream-json ended without a valid stream event/.test(text) ||
     /超时/.test(text) ||
     /超時/.test(text)
   ) {
@@ -140,6 +163,9 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
     return { disposition: "retryable", kind: "server", reason: "服务错误" };
   }
   if (/turn cancell?ed/.test(text)) {
+    return { disposition: "retryable", kind: "soft-cancel", reason: "暂时中断" };
+  }
+  if (isSilentCliProcessExit(text)) {
     return { disposition: "retryable", kind: "soft-cancel", reason: "暂时中断" };
   }
   return null;

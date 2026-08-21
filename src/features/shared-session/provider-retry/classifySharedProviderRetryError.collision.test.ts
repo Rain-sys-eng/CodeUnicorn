@@ -47,6 +47,20 @@ describe("classifier collision: intended hits", () => {
     ["json code 424", '{"code":424}', "pool"],
     ["json code 429", '{"code":"429"}', "rate"],
     ["json code 502", '{"code":"502"}', "server"],
+    [
+      "claude silent exit 1",
+      "会话失败：Claude exited with status: exit code: 1. Diagnostics: input_format=stream-json, include_hook_events=true, permission_mode=full-access. No stdout/stderr diagnostics were observed.",
+      "soft-cancel",
+    ],
+    ["kimi silent exit", "Kimi exited with status: exit status: 1", "soft-cancel"],
+    ["grok silent exit", "Grok exited with status: exit code: 1", "soft-cancel"],
+    ["opencode silent exit", "OpenCode exited with status: 1", "soft-cancel"],
+    ["pi silent exit", "PI exited with status: exit code: 1", "soft-cancel"],
+    [
+      "claude stream startup timeout",
+      "Claude stream-json startup timed out after 8s without a valid stream event. No stdout/stderr diagnostics were observed.",
+      "timeout",
+    ],
   ] as const)("%s → %s", (_name, message, kind) => {
     expect(classify(message, { wasLocalInterrupt: false })).toMatchObject({
       disposition: "retryable",
@@ -100,6 +114,36 @@ describe("classifier collision: known misses", () => {
     expect(classify("407 Proxy Authentication Required").disposition).toBe(
       "ignore",
     );
+  });
+
+  it("does not treat SIGINT/SIGTERM process exits as vendor retry", () => {
+    expect(
+      classify("Claude exited with status: exit code: 130").disposition,
+    ).toBe("ignore");
+    expect(
+      classify("Grok exited with status: exit code: 143").disposition,
+    ).toBe("ignore");
+    expect(
+      classify("Kimi exited with status: exit code: 137").disposition,
+    ).toBe("ignore");
+  });
+
+  it("does not steal stderr-backed permanent failures or user stops", () => {
+    expect(
+      classify("unknown model 'claude-opus-5'").disposition,
+    ).toBe("permanent");
+    expect(
+      classify(
+        "Claude exited with status: exit code: 1. Diagnostics: input_format=stream-json, include_hook_events=true, permission_mode=full-access. No stdout/stderr diagnostics were observed.",
+        { wasLocalInterrupt: true },
+      ),
+    ).toMatchObject({ disposition: "abort", kind: "user-stop" });
+    expect(
+      classify("bash command exited with status 1").disposition,
+    ).toBe("ignore");
+    expect(
+      classify("the process exited with status: 1").disposition,
+    ).toBe("ignore");
   });
 });
 

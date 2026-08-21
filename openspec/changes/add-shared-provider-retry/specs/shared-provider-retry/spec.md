@@ -21,6 +21,16 @@ Shared V2 MUST treat a committed vendor-pool / timeout / rate-limit / overload f
 - **THEN** the classifier MUST treat it as retryable pool failure
 - **AND** the canvas MUST start the same wait-then-resend series as a pool 403
 
+#### Scenario: silent CLI process exit is treated as a temporary interrupt
+
+- **GIVEN** a Shared session whose last attempt committed failed with `Claude exited with status: exit code: 1` and `No stdout/stderr diagnostics were observed`
+- **AND** retry is enabled with `maxAttempts >= 1`
+- **AND** the current attempt was not interrupted by the local stop control
+- **WHEN** the send path unlocks the composer
+- **THEN** the classifier MUST treat it as retryable `soft-cancel`
+- **AND** the canvas MUST start the same wait-then-resend series as other vendor-temporary failures
+- **AND** SIGINT / SIGTERM style exits (`130` / `137` / `143`) MUST stay fail-closed
+
 #### Scenario: user stop does not auto-resend
 
 - **GIVEN** the current attempt was interrupted by the local stop control

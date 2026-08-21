@@ -26,3 +26,4 @@
 ## 5. 验证
 
 - [x] 5.1 focused vitest：classifier / policy / store / controller / hint / locale
+- [x] 5.2 将 Claude 静默进程退出（exit 1 / 无 stdout-stderr）纳入 soft-cancel 自动续跑

@@ -115,10 +115,10 @@ user send
 |---|---|---|
 | `pool` | 号池 | `not assigned to any group`；`api key is not assigned`；`failed to authenticate` 且含 `403`；`401`；`invalid_api_key` / `invalid api key` |
 | `rate` | 请求过多 | `429`；`too many requests`；`rate limit` / `rate-limit` / `rate_limited` |
-| `timeout` | 超时 | 现有 `classifyNetworkError === "timeout"`；`FIRST_PACKET_TIMEOUT:`；`deadline exceeded`；`no initial response within`；中文「超时/超時」 |
+| `timeout` | 超时 | 现有 `classifyNetworkError === "timeout"`；`FIRST_PACKET_TIMEOUT:`；`deadline exceeded`；`no initial response within`；`stream-json startup timed out` / `ended without a valid stream event`；中文「超时/超時」 |
 | `overload` | 过载 | `overloaded`；`at/no/out of/without capacity`；`capacity exceeded/exhausted/limit`；`busy, please retry` |
 | `server` | 服务错误 | `5xx` 且附近有 `error/http/status/upstream/gateway`；`bad gateway`；`service unavailable`；`upstream` + `retry/error/fail` |
-| `soft-cancel` | 暂时中断 | `turn cancelled` / `canceled`，且 **没有** 本地 interrupt 证据 |
+| `soft-cancel` | 暂时中断 | `turn cancelled` / `canceled`，且 **没有** 本地 interrupt 证据；Shared CLI 静默进程退出（`Claude/Kimi/Grok/OpenCode/PI exited with status`，含 `exit code: 1` 且无 stdout/stderr），且不是 `130/137/143` |
 
 号池 403 是主场景：供应商后台可能已切号，下一枪有机会打中可用 key。
 
