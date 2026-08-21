@@ -1096,10 +1096,10 @@
 .settings-shortcuts-kbd-group--large .settings-shortcuts-kbd {
   min-width: 38px;
   padding: 8px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--settings-basic-control-border);
   border-radius: 7px;
-  background: #2c2c2e;
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--settings-basic-control);
+  color: var(--settings-basic-text);
   font-size: 15px;
 }
 
@@ -1148,7 +1148,7 @@
   padding: 32px 24px;
   border: 1px solid color-mix(in srgb, var(--settings-basic-control-border) 55%, transparent);
   border-radius: 16px;
-  background: #191919;
+  background: var(--settings-basic-surface);
 }
 
 /* Mobile back control: only visible in the detail pane under 900px. */
@@ -1207,9 +1207,9 @@
   min-width: 200px;
   min-height: 58px;
   padding: 10px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--settings-basic-control-border);
   border-radius: 10px;
-  background: #202020;
+  background: var(--settings-basic-control);
   cursor: pointer;
   outline: none;
   transition: border-color 130ms ease, box-shadow 130ms ease;

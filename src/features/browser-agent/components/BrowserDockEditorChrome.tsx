@@ -87,6 +87,8 @@ type BrowserDockEditorChromeProps = {
   onNewTab: () => void;
   onPopOut: () => void;
   onEnable: () => void;
+  /** 主窗口内嵌 Dock 才有：关掉整个 Browser Dock 分栏，不销毁 session。 */
+  onClosePanel?: () => void;
   setBusy: (busy: boolean) => void;
   setNotice: (notice: BrowserDockNotice | null) => void;
 };
@@ -114,6 +116,7 @@ export function BrowserDockEditorChrome({
   onNewTab,
   onPopOut,
   onEnable,
+  onClosePanel,
   setBusy,
   setNotice,
 }: BrowserDockEditorChromeProps) {
@@ -299,6 +302,17 @@ export function BrowserDockEditorChrome({
             <Plus size={14} aria-hidden />
           </Button>
         </div>
+        {onClosePanel ? (
+          <button
+            type="button"
+            className="browser-agent-editor-close"
+            onClick={onClosePanel}
+            aria-label={t("browserAgent.dock.closePanel")}
+            title={t("browserAgent.dock.closePanel")}
+          >
+            <X size={14} aria-hidden />
+          </button>
+        ) : null}
       </div>
       <div className="browser-agent-editor-urlbar">
         {!resolvedEnabled ? (
