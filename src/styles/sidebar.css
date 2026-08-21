@@ -55,7 +55,7 @@
 
 .sidebar-primary-nav-item.is-disabled {
   color: var(--text-faint);
-  opacity: 0.6;
+  opacity: 0.88;
   cursor: default;
 }
 

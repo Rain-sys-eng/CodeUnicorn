@@ -19,8 +19,28 @@ const mainCss = readStyleSheet("main.css");
 const darkThemeCss = readStyleSheet("themes.dark.css");
 const lightThemeCss = readStyleSheet("themes.light.css");
 const systemThemeCss = readStyleSheet("themes.system.css");
+const toolBlocksCss = readStyleSheet("tool-blocks.css");
 
 describe("desktop shell theme contract", () => {
+  it("keeps dark secondary ink bright-dim instead of mid-grey", () => {
+    // Wallpaper / dark chrome used to paint sidebar captions, thinking
+    // rows, and composer placeholders at #808080 / rgb(115,115,115).
+    // Those mid-greys go muddy over a photograph; keep them a light dim.
+    expect(darkThemeCss).toContain("--text-muted: #c8c8c8;");
+    expect(darkThemeCss).toContain("--text-subtle: #bebebe;");
+    expect(darkThemeCss).toContain("--text-faint: #b4b4b4;");
+    expect(darkThemeCss).toContain("--text-fainter: #a3a3a3;");
+    expect(darkThemeCss).toContain("--text-tertiary: var(--text-faint);");
+    expect(darkThemeCss).toContain("--color-thinking-text: var(--text-faint);");
+    expect(darkThemeCss).toContain("--muted-foreground: oklch(0.78 0.008 286);");
+    expect(darkThemeCss).not.toContain("--text-faint: #808080;");
+    expect(darkThemeCss).not.toContain("--color-thinking-text: rgb(115, 115, 115);");
+    expect(lightThemeCss).toContain("--text-faint: rgba(24, 24, 27, 0.5);");
+    expect(lightThemeCss).toContain("--color-thinking-text: rgb(115, 115, 115);");
+    expect(toolBlocksCss).toContain("--color-tool-summary: var(--text-faint, #b4b4b4);");
+    expect(toolBlocksCss).not.toContain("--color-tool-summary: #888;");
+  });
+
   it("defines dark desktop surfaces for explicit and system-dark appearances", () => {
     expect(darkThemeCss).toContain(
       "--desktop-shell-background: var(--surface-messages)",

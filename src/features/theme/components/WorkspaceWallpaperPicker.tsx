@@ -640,23 +640,3 @@ function LibraryWallpaperCard({
     </div>
   );
 }
-
-export function currentWallpaperLabel(
-  wallpaper: WorkspaceWallpaperSettings,
-): string | null {
-  const sanitized = sanitizeWorkspaceWallpaper(wallpaper);
-  const selectedId = resolveSelectedLibraryId(
-    sanitized.library ?? [],
-    sanitized.selectedLibraryId,
-  );
-  const selected = (sanitized.library ?? []).find(
-    (item) => item.id === selectedId,
-  );
-  if (selected) {
-    return wallpaperFileName(selected.sourcePath ?? selected.path);
-  }
-  if (sanitized.customImagePath) {
-    return wallpaperFileName(sanitized.customImagePath);
-  }
-  return null;
-}

@@ -21,10 +21,10 @@
   --input-bg: color-mix(in srgb, var(--surface-messages, #0d0f14) 82%, var(--surface-control, #27272e) 18%);
   --input-border: color-mix(in srgb, var(--border-muted, #222228) 82%, transparent);
   --input-focus-border: color-mix(in srgb, var(--accent-strong, #3b82f6) 72%, var(--border-strong, #353540));
-  --input-placeholder: color-mix(in srgb, var(--text-muted, #b3b3b3) 82%, transparent);
+  --input-placeholder: var(--text-faint, #b4b4b4);
   --text-primary: var(--text-primary, #e6e7ea);
-  --text-secondary: var(--text-muted, #b3b3b3);
-  --text-muted: var(--text-faint, #666666);
+  --text-secondary: var(--text-muted, #c8c8c8);
+  --text-muted: var(--text-faint, #b4b4b4);
   --dropdown-bg: #1f2028;
   --tooltip-bg: #1a1c24;
   --dropdown-border: var(--border-strong, #353540);
@@ -135,8 +135,8 @@
 [data-theme="dark"] .composer-tool-menu-sub-content {
   /* Literal + non-self app tokens only — avoid circular --x: var(--x). */
   --text-primary: #e6e7ea;
-  --text-secondary: #b3b3b3;
-  --text-muted: #888888;
+  --text-secondary: #c8c8c8;
+  --text-muted: #b4b4b4;
   --dropdown-bg: #1f2028;
   --dropdown-border: #353540;
   --dropdown-hover: #2a2d2e;

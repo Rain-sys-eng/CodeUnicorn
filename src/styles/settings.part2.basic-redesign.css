@@ -797,35 +797,50 @@
 }
 
 /*
- * Native range inputs (interface scale / code font size / window opacity) are
- * restyled into a shadcn Slider look: thin 6px rail + small circular thumb.
- * Kept as <input type="range"> so existing fireEvent.change tests still drive
- * them. ponytail: uniform rail (no primary progress fill) — WebKit can't fill a
- * range track without JS; upgrade to an inline --value gradient if a fill is
- * wanted.
+ * Native range inputs (wallpaper blur/darken, interface scale, code font size,
+ * window opacity) are restyled into a shadcn Slider look: thin 6px rail +
+ * small circular thumb. Kept as <input type="range"> so existing
+ * fireEvent.change tests still drive them. ponytail: uniform rail (no primary
+ * progress fill) — WebKit can't fill a range track without JS; upgrade to an
+ * inline --value gradient if a fill is wanted.
+ *
+ * The later generic `.settings-input` pill (border + control fill) must not
+ * apply here: on dark wallpaper it becomes a muddy capsule around the rail.
  */
 .settings-section-basic .settings-input--range,
 .settings-section-tabbed .settings-input--range {
   -webkit-appearance: none;
   appearance: none;
   height: 18px;
+  min-height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
   background: transparent;
   accent-color: auto;
   cursor: pointer;
+  box-shadow: none;
+}
+
+.settings-section-basic .settings-input--range:focus,
+.settings-section-tabbed .settings-input--range:focus {
+  border: none;
+  outline: none;
+  box-shadow: none;
 }
 
 .settings-section-basic .settings-input--range::-webkit-slider-runnable-track,
 .settings-section-tabbed .settings-input--range::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--settings-basic-control-border) 52%, transparent);
+  background: color-mix(in srgb, var(--settings-basic-text) 22%, transparent);
 }
 
 .settings-section-basic .settings-input--range::-moz-range-track,
 .settings-section-tabbed .settings-input--range::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--settings-basic-control-border) 52%, transparent);
+  background: color-mix(in srgb, var(--settings-basic-text) 22%, transparent);
 }
 
 .settings-section-basic .settings-input--range::-webkit-slider-thumb,
@@ -836,10 +851,10 @@
   height: 15px;
   margin-top: -4.5px;
   border-radius: 999px;
-  background: var(--settings-basic-surface);
-  border: 1px solid color-mix(in srgb, var(--settings-basic-text) 55%, transparent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  background: var(--settings-basic-text);
+  border: 1px solid color-mix(in srgb, var(--settings-basic-text) 88%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .settings-section-basic .settings-input--range::-moz-range-thumb,
@@ -847,19 +862,21 @@
   width: 15px;
   height: 15px;
   border-radius: 999px;
-  background: var(--settings-basic-surface);
-  border: 1px solid color-mix(in srgb, var(--settings-basic-text) 55%, transparent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  background: var(--settings-basic-text);
+  border: 1px solid color-mix(in srgb, var(--settings-basic-text) 88%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
 }
 
 .settings-section-basic .settings-input--range:hover::-webkit-slider-thumb,
 .settings-section-tabbed .settings-input--range:hover::-webkit-slider-thumb {
-  border-color: color-mix(in srgb, var(--settings-basic-text) 72%, transparent);
+  border-color: var(--settings-basic-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
 }
 
 .settings-section-basic .settings-input--range:hover::-moz-range-thumb,
 .settings-section-tabbed .settings-input--range:hover::-moz-range-thumb {
-  border-color: color-mix(in srgb, var(--settings-basic-text) 72%, transparent);
+  border-color: var(--settings-basic-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
 }
 
 .settings-section-basic .settings-input--range:focus-visible::-webkit-slider-thumb,
@@ -994,7 +1011,7 @@
   height: 15px;
 }
 
-.settings-section-basic .settings-input,
+.settings-section-basic .settings-input:not(.settings-input--range):not([type="range"]),
 .settings-section-basic .settings-select {
   min-height: 36px;
   border-radius: 10px;
@@ -1007,7 +1024,7 @@
   color: color-mix(in srgb, var(--settings-basic-text-muted) 82%, #fff 18%);
 }
 
-.settings-section-basic .settings-input:focus,
+.settings-section-basic .settings-input:not(.settings-input--range):not([type="range"]):focus,
 .settings-section-basic .settings-select:focus {
   border-color: var(--settings-basic-text);
 }
@@ -1814,10 +1831,209 @@
   justify-content: flex-end;
 }
 
-.settings-wallpaper-picker-dialog {
+/* Portal dialog — opaque, self-contained tokens (not nested under .settings-section-basic) */
+.settings-wallpaper-picker-dialog[data-slot="dialog-content"],
+[data-slot="dialog-content"].settings-wallpaper-picker-dialog {
+  --settings-basic-text: #171b23;
+  --settings-basic-text-muted: rgba(23, 27, 35, 0.68);
+  --settings-basic-surface: #ffffff;
+  --settings-basic-surface-strong: #f4f4f5;
+  --settings-basic-border: #d4d4d8;
+  --settings-basic-divider: rgba(15, 23, 36, 0.09);
+  --settings-basic-control: #f4f4f5;
+  --settings-basic-control-hover: #ececee;
+  --settings-basic-control-border: rgba(15, 23, 36, 0.2);
   width: min(920px, calc(100% - 2rem));
   max-width: min(920px, calc(100% - 2rem));
-  background: var(--settings-basic-surface, #fff);
+  color: var(--settings-basic-text);
+  border: 1px solid var(--settings-basic-border);
+  border-radius: 16px;
+  background-color: #ffffff;
+  background-image: none;
+  opacity: 1;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  isolation: isolate;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="dark"] .settings-wallpaper-picker-dialog[data-slot="dialog-content"],
+:root[data-theme="dark"] [data-slot="dialog-content"].settings-wallpaper-picker-dialog,
+:root[data-theme="dim"] .settings-wallpaper-picker-dialog[data-slot="dialog-content"],
+:root[data-theme="dim"] [data-slot="dialog-content"].settings-wallpaper-picker-dialog,
+:root[data-appearance="dark"] .settings-wallpaper-picker-dialog[data-slot="dialog-content"],
+:root[data-appearance="dark"] [data-slot="dialog-content"].settings-wallpaper-picker-dialog {
+  --settings-basic-text: #f5f5f7;
+  --settings-basic-text-muted: #c8c8c8;
+  --settings-basic-surface: #1c1c1e;
+  --settings-basic-surface-strong: #2c2c2e;
+  --settings-basic-border: #3a3a3c;
+  --settings-basic-divider: rgba(255, 255, 255, 0.08);
+  --settings-basic-control: #2c2c2e;
+  --settings-basic-control-hover: #3a3a3c;
+  --settings-basic-control-border: #5a5a5e;
+  color-scheme: dark;
+  color: var(--settings-basic-text);
+  border-color: #3a3a3c;
+  background-color: #1c1c1e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .settings-wallpaper-picker-dialog[data-slot="dialog-content"],
+  :root:not([data-theme]) [data-slot="dialog-content"].settings-wallpaper-picker-dialog {
+    --settings-basic-text: #f5f5f7;
+    --settings-basic-text-muted: #c8c8c8;
+    --settings-basic-surface: #1c1c1e;
+    --settings-basic-surface-strong: #2c2c2e;
+    --settings-basic-border: #3a3a3c;
+    --settings-basic-divider: rgba(255, 255, 255, 0.08);
+    --settings-basic-control: #2c2c2e;
+    --settings-basic-control-hover: #3a3a3c;
+    --settings-basic-control-border: #5a5a5e;
+    color-scheme: dark;
+    color: var(--settings-basic-text);
+    border-color: #3a3a3c;
+    background-color: #1c1c1e;
+  }
+
+  :root:not([data-theme]) .settings-wallpaper-picker-dialog .settings-pref-segment.is-active {
+    background: #2c2c2e;
+  }
+
+  :root:not([data-theme]) .settings-wallpaper-picker-dialog .settings-web-btn--primary {
+    background: #f4f4f5;
+    color: #18181b;
+  }
+}
+
+.settings-wallpaper-picker-dialog [data-slot="dialog-title"] {
+  color: var(--settings-basic-text);
+}
+
+.settings-wallpaper-picker-dialog [data-slot="dialog-description"] {
+  color: var(--settings-basic-text-muted);
+}
+
+.settings-wallpaper-picker-dialog [data-slot="dialog-close"] {
+  color: var(--settings-basic-text-muted);
+}
+
+.settings-wallpaper-picker-dialog .settings-pref-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--settings-basic-divider) 95%, transparent);
+  background: var(--settings-basic-control);
+  max-width: 100%;
+}
+
+.settings-wallpaper-picker-dialog .settings-pref-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 11px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--settings-basic-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.settings-wallpaper-picker-dialog .settings-pref-segment:hover {
+  color: var(--settings-basic-text);
+  background: color-mix(in srgb, var(--settings-basic-surface-strong) 70%, transparent);
+}
+
+.settings-wallpaper-picker-dialog .settings-pref-segment.is-active {
+  color: var(--settings-basic-text);
+  background: var(--settings-basic-surface-strong);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 0 0 1px color-mix(in srgb, var(--settings-basic-border) 55%, transparent);
+}
+
+:root[data-theme="dark"] .settings-wallpaper-picker-dialog .settings-pref-segment.is-active,
+:root[data-theme="dim"] .settings-wallpaper-picker-dialog .settings-pref-segment.is-active,
+:root[data-appearance="dark"] .settings-wallpaper-picker-dialog .settings-pref-segment.is-active {
+  background: #2c2c2e;
+}
+
+.settings-wallpaper-picker-dialog .settings-web-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--settings-basic-border);
+  background: var(--settings-basic-control);
+  color: var(--settings-basic-text);
+  font-size: 12.5px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.settings-wallpaper-picker-dialog .settings-web-btn:hover:not(:disabled) {
+  background: var(--settings-basic-control-hover);
+}
+
+.settings-wallpaper-picker-dialog .settings-web-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.settings-wallpaper-picker-dialog .settings-web-btn--primary {
+  border-color: transparent;
+  background: #18181b;
+  color: #fafafa;
+}
+
+:root[data-theme="dark"] .settings-wallpaper-picker-dialog .settings-web-btn--primary,
+:root[data-theme="dim"] .settings-wallpaper-picker-dialog .settings-web-btn--primary,
+:root[data-appearance="dark"] .settings-wallpaper-picker-dialog .settings-web-btn--primary {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.settings-wallpaper-picker-dialog .settings-web-btn--primary:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.settings-wallpaper-picker-dialog .settings-pref-reset {
+  appearance: none;
+  margin: 0;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--settings-basic-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.settings-wallpaper-picker-dialog .settings-pref-reset:hover {
+  color: var(--settings-basic-text);
 }
 
 .settings-wallpaper-picker-toolbar {
@@ -1899,6 +2115,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+  color: var(--settings-basic-text, #171b23);
 }
 
 .settings-wallpaper-market-search {
@@ -1908,8 +2125,8 @@
   padding: 0 10px;
   border: 1px solid var(--settings-basic-border, #e5e7eb);
   border-radius: 8px;
-  background: var(--settings-basic-surface, #fff);
-  color: var(--settings-basic-text, #111);
+  background: var(--settings-basic-control, #f4f4f5);
+  color: var(--settings-basic-text, #171b23);
   font-size: 13px;
 }
 

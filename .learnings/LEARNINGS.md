@@ -1,5 +1,59 @@
 # Learnings
 
+## [LRN-20260822-001] user_feedback
+
+**Logged**: 2026-08-22T00:55:33+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+设置页 Dialog 通过 Portal 挂到 body 后，拿不到 `.settings-section-basic` 的 `--settings-basic-*` token；深色主题会掉回浅色 fallback。
+
+### Details
+「选择壁纸」弹层用 `var(--settings-basic-surface, #fff)`，但 `DialogContent` 是 Radix Portal，不在 `.settings-section-basic` 内。token 未定义时回退 `#fff`，标题/分段按钮/隐藏/导入也因为选择器写了 `.settings-section-basic .settings-pref-segment` 而没样式。同类已修好的是 `.settings-open-app-dialog`：弹层自己写实色 `#ffffff` / `#1c1c1e`。
+
+### Suggested Action
+设置弹层必须自带实色 surface 与内部控件样式，禁止依赖父级 `.settings-section-basic` token，禁止 `color-mix(..., transparent)` 当弹层底。
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/styles/settings.part2.basic-redesign.css, src/features/theme/components/WorkspaceWallpaperPicker.tsx
+- Tags: theme, dialog, portal, wallpaper, dark-mode
+
+### Resolution
+- **Resolved**: 2026-08-22T00:55:33+08:00
+- **Notes**: Wallpaper picker dialog now owns opaque light/dark surfaces (`#ffffff` / `#1c1c1e`) and restyles segmented tabs, buttons, and reset links inside the portal.
+
+---
+
+## [LRN-20260821-002] user_feedback
+
+**Logged**: 2026-08-21T17:20:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+深色模式下次级文字不能停在中灰（#808080 / rgb(115,115,115)），叠壁纸会发闷；应走亮、略暗的 ink。
+
+### Details
+侧栏分组、思考行、composer placeholder / toolbar 看起来像同一套灰，但实际分散在 `--text-faint`、`--color-thinking-text`、`--muted-foreground`、ChatInputBox `--input-placeholder`（还混了透明）和 lazy-loaded `--color-tool-summary: #888`。只改一行不够。浅色阶梯不要跟着抬。
+
+### Suggested Action
+改 `themes.dark.css` 的 muted/faint 阶梯，并把 thinking / composer / tool-summary 接回 `--text-faint`。浅色 token 保持原对比。
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/styles/themes.dark.css, src/features/composer/components/ChatInputBox/styles/variables-bridge.css, src/styles/tool-blocks.css
+- Tags: theme, wallpaper, muted-foreground, dark-ink
+
+### Resolution
+- **Resolved**: 2026-08-21T17:20:00+08:00
+- **Notes**: Dark secondary ink lifted to #b4b4b4 / #c8c8c8; composer placeholder no longer mixes extra transparency.
+
+---
+
 ## [LRN-20260821-001] user_feedback
 
 **Logged**: 2026-08-21T16:36:56Z

@@ -16,12 +16,12 @@
   --text-strong: #ffffff;
   --text-emphasis: #e6e6e6;
   --text-stronger: #d9d9d9;
-  --text-quiet: #bfbfbf;
-  --text-muted: #b3b3b3;
-  --text-subtle: #999999;
-  --text-faint: #808080;
-  --text-fainter: #737373;
-  --text-dim: #595959;
+  --text-quiet: #d4d4d4;
+  --text-muted: #c8c8c8;
+  --text-subtle: #bebebe;
+  --text-faint: #b4b4b4;
+  --text-fainter: #a3a3a3;
+  --text-dim: #8f8f8f;
   /* zinc-neutral surface ramp (navy tint removed; functional accents kept) */
   --surface-sidebar: oklch(0.165 0.004 286);
   --surface-sidebar-opaque: oklch(0.165 0.004 286);
@@ -103,7 +103,7 @@
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
+  --muted-foreground: oklch(0.78 0.008 286);
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
@@ -138,7 +138,7 @@
   --bg-active: oklch(0.34 0.005 286);
 
   --text-secondary: #e0e0e0;
-  --text-tertiary: #858585;
+  --text-tertiary: var(--text-faint);
 
   --border-primary: oklch(0.31 0.005 286);
   --border-color: oklch(0.32 0.006 286);
@@ -149,12 +149,12 @@
   --color-error: #f44336;
 
   --color-thinking-border: #333;
-  --color-thinking-text: rgb(115, 115, 115);
+  --color-thinking-text: var(--text-faint);
 
   --color-tool-bg: #161616;
   --color-tool-icon: #64b5f6;
   --color-tool-name: #90caf9;
-  --color-tool-summary: #888;
+  --color-tool-summary: var(--text-faint);
   --color-tool-file-link: #a5d6a7;
 
   /* Dropdown/Selector styles */
