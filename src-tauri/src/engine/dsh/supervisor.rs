@@ -651,19 +651,61 @@ fn log_suffix(logs: &str) -> String {
 }
 
 fn extract_spawn_log_summary(logs: &str) -> String {
-    let interesting = logs.lines().find(|line| {
-        let lower = line.to_ascii_lowercase();
-        lower.contains("error:")
-            || lower.contains("not a valid win32")
-            || lower.contains("os error")
-            || lower.contains("plugin tree")
-    });
-    let text = interesting.unwrap_or(logs).trim();
+    // Outer boot() wraps every plugin-tree failure as
+    // `failed to apply loader entry include (cordis:include)`. Prefer the
+    // inner `failed to import loader entry …` / native mismatch line so
+    // Settings shows a cause the user can act on.
+    let mut best: Option<(i32, &str)> = None;
+    for line in logs.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let score = spawn_log_line_score(&trimmed.to_ascii_lowercase());
+        if score <= 0 {
+            continue;
+        }
+        if best
+            .map(|(best_score, _)| score > best_score)
+            .unwrap_or(true)
+        {
+            best = Some((score, trimmed));
+        }
+    }
+    let text = best.map(|(_, line)| line).unwrap_or(logs).trim();
     if text.len() > 400 {
         format!("{}…", &text[..400])
     } else {
         text.to_string()
     }
+}
+
+fn spawn_log_line_score(lower: &str) -> i32 {
+    if lower.contains("mismatched native koffi") {
+        return 100;
+    }
+    if lower.contains("failed to import loader entry") {
+        return 90;
+    }
+    if lower.contains("duplicate loader entry") {
+        return 90;
+    }
+    if lower.contains("does not provide an export named 'default'") {
+        return 85;
+    }
+    if lower.contains("not a valid win32") || lower.contains("os error") {
+        return 70;
+    }
+    if lower.contains("failed to apply loader entry") && !lower.contains("cordis:include") {
+        return 60;
+    }
+    if lower.contains("plugin tree") {
+        return 40;
+    }
+    if lower.contains("error:") {
+        return 30;
+    }
+    0
 }
 
 fn format_spawn_exit(origin: &str, status: std::process::ExitStatus, logs: &str) -> String {
@@ -679,6 +721,14 @@ fn classify_spawn_error(origin: &str, spawn_err: &str) -> String {
     {
         return format!(
             "{spawn_err} Windows npm 常把 sharp/dist/constructor.mjs 装成 0 字节（Mac 完整安装不会）。请重装 `npm install -g @deepseek-ai/dsh` 后重试。"
+        );
+    }
+    if spawn_err
+        .to_ascii_lowercase()
+        .contains("mismatched native koffi")
+    {
+        return format!(
+            "{spawn_err} koffi JS 与 native `.node` 版本不一致（升级 `@deepseek-ai/dsh` 后 npm 常留下旧的 `@koromix/koffi-<platform>`）。请重装 `npm install -g @deepseek-ai/dsh`，或把官方 koffi 平台包对齐到当前 koffi 版本后再启动。"
         );
     }
     if spawn_err.contains("exited before becoming ready")
@@ -859,6 +909,17 @@ mod tests {
         assert!(constructor_err.contains("constructor.mjs"));
         assert!(constructor_err.contains("Windows npm"));
         assert!(constructor_err.contains("npm install -g @deepseek-ai/dsh"));
+        let koffi_err = classify_spawn_error(
+            "http://127.0.0.1:3080",
+            "dsh web exited before becoming ready at http://127.0.0.1:3080 (exit code: 1). Output: Error: failed to import loader entry subprocess (@deepseek-ai/dsh-subprocess-local): Mismatched native Koffi modules",
+        );
+        assert!(koffi_err.contains("Mismatched native Koffi"));
+        assert!(koffi_err.contains("@koromix/koffi-<platform>"));
+        assert!(koffi_err.contains("npm install -g @deepseek-ai/dsh"));
+        assert!(
+            !koffi_err.contains("koffi-win32-x64"),
+            "koffi hint must stay platform-neutral for Mac: {koffi_err}"
+        );
     }
 
     #[test]
@@ -951,6 +1012,39 @@ mod tests {
         assert_eq!(
             extract_spawn_log_summary(logs),
             "Error: dsh: plugin tree failed to load: sharp constructor"
+        );
+    }
+
+    #[test]
+    fn spawn_log_summary_prefers_inner_koffi_mismatch_over_cordis_include() {
+        let logs = "\
+file:///…/dsh-app-boot/lib/index.js:1187
+throw new Error(`${binName}: ${stage}: ${detail}${stack}`, { cause });
+      ^
+
+Error: dsh: plugin tree failed to load: failed to apply loader entry include (cordis:include): loader entries failed to apply
+AggregateError: loader entries failed to apply
+    at EntryGroup.update (file:///…/cordis-plugin-loader/lib/index.js:91:35)
+      [errors]: [
+        Error: failed to import loader entry subprocess (@deepseek-ai/dsh-subprocess-local): Mismatched native Koffi modules
+            at updateError (file:///…/cordis-plugin-loader/lib/index.js:299:9)
+        Error: failed to import loader entry sandbox (@deepseek-ai/dsh-sandbox-local): Mismatched native Koffi modules
+      ]
+
+Node.js v24.15.0
+";
+        let summary = extract_spawn_log_summary(logs);
+        assert!(
+            summary.contains("Mismatched native Koffi"),
+            "expected inner koffi mismatch, got {summary}"
+        );
+        assert!(
+            summary.contains("subprocess") || summary.contains("sandbox"),
+            "expected named loader entry, got {summary}"
+        );
+        assert!(
+            !summary.contains("cordis:include"),
+            "outer include wrapper should not hide the inner cause: {summary}"
         );
     }
 
