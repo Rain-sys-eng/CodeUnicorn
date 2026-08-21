@@ -1776,6 +1776,10 @@ describe("SettingsView Display", () => {
     });
     await flushSettingsViewEffects();
 
+    expect(screen.getByText("Current wallpaper")).toBeTruthy();
+    expect(screen.queryByText("one.png")).toBeNull();
+    expect(screen.queryByText("pic-1")).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: "Choose wallpaper" }));
     expect(screen.getByTestId("settings-workspace-wallpaper-picker")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "loop.mp4" }));

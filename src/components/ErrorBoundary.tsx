@@ -34,7 +34,7 @@ type ErrorBoundaryState = {
 const shellStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "#0d0f14",
+  background: "#0d0d0d",
   color: "#e2e8f0",
   fontFamily:
     'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
@@ -244,7 +244,7 @@ export class ErrorBoundary extends Component<
             style={{
               marginBottom: 16,
               padding: 12,
-              background: "#111827",
+              background: "#141414",
               border: "1px solid #1f2937",
               borderRadius: 8,
               maxWidth: 860,

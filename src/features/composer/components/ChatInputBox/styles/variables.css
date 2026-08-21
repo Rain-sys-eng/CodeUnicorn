@@ -18,7 +18,7 @@
   --input-bg: var(--bg-chat, #1e1e1e);
   --input-border: #3e3e42;
   --input-focus-border: #007fd4;
-  --input-placeholder: #666;
+  --input-placeholder: #b4b4b4;
   --dropdown-bg: #252526;
   --dropdown-border: #454545;
   --dropdown-hover: #2a2d2e;
@@ -29,8 +29,8 @@
   --button-primary: #007fd4;
   --button-disabled: #555;
   --text-primary: #cccccc;
-  --text-secondary: #888888;
-  --text-muted: #666666;
+  --text-secondary: #c8c8c8;
+  --text-muted: #b4b4b4;
   --progress-bg: rgba(255, 255, 255, 0.15);
   --progress-fill: #4fc3f7;
   --attachment-bg: #2d2d2d;

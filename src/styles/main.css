@@ -14,7 +14,7 @@
 }
 
 .app.layout-desktop {
-  background: var(--desktop-shell-background, var(--surface-messages, #0d0f14));
+  background: var(--desktop-shell-background, var(--surface-messages, #0d0d0d));
 }
 
 .app.layout-desktop .sidebar,
@@ -42,15 +42,15 @@
   --desktop-main-radius: 0;
   --desktop-shell-background: var(
     --desktop-main-background,
-    var(--surface-messages, #0d0f14)
+    var(--surface-messages, #0d0d0d)
   );
   --desktop-sidebar-background: var(
     --desktop-main-background,
-    var(--surface-messages, #0d0f14)
+    var(--surface-messages, #0d0d0d)
   );
   background: var(
     --desktop-main-background,
-    var(--surface-messages, #0d0f14)
+    var(--surface-messages, #0d0d0d)
   );
 }
 

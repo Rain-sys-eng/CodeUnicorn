@@ -233,8 +233,8 @@
   :root:not([data-theme]) {
     /* 滚动条颜色 - Scrollbar colors (暗色系统模式) */
     --scrollbar-track: #1a1a1a;
-    --scrollbar-thumb: #404050;
-    --scrollbar-thumb-hover: #5a5a6a;
+    --scrollbar-thumb: #404040;
+    --scrollbar-thumb-hover: #5a5a5a;
   }
 
   /* Native select/option dark mode fix (Windows WebView2) */

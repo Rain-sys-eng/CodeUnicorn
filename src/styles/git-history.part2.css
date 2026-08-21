@@ -4,7 +4,7 @@
   width: min(640px, 100%);
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-default) 78%, transparent);
-  background: color-mix(in srgb, var(--surface-card-muted, #111725) 92%, #0b1220);
+  background: var(--surface-card-muted, var(--surface-card));
   box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
   padding: 14px;
   display: flex;
@@ -16,7 +16,7 @@
   width: min(560px, 100%);
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-default) 78%, transparent);
-  background: color-mix(in srgb, var(--surface-card-muted, #111725) 92%, #0b1220);
+  background: var(--surface-card-muted, var(--surface-card));
   box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
   padding: 14px;
   display: flex;
@@ -40,7 +40,7 @@
 .git-history-worktree-danger-list {
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-default) 64%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 54%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 54%, transparent);
   padding: 8px 10px;
 }
 
@@ -103,7 +103,7 @@
   width: min(560px, 100%);
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, #ef4444 26%, var(--border-default));
-  background: color-mix(in srgb, var(--surface-card-muted, #111725) 94%, #0b1220);
+  background: var(--surface-card-muted, var(--surface-card));
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
   padding: 14px;
   display: flex;
@@ -135,7 +135,7 @@
   height: 26px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 66%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 66%, transparent);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -203,7 +203,7 @@
   margin: 0;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 54%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 54%, transparent);
   overflow: hidden;
 }
 
@@ -244,7 +244,7 @@
   flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 64%, transparent);
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1;
@@ -282,7 +282,7 @@
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--border-default) 78%, transparent);
   background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 96%, transparent);
-  box-shadow: 0 12px 30px color-mix(in srgb, #0f172a 18%, transparent);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--surface-messages) 18%, transparent);
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -598,7 +598,7 @@
       color-mix(in srgb, var(--surface-card-muted, #ffffff) 96%, transparent) 100%
     );
   box-shadow:
-    0 12px 30px color-mix(in srgb, #0f172a 18%, transparent),
+    0 12px 30px color-mix(in srgb, var(--surface-messages) 18%, transparent),
     0 1px 0 color-mix(in srgb, #ffffff 50%, transparent) inset;
   padding: 16px;
   display: flex;
@@ -1012,7 +1012,7 @@
   min-height: var(--git-filetree-row-min-height);
   padding: var(--git-filetree-row-pad-y) var(--git-filetree-row-pad-x);
   border-radius: var(--git-filetree-row-radius);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 36%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 36%, transparent);
   border: 1px solid color-mix(in srgb, var(--border-default) 34%, transparent);
   font-size: 13px;
   color: var(--text-secondary);
@@ -1047,7 +1047,7 @@
 
 .git-history-push-preview-empty {
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 54%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 54%, transparent);
 }
 
 .git-history-push-preview-error {
@@ -1130,7 +1130,7 @@
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   background: var(--surface-popover);
-  box-shadow: 0 12px 24px color-mix(in srgb, #0f172a 16%, transparent);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--surface-messages) 16%, transparent);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1561,7 +1561,7 @@
   border: 1px solid color-mix(in srgb, var(--border-default) 54%, transparent);
   border-radius: 9px;
   padding: 8px 9px;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 46%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 46%, transparent);
 }
 
 .git-history-reset-mode-item input {
@@ -1628,7 +1628,7 @@
 
 .git-history-create-pr-generate-button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 40%, var(--border-default));
-  background: color-mix(in srgb, var(--surface-hover, var(--surface-control, #1a2230)) 60%, transparent);
+  background: color-mix(in srgb, var(--surface-hover, var(--surface-control, #1a1a1a)) 60%, transparent);
   color: var(--text-primary);
 }
 
@@ -1730,7 +1730,7 @@
   height: 32px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 70%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 70%, transparent);
   color: var(--text-primary);
   padding: 0 10px;
   box-sizing: border-box;
@@ -1778,7 +1778,7 @@
 }
 
 .git-history-create-branch-btn.is-cancel {
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 64%, transparent);
   color: var(--text-secondary);
 }
 

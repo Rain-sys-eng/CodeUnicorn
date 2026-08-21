@@ -67,7 +67,7 @@ import {
   sanitizeDockIconId,
   type DockIconId,
 } from "../../../../theme/utils/dockIcon";
-import { WorkspaceWallpaperPicker, currentWallpaperLabel } from "../../../../theme/components/WorkspaceWallpaperPicker";
+import { WorkspaceWallpaperPicker } from "../../../../theme/components/WorkspaceWallpaperPicker";
 import { useManagedWallpaperSrc } from "../../../../theme/utils/useManagedWallpaperSrc";
 import { publishWorkspaceWallpaper } from "../../../../theme/utils/workspaceWallpaperStore";
 import {
@@ -390,7 +390,6 @@ export function BasicAppearanceSection({
   const visibleLibraryCount = visibleWallpaperLibraryItems(
     wallpaper.library ?? [],
   ).length;
-  const currentLabel = currentWallpaperLabel(wallpaper);
 
   // Local drafts for sliders: preview CSS vars immediately, persist after 1s
   // idle / release so dragging does not write the whole settings file per tick.
@@ -642,12 +641,11 @@ export function BasicAppearanceSection({
                     <div className="settings-pref-title">
                       {t("settings.workspaceWallpaperCurrent")}
                     </div>
-                    <div
-                      className={`settings-pref-desc${currentLabel ? " settings-wallpaper-path" : ""}`}
-                      title={currentLabel ?? undefined}
-                    >
-                      {currentLabel ?? t("settings.workspaceWallpaperMissing")}
-                    </div>
+                    {currentWallpaperMedia ? null : (
+                      <div className="settings-pref-desc">
+                        {t("settings.workspaceWallpaperMissing")}
+                      </div>
+                    )}
                   </div>
                   <div className="settings-pref-control settings-wallpaper-current-control">
                     {selectedLibraryItem?.kind === "video" ? (
@@ -939,6 +937,8 @@ export function BasicAppearanceSection({
           </div>
         ) : null}
 
+        {/* 应用图标选择入口已隐藏，仅隐藏 UI，底层换肤逻辑保留 */}
+        {false && (
         <div className="settings-pref-row settings-pref-row--dock-icon">
           <div className="settings-pref-meta">
             <div className="settings-pref-title">{t("settings.dockIcon")}</div>
@@ -956,6 +956,7 @@ export function BasicAppearanceSection({
             })}
           />
         </div>
+        )}
 
         <SyntaxAndDiffPreview appearance={resolvedAppearanceTheme} />
 
