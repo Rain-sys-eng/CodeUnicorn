@@ -29,6 +29,7 @@ status: active
 | **Plans** | [`plans/README.md`](plans/README.md) | 有时间边界的 implementation plan |
 | **Research** | [`research/README.md`](research/README.md) | 外部调研、spike 与设计输入，不代表 shipped behavior |
 | **Reports** | [`reports/README.md`](reports/README.md) | 带日期的治理、影响与验收报告 |
+| **Promotion** | [`promotion/README.md`](promotion/README.md) | 面向外部用户的客户端推广材料（能力介绍、对比、场景） |
 | **Designs** | [`designs/README.md`](designs/README.md) | HTML 原型、选款页、视觉 mock；不是 shipped UI |
 
 ## 历史文档
