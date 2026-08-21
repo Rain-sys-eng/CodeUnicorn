@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "Annuler",
       "revertAllConfirmTitle": "Annuler toutes les modifications",
       "revertAllConfirmBody":
-        "Les modifications locales de {{count}} fichiers seront abandonnées et restaurées au dernier commit. Cette action est irréversible.",
+        "Les modifications locales non indexées de {{count}} fichiers seront abandonnées et restaurées vers l'index (ou HEAD s'il n'y a rien d'indexé). Les modifications déjà indexées seront conservées. Cette action est irréversible.",
       "revertAllConfirmAction": "Tout annuler",
       "revertFileConfirmTitle": "Annuler les modifications du fichier",
       "revertFileConfirmBody":
-        "Les modifications locales de « {{path}} » seront abandonnées et restaurées au dernier commit. Cette action est irréversible.",
+        "Les modifications locales non indexées de « {{path}} » seront abandonnées et restaurées vers l'index (ou HEAD s'il n'y a rien d'indexé). Les modifications déjà indexées seront conservées. Cette action est irréversible.",
       "revertFileConfirmAction": "Annuler"
     },
     "noThinkingContent": "Aucun contenu de réflexion",

@@ -44,7 +44,7 @@ function MiniChatInputBoxStub({
           </div>
         </div>
       </div>
-      <div className="input-editable-wrapper">Input</div>
+      <div className="input-editable-wrapper scrollable">Input</div>
       <div className="chat-input-box-footer">Footer</div>
     </div>
   );

@@ -21,11 +21,11 @@ const messages = {
       revertFileAction: "撤销",
       revertAllConfirmTitle: "撤销全部更改",
       revertAllConfirmBody:
-        "将撤销这 {{count}} 个文件的本地更改，恢复到最近一次提交。此操作无法撤销。",
+        "将撤销这 {{count}} 个文件尚未暂存的本地更改，恢复到暂存区（若无暂存则回到上次提交）。已暂存的内容会保留。此操作无法撤销。",
       revertAllConfirmAction: "确认撤销全部",
       revertFileConfirmTitle: "撤销文件更改",
       revertFileConfirmBody:
-        "将撤销「{{path}}」的本地更改，恢复到最近一次提交。此操作无法撤销。",
+        "将撤销「{{path}}」尚未暂存的本地更改，恢复到暂存区（若无暂存则回到上次提交）。已暂存的内容会保留。此操作无法撤销。",
       revertFileConfirmAction: "确认撤销",
     },
     noThinkingContent: "无思考内容",

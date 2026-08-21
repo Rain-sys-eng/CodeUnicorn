@@ -175,9 +175,9 @@ const git = {
     discardConfirmMultiple:
       "放弃这些文件的更改？\n\n{{preview}}{{more}}\n\n此操作无法撤销。",
     discardConfirmTitle: "放弃更改",
-    discardDialogBeginnerLead: "你将放弃这些文件中的本地改动。",
-    discardDialogAffectsLabel: "以下文件会恢复到最近一次提交：",
-    discardDialogBeginnerHint: "如果你还要保留修改，请先提交或 stash。",
+    discardDialogBeginnerLead: "你将放弃这些文件中尚未暂存的本地改动。已暂存的内容会保留。",
+    discardDialogAffectsLabel: "以下文件的未暂存改动会恢复到暂存区（若无暂存则回到上次提交）：",
+    discardDialogBeginnerHint: "如果你还要保留未暂存修改，请先暂存、提交或 stash。",
     discardDialogConfirmAction: "确认放弃",
     andMore: "以及其他 {{count}} 个文件",
     enterCommitMessage: "输入提交信息",

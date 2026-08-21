@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "Desfazer",
       "revertAllConfirmTitle": "Desfazer todas as alterações",
       "revertAllConfirmBody":
-        "Isso descartará as alterações locais em {{count}} arquivos e os restaurará para o último commit. Isso não pode ser desfeito.",
+        "Isso descartará as alterações locais não indexadas em {{count}} arquivos e as restaurará para o índice (ou HEAD se nada estiver indexado). As alterações já indexadas serão mantidas. Isso não pode ser desfeito.",
       "revertAllConfirmAction": "Desfazer tudo",
       "revertFileConfirmTitle": "Desfazer alterações do arquivo",
       "revertFileConfirmBody":
-        "Isso descartará as alterações locais de “{{path}}” e o restaurará para o último commit. Isso não pode ser desfeito.",
+        "Isso descartará as alterações locais não indexadas de “{{path}}” e o restaurará para o índice (ou HEAD se nada estiver indexado). As alterações já indexadas serão mantidas. Isso não pode ser desfeito.",
       "revertFileConfirmAction": "Desfazer"
     },
     "noThinkingContent": "Sem conteúdo de raciocínio",

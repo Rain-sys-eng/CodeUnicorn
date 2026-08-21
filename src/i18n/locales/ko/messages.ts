@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "실행 취소",
       "revertAllConfirmTitle": "모든 변경 실행 취소",
       "revertAllConfirmBody":
-        "{{count}}개 파일의 로컬 변경을 버리고 마지막 커밋으로 복원합니다. 이 작업은 되돌릴 수 없습니다.",
+        "{{count}}개 파일의 스테이징되지 않은 로컬 변경을 버리고 인덱스(스테이징이 없으면 HEAD)로 복원합니다. 이미 스테이징된 변경은 유지됩니다. 이 작업은 되돌릴 수 없습니다.",
       "revertAllConfirmAction": "모두 실행 취소",
       "revertFileConfirmTitle": "파일 변경 실행 취소",
       "revertFileConfirmBody":
-        "「{{path}}」의 로컬 변경을 버리고 마지막 커밋으로 복원합니다. 이 작업은 되돌릴 수 없습니다.",
+        "「{{path}}」의 스테이징되지 않은 로컬 변경을 버리고 인덱스(스테이징이 없으면 HEAD)로 복원합니다. 이미 스테이징된 변경은 유지됩니다. 이 작업은 되돌릴 수 없습니다.",
       "revertFileConfirmAction": "실행 취소"
     },
     "noThinkingContent": "사고 내용 없음",

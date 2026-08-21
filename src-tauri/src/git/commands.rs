@@ -397,13 +397,12 @@ pub(crate) async fn revert_git_file(
     };
 
     let repo_root = resolve_git_root_for_scope(&entry, repository_root.as_deref())?;
+    // Unstaged discard restores the working tree from the index, not HEAD.
+    // `--staged --worktree` would also drop already-staged hunks on mixed files.
     for path in action_paths_for_file(&repo_root, &path, GitStatusLayer::Workdir) {
-        if run_git_command(
-            &repo_root,
-            &["restore", "--staged", "--worktree", "--", &path],
-        )
-        .await
-        .is_ok()
+        if run_git_command(&repo_root, &["restore", "--worktree", "--", &path])
+            .await
+            .is_ok()
         {
             continue;
         }
@@ -442,13 +441,10 @@ pub(crate) async fn revert_git_paths(
     if expanded.is_empty() {
         return Err("path is required".to_string());
     }
-    // Tracked files restore in one shot; untracked paths may fail restore and fall to clean.
-    let _ = run_git_command_with_paths(
-        &repo_root,
-        &["restore", "--staged", "--worktree", "--"],
-        &expanded,
-    )
-    .await;
+    // Tracked files restore in one shot from the index; untracked paths may fail
+    // restore and fall to clean. Do not pass `--staged`, or mixed files lose the index.
+    let _ = run_git_command_with_paths(&repo_root, &["restore", "--worktree", "--"], &expanded)
+        .await;
     // Match single-file semantics: clean only when needed, and never fail the batch
     // solely because a tracked path is not cleanable.
     for path in &expanded {

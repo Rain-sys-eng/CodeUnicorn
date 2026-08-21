@@ -1786,7 +1786,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
           {!isInputBoxCollapsed && (
             <div
               ref={editableWrapperRef}
-              className={`input-editable-wrapper${isDragOver ? " is-drag-over" : ""}`}
+              className={`input-editable-wrapper scrollable${isDragOver ? " is-drag-over" : ""}`}
               onMouseOver={handleMouseOver}
               onMouseLeave={handleMouseLeave}
               onDragOver={handleDragOver}

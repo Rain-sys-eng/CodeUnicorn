@@ -4,10 +4,22 @@
 .input-editable-wrapper {
   position: relative;
   padding: 12px 14px 10px;
+  min-width: 0;
   min-height: 20px;
   max-height: 240px;
-  overflow-y: auto;
+  /* clip, not hidden: WebKit can promote overflow-x:hidden to auto when the
+     vertical scrollbar appears, which is why a horizontal bar shows up here. */
   overflow-x: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
+}
+
+/* Composer text wraps; never show a horizontal bar even if WebKit still
+   promotes overflow-x. `.scrollable` sets both width and height on
+   ::-webkit-scrollbar, so hide the horizontal track explicitly. */
+.input-editable-wrapper::-webkit-scrollbar:horizontal {
+  display: none;
+  height: 0;
 }
 
 .chat-input-box.file-tree-drop-target-active .input-editable-wrapper {
@@ -244,26 +256,9 @@
   animation: tooltip-fade-in 0.2s forwards;
 }
 
-/* Input box scrollbar styles */
-.input-editable-wrapper::-webkit-scrollbar {
-  width: 4px;
-}
-
-.input-editable-wrapper::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.input-editable-wrapper::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-.input-editable-wrapper:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
-}
-
 .input-editable {
+  min-width: 0;
+  max-width: 100%;
   min-height: calc(1.5em * 1);
   outline: none;
   color: var(--text-primary);

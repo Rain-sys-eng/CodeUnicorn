@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "撤銷",
       "revertAllConfirmTitle": "撤銷全部變更",
       "revertAllConfirmBody":
-        "將撤銷這 {{count}} 個檔案的本地變更，恢復到最近一次提交。此操作無法復原。",
+        "將撤銷這 {{count}} 個檔案尚未暫存的本地變更，還原到暫存區（若無暫存則回到上次提交）。已暫存的內容會保留。此操作無法復原。",
       "revertAllConfirmAction": "確認撤銷全部",
       "revertFileConfirmTitle": "撤銷檔案變更",
       "revertFileConfirmBody":
-        "將撤銷「{{path}}」的本地變更，恢復到最近一次提交。此操作無法復原。",
+        "將撤銷「{{path}}」尚未暫存的本地變更，還原到暫存區（若無暫存則回到上次提交）。已暫存的內容會保留。此操作無法復原。",
       "revertFileConfirmAction": "確認撤銷"
     },
     "noThinkingContent": "沒有思考內容",
