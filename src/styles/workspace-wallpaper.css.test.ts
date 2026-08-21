@@ -121,14 +121,22 @@ describe("workspace wallpaper styles", () => {
       "background: color-mix(in srgb, #ffffff 78%, transparent);",
     );
     expect(css).toContain(
-      ":root[data-workspace-wallpaper] .settings-section-basic .settings-basic-group-card",
+      ":root[data-workspace-wallpaper] .settings-embedded :is(",
+    );
+    expect(css).toContain(".settings-basic-group-card,");
+    expect(css).toContain(".vendor-group-card,");
+    expect(css).toContain(".settings-project-row,");
+    expect(css).toContain(".settings-shortcuts-detail,");
+    expect(css).toContain(".settings-toggle-row,");
+    expect(css).toContain(
+      "--settings-wallpaper-card: color-mix(in srgb, #ffffff 34%, transparent);",
     );
     expect(css).toContain(
-      "background: color-mix(in srgb, #ffffff 34%, transparent);",
+      "--settings-wallpaper-card: color-mix(in srgb, #121214 22%, transparent);",
     );
     expect(css).toContain("backdrop-filter: blur(22px) saturate(1.28);");
     expect(css).toContain(
-      ':root[data-platform="windows"][data-workspace-wallpaper] .settings-section-basic .settings-basic-group-card',
+      ':root[data-platform="windows"][data-workspace-wallpaper] .settings-embedded :is(',
     );
     expect(css).toContain("--message-inline-code-bg: color-mix(");
     expect(css).toContain("var(--workspace-wallpaper-wash, #ededf0) 38%");

@@ -147,7 +147,7 @@
   padding: 0 10px;
   border: 1px solid var(--settings-basic-divider);
   border-radius: 8px;
-  background: var(--background);
+  background: var(--settings-basic-control);
   color: var(--text-faint);
 }
 
