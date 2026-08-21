@@ -64,6 +64,105 @@
   animation: slideUp 0.2s ease-out;
 }
 
+.prompt-enhancer-dialog--wide {
+  max-width: 920px;
+}
+
+.prompt-enhancer-subtitle {
+  margin-left: 8px;
+  color: var(--text-tertiary, var(--text-secondary));
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.prompt-enhancer-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 36px;
+}
+
+.prompt-enhancer-picker {
+  min-width: 0;
+}
+
+/* Portaled ModelSelect menus default to z-50; overlay is 2000. */
+.prompt-enhancer-model-menu {
+  z-index: 2100;
+}
+
+.prompt-enhancer-picker.is-disabled {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.prompt-enhancer-empty-engines {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.prompt-enhancer-modes {
+  display: flex;
+  gap: 6px;
+}
+
+.prompt-enhancer-mode {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dropdown-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.prompt-enhancer-mode.on {
+  color: var(--text-primary);
+  border-color: var(--button-primary);
+  background: color-mix(in srgb, var(--button-primary) 16%, transparent);
+}
+
+.prompt-enhancer-mode:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prompt-enhancer-intensity-hint {
+  margin: 0;
+  color: var(--text-tertiary, var(--text-secondary));
+  font-size: 12px;
+}
+
+.prompt-enhancer-advanced {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.prompt-enhancer-advanced summary {
+  cursor: pointer;
+}
+
+.prompt-enhancer-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 260px;
+}
+
+.prompt-section-meta {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-tertiary, var(--text-secondary));
+}
+
+.prompt-diff-add {
+  color: #7ee787;
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(20px);
@@ -138,6 +237,15 @@
   border: 1px solid var(--dropdown-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--button-primary) 8%, transparent);
+}
+
+.prompt-text.original-prompt {
+  min-height: 220px;
+  max-height: 350px;
+  resize: vertical;
+  font: inherit;
+  outline: none;
+  color: inherit;
 }
 
 .prompt-enhancer-field {
@@ -312,8 +420,11 @@
 }
 
 @media (max-width: 640px) {
-  .prompt-enhancer-config {
+  .prompt-enhancer-config,
+  .prompt-enhancer-toolbar,
+  .prompt-enhancer-split {
     grid-template-columns: 1fr;
+    display: grid;
   }
 
   .prompt-enhancer-run-btn {

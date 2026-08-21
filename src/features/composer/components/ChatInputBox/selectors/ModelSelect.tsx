@@ -66,6 +66,8 @@ interface ModelSelectProps {
   currentProvider?: string;  // Current provider type
   providerLabel?: string;
   triggerVariant?: 'default' | 'readiness';
+  /** Raise the portaled menu above a stacking overlay (prompt enhancer dialog). */
+  menuLayer?: 'default' | 'overlay';
   modelGroups?: ProviderModelGroup[];
   onProviderModelChange?: (providerId: ProviderId, modelId: string) => void;
   /** Navigate to model management; optional providerId = the engine submenu opened */
@@ -536,6 +538,7 @@ export const ModelSelect = memo(({
   models = [],
   currentProvider = 'claude',
   triggerVariant = 'default',
+  menuLayer = 'default',
   modelGroups,
   onProviderModelChange,
   onAddModel,
@@ -1190,7 +1193,7 @@ export const ModelSelect = memo(({
         align="start"
         side="top"
         sideOffset={4}
-        className="max-h-[380px] w-64 overflow-y-auto"
+        className={menuLayer === 'overlay' ? 'prompt-enhancer-model-menu max-h-[380px] w-64 overflow-y-auto' : 'max-h-[380px] w-64 overflow-y-auto'}
       >
         {hasPickerGroups ? (
           <>
@@ -1229,7 +1232,7 @@ export const ModelSelect = memo(({
                     <DropdownMenuSubContent
                       sideOffset={8}
                       alignOffset={-4}
-                      className="max-h-[380px] w-72 overflow-y-auto"
+                      className={menuLayer === 'overlay' ? 'prompt-enhancer-model-menu max-h-[380px] w-72 overflow-y-auto' : 'max-h-[380px] w-72 overflow-y-auto'}
                     >
                       <DropdownMenuLabel className="flex items-center gap-1.5 text-muted-foreground">
                         <span className="min-w-0 flex-1 truncate">

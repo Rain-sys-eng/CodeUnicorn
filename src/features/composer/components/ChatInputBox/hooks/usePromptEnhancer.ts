@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { engineSendMessageSync } from '../../../../../services/tauri';
 import type { EngineType } from '../../../../../types';
+import { isEngineExecutionEnabled } from '../../../../../utils/engineExecutionPolicy';
 import { getNormalizedAssistantMessageText } from '../../../../../utils/threadItemsAssistantText';
+import { useCliEngineVisibility } from '../../../hooks/cliEngineVisibilityStore';
+import { resolveDshModelForSend } from '../../../../threads/hooks/threadMessagingHelpers';
 import type { ModelInfo, ProviderId } from '../types';
 import type { ProviderModelGroup } from '../modelOptions';
 
@@ -20,6 +23,19 @@ const PROMPT_ENHANCER_AUTO_SESSION = {
 export const PROMPT_ENHANCER_ENGINE_OPTIONS: EngineType[] = [
   'claude',
   'codex',
+  'grok',
+  'kimi',
+  'opencode',
+  'pi',
+  'dsh',
+];
+
+export type PromptEnhancerIntensity = 'light' | 'struct' | 'exec';
+
+export const PROMPT_ENHANCER_INTENSITY_OPTIONS: PromptEnhancerIntensity[] = [
+  'light',
+  'struct',
+  'exec',
 ];
 
 export const PROMPT_ENHANCER_TIMEOUT_LIMITS = {
@@ -98,12 +114,14 @@ function enhancerCacheKey(options: {
   engine: EngineType;
   model: string | null;
   locale: string;
+  intensity: PromptEnhancerIntensity;
 }): string {
   return [
     options.workspaceId.trim(),
     options.locale,
     options.engine,
     options.model ?? '',
+    options.intensity,
     options.text,
   ].join('|');
 }
@@ -145,73 +163,117 @@ export function resolveEnhancerLocale(language: string | undefined): EnhancerLoc
   return language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
+export function isPromptEnhancerEngine(engine: string): engine is EngineType {
+  return (PROMPT_ENHANCER_ENGINE_OPTIONS as readonly string[]).includes(engine);
+}
+
+export function resolveVisibleEnhancerEngines(
+  disabledCliEngineIds: ReadonlySet<string>,
+): EngineType[] {
+  return PROMPT_ENHANCER_ENGINE_OPTIONS.filter(
+    (engine) => isEngineExecutionEnabled(engine) && !disabledCliEngineIds.has(engine),
+  );
+}
+
+export function normalizeEnhancerEngine(
+  currentProvider: string,
+  visibleEngines: readonly EngineType[] = PROMPT_ENHANCER_ENGINE_OPTIONS,
+): EngineType {
+  if (isPromptEnhancerEngine(currentProvider) && visibleEngines.includes(currentProvider)) {
+    return currentProvider;
+  }
+  return visibleEngines[0] ?? 'claude';
+}
+
+function intensityInstruction(intensity: PromptEnhancerIntensity, locale: EnhancerLocale): string[] {
+  if (locale === 'zh') {
+    switch (intensity) {
+      case 'struct':
+        return [
+          '- 强度：结构化。只在能增加约束时才分节。',
+          '- 禁止用「目标 / 背景 / 验收标准」把同一句话再写一遍。',
+          '- 小节标题必须带进新信息，否则不要分节。',
+        ];
+      case 'exec':
+        return [
+          '- 强度：可执行。补上动作顺序和如何验收。',
+          '- 不要发明草稿里没有的文件、接口、错误码或产品事实。',
+          '- 不要把草稿整段复制后再加空标题。',
+        ];
+      case 'light':
+      default:
+        return [
+          '- 强度：轻润色。只整理措辞和指代，保持原长度量级。',
+          '- 短草稿不要扩写成多段模板。',
+          '- 不要新增草稿未提出的任务。',
+        ];
+    }
+  }
+  switch (intensity) {
+    case 'struct':
+      return [
+        '- Intensity: structured. Add sections only when they introduce new constraints.',
+        '- Do not restate the same sentence under Goal / Context / Acceptance headings.',
+        '- A heading is allowed only if it carries information that is not already in the draft.',
+      ];
+    case 'exec':
+      return [
+        '- Intensity: executable. Add action order and how to verify success.',
+        '- Do not invent files, APIs, error codes, or product facts missing from the draft.',
+        '- Do not copy the draft verbatim and wrap it in empty headings.',
+      ];
+    case 'light':
+    default:
+      return [
+        '- Intensity: light polish. Improve wording and references; keep a similar length.',
+        '- Do not expand a short draft into a multi-section template.',
+        '- Do not add tasks the draft did not ask for.',
+      ];
+  }
+}
+
 export function buildPromptEnhancerInstruction(
   originalPrompt: string,
   engine: EngineType,
   locale: EnhancerLocale,
+  intensity: PromptEnhancerIntensity = 'light',
 ): string {
-  const baseInstruction =
+  const sharedRules =
     locale === 'zh'
       ? [
           '你是一名提示词改写助手。',
           '把用户的草稿改写为更清晰、更可执行的 AI 助手提示词。',
-          '要求：',
+          '硬性要求：',
           '- 保留原始意图、语言和明确事实。',
           '- 不要回答请求本身。',
-          '- 草稿含糊时，在不虚构新事实的前提下改善结构与清晰度。',
-          '- 仅在有帮助时使用简洁小节，如目标、背景、约束、输出或验收标准。',
-          '- 草稿已清晰时，仅做轻度润色。',
+          '- 不要复述草稿，也不要把同一句换行再写一遍。',
+          '- 只输出一份改写结果。禁止前后重复、禁止拷贝粘贴两遍。',
           '- 只输出改写后的提示词文本，不要解释、不要 markdown 代码块、不要前言。',
-          '',
-          '用户草稿：',
-          originalPrompt,
         ]
       : [
           'You are a prompt rewriting assistant.',
           'Rewrite the user draft into a clearer, more actionable prompt for an AI assistant.',
-          'Requirements:',
+          'Hard requirements:',
           '- Preserve the original intent, language, and explicit facts.',
           '- Do not answer the request itself.',
-          '- If the draft is vague, improve structure and clarity without inventing new facts.',
-          '- Use concise sections only when they help, such as Goal, Context, Constraints, Output, or Acceptance Criteria.',
-          '- If the draft is already clear, lightly polish it.',
+          '- Do not restate the draft, and do not repeat the same sentence on a new line.',
+          '- Output exactly one rewrite. Never duplicate the result back-to-back.',
           '- Output only the rewritten prompt text with no explanation, no markdown fence, and no preamble.',
-          '',
-          'User draft:',
-          originalPrompt,
         ];
 
-  if (engine === 'claude') {
-    const claudeConstraints =
-      locale === 'zh'
-        ? [
-            '- 改写保持简洁、面向执行，避免冗长。',
-            '- 最多输出 6 行短句，纯文本，不要 markdown 标题，不要多层列表。',
-            '- 删除填充词和元语言，只保留可执行的约束与交付格式。',
-          ]
-        : [
-            '- Keep the rewrite concise and execution-oriented; avoid verbosity.',
-            '- Output at most 6 short lines, plain text only, no markdown headings, no bullet nesting.',
-            '- Remove filler and meta language; keep only actionable constraints and deliverable format.',
-          ];
-    baseInstruction.splice(8, 0, ...claudeConstraints);
-  }
+  const engineRules =
+    engine === 'claude'
+      ? locale === 'zh'
+        ? ['- 保持简洁、面向执行；不要为了凑结构而变长。']
+        : ['- Keep the rewrite concise and execution-oriented; do not pad it for structure.']
+      : [];
 
-  return baseInstruction.join('\n');
-}
-
-function normalizeEnhancerEngine(currentProvider: string): EngineType {
-  switch (currentProvider) {
-    case 'codex':
-      return currentProvider;
-    case 'claude':
-    default:
-      return 'claude';
-  }
+  const draftLabel = locale === 'zh' ? '用户草稿：' : 'User draft:';
+  return [...sharedRules, ...intensityInstruction(intensity, locale), ...engineRules, '', draftLabel, originalPrompt].join('\n');
 }
 
 function isPromptEnhancerProviderId(engine: EngineType): engine is ProviderId {
-  return engine === 'claude' || engine === 'codex';
+  return isPromptEnhancerEngine(engine);
 }
 
 function resolveEnhancerModelOptions(
@@ -224,6 +286,22 @@ function resolveEnhancerModelOptions(
   return modelGroups.find((group) => group.providerId === engine)?.models ?? [];
 }
 
+function findEnhancerModel(
+  modelGroups: ProviderModelGroup[],
+  engine: EngineType,
+  modelId: string,
+): ModelInfo | undefined {
+  const trimmedModelId = modelId.trim();
+  if (!trimmedModelId) {
+    return undefined;
+  }
+  const modelOptions = resolveEnhancerModelOptions(modelGroups, engine);
+  return (
+    modelOptions.find((entry) => entry.id === trimmedModelId) ??
+    modelOptions.find((entry) => (entry.model ?? '').trim() === trimmedModelId)
+  );
+}
+
 function resolveDefaultEnhancerModelId(
   modelGroups: ProviderModelGroup[],
   engine: EngineType,
@@ -233,23 +311,42 @@ function resolveDefaultEnhancerModelId(
   if (modelOptions.length === 0) {
     return '';
   }
-  if (currentModelId.trim().length > 0 && modelOptions.some((model) => model.id === currentModelId)) {
-    return currentModelId;
+  const matched = findEnhancerModel(modelGroups, engine, currentModelId);
+  if (matched?.id) {
+    return matched.id;
   }
   return modelOptions[0]?.id ?? '';
 }
 
-function resolveRuntimeEnhancerModel(
+/**
+ * DSH 只接受 `{provider}/{model}` catalog id。`.model` 是 runtime 短名
+ *（例如 `grok-4.6`），发给 DSH 会直接失败。其它引擎仍用 runtime / id。
+ */
+export function resolveEnhancerModelForSend(
   modelGroups: ProviderModelGroup[],
   engine: EngineType,
   modelId: string,
 ): string | null {
   const trimmedModelId = modelId.trim();
-  if (!trimmedModelId) {
+  if (!trimmedModelId || trimmedModelId === engine) {
     return null;
   }
-  const model = resolveEnhancerModelOptions(modelGroups, engine).find((entry) => entry.id === trimmedModelId);
-  return ((model as ModelInfo & { model?: string } | undefined)?.model ?? trimmedModelId).trim() || null;
+  const matched = findEnhancerModel(modelGroups, engine, trimmedModelId);
+  const catalogId = matched?.id?.trim() || trimmedModelId;
+  const runtime = matched?.model?.trim() || '';
+
+  if (engine === 'dsh') {
+    return resolveDshModelForSend({
+      catalogId,
+      runtimeModel: runtime || trimmedModelId,
+    });
+  }
+
+  if ((engine === 'pi' || engine === 'opencode') && catalogId.includes('/')) {
+    return catalogId;
+  }
+
+  return (runtime || catalogId).trim() || null;
 }
 
 function normalizeEnhancerTimeoutSeconds(timeoutSeconds: number): number {
@@ -262,7 +359,57 @@ function normalizeEnhancerTimeoutSeconds(timeoutSeconds: number): number {
   );
 }
 
-function normalizeEnhancedPromptResponse(text: unknown): string {
+function compactEnhancerText(value: string): string {
+  return value.replace(/\s+/g, '');
+}
+
+function collapseExactRepeatedBlocks(value: string): string {
+  const compact = compactEnhancerText(value);
+  if (compact.length < 12) {
+    return value;
+  }
+  for (const repeatCount of [3, 2]) {
+    if (compact.length % repeatCount !== 0) {
+      continue;
+    }
+    const chunkLength = compact.length / repeatCount;
+    const chunk = compact.slice(0, chunkLength);
+    if (chunk.length >= 6 && chunk.repeat(repeatCount) === compact) {
+      const midpoint = Math.floor(value.length / repeatCount);
+      const firstHalf = value.slice(0, midpoint).trim();
+      if (firstHalf.length >= 6) {
+        return firstHalf;
+      }
+    }
+  }
+  return value;
+}
+
+function collapseConsecutiveDuplicateChunks(value: string, splitter: RegExp, joiner: string): string {
+  const chunks = value.split(splitter).map((entry) => entry.trim()).filter(Boolean);
+  if (chunks.length < 2) {
+    return value;
+  }
+  const collapsed: string[] = [];
+  for (const chunk of chunks) {
+    const previous = collapsed[collapsed.length - 1];
+    if (previous && compactEnhancerText(previous) === compactEnhancerText(chunk)) {
+      continue;
+    }
+    collapsed.push(chunk);
+  }
+  return collapsed.join(joiner);
+}
+
+function collapseConsecutiveDuplicateParagraphs(value: string): string {
+  return collapseConsecutiveDuplicateChunks(value, /\n{2,}/, '\n\n');
+}
+
+function collapseConsecutiveDuplicateLines(value: string): string {
+  return collapseConsecutiveDuplicateChunks(value, /\n/, '\n');
+}
+
+export function normalizeEnhancedPromptResponse(text: unknown): string {
   if (typeof text !== 'string') {
     return '';
   }
@@ -270,7 +417,13 @@ function normalizeEnhancedPromptResponse(text: unknown): string {
   if (!trimmed) {
     return '';
   }
-  return getNormalizedAssistantMessageText(trimmed).trim();
+  const normalized = getNormalizedAssistantMessageText(trimmed).trim();
+  if (!normalized) {
+    return '';
+  }
+  return collapseConsecutiveDuplicateLines(
+    collapseConsecutiveDuplicateParagraphs(collapseExactRepeatedBlocks(normalized)),
+  ).trim();
 }
 
 function buildIsolatedSessionId(): string {
@@ -343,6 +496,7 @@ interface UsePromptEnhancerOptions {
   currentProvider: string;
   selectedModel: string;
   modelGroups: ProviderModelGroup[];
+  targetModelGroups?: ProviderModelGroup[];
   setHasContent: (hasContent: boolean) => void;
   handleInput: () => void;
   stageNextCommitOptions?: (options: {
@@ -358,7 +512,10 @@ interface UsePromptEnhancerReturn {
   enhancingEngine: EngineType;
   selectedEnhancerEngine: EngineType;
   selectedEnhancerModel: string;
+  selectedEnhancerIntensity: PromptEnhancerIntensity;
   enhancerModelOptions: ModelInfo[];
+  enhancerModelGroups: ProviderModelGroup[];
+  visibleEnhancerEngines: EngineType[];
   enhancerTimeoutSeconds: number;
   timeoutLimits: typeof PROMPT_ENHANCER_TIMEOUT_LIMITS;
   showEnhancerDialog: boolean;
@@ -368,7 +525,10 @@ interface UsePromptEnhancerReturn {
   handleEnhancePrompt: () => void;
   handleEnhancerEngineChange: (engine: EngineType) => void;
   handleEnhancerModelChange: (modelId: string) => void;
+  handleEnhancerProviderModelChange: (providerId: ProviderId, modelId: string) => void;
+  handleEnhancerIntensityChange: (intensity: PromptEnhancerIntensity) => void;
   handleEnhancerTimeoutChange: (timeoutSeconds: number) => void;
+  handleOriginalPromptChange: (prompt: string) => void;
   handleRunPromptEnhancement: () => void;
   handleUseEnhancedPrompt: () => void;
   handleKeepOriginalPrompt: () => void;
@@ -418,6 +578,7 @@ export function usePromptEnhancer({
   currentProvider,
   selectedModel,
   modelGroups,
+  targetModelGroups,
   setHasContent,
   handleInput,
   stageNextCommitOptions,
@@ -430,13 +591,58 @@ export function usePromptEnhancer({
   // 部分测试只 mock t 而不提供 i18n 对象，读取语言时防御缺省。
   const languageRef = useRef(i18n?.language as string | undefined);
   languageRef.current = i18n?.language as string | undefined;
+  const disabledCliEngineIds = useCliEngineVisibility();
+  const visibleEnhancerEngines = useMemo(
+    () => resolveVisibleEnhancerEngines(disabledCliEngineIds),
+    [disabledCliEngineIds],
+  );
+  const enhancerModelGroups = useMemo(() => {
+    const byId = new Map<ProviderId, ProviderModelGroup>();
+    const mergeGroup = (group: ProviderModelGroup) => {
+      const existing = byId.get(group.providerId);
+      if (!existing) {
+        byId.set(group.providerId, group);
+        return;
+      }
+      const seen = new Set(existing.models.map((model) => model.id));
+      const models = [...existing.models];
+      for (const model of group.models) {
+        if (!seen.has(model.id)) {
+          seen.add(model.id);
+          models.push(model);
+        }
+      }
+      byId.set(group.providerId, {
+        ...existing,
+        providerLabel: existing.providerLabel || group.providerLabel,
+        models,
+        enabled: existing.enabled || group.enabled,
+      });
+    };
+    modelGroups.forEach(mergeGroup);
+    (targetModelGroups ?? []).forEach(mergeGroup);
+    return visibleEnhancerEngines.map((engine) => {
+      const existing = byId.get(engine as ProviderId);
+      if (existing) {
+        return existing;
+      }
+      return {
+        providerId: engine as ProviderId,
+        providerLabel: engine,
+        models: [],
+        enabled: true,
+      };
+    });
+  }, [modelGroups, targetModelGroups, visibleEnhancerEngines]);
 
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [enhancingEngine, setEnhancingEngine] = useState<EngineType>('claude');
   const [selectedEnhancerEngine, setSelectedEnhancerEngine] = useState<EngineType>(
-    normalizeEnhancerEngine(currentProvider),
+    normalizeEnhancerEngine(currentProvider, visibleEnhancerEngines),
   );
   const [selectedEnhancerModel, setSelectedEnhancerModel] = useState('');
+  const [selectedEnhancerIntensity, setSelectedEnhancerIntensity] =
+    useState<PromptEnhancerIntensity>('light');
   const [enhancerTimeoutSeconds, setEnhancerTimeoutSeconds] = useState(
     PROMPT_ENHANCER_DEFAULT_TIMEOUT_SECONDS,
   );
@@ -461,6 +667,27 @@ export function usePromptEnhancer({
     setCanUseEnhancedPrompt(false);
   }, [workspaceId]);
 
+  useEffect(() => {
+    if (!showEnhancerDialog) {
+      return;
+    }
+    const resolved = resolveDefaultEnhancerModelId(
+      enhancerModelGroups,
+      selectedEnhancerEngine,
+      selectedEnhancerModel || selectedModel,
+    );
+    if (!resolved || resolved === selectedEnhancerModel) {
+      return;
+    }
+    setSelectedEnhancerModel(resolved);
+  }, [
+    enhancerModelGroups,
+    selectedEnhancerEngine,
+    selectedEnhancerModel,
+    selectedModel,
+    showEnhancerDialog,
+  ]);
+
   const closeEnhancerDialog = useCallback(() => {
     activeRequestIdRef.current += 1;
     setShowEnhancerDialog(false);
@@ -475,28 +702,52 @@ export function usePromptEnhancer({
     }
 
     activeRequestIdRef.current += 1;
-    const defaultEngine = normalizeEnhancerEngine(currentProvider);
+    const defaultEngine = normalizeEnhancerEngine(currentProvider, visibleEnhancerEngines);
     setSelectedEnhancerEngine(defaultEngine);
-    setSelectedEnhancerModel(resolveDefaultEnhancerModelId(modelGroups, defaultEngine, selectedModel));
+    setSelectedEnhancerModel(resolveDefaultEnhancerModelId(enhancerModelGroups, defaultEngine, selectedModel));
     setOriginalPrompt(content);
     setEnhancedPrompt('');
     setCanUseEnhancedPrompt(false);
     setShowEnhancerDialog(true);
     setIsEnhancing(false);
-  }, [currentProvider, getTextContent, modelGroups, selectedModel]);
+  }, [currentProvider, enhancerModelGroups, getTextContent, selectedModel, visibleEnhancerEngines]);
 
   const handleEnhancerEngineChange = useCallback((engine: EngineType) => {
-    if (!PROMPT_ENHANCER_ENGINE_OPTIONS.includes(engine)) {
+    if (!visibleEnhancerEngines.includes(engine)) {
       return;
     }
     setSelectedEnhancerEngine(engine);
-    setSelectedEnhancerModel(resolveDefaultEnhancerModelId(modelGroups, engine, ''));
+    setSelectedEnhancerModel(resolveDefaultEnhancerModelId(enhancerModelGroups, engine, ''));
     setCanUseEnhancedPrompt(false);
     setEnhancedPrompt('');
-  }, [modelGroups]);
+  }, [enhancerModelGroups, visibleEnhancerEngines]);
 
   const handleEnhancerModelChange = useCallback((modelId: string) => {
     setSelectedEnhancerModel(modelId);
+    setCanUseEnhancedPrompt(false);
+    setEnhancedPrompt('');
+  }, []);
+
+  const handleEnhancerProviderModelChange = useCallback((providerId: ProviderId, modelId: string) => {
+    if (!visibleEnhancerEngines.includes(providerId)) {
+      return;
+    }
+    setSelectedEnhancerEngine(providerId);
+    setSelectedEnhancerModel(
+      findEnhancerModel(enhancerModelGroups, providerId, modelId)?.id ?? modelId,
+    );
+    setCanUseEnhancedPrompt(false);
+    setEnhancedPrompt('');
+  }, [enhancerModelGroups, visibleEnhancerEngines]);
+
+  const handleEnhancerIntensityChange = useCallback((intensity: PromptEnhancerIntensity) => {
+    setSelectedEnhancerIntensity(intensity);
+    setCanUseEnhancedPrompt(false);
+    setEnhancedPrompt('');
+  }, []);
+
+  const handleOriginalPromptChange = useCallback((prompt: string) => {
+    setOriginalPrompt(prompt);
     setCanUseEnhancedPrompt(false);
     setEnhancedPrompt('');
   }, []);
@@ -507,7 +758,10 @@ export function usePromptEnhancer({
 
   const handleRunPromptEnhancement = useCallback(() => {
     const content = originalPrompt.trim();
-    if (!content || isEnhancing) {
+    if (!content || isEnhancing || visibleEnhancerEngines.length === 0) {
+      return;
+    }
+    if (!visibleEnhancerEngines.includes(selectedEnhancerEngine)) {
       return;
     }
 
@@ -529,16 +783,32 @@ export function usePromptEnhancer({
     const engine = selectedEnhancerEngine;
     const timeoutSeconds = normalizeEnhancerTimeoutSeconds(enhancerTimeoutSeconds);
     const locale = resolveEnhancerLocale(languageRef.current);
-    const prompt = buildPromptEnhancerInstruction(content, engine, locale);
+    const intensity = selectedEnhancerIntensity;
+    const prompt = buildPromptEnhancerInstruction(content, engine, locale, intensity);
     const fallbackPrompt =
-      engine === 'claude' ? buildPromptEnhancerInstruction(content, 'codex', locale) : null;
-    const requestModel = resolveRuntimeEnhancerModel(modelGroups, engine, selectedEnhancerModel);
+      engine === 'claude' && visibleEnhancerEngines.includes('codex')
+        ? buildPromptEnhancerInstruction(content, 'codex', locale, intensity)
+        : null;
+    const requestModel = resolveEnhancerModelForSend(enhancerModelGroups, engine, selectedEnhancerModel);
+    if (engine === 'dsh' && requestModel === null) {
+      setEnhancedPrompt(
+        tRef.current('promptEnhancer.failedDshCatalogId', {
+          model: selectedEnhancerModel || 'empty',
+          defaultValue:
+            'DSH needs a provider/model catalog id. Select a DSH catalog row instead of a bare runtime name like {{model}}.',
+        }),
+      );
+      setCanUseEnhancedPrompt(false);
+      setIsEnhancing(false);
+      return;
+    }
     const cacheKey = enhancerCacheKey({
       workspaceId,
       text: content,
       engine,
       model: requestModel,
       locale,
+      intensity,
     });
 
     setEnhancingEngine(engine);
@@ -600,6 +870,7 @@ export function usePromptEnhancer({
                 engine: 'codex',
                 model: null,
                 locale,
+                intensity,
               }),
               fallbackRewrittenPrompt,
             );
@@ -635,10 +906,12 @@ export function usePromptEnhancer({
   }, [
     enhancerTimeoutSeconds,
     isEnhancing,
-    modelGroups,
+    enhancerModelGroups,
     originalPrompt,
     selectedEnhancerEngine,
+    selectedEnhancerIntensity,
     selectedEnhancerModel,
+    visibleEnhancerEngines,
     workspaceId,
   ]);
 
@@ -669,7 +942,10 @@ export function usePromptEnhancer({
     enhancingEngine,
     selectedEnhancerEngine,
     selectedEnhancerModel,
-    enhancerModelOptions: resolveEnhancerModelOptions(modelGroups, selectedEnhancerEngine),
+    selectedEnhancerIntensity,
+    enhancerModelOptions: resolveEnhancerModelOptions(enhancerModelGroups, selectedEnhancerEngine),
+    enhancerModelGroups,
+    visibleEnhancerEngines,
     enhancerTimeoutSeconds,
     timeoutLimits: PROMPT_ENHANCER_TIMEOUT_LIMITS,
     showEnhancerDialog,
@@ -679,7 +955,10 @@ export function usePromptEnhancer({
     handleEnhancePrompt,
     handleEnhancerEngineChange,
     handleEnhancerModelChange,
+    handleEnhancerProviderModelChange,
+    handleEnhancerIntensityChange,
     handleEnhancerTimeoutChange,
+    handleOriginalPromptChange,
     handleRunPromptEnhancement,
     handleUseEnhancedPrompt,
     handleKeepOriginalPrompt: closeEnhancerDialog,
