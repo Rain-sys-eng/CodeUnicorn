@@ -10,10 +10,16 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, Mutex};
 use tokio_tungstenite::tungstenite::Message;
+
+/// DSH streams token-sized reasoning/text deltas. Coalesce only those two
+/// kinds on the mux emit path so a multi-hour k3 goal does not flood the
+/// shared app-server-event queue. Other engines are untouched.
+const DSH_DELTA_COALESCE_WINDOW: Duration = Duration::from_millis(50);
+const DSH_DELTA_COALESCE_MAX_BYTES: usize = 4096;
 
 #[derive(Debug, Clone)]
 pub struct DshSessionBinding {
@@ -37,12 +43,166 @@ struct DshGoalSessionState {
     awaiting_session_idle: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DshCoalescedDeltaKind {
+    Text,
+    Reasoning,
+}
+
+#[derive(Debug, Clone)]
+struct DshPendingDelta {
+    kind: DshCoalescedDeltaKind,
+    session_id: String,
+    workspace_id: String,
+    thread_id: String,
+    item_id: String,
+    turn_id: Option<String>,
+    text: String,
+    started_at: Instant,
+}
+
+impl DshPendingDelta {
+    fn key(&self) -> (DshCoalescedDeltaKind, String, String) {
+        (self.kind, self.session_id.clone(), self.item_id.clone())
+    }
+
+    fn should_flush(&self, now: Instant) -> bool {
+        now.saturating_duration_since(self.started_at) >= DSH_DELTA_COALESCE_WINDOW
+            || self.text.len() >= DSH_DELTA_COALESCE_MAX_BYTES
+    }
+
+    fn remaining_window(&self, now: Instant) -> Duration {
+        DSH_DELTA_COALESCE_WINDOW.saturating_sub(now.saturating_duration_since(self.started_at))
+    }
+
+    fn into_event(self) -> EngineEvent {
+        match self.kind {
+            DshCoalescedDeltaKind::Text => EngineEvent::TextDelta {
+                workspace_id: self.workspace_id,
+                text: self.text,
+            },
+            DshCoalescedDeltaKind::Reasoning => EngineEvent::ReasoningDelta {
+                workspace_id: self.workspace_id,
+                text: self.text,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct DshDeltaCoalesceBuffer {
+    pending: Option<DshPendingDelta>,
+}
+
+fn dsh_delta_kind(event: &EngineEvent) -> Option<DshCoalescedDeltaKind> {
+    match event {
+        EngineEvent::TextDelta { .. } => Some(DshCoalescedDeltaKind::Text),
+        EngineEvent::ReasoningDelta { .. } => Some(DshCoalescedDeltaKind::Reasoning),
+        _ => None,
+    }
+}
+
+fn dsh_delta_text(event: &EngineEvent) -> Option<&str> {
+    match event {
+        EngineEvent::TextDelta { text, .. } | EngineEvent::ReasoningDelta { text, .. } => {
+            Some(text.as_str())
+        }
+        _ => None,
+    }
+}
+
+type DshEmitReady = (EngineEvent, String, String, Option<String>);
+
+fn pending_to_ready(pending: DshPendingDelta) -> DshEmitReady {
+    let thread_id = pending.thread_id.clone();
+    let item_id = pending.item_id.clone();
+    let turn_id = pending.turn_id.clone();
+    (pending.into_event(), thread_id, item_id, turn_id)
+}
+
+/// Fold consecutive same-item text/reasoning deltas. Returns events that must
+/// emit now (flushed pending + non-delta events). The newest matching delta
+/// stays in the buffer until the time/size window expires.
+fn push_dsh_coalesced_events(
+    buffer: &mut DshDeltaCoalesceBuffer,
+    session_id: &str,
+    binding: &DshSessionBinding,
+    events: Vec<EngineEvent>,
+    now: Instant,
+) -> Vec<DshEmitReady> {
+    let mut ready = Vec::new();
+    for event in events {
+        let item_id = item_id_for_event(&event, binding, session_id);
+        let turn_id = binding.turn_id.clone();
+        let Some(kind) = dsh_delta_kind(&event) else {
+            if let Some(pending) = buffer.pending.take() {
+                ready.push(pending_to_ready(pending));
+            }
+            ready.push((event, binding.thread_id.clone(), item_id, turn_id));
+            continue;
+        };
+        let Some(text) = dsh_delta_text(&event).filter(|value| !value.is_empty()) else {
+            continue;
+        };
+        let incoming = DshPendingDelta {
+            kind,
+            session_id: session_id.to_string(),
+            workspace_id: binding.workspace_id.clone(),
+            thread_id: binding.thread_id.clone(),
+            item_id,
+            turn_id,
+            text: text.to_string(),
+            started_at: now,
+        };
+        match buffer.pending.as_mut() {
+            Some(pending) if pending.key() == incoming.key() => {
+                pending.text.push_str(&incoming.text);
+                if pending.should_flush(now) {
+                    let flushed = buffer.pending.take().expect("pending just matched");
+                    ready.push(pending_to_ready(flushed));
+                }
+            }
+            Some(_) => {
+                let flushed = buffer.pending.take().expect("pending exists");
+                ready.push(pending_to_ready(flushed));
+                buffer.pending = Some(incoming);
+            }
+            None => {
+                buffer.pending = Some(incoming);
+            }
+        }
+    }
+    ready
+}
+
+fn take_expired_dsh_delta(
+    buffer: &mut DshDeltaCoalesceBuffer,
+    now: Instant,
+) -> Option<DshEmitReady> {
+    let should_flush = buffer
+        .pending
+        .as_ref()
+        .is_some_and(|pending| pending.should_flush(now));
+    if !should_flush {
+        return None;
+    }
+    buffer.pending.take().map(pending_to_ready)
+}
+
+fn next_dsh_delta_flush_delay(buffer: &DshDeltaCoalesceBuffer, now: Instant) -> Option<Duration> {
+    buffer
+        .pending
+        .as_ref()
+        .map(|pending| pending.remaining_window(now))
+}
+
 struct MuxHub {
     bindings: HashMap<String, DshSessionBinding>,
     goal_states: HashMap<String, DshGoalSessionState>,
     turn_waiters: HashMap<String, Vec<oneshot::Sender<String>>>,
     open_turns: HashMap<String, bool>,
     pending_questions: HashMap<String, Value>,
+    pending_deltas: DshDeltaCoalesceBuffer,
     app: Option<AppHandle>,
     stop: Option<oneshot::Sender<()>>,
     url: Option<String>,
@@ -58,6 +218,7 @@ fn mux() -> &'static Mutex<MuxHub> {
             turn_waiters: HashMap::new(),
             open_turns: HashMap::new(),
             pending_questions: HashMap::new(),
+            pending_deltas: DshDeltaCoalesceBuffer::default(),
             app: None,
             stop: None,
             url: None,
@@ -71,10 +232,17 @@ pub async fn bind_session(session_id: &str, binding: DshSessionBinding) {
 }
 
 pub async fn unbind_session(session_id: &str) {
-    let mut hub = mux().lock().await;
-    hub.bindings.remove(session_id);
-    hub.goal_states.remove(session_id);
-    hub.open_turns.remove(session_id);
+    let (app, flushed) = {
+        let mut hub = mux().lock().await;
+        let flushed = take_pending_delta_for_session(&mut hub, session_id);
+        hub.bindings.remove(session_id);
+        hub.goal_states.remove(session_id);
+        hub.open_turns.remove(session_id);
+        (hub.app.clone(), flushed)
+    };
+    if let (Some(app), Some((event, thread_id, item_id, turn_id))) = (app, flushed) {
+        emit_dsh_engine_event(&app, event, &thread_id, item_id, turn_id);
+    }
 }
 
 pub async fn session_has_open_turn(session_id: &str) -> bool {
@@ -197,6 +365,7 @@ pub async fn ensure_mux(client: &DshHostClient) {
 async fn run_mux_loop(url: String, mut stop: tokio::sync::oneshot::Receiver<()>) {
     loop {
         if stop.try_recv().is_ok() {
+            flush_all_pending_dsh_deltas().await;
             return;
         }
         match tokio_tungstenite::connect_async(&url).await {
@@ -204,10 +373,24 @@ async fn run_mux_loop(url: String, mut stop: tokio::sync::oneshot::Receiver<()>)
                 log::info!("[dsh] mux connected {url}");
                 let (mut sink, mut stream) = stream.split();
                 loop {
+                    let flush_delay = {
+                        let hub = mux().lock().await;
+                        next_dsh_delta_flush_delay(&hub.pending_deltas, Instant::now())
+                    };
                     tokio::select! {
                         _ = &mut stop => {
+                            flush_all_pending_dsh_deltas().await;
                             let _ = sink.close().await;
                             return;
+                        }
+                        _ = async {
+                            if let Some(delay) = flush_delay {
+                                tokio::time::sleep(delay).await;
+                            } else {
+                                std::future::pending::<()>().await;
+                            }
+                        } => {
+                            flush_expired_dsh_deltas().await;
                         }
                         next = stream.next() => {
                             match next {
@@ -220,9 +403,13 @@ async fn run_mux_loop(url: String, mut stop: tokio::sync::oneshot::Receiver<()>)
                                     }
                                 }
                                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {}
-                                Some(Ok(Message::Close(_))) | None => break,
+                                Some(Ok(Message::Close(_))) | None => {
+                                    flush_all_pending_dsh_deltas().await;
+                                    break;
+                                }
                                 Some(Err(error)) => {
                                     log::warn!("[dsh] mux read error: {error}");
+                                    flush_all_pending_dsh_deltas().await;
                                     break;
                                 }
                             }
@@ -235,7 +422,10 @@ async fn run_mux_loop(url: String, mut stop: tokio::sync::oneshot::Receiver<()>)
             }
         }
         tokio::select! {
-            _ = &mut stop => return,
+            _ = &mut stop => {
+                flush_all_pending_dsh_deltas().await;
+                return;
+            }
             _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
         }
     }
@@ -401,6 +591,64 @@ fn project_dsh_goal_injection(
     }]
 }
 
+fn emit_dsh_engine_event(
+    app: &AppHandle,
+    event: EngineEvent,
+    thread_id: &str,
+    item_id: String,
+    turn_id: Option<String>,
+) {
+    if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
+        &event,
+        thread_id,
+        &item_id,
+        turn_id.as_deref(),
+    ) {
+        let _ = app.emit("app-server-event", payload);
+    }
+}
+
+fn take_pending_delta_for_session(
+    hub: &mut MuxHub,
+    session_id: &str,
+) -> Option<DshEmitReady> {
+    let matches = hub
+        .pending_deltas
+        .pending
+        .as_ref()
+        .is_some_and(|pending| pending.session_id == session_id);
+    if !matches {
+        return None;
+    }
+    hub.pending_deltas.pending.take().map(pending_to_ready)
+}
+
+async fn flush_expired_dsh_deltas() {
+    let (app, flushed) = {
+        let mut hub = mux().lock().await;
+        (
+            hub.app.clone(),
+            take_expired_dsh_delta(&mut hub.pending_deltas, Instant::now()),
+        )
+    };
+    if let (Some(app), Some((event, thread_id, item_id, turn_id))) = (app, flushed) {
+        emit_dsh_engine_event(&app, event, &thread_id, item_id, turn_id);
+    }
+}
+
+async fn flush_all_pending_dsh_deltas() {
+    let (app, flushed) = {
+        let mut hub = mux().lock().await;
+        (
+            hub.app.clone(),
+            hub.pending_deltas.pending.take().map(pending_to_ready),
+        )
+    };
+    if let (Some(app), Some((event, thread_id, item_id, turn_id))) = (app, flushed) {
+        emit_dsh_engine_event(&app, event, &thread_id, item_id, turn_id);
+    }
+}
+
 async fn dispatch_mux_text(text: &str) {
     let Ok(raw) = serde_json::from_str::<Value>(text) else {
         return;
@@ -408,7 +656,7 @@ async fn dispatch_mux_text(text: &str) {
     let session_id = peek_mux_session_id(&raw).unwrap_or_default();
     let (frame, rpc_id) = unwrap_mux_envelope(&raw);
     let frame_type = frame.get("type").and_then(Value::as_str).unwrap_or("");
-    let (binding, app, events) = {
+    let (app, ready) = {
         let mut hub = mux().lock().await;
         if session_id.is_empty() || !hub.bindings.contains_key(&session_id) {
             return;
@@ -453,24 +701,26 @@ async fn dispatch_mux_text(text: &str) {
             projected,
             &binding.workspace_id,
         );
+        let mut ready = push_dsh_coalesced_events(
+            &mut hub.pending_deltas,
+            &session_id,
+            &binding,
+            events,
+            Instant::now(),
+        );
         if should_unbind {
+            if let Some(pending) = take_pending_delta_for_session(&mut hub, &session_id) {
+                ready.push(pending);
+            }
             hub.bindings.remove(&session_id);
             hub.goal_states.remove(&session_id);
             hub.open_turns.remove(&session_id);
         }
-        (binding, app, events)
+        (app, ready)
     };
 
-    for event in events {
-        let item_id = item_id_for_event(&event, &binding, &session_id);
-        if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
-            &event,
-            &binding.thread_id,
-            &item_id,
-            binding.turn_id.as_deref(),
-        ) {
-            let _ = app.emit("app-server-event", payload);
-        }
+    for (event, thread_id, item_id, turn_id) in ready {
+        emit_dsh_engine_event(&app, event, &thread_id, item_id, turn_id);
     }
 }
 
@@ -1608,5 +1858,172 @@ mod tests {
             }
             other => panic!("expected Raw session stats, got {other:?}"),
         }
+    }
+
+    fn text_delta(text: &str) -> EngineEvent {
+        EngineEvent::TextDelta {
+            workspace_id: "ws-1".to_string(),
+            text: text.to_string(),
+        }
+    }
+
+    fn reasoning_delta(text: &str) -> EngineEvent {
+        EngineEvent::ReasoningDelta {
+            workspace_id: "ws-1".to_string(),
+            text: text.to_string(),
+        }
+    }
+
+    fn tool_started() -> EngineEvent {
+        EngineEvent::ToolStarted {
+            workspace_id: "ws-1".to_string(),
+            tool_id: "call-1".to_string(),
+            tool_name: "read".to_string(),
+            input: None,
+        }
+    }
+
+    #[test]
+    fn coalesces_consecutive_text_deltas_until_window_expires() {
+        let mut buffer = DshDeltaCoalesceBuffer::default();
+        let now = Instant::now();
+        let ready = push_dsh_coalesced_events(
+            &mut buffer,
+            "session-1",
+            &binding(),
+            vec![text_delta("Hel"), text_delta("lo")],
+            now,
+        );
+        assert!(ready.is_empty(), "same-window text deltas stay buffered");
+        assert_eq!(buffer.pending.as_ref().map(|pending| pending.text.as_str()), Some("Hello"));
+
+        let ready = take_expired_dsh_delta(&mut buffer, now + DSH_DELTA_COALESCE_WINDOW);
+        match ready.as_ref() {
+            Some((EngineEvent::TextDelta { text, .. }, thread_id, item_id, turn_id)) => {
+                assert_eq!(text, "Hello");
+                assert_eq!(thread_id, "dsh:session-1");
+                assert_eq!(item_id, "item-1");
+                assert_eq!(turn_id.as_deref(), Some("turn-1"));
+            }
+            other => panic!("expected flushed text delta, got {other:?}"),
+        }
+        assert!(buffer.pending.is_none());
+    }
+
+    #[test]
+    fn coalesces_reasoning_deltas_on_their_own_item() {
+        let mut buffer = DshDeltaCoalesceBuffer::default();
+        let now = Instant::now();
+        let ready = push_dsh_coalesced_events(
+            &mut buffer,
+            "session-1",
+            &binding(),
+            vec![reasoning_delta("think "), reasoning_delta("hard")],
+            now,
+        );
+        assert!(ready.is_empty());
+        assert_eq!(
+            buffer.pending.as_ref().map(|pending| pending.text.as_str()),
+            Some("think hard")
+        );
+        assert_eq!(
+            buffer.pending.as_ref().map(|pending| pending.item_id.as_str()),
+            Some("dsh-reasoning-turn-1")
+        );
+    }
+
+    #[test]
+    fn non_delta_event_flushes_pending_then_emits_itself() {
+        let mut buffer = DshDeltaCoalesceBuffer::default();
+        let now = Instant::now();
+        let ready = push_dsh_coalesced_events(
+            &mut buffer,
+            "session-1",
+            &binding(),
+            vec![text_delta("Hi"), tool_started()],
+            now,
+        );
+        assert_eq!(ready.len(), 2);
+        assert!(matches!(
+            &ready[0],
+            (EngineEvent::TextDelta { text, .. }, _, _, _) if text == "Hi"
+        ));
+        assert!(matches!(&ready[1], (EngineEvent::ToolStarted { tool_id, .. }, _, item_id, _) if tool_id == "call-1" && item_id == "call-1"));
+        assert!(buffer.pending.is_none());
+    }
+
+    #[test]
+    fn switching_delta_kind_flushes_the_previous_buffer() {
+        let mut buffer = DshDeltaCoalesceBuffer::default();
+        let now = Instant::now();
+        let ready = push_dsh_coalesced_events(
+            &mut buffer,
+            "session-1",
+            &binding(),
+            vec![text_delta("out"), reasoning_delta("in")],
+            now,
+        );
+        assert_eq!(ready.len(), 1);
+        assert!(matches!(
+            &ready[0],
+            (EngineEvent::TextDelta { text, .. }, _, _, _) if text == "out"
+        ));
+        assert_eq!(
+            buffer.pending.as_ref().map(|pending| pending.text.as_str()),
+            Some("in")
+        );
+    }
+
+    #[test]
+    fn take_pending_delta_for_session_only_flushes_matching_session() {
+        let mut hub = MuxHub {
+            bindings: HashMap::new(),
+            goal_states: HashMap::new(),
+            turn_waiters: HashMap::new(),
+            open_turns: HashMap::new(),
+            pending_questions: HashMap::new(),
+            pending_deltas: DshDeltaCoalesceBuffer::default(),
+            app: None,
+            stop: None,
+            url: None,
+        };
+        let now = Instant::now();
+        let _ = push_dsh_coalesced_events(
+            &mut hub.pending_deltas,
+            "session-keep",
+            &binding(),
+            vec![text_delta("keep")],
+            now,
+        );
+        assert!(take_pending_delta_for_session(&mut hub, "session-other").is_none());
+        let flushed = take_pending_delta_for_session(&mut hub, "session-keep");
+        assert!(matches!(
+            flushed.as_ref(),
+            Some((EngineEvent::TextDelta { text, .. }, _, _, _)) if text == "keep"
+        ));
+        assert!(hub.pending_deltas.pending.is_none());
+    }
+
+    #[test]
+    fn size_cap_flushes_without_waiting_for_the_time_window() {
+        let mut buffer = DshDeltaCoalesceBuffer::default();
+        let now = Instant::now();
+        let first = "x".repeat(DSH_DELTA_COALESCE_MAX_BYTES - 1);
+        let ready = push_dsh_coalesced_events(
+            &mut buffer,
+            "session-1",
+            &binding(),
+            vec![text_delta(&first), text_delta("yz")],
+            now,
+        );
+        assert_eq!(ready.len(), 1);
+        match &ready[0] {
+            (EngineEvent::TextDelta { text, .. }, _, _, _) => {
+                assert_eq!(text.len(), DSH_DELTA_COALESCE_MAX_BYTES + 1);
+                assert!(text.ends_with("xyz"));
+            }
+            other => panic!("expected size-cap flush, got {other:?}"),
+        }
+        assert!(buffer.pending.is_none());
     }
 }

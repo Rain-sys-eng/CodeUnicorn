@@ -81,6 +81,7 @@ status: active
 - [`perf/README.md`](perf/README.md)
 - [`perf/pr-1092-performance-retrospective.md`](perf/pr-1092-performance-retrospective.md) — PR #1092 性能复盘：主因、解法、防再犯
 - [`analysis/workspace-switch-session-catalog-performance-regression-2026-08-08.md`](analysis/workspace-switch-session-catalog-performance-regression-2026-08-08.md) — workspace navigation exhaustive catalog scan 根因、版本归因与闭环修复指南
+- [`analysis/dsh-k3-long-goal-client-stall-2026-08-21.md`](analysis/dsh-k3-long-goal-client-stall-2026-08-21.md) — DSH k3 超长 goal：host 仍活、客户端假死；mux coalesce 最小修复与后续缺口
 - [`perf/render-jank-knife-experiments-2026-07-08.md`](perf/render-jank-knife-experiments-2026-07-08.md)
 - [`perf/streaming-render-stall-design-2026-07-30.md`](perf/streaming-render-stall-design-2026-07-30.md)
 
