@@ -1,4 +1,9 @@
 {
+  "[rust]": {
+    "editor.formatOnSave": false,
+    "editor.formatOnPaste": false
+  },
+  "rust-analyzer.rustfmt.extraArgs": ["--edition", "2021"],
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {

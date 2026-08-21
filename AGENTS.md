@@ -97,6 +97,12 @@
 - 高风险文件冲突时，禁止整文件 `--ours` / `--theirs` 覆盖。
 - 必须先列 capability matrix，再做 semantic merge，并验证关键 symbol / tests / contract command。
 
+### Rust Format Gate
+
+- `src-tauri` 提交树不是 rustfmt-clean。禁止全仓 `cargo fmt`。禁止对含 `mod foo;` 的 `lib.rs` / `mod.rs` 跑 rustfmt（稳定版会顺着 child module 重排整棵 crate；`skip_children` 仅 nightly）。
+- 若必须格式化，只对本次改动的叶子 `.rs`：`rustfmt --edition 2021 path.rs`
+- 细则：`dev-guidelines/backend/quality-guidelines.md`（Rust Format）。配置：`src-tauri/rustfmt.toml`、`.vscode/settings.json`。
+
 ### Shell Baseline
 
 - 遇到 `command not found`，先执行：

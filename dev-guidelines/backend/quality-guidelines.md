@@ -13,6 +13,21 @@
 - 新增 command 但遗漏 `command_registry.rs` 注册。
 - 命令参数改名后不更新 `src/services/tauri.ts`。
 - 破坏幂等性导致 retry 重放污染。
+- 对 `src-tauri` 跑全仓 `cargo fmt`，或对含 `mod foo;` 的 `lib.rs` / `mod.rs` 跑 rustfmt（稳定版会顺着 child module 重排整棵 crate；`skip_children` 仅 nightly）。
+
+## Rust Format
+
+提交树未做过全仓 rustfmt。本地稳定版 rustfmt 默认顺着 `mod` 往下走，格式化 `lib.rs` 或任意 `mod.rs` 会把无关模块一并重排进工作区。`skip_children` 是 nightly-only，不能当闸门。
+
+- 配置源：`src-tauri/rustfmt.toml`（edition 2021、不重排 `mod` / import）。
+- 编辑器：`.vscode/settings.json` 关闭 Rust `formatOnSave` / `formatOnPaste`。
+- 必须格式化时只动本次改过的**叶子**文件（文件里不要有会解析到磁盘的 `mod foo;`）：
+
+```bash
+rustfmt --edition 2021 src-tauri/src/path/to/changed.rs
+```
+
+- 全仓 fmt 只能单独开纯格式 PR。
 
 ## 推荐验证命令
 
