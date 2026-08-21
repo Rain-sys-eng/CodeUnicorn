@@ -1,5 +1,32 @@
 # Learnings
 
+## [LRN-20260821-001] user_feedback
+
+**Logged**: 2026-08-21T16:36:56Z
+**Priority**: medium
+**Status**: resolved
+**Area**: frontend
+
+### Summary
+首页 composer 下方的工作区选择器会被一条空的 `composer-branch-row` 撑开。
+
+### Details
+`Composer` 在 `selectedEngine === "dsh"` 时无条件渲染 `.composer-branch-row`（`min-height: 28px`）。首页把分支/用量指示器交给 `HomeChat` 自己渲染，并关闭 `footerUsageIndicatorEnabled`，但 DSH 条件仍会留下空行。`DshSessionStatsLine` 在无 session stats 时返回 `null`，空壳高度却还在。Home 工作区选择器原先还有 `margin-top: 10px`，叠加后空隙更明显。
+
+### Suggested Action
+分支行只在有真实内容时渲染：branch badge、footer usage、shared collab slot，或 `deriveDshSessionStatsLine(usage) != null`。首页工作区选择器贴近 composer，不要预留会话态 footer 间距。
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/features/composer/components/Composer.tsx, src/styles/home-chat.css, src/features/composer/components/Composer.context-dual-view.test.tsx
+- Tags: homepage, composer, dsh, empty-row
+
+### Resolution
+- **Resolved**: 2026-08-21T16:36:56Z
+- **Notes**: Homepage create-session DSH path no longer mounts an empty branch row; meta spacing tightened to 4px.
+
+---
+
 ## [LRN-20260817-009] user_feedback
 
 **Logged**: 2026-08-17T22:55:00+08:00

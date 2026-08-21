@@ -51,6 +51,7 @@ import { persistSharedSessionSelectedTarget } from "../../shared-session/service
 import { shouldSuppressSharedTargetPersistToast } from "../../shared-session/target/sharedTargetPersistErrors";
 import { resolveComposerAtomicSelectedModelId } from "../utils/resolveComposerAtomicSelectedModelId";
 import { resolveDefaultCreationExecutionTarget } from "../utils/resolveDefaultCreationExecutionTarget";
+import { deriveDshSessionStatsLine } from "../utils/dshSessionStats";
 import {
   resolveDshAtomicCatalogIdForSend,
   resolveDshNativeRuntimeModel,
@@ -3126,6 +3127,15 @@ function ComposerImpl({
   // 所有 provider 的上下文占用入口统一渲染在输入框下方分支行右侧；
   // Codex 继续使用 dual-view ContextBar，保留 tooltip 与 compaction controls。
   const showFooterUsageIndicator = footerUsageIndicatorEnabled;
+  const composerFooterEngine = selectedAtomicTarget?.engine ?? selectedEngine;
+  const showDshSessionStatsLine =
+    composerFooterEngine === "dsh" &&
+    deriveDshSessionStatsLine(contextUsage) != null;
+  const showComposerBranchRow =
+    Boolean(branchControl?.branchName) ||
+    showFooterUsageIndicator ||
+    isSharedSessionResolved ||
+    showDshSessionStatsLine;
   const footerUsagePercentage =
     resolvedLegacyContextUsage && resolvedLegacyContextUsage.total > 0
       ? Math.round(
@@ -3789,15 +3799,12 @@ function ComposerImpl({
               completionEmailDisabled={completionEmailDisabled}
               onToggleCompletionEmail={onToggleCompletionEmail}
             />
-            {branchControl?.branchName ||
-            showFooterUsageIndicator ||
-            isSharedSessionResolved ||
-            selectedEngine === "dsh" ? (
+            {showComposerBranchRow ? (
               <div className="composer-branch-row">
                 {branchControl?.branchName ? (
                   <ComposerBranchBadge {...branchControl} />
                 ) : null}
-                {selectedEngine === "dsh" ? (
+                {showDshSessionStatsLine ? (
                   <DshSessionStatsLine usage={contextUsage} />
                 ) : null}
                 {showFooterUsageIndicator || isSharedSessionResolved ? (
