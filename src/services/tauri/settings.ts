@@ -28,6 +28,88 @@ export async function updateAppSettings(settings: AppSettings): Promise<AppSetti
   return invoke<AppSettings>("update_app_settings", { settings });
 }
 
+export type ImportedWorkspaceWallpaper = {
+  id: string;
+  kind: "image" | "video";
+  path: string;
+  sourcePath: string;
+};
+
+export async function importWorkspaceWallpaper(
+  sourcePath: string,
+): Promise<ImportedWorkspaceWallpaper> {
+  return invoke<ImportedWorkspaceWallpaper>("import_workspace_wallpaper", {
+    sourcePath,
+  });
+}
+
+export async function removeWorkspaceWallpaper(path: string): Promise<void> {
+  await invoke<void>("remove_workspace_wallpaper", { path });
+}
+
+export async function readWorkspaceWallpaperPreview(
+  path: string,
+): Promise<string> {
+  return invoke<string>("read_workspace_wallpaper_preview", { path });
+}
+
+export async function readWorkspaceWallpaperBytes(
+  path: string,
+): Promise<Uint8Array> {
+  const payload = await invoke<ArrayBuffer | number[] | Uint8Array>(
+    "read_workspace_wallpaper_bytes",
+    { path },
+  );
+  if (payload instanceof ArrayBuffer) {
+    return new Uint8Array(payload);
+  }
+  if (payload instanceof Uint8Array) {
+    return payload;
+  }
+  if (Array.isArray(payload)) {
+    return Uint8Array.from(payload);
+  }
+  throw new Error("Wallpaper bytes payload is not binary.");
+}
+
+export type WallpaperMarketCategory = "all" | "general" | "anime" | "people";
+
+export type WallpaperMarketItem = {
+  id: string;
+  thumbUrl: string;
+  fullUrl: string;
+  sourceUrl: string;
+  resolution: string;
+  category: string;
+};
+
+export type WallpaperMarketSearchResult = {
+  page: number;
+  lastPage: number;
+  items: WallpaperMarketItem[];
+};
+
+export async function searchWorkspaceWallpaperMarket(input: {
+  query?: string;
+  category?: WallpaperMarketCategory;
+  page?: number;
+}): Promise<WallpaperMarketSearchResult> {
+  return invoke<WallpaperMarketSearchResult>(
+    "search_workspace_wallpaper_market",
+    { query: input },
+  );
+}
+
+export async function downloadWorkspaceWallpaper(input: {
+  url: string;
+  sourceUrl: string;
+  suggestedName?: string;
+}): Promise<ImportedWorkspaceWallpaper> {
+  return invoke<ImportedWorkspaceWallpaper>("download_workspace_wallpaper", {
+    request: input,
+  });
+}
+
 export async function getCodexUnifiedExecExternalStatus(): Promise<CodexUnifiedExecExternalStatus> {
   return invoke<CodexUnifiedExecExternalStatus>(
     "get_codex_unified_exec_external_status",

@@ -189,6 +189,7 @@ mod types;
 mod utils;
 mod vendors;
 mod web_service;
+mod workspace_wallpaper;
 mod window;
 #[cfg(any(test, target_os = "windows"))]
 mod windows_f5_reload_guard;

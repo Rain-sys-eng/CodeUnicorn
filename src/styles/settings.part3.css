@@ -54,8 +54,8 @@
   color-scheme: light;
   --settings-basic-text: #171b23;
   --settings-basic-text-muted: rgba(23, 27, 35, 0.68);
-  --settings-basic-surface: rgba(255, 255, 255, 0.94);
-  --settings-basic-surface-strong: rgba(246, 248, 252, 0.94);
+  --settings-basic-surface: rgba(255, 255, 255, 0.58);
+  --settings-basic-surface-strong: rgba(246, 248, 252, 0.62);
   --settings-basic-border: rgba(15, 23, 36, 0.12);
   --settings-basic-divider: rgba(15, 23, 36, 0.09);
   --settings-basic-control: rgba(15, 23, 36, 0.08);
@@ -89,8 +89,8 @@
     color-scheme: light;
     --settings-basic-text: #171b23;
     --settings-basic-text-muted: rgba(23, 27, 35, 0.68);
-    --settings-basic-surface: rgba(255, 255, 255, 0.94);
-    --settings-basic-surface-strong: rgba(246, 248, 252, 0.94);
+    --settings-basic-surface: rgba(255, 255, 255, 0.58);
+    --settings-basic-surface-strong: rgba(246, 248, 252, 0.62);
     --settings-basic-border: rgba(15, 23, 36, 0.12);
     --settings-basic-divider: rgba(15, 23, 36, 0.09);
     --settings-basic-control: rgba(15, 23, 36, 0.08);
