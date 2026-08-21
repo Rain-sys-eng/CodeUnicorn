@@ -3036,6 +3036,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           ownerSurface="main-split-browser-dock"
           displayMode="embedded"
           className="browser-agent-center-panel-dock"
+          onClosePanel={options.onCloseBrowserDock}
         />
       </Suspense>
     ) : null;

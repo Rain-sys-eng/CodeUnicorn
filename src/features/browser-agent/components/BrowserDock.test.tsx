@@ -360,4 +360,24 @@ describe("BrowserDock", () => {
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
     expect(screen.getByRole("tab", { name: /Two/i })).toBeTruthy();
   });
+
+  it("renders a panel close control only when onClosePanel is provided", async () => {
+    const onClosePanel = vi.fn();
+    const { rerender } = render(
+      <BrowserDock workspaceId="workspace-1" enabled />,
+    );
+    await waitFor(() => expect(screen.getByRole("tablist")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Close Browser Dock" })).toBeNull();
+
+    rerender(
+      <BrowserDock
+        workspaceId="workspace-1"
+        enabled
+        onClosePanel={onClosePanel}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close Browser Dock" }));
+    expect(onClosePanel).toHaveBeenCalledTimes(1);
+  });
 });

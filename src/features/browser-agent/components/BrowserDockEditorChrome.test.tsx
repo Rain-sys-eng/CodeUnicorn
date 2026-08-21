@@ -208,6 +208,19 @@ describe("BrowserDockEditorChrome", () => {
     expect(tabBar).toBeTruthy();
     expect(tabBar?.querySelector(".browser-agent-dock-icon")).toBeNull();
     expect(tabBar?.querySelector(".browser-agent-editor-attach")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close Browser Dock" })).toBeNull();
+  });
+
+  it("shows a tab-bar close control when onClosePanel is provided", () => {
+    const onClosePanel = vi.fn();
+    renderChrome({ onClosePanel });
+
+    const closeButton = screen.getByRole("button", { name: "Close Browser Dock" });
+    const tabBar = document.querySelector(".browser-agent-editor-tabbar");
+    expect(tabBar?.contains(closeButton)).toBe(true);
+
+    fireEvent.click(closeButton);
+    expect(onClosePanel).toHaveBeenCalledTimes(1);
   });
 
   it("invokes open from the url-bar icon", () => {

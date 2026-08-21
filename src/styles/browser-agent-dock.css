@@ -97,6 +97,29 @@
   border-radius: 0;
 }
 
+.browser-agent-editor-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: auto;
+  align-self: stretch;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.browser-agent-editor-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
 .browser-agent-editor-tab-avatar {
   display: inline-flex;
   align-items: center;
