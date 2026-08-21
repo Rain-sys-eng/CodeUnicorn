@@ -23,6 +23,7 @@ status: active
 | [`shared-provider-retry/index.html`](shared-provider-retry/index.html) | Shared 供应商失败后同一家再发一轮：倒计时 / 立即再试 / 停止，可改次数、等待和话术 | 浏览器打开，点右侧失败类型和设置 |
 | [`runtime-model-identity/05-receipt-r-mark.html`](runtime-model-identity/05-receipt-r-mark.html) | 采纳稿 B：Shared turn badge 前半 picker 不动；后半高亮 `→` + 圆形 R + runtime 模型/窗口 | 浏览器打开，点回执下滑 |
 | [`prompt-enhancer-redesign/index.html`](prompt-enhancer-redesign/index.html) | Composer「增强提示词」方案 A 定稿：并排对照；引擎只显示供应商设置已启用 CLI（`disabledCliEngines`） | 浏览器打开，左侧模拟启停引擎，再点开始增强 |
+| [`pi-native-features/index.html`](pi-native-features/index.html) | Pi 接入设计稿（真壳 base：真实 CSS @import + 运行时 DOM dump）：4 共同分叉（mossx 级 fork UX）/ 1 侧栏树 / 2 沉浸树 / 3 内嵌分叉；跨引擎调研见 `docs/research/session-fork-tree-cross-engine-capability.md`；幕布不动 | 浏览器打开 gallery |
 
 存量 `docs/previews/`、`docs/prototypes/` 因高 fan-out 引用暂不搬迁。新设计稿一律进本目录，不要放仓库根 `designs/` 或 `.artifacts/`。
 
