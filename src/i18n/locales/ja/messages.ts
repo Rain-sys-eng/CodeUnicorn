@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "取り消し",
       "revertAllConfirmTitle": "すべての変更を取り消し",
       "revertAllConfirmBody":
-        "{{count}} 個のファイルのローカル変更を破棄し、最新のコミットに戻します。この操作は元に戻せません。",
+        "{{count}} 個のファイルの未ステージのローカル変更を破棄し、インデックス（ステージがなければ HEAD）に戻します。ステージ済みの変更は残ります。この操作は元に戻せません。",
       "revertAllConfirmAction": "すべて取り消す",
       "revertFileConfirmTitle": "ファイル変更を取り消し",
       "revertFileConfirmBody":
-        "「{{path}}」のローカル変更を破棄し、最新のコミットに戻します。この操作は元に戻せません。",
+        "「{{path}}」の未ステージのローカル変更を破棄し、インデックス（ステージがなければ HEAD）に戻します。ステージ済みの変更は残ります。この操作は元に戻せません。",
       "revertFileConfirmAction": "取り消す"
     },
     "noThinkingContent": "思考内容がありません",

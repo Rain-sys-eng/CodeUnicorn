@@ -78,6 +78,22 @@ export type WorkspaceWallpaperFluidMotion =
   | "tornado"
   | "chase";
 
+export type WorkspaceWallpaperLibraryKind = "image" | "video";
+
+export type WorkspaceWallpaperObjectFit =
+  | "cover"
+  | "contain"
+  | "center"
+  | "fill";
+
+export type WorkspaceWallpaperLibraryItem = {
+  id: string;
+  kind: WorkspaceWallpaperLibraryKind;
+  path: string;
+  sourcePath?: string | null;
+  hidden?: boolean;
+};
+
 export type WorkspaceWallpaperSettings = {
   mode: WorkspaceWallpaperMode;
   customImagePath: string | null;
@@ -85,6 +101,18 @@ export type WorkspaceWallpaperSettings = {
   fluidMotion?: WorkspaceWallpaperFluidMotion;
   /** Frost blur in px, 0–20. Default 12. Reuses the old veil slider field. */
   veilOpacity?: number;
+  library?: WorkspaceWallpaperLibraryItem[];
+  selectedLibraryId?: string | null;
+  /** Media-layer blur in px, 0–40. Default 0. */
+  wallpaperBlur?: number;
+  /** Media-layer darken in percent, 0–80. Default 0. */
+  wallpaperDarken?: number;
+  playbackRate?: number;
+  flip?: boolean;
+  objectFit?: WorkspaceWallpaperObjectFit;
+  paused?: boolean;
+  rotationEnabled?: boolean;
+  rotationIntervalMinutes?: number;
 };
 
 export type ComposerEditorSettings = {

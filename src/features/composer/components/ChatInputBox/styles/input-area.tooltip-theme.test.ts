@@ -17,6 +17,28 @@ function getCssRule(css: string, selector: string): string {
   return css.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "s"))?.[1] ?? "";
 }
 
+describe("composer input-area scrollbar", () => {
+  it("clips horizontal overflow and hides the horizontal native bar", () => {
+    const rule = getCssRule(inputAreaCss, ".input-editable-wrapper");
+    const horizontalBarRule = getCssRule(
+      inputAreaCss,
+      ".input-editable-wrapper::-webkit-scrollbar:horizontal",
+    );
+
+    expect(rule).toContain("overflow-x: clip;");
+    expect(rule).toContain("overflow-y: auto;");
+    expect(rule).toContain("min-width: 0;");
+    expect(horizontalBarRule).toContain("display: none;");
+    expect(horizontalBarRule).toContain("height: 0;");
+  });
+
+  it("does not keep a local thick composer scrollbar; thin chrome comes from .scrollable", () => {
+    expect(inputAreaCss).not.toMatch(
+      /\.input-editable-wrapper::-webkit-scrollbar\s*\{[^}]*width:\s*4px/s,
+    );
+  });
+});
+
 describe("composer portal tooltip / dropdown theme fallbacks", () => {
   it("uses theme-aware surfaces for tool-menu CSS tooltips (mail / live / enhance)", () => {
     // Regression: DropdownMenuContent portals to body, so these tooltips only

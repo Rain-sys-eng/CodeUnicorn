@@ -186,11 +186,11 @@ const git = {
       "Discard changes in these files?\n\n{{preview}}{{more}}\n\nThis cannot be undone.",
     discardConfirmTitle: "Discard changes",
     discardDialogBeginnerLead:
-      "You are about to discard local edits in these files.",
+      "You are about to discard unstaged edits in these files. Staged changes will be kept.",
     discardDialogAffectsLabel:
-      "The following files will be reset to the last commit:",
+      "Unstaged changes in the following files will be restored to the index (or HEAD if nothing is staged):",
     discardDialogBeginnerHint:
-      "If you need these edits, commit or stash first.",
+      "If you need the unstaged edits, stage, commit, or stash first.",
     discardDialogConfirmAction: "Confirm discard",
     andMore: "and {{count}} more",
     enterCommitMessage: "Enter a commit message",

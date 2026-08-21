@@ -68,6 +68,11 @@ describe("workspace wallpaper styles", () => {
       ':root[data-platform="windows"] .workspace-wallpaper::after',
     );
     expect(css).toContain(".workspace-wallpaper::after");
+    expect(css).toContain(".workspace-wallpaper::before");
+    expect(css).toContain("--workspace-wallpaper-media-blur");
+    expect(css).toContain("--workspace-wallpaper-darken");
+    expect(css).toContain("--workspace-wallpaper-object-fit");
+    expect(css).toContain("--workspace-wallpaper-flip");
     expect(css).toContain("backdrop-filter: none;");
     expect(css).toContain(
       ":root[data-workspace-wallpaper] .app {\n  position: relative;\n  z-index: 1;\n}",
@@ -96,6 +101,68 @@ describe("workspace wallpaper styles", () => {
     expect(css).toContain(".home-titlebar-drag-strip");
     expect(css).toContain(
       ":root[data-workspace-wallpaper] .home-titlebar-drag-strip {\n  pointer-events: auto;\n}",
+    );
+    expect(css).toContain(
+      ":root[data-workspace-wallpaper] .settings-embedded",
+    );
+    expect(css).toContain(
+      ":root[data-workspace-wallpaper] .main.settings-open > .settings-embedded",
+    );
+    expect(css).toContain(
+      ":root[data-workspace-wallpaper] .settings-content-wrap",
+    );
+    expect(css).toContain(
+      ":root[data-workspace-wallpaper][data-theme=\"light\"] .settings-sidebar",
+    );
+    expect(css).not.toContain(
+      "background: color-mix(in srgb, #ffffff 72%, transparent);",
+    );
+    expect(css).not.toContain(
+      "background: color-mix(in srgb, #ffffff 78%, transparent);",
+    );
+    expect(css).toContain(
+      ":root[data-workspace-wallpaper] .settings-section-basic .settings-basic-group-card",
+    );
+    expect(css).toContain(
+      "background: color-mix(in srgb, #ffffff 34%, transparent);",
+    );
+    expect(css).toContain("backdrop-filter: blur(22px) saturate(1.28);");
+    expect(css).toContain(
+      ':root[data-platform="windows"][data-workspace-wallpaper] .settings-section-basic .settings-basic-group-card',
+    );
+    expect(css).toContain("--message-inline-code-bg: color-mix(");
+    expect(css).toContain("var(--workspace-wallpaper-wash, #ededf0) 38%");
+    expect(css).toContain("var(--workspace-wallpaper-wash, #ededf0) 44%");
+    expect(css).toContain(
+      ":root[data-workspace-wallpaper] :is(.message, .thinking-block) .markdown-codeblock",
+    );
+    expect(css).toContain(
+      ":root[data-workspace-wallpaper] :is(.message, .thinking-block) .markdown :not(pre) > code",
+    );
+    expect(css).not.toContain(
+      ":root[data-workspace-wallpaper] :is(.message, .thinking-block) .markdown-codeblock {\n  backdrop-filter:",
+    );
+  });
+
+  it("keeps opaque markdown code surfaces when wallpaper is off", () => {
+    const css = readFileSync(
+      resolve(process.cwd(), "src/styles/messages.part2.css"),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
+    expect(css).toContain("--message-inline-code-bg: var(--muted);");
+    expect(css).toContain("--message-codeblock-bg: var(--muted);");
+    expect(css).not.toContain("data-workspace-wallpaper");
+  });
+
+  it("allows Tauri asset.localhost previews in CSP", () => {
+    const csp = JSON.parse(
+      readFileSync(resolve(process.cwd(), "src-tauri/tauri.conf.json"), "utf8"),
+    ).app.security.csp as string;
+    expect(csp).toContain("http://asset.localhost");
+    expect(csp).toContain("https://asset.localhost");
+    expect(csp).toContain("img-src");
+    expect(csp).toContain(
+      "media-src 'self' asset: data: blob: http://asset.localhost https://asset.localhost",
     );
   });
 });

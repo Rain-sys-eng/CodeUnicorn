@@ -34,6 +34,13 @@ describe("ChatInputBox submit button", () => {
     cleanup();
   });
 
+  it("opts the editable wrapper into the shared thin scrollbar", () => {
+    render(<ChatInputBox showHeader={false} />);
+
+    const wrapper = document.querySelector(".input-editable-wrapper");
+    expect(wrapper?.classList.contains("scrollable")).toBe(true);
+  });
+
   it("enables the send button immediately after plain text input", () => {
     render(<ChatInputBox showHeader={false} />);
 

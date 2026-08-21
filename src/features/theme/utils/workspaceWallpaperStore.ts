@@ -2,6 +2,7 @@ import type { WorkspaceWallpaperSettings } from "../../../types";
 import {
   DEFAULT_WORKSPACE_WALLPAPER,
   sanitizeWorkspaceWallpaper,
+  workspaceWallpaperSnapshotKey,
 } from "./workspaceWallpaper";
 
 type Listener = () => void;
@@ -34,13 +35,7 @@ export function publishWorkspaceWallpaper(
   // from a real settings load/save, so later seeds must not overwrite it.
   seeded = true;
   const next = sanitizeWorkspaceWallpaper(value);
-  if (
-    snapshot.mode === next.mode &&
-    snapshot.customImagePath === next.customImagePath &&
-    snapshot.fluidPreset === next.fluidPreset &&
-    snapshot.fluidMotion === next.fluidMotion &&
-    snapshot.veilOpacity === next.veilOpacity
-  ) {
+  if (workspaceWallpaperSnapshotKey(snapshot) === workspaceWallpaperSnapshotKey(next)) {
     return snapshot;
   }
   snapshot = next;

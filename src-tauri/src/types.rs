@@ -1501,6 +1501,18 @@ fn default_layout_mode() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceWallpaperLibraryItem {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) path: String,
+    #[serde(default)]
+    pub(crate) source_path: Option<String>,
+    #[serde(default)]
+    pub(crate) hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceWallpaperSettings {
     #[serde(default = "default_workspace_wallpaper_mode")]
     pub(crate) mode: String,
@@ -1512,6 +1524,26 @@ pub(crate) struct WorkspaceWallpaperSettings {
     pub(crate) fluid_motion: String,
     #[serde(default = "default_workspace_wallpaper_veil_opacity")]
     pub(crate) veil_opacity: u8,
+    #[serde(default)]
+    pub(crate) library: Vec<WorkspaceWallpaperLibraryItem>,
+    #[serde(default)]
+    pub(crate) selected_library_id: Option<String>,
+    #[serde(default = "default_workspace_wallpaper_blur")]
+    pub(crate) wallpaper_blur: u8,
+    #[serde(default = "default_workspace_wallpaper_darken")]
+    pub(crate) wallpaper_darken: u8,
+    #[serde(default = "default_workspace_wallpaper_playback_rate")]
+    pub(crate) playback_rate: f32,
+    #[serde(default)]
+    pub(crate) flip: bool,
+    #[serde(default = "default_workspace_wallpaper_object_fit")]
+    pub(crate) object_fit: String,
+    #[serde(default)]
+    pub(crate) paused: bool,
+    #[serde(default)]
+    pub(crate) rotation_enabled: bool,
+    #[serde(default = "default_workspace_wallpaper_rotation_interval")]
+    pub(crate) rotation_interval_minutes: u16,
 }
 
 fn default_workspace_wallpaper_mode() -> String {
@@ -1530,6 +1562,26 @@ fn default_workspace_wallpaper_veil_opacity() -> u8 {
     12
 }
 
+fn default_workspace_wallpaper_blur() -> u8 {
+    0
+}
+
+fn default_workspace_wallpaper_darken() -> u8 {
+    0
+}
+
+fn default_workspace_wallpaper_playback_rate() -> f32 {
+    1.0
+}
+
+fn default_workspace_wallpaper_object_fit() -> String {
+    "cover".to_string()
+}
+
+fn default_workspace_wallpaper_rotation_interval() -> u16 {
+    30
+}
+
 fn default_workspace_wallpaper() -> WorkspaceWallpaperSettings {
     WorkspaceWallpaperSettings {
         mode: default_workspace_wallpaper_mode(),
@@ -1537,6 +1589,16 @@ fn default_workspace_wallpaper() -> WorkspaceWallpaperSettings {
         fluid_preset: default_workspace_wallpaper_fluid_preset(),
         fluid_motion: default_workspace_wallpaper_fluid_motion(),
         veil_opacity: default_workspace_wallpaper_veil_opacity(),
+        library: Vec::new(),
+        selected_library_id: None,
+        wallpaper_blur: default_workspace_wallpaper_blur(),
+        wallpaper_darken: default_workspace_wallpaper_darken(),
+        playback_rate: default_workspace_wallpaper_playback_rate(),
+        flip: false,
+        object_fit: default_workspace_wallpaper_object_fit(),
+        paused: false,
+        rotation_enabled: false,
+        rotation_interval_minutes: default_workspace_wallpaper_rotation_interval(),
     }
 }
 

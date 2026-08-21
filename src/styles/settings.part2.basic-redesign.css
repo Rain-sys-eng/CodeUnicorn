@@ -1301,7 +1301,7 @@
 .settings-section-basic .settings-basic-group-card.settings-pref-card {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--settings-basic-border) 88%, transparent);
-  background: color-mix(in srgb, var(--settings-basic-surface) 96%, var(--surface-messages) 4%);
+  background: var(--settings-basic-surface);
   box-shadow: none;
   overflow: hidden;
 }
@@ -1707,14 +1707,232 @@
 }
 
 .settings-section-basic .settings-wallpaper-custom {
-  width: min(100%, 520px);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--settings-basic-divider) 88%, transparent);
+}
+
+.settings-section-basic .settings-wallpaper-subrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--settings-basic-divider) 72%, transparent);
+}
+
+.settings-section-basic .settings-wallpaper-custom > .settings-wallpaper-subrow:first-child {
+  border-top: none;
+}
+
+.settings-section-basic .settings-pref-row--stack > .settings-wallpaper-subrow {
+  width: 100%;
+}
+
+.settings-section-basic .settings-wallpaper-current-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-section-basic .settings-wallpaper-chooser {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.settings-section-basic .settings-wallpaper-chooser:focus-visible {
+  outline: none;
+}
+
+.settings-section-basic .settings-wallpaper-chooser:focus-visible .settings-web-btn {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--settings-basic-text) 10%, transparent);
+}
+
+.settings-section-basic .settings-wallpaper-thumb {
+  display: block;
+  width: 44px;
+  height: 28px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--settings-basic-border) 88%, transparent);
+  background: color-mix(in srgb, var(--settings-basic-control) 55%, transparent);
+}
+
+.settings-section-basic .settings-wallpaper-thumb img,
+.settings-section-basic .settings-wallpaper-thumb video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-section-basic .settings-wallpaper-thumb-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--settings-basic-text-muted);
+}
+
+.settings-section-basic .settings-wallpaper-fits,
+.settings-section-basic .settings-wallpaper-rates,
+.settings-section-basic .settings-wallpaper-motions {
+  width: auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.settings-section-basic .settings-wallpaper-fits .settings-pref-segment,
+.settings-section-basic .settings-wallpaper-rates .settings-pref-segment,
+.settings-section-basic .settings-wallpaper-motions .settings-pref-segment {
+  flex: 0 0 auto;
+}
+
+.settings-section-basic .settings-wallpaper-custom .settings-pref-inline-control {
+  width: min(100%, 280px);
+  justify-content: flex-end;
+}
+
+.settings-section-basic .settings-pref-row--stack > .settings-wallpaper-subrow .settings-pref-inline-control {
+  width: min(100%, 280px);
+  justify-content: flex-end;
+}
+
+.settings-wallpaper-picker-dialog {
+  width: min(920px, calc(100% - 2rem));
+  max-width: min(920px, calc(100% - 2rem));
+  background: var(--settings-basic-surface, #fff);
+}
+
+.settings-wallpaper-picker-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-wallpaper-picker-empty {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  color: var(--settings-basic-text-muted, #6b7280);
+  font-size: 13px;
+}
+
+.settings-wallpaper-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+  max-height: min(52vh, 420px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.settings-wallpaper-picker-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-wallpaper-picker-thumb {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--settings-basic-border, #e5e7eb);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111;
+  aspect-ratio: 16 / 10;
+  cursor: pointer;
+}
+
+.settings-wallpaper-picker-card.is-active .settings-wallpaper-picker-thumb {
+  box-shadow: 0 0 0 2px var(--settings-basic-text, #111);
+}
+
+.settings-wallpaper-picker-thumb img,
+.settings-wallpaper-picker-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.settings-wallpaper-picker-kind {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 55%, transparent);
+  color: #fff;
+  font-size: 11px;
+}
+
+.settings-wallpaper-picker-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.settings-wallpaper-picker-name {
+  flex: 1 1 80px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.settings-wallpaper-market-search {
+  flex: 1 1 220px;
+  min-width: 160px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--settings-basic-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--settings-basic-surface, #fff);
+  color: var(--settings-basic-text, #111);
+  font-size: 13px;
+}
+
+.settings-wallpaper-picker-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--settings-basic-text-muted, #6b7280);
+}
+
+.settings-wallpaper-picker-empty {
+  gap: 10px;
 }
 
 .settings-section-basic .settings-wallpaper-presets {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
-  width: min(100%, 520px);
+  width: auto;
+  max-width: 100%;
 }
 
 .settings-section-basic .settings-wallpaper-swatch {
@@ -1745,40 +1963,15 @@
     0 0 0 3.5px color-mix(in srgb, var(--settings-basic-text) 55%, transparent);
 }
 
-.settings-section-basic .settings-wallpaper-motions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  width: min(100%, 520px);
-}
-
-.settings-section-basic .settings-wallpaper-motion {
-  appearance: none;
-  margin: 0;
-  border: 1px solid var(--settings-basic-border);
-  background: color-mix(in srgb, var(--settings-basic-surface) 88%, var(--settings-basic-border));
-  color: var(--settings-basic-text);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.2;
-  cursor: pointer;
-}
-
-.settings-section-basic .settings-wallpaper-motion.is-active {
-  background: var(--settings-basic-text);
-  color: var(--settings-basic-surface);
-  border-color: var(--settings-basic-text);
-}
-
 .settings-section-basic .settings-wallpaper-path {
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
+}
+
+.settings-section-basic .settings-wallpaper-subrow .settings-pref-desc {
+  min-width: 0;
 }
 
 .settings-section-basic .settings-pref-font-control {
@@ -1834,7 +2027,7 @@
 .settings-section-basic .settings-color-config-card.settings-pref-card {
   display: block;
   padding: 0;
-  background: color-mix(in srgb, var(--settings-basic-surface) 96%, var(--surface-messages) 4%);
+  background: var(--settings-basic-surface);
 }
 
 .settings-section-basic .settings-color-config-card .settings-color-config-inner {
@@ -1881,7 +2074,8 @@
   .settings-section-basic .settings-pref-row,
   .settings-section-basic .settings-pref-row--theme,
   .settings-section-basic .settings-pref-row--scale,
-  .settings-section-basic .settings-pref-row-main {
+  .settings-section-basic .settings-pref-row-main,
+  .settings-section-basic .settings-wallpaper-subrow {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     align-items: stretch;
@@ -1892,7 +2086,11 @@
   .settings-section-basic .settings-pref-scale,
   .settings-section-basic .settings-pref-font-control,
   .settings-section-basic .settings-pref-select-wrap,
-  .settings-section-basic .settings-pref-select-wrap--grow {
+  .settings-section-basic .settings-pref-select-wrap--grow,
+  .settings-section-basic .settings-wallpaper-current-control,
+  .settings-section-basic .settings-wallpaper-presets,
+  .settings-section-basic .settings-wallpaper-custom .settings-pref-inline-control,
+  .settings-section-basic .settings-pref-row--stack > .settings-wallpaper-subrow .settings-pref-inline-control {
     width: 100%;
     max-width: none;
     justify-content: stretch;
@@ -2308,7 +2506,7 @@
 .settings-section-basic .settings-email-section .settings-basic-shadcn-card {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--settings-basic-border) 88%, transparent);
-  background: color-mix(in srgb, var(--settings-basic-surface) 96%, var(--surface-messages) 4%);
+  background: var(--settings-basic-surface);
   box-shadow: none;
 }
 
@@ -3523,7 +3721,7 @@ button.settings-open-app-health:disabled {
   padding: 0 12px;
   border-radius: 9px;
   border: 1px solid color-mix(in srgb, var(--settings-basic-border) 90%, transparent);
-  background: color-mix(in srgb, var(--settings-basic-surface) 96%, var(--surface-messages) 4%);
+  background: var(--settings-basic-surface);
   color: var(--settings-basic-text);
   font-size: 13px;
   line-height: 1;

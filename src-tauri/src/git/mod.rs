@@ -2398,6 +2398,110 @@ mod tests {
         assert!(unstage_index.get_path(Path::new("c.txt"), 0).is_none());
     }
 
+    fn index_blob_text(repo_root: &Path, path: &str) -> String {
+        let repo = open_repository_at_root(repo_root).expect("open repo");
+        let index = repo.index().expect("open index");
+        let entry = index
+            .get_path(Path::new(path), 0)
+            .unwrap_or_else(|| panic!("missing index path {path}"));
+        let blob = repo.find_blob(entry.id).expect("find index blob");
+        String::from_utf8(blob.content().to_vec()).expect("index blob utf8")
+    }
+
+    #[tokio::test]
+    async fn unstaged_restore_keeps_staged_hunks_on_mixed_file() {
+        let (root, _repo) = create_temp_repo();
+        fs::write(root.join("mixed.txt"), "head\n").expect("write head content");
+        commit_all_with_message(&root, "init mixed fixture").await;
+
+        fs::write(root.join("mixed.txt"), "staged\n").expect("write staged content");
+        run_git_command(&root, &["add", "--", "mixed.txt"])
+            .await
+            .expect("stage mixed file");
+        fs::write(root.join("mixed.txt"), "unstaged\n").expect("write unstaged content");
+
+        for path in action_paths_for_file(&root, "mixed.txt", GitStatusLayer::Workdir) {
+            run_git_command(&root, &["restore", "--worktree", "--", &path])
+                .await
+                .expect("restore unstaged worktree");
+        }
+
+        assert_eq!(
+            fs::read_to_string(root.join("mixed.txt")).expect("read worktree"),
+            "staged\n"
+        );
+        assert_eq!(index_blob_text(&root, "mixed.txt"), "staged\n");
+
+        let repo = open_repository_at_root(&root).expect("open mixed repo");
+        let mut status_options = StatusOptions::new();
+        status_options.include_untracked(true).include_ignored(false);
+        let statuses = repo
+            .statuses(Some(&mut status_options))
+            .expect("collect mixed statuses");
+        let entry = statuses
+            .iter()
+            .find(|entry| entry.path() == Some("mixed.txt"))
+            .expect("mixed.txt status");
+        assert!(
+            entry.status().contains(Status::INDEX_MODIFIED),
+            "staged hunks must remain after unstaged discard"
+        );
+        assert!(
+            !entry.status().intersects(Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_NEW),
+            "working tree must match the index after unstaged discard"
+        );
+    }
+
+    #[tokio::test]
+    async fn unstaged_restore_leaves_untracked_for_clean_fallback() {
+        let (root, _repo) = create_temp_repo();
+        fs::write(root.join("tracked.txt"), "tracked\n").expect("write tracked content");
+        commit_all_with_message(&root, "init untracked fixture").await;
+        fs::write(root.join("scratch.txt"), "untracked\n").expect("write untracked file");
+
+        let restore_result =
+            run_git_command(&root, &["restore", "--worktree", "--", "scratch.txt"]).await;
+        assert!(
+            restore_result.is_err(),
+            "untracked paths should fail restore so discard can fall back to clean"
+        );
+        run_git_command(&root, &["clean", "-f", "--", "scratch.txt"])
+            .await
+            .expect("clean untracked path");
+        assert!(!root.join("scratch.txt").exists());
+        assert_eq!(
+            fs::read_to_string(root.join("tracked.txt")).expect("read tracked file"),
+            "tracked\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn revert_all_still_discards_staged_and_unstaged() {
+        let (root, _repo) = create_temp_repo();
+        fs::write(root.join("keep.txt"), "head\n").expect("write head content");
+        commit_all_with_message(&root, "init revert-all fixture").await;
+        fs::write(root.join("keep.txt"), "staged\n").expect("write staged content");
+        run_git_command(&root, &["add", "--", "keep.txt"])
+            .await
+            .expect("stage keep file");
+        fs::write(root.join("keep.txt"), "unstaged\n").expect("write unstaged content");
+        fs::write(root.join("scratch.txt"), "untracked\n").expect("write untracked file");
+
+        run_git_command(&root, &["restore", "--staged", "--worktree", "--", "."])
+            .await
+            .expect("revert all restore");
+        run_git_command(&root, &["clean", "-f", "-d"])
+            .await
+            .expect("revert all clean");
+
+        assert_eq!(
+            fs::read_to_string(root.join("keep.txt")).expect("read after revert all"),
+            "head\n"
+        );
+        assert!(!root.join("scratch.txt").exists());
+        assert_worktree_clean(&root);
+    }
+
     #[test]
     fn open_repository_at_root_does_not_search_parent_directories() {
         let (root, _repo) = create_temp_repo();

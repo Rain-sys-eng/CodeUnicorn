@@ -203,8 +203,8 @@ export {
   writeClientCreatedSessionIndex,
   writeRemappedClientSessionIndex,
 } from "./tauri/sessionIndex";
-export type { CodexRuntimeReloadResult, DockIconApplyResult, SettingsRecoveryNotice } from "./tauri/settings";
-export { getAppSettings, getCodexConfigPath, getCodexUnifiedExecExternalStatus, reloadCodexRuntimeConfig, restoreCodexUnifiedExecOfficialDefault, setCodexUnifiedExecOfficialOverride, setDockIcon, takeSettingsRecoveryNotice, updateAppSettings } from "./tauri/settings";
+export type { CodexRuntimeReloadResult, DockIconApplyResult, ImportedWorkspaceWallpaper, SettingsRecoveryNotice, WallpaperMarketCategory, WallpaperMarketItem, WallpaperMarketSearchResult } from "./tauri/settings";
+export { downloadWorkspaceWallpaper, getAppSettings, getCodexConfigPath, getCodexUnifiedExecExternalStatus, importWorkspaceWallpaper, readWorkspaceWallpaperBytes, readWorkspaceWallpaperPreview, reloadCodexRuntimeConfig, removeWorkspaceWallpaper, restoreCodexUnifiedExecOfficialDefault, searchWorkspaceWallpaperMarket, setCodexUnifiedExecOfficialOverride, setDockIcon, takeSettingsRecoveryNotice, updateAppSettings } from "./tauri/settings";
 export type {
   AgentMdResponse,
   ClaudeMdResponse,

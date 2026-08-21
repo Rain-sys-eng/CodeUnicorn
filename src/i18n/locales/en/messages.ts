@@ -23,11 +23,11 @@ const messages = {
       revertFileAction: "Undo",
       revertAllConfirmTitle: "Undo all changes",
       revertAllConfirmBody:
-        "This will discard local changes in {{count}} files and restore them to the last commit. This cannot be undone.",
+        "This will discard unstaged local changes in {{count}} files and restore them to the index (or HEAD if nothing is staged). Staged changes are kept. This cannot be undone.",
       revertAllConfirmAction: "Undo all",
       revertFileConfirmTitle: "Undo file changes",
       revertFileConfirmBody:
-        "This will discard local changes in “{{path}}” and restore it to the last commit. This cannot be undone.",
+        "This will discard unstaged local changes in “{{path}}” and restore it to the index (or HEAD if nothing is staged). Staged changes are kept. This cannot be undone.",
       revertFileConfirmAction: "Undo",
     },
     noThinkingContent: "No thinking content",

@@ -90,6 +90,18 @@ describe("HomeChat styles", () => {
     );
   });
 
+  it("keeps the homepage workspace selector close to the composer", () => {
+    const css = readFileSync(
+      resolve(process.cwd(), "src/styles/home-chat.css"),
+      "utf8",
+    );
+    const metaRule =
+      css.match(/\.home-chat-composer-meta\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+    expect(metaRule).toContain("margin-top: 4px;");
+    expect(metaRule).not.toContain("margin-top: 10px;");
+  });
+
   it("does not override shared input-area padding or min-height on Home composer", () => {
     const homeCss = readFileSync(
       resolve(process.cwd(), "src/styles/home-chat.css"),

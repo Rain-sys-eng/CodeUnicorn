@@ -14,6 +14,7 @@ import Focus from "lucide-react/dist/esm/icons/focus";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Globe2 from "lucide-react/dist/esm/icons/globe-2";
+import Image from "lucide-react/dist/esm/icons/image";
 import Info from "lucide-react/dist/esm/icons/info";
 import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import ListChecks from "lucide-react/dist/esm/icons/list-checks";
@@ -26,13 +27,13 @@ import Palette from "lucide-react/dist/esm/icons/palette";
 import PanelBottom from "lucide-react/dist/esm/icons/panel-bottom";
 import PanelRightOpen from "lucide-react/dist/esm/icons/panel-right-open";
 import PanelTop from "lucide-react/dist/esm/icons/panel-top";
+import Pause from "lucide-react/dist/esm/icons/pause";
 import Play from "lucide-react/dist/esm/icons/play";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import Search from "lucide-react/dist/esm/icons/search";
 import Sun from "lucide-react/dist/esm/icons/sun";
 import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
 import type { LucideIcon } from "lucide-react";
-import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_OPEN_APP_ID,
@@ -51,9 +52,9 @@ import {
 import type {
   AppSettings,
   ThemePresetId,
-  WorkspaceWallpaperFluidMotion,
-  WorkspaceWallpaperFluidPreset,
-  WorkspaceWallpaperMode,
+  WorkspaceWallpaperLibraryKind,
+  WorkspaceWallpaperObjectFit,
+  WorkspaceWallpaperSettings,
 } from "../../../../../types";
 import {
   CODE_FONT_SIZE_DEFAULT,
@@ -66,16 +67,24 @@ import {
   sanitizeDockIconId,
   type DockIconId,
 } from "../../../../theme/utils/dockIcon";
+import { WorkspaceWallpaperPicker, currentWallpaperLabel } from "../../../../theme/components/WorkspaceWallpaperPicker";
+import { useManagedWallpaperSrc } from "../../../../theme/utils/useManagedWallpaperSrc";
+import { publishWorkspaceWallpaper } from "../../../../theme/utils/workspaceWallpaperStore";
 import {
-  WORKSPACE_FLUID_MOTIONS,
-  WORKSPACE_FLUID_PRESETS,
-  fluidPresetToneColors,
-} from "../../../../onboarding/utils/fluidTones";
-import {
-  MAX_WORKSPACE_WALLPAPER_VEIL_OPACITY,
-  MIN_WORKSPACE_WALLPAPER_VEIL_OPACITY,
+  DEFAULT_WORKSPACE_WALLPAPER_PLAYBACK_RATE,
+  MAX_WORKSPACE_WALLPAPER_BLUR,
+  MAX_WORKSPACE_WALLPAPER_DARKEN,
+  MIN_WORKSPACE_WALLPAPER_BLUR,
+  MIN_WORKSPACE_WALLPAPER_DARKEN,
+  WORKSPACE_WALLPAPER_OBJECT_FITS,
+  WORKSPACE_WALLPAPER_PLAYBACK_RATES,
+  WORKSPACE_WALLPAPER_ROTATION_INTERVALS,
+  resolveWorkspaceWallpaperLibraryItem,
+  resolveWorkspaceWallpaperMedia,
   sanitizeWorkspaceWallpaper,
-  sanitizeWorkspaceWallpaperVeilOpacity,
+  sanitizeWorkspaceWallpaperBlur,
+  sanitizeWorkspaceWallpaperDarken,
+  visibleWallpaperLibraryItems,
 } from "../../../../theme/utils/workspaceWallpaper";
 import { LanguageSelector } from "../../LanguageSelector";
 import { SyntaxAndDiffPreview } from "./SyntaxAndDiffPreview";
@@ -179,7 +188,38 @@ function ClientUiVisibilityIcon({
   );
 }
 
+function WallpaperPreviewThumb({
+  path,
+  kind,
+}: {
+  path: string;
+  kind: WorkspaceWallpaperLibraryKind;
+}) {
+  const preview = useManagedWallpaperSrc(path, kind);
+  if (preview.failed) {
+    return (
+      <span className="settings-wallpaper-thumb-fallback" aria-hidden>
+        <Image size={16} strokeWidth={2} />
+      </span>
+    );
+  }
+  if (kind === "video") {
+    return (
+      <video
+        src={preview.src}
+        muted
+        playsInline
+        preload="metadata"
+        aria-hidden
+        onError={preview.handleError}
+      />
+    );
+  }
+  return <img src={preview.src} alt="" onError={preview.handleError} />;
+}
+
 const DOCK_ICON_SCROLL_STEP_PX = 160;
+const WALLPAPER_SLIDER_PREVIEW_DEBOUNCE_MS = 1000;
 
 type DockIconPickerProps = {
   selectedDockIconId: DockIconId;
@@ -345,25 +385,38 @@ export function BasicAppearanceSection({
   const selectedOpenAppIconSrc = resolveSelectedOpenAppIconSrc(appSettings);
   const selectedDockIconId = sanitizeDockIconId(appSettings.dockIconId);
   const wallpaper = sanitizeWorkspaceWallpaper(appSettings.workspaceWallpaper);
+  const selectedLibraryItem = resolveWorkspaceWallpaperLibraryItem(wallpaper);
+  const currentWallpaperMedia = resolveWorkspaceWallpaperMedia(wallpaper);
+  const visibleLibraryCount = visibleWallpaperLibraryItems(
+    wallpaper.library ?? [],
+  ).length;
+  const currentLabel = currentWallpaperLabel(wallpaper);
 
-  // Local draft for the frost slider: onChange only moves the draft, the
-  // (expensive) full-settings persist runs once on release. Committing per
-  // input event would fire a whole-file settings write per tick and fight the
-  // controlled value while the async round-trip is in flight.
-  const [veilDraft, setVeilDraft] = useState(wallpaper.veilOpacity);
+  // Local drafts for sliders: preview CSS vars immediately, persist after 1s
+  // idle / release so dragging does not write the whole settings file per tick.
+  const [blurDraft, setBlurDraft] = useState(wallpaper.wallpaperBlur ?? 0);
+  const [darkenDraft, setDarkenDraft] = useState(wallpaper.wallpaperDarken ?? 0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const blurPersistTimerRef = useRef<number | null>(null);
+  const darkenPersistTimerRef = useRef<number | null>(null);
   useEffect(() => {
-    setVeilDraft(wallpaper.veilOpacity);
-  }, [wallpaper.veilOpacity]);
+    setBlurDraft(wallpaper.wallpaperBlur ?? 0);
+  }, [wallpaper.wallpaperBlur]);
+  useEffect(() => {
+    setDarkenDraft(wallpaper.wallpaperDarken ?? 0);
+  }, [wallpaper.wallpaperDarken]);
+  useEffect(() => {
+    return () => {
+      if (blurPersistTimerRef.current != null) {
+        window.clearTimeout(blurPersistTimerRef.current);
+      }
+      if (darkenPersistTimerRef.current != null) {
+        window.clearTimeout(darkenPersistTimerRef.current);
+      }
+    };
+  }, []);
 
-  const persistWallpaper = (
-    next: Partial<{
-      mode: WorkspaceWallpaperMode;
-      customImagePath: string | null;
-      fluidPreset: WorkspaceWallpaperFluidPreset;
-      fluidMotion: WorkspaceWallpaperFluidMotion;
-      veilOpacity: number;
-    }>,
-  ) => {
+  const persistWallpaper = (next: Partial<WorkspaceWallpaperSettings>) => {
     void onUpdateAppSettings({
       ...appSettings,
       workspaceWallpaper: sanitizeWorkspaceWallpaper({
@@ -373,32 +426,65 @@ export function BasicAppearanceSection({
     });
   };
 
-  const commitVeilDraft = () => {
-    const next = sanitizeWorkspaceWallpaperVeilOpacity(veilDraft);
-    if (next === wallpaper.veilOpacity) {
-      return;
-    }
-    persistWallpaper({ veilOpacity: next });
+  const previewWallpaper = (next: Partial<WorkspaceWallpaperSettings>) => {
+    publishWorkspaceWallpaper({
+      ...wallpaper,
+      ...next,
+    });
   };
 
-  const handleChooseCustomWallpaper = async () => {
-    const selection = await openFileDialog({
-      multiple: false,
-      directory: false,
-      filters: [
-        {
-          name: "Images",
-          extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
-        },
-      ],
-    });
-    if (typeof selection !== "string" || !selection.trim()) {
+  const scheduleWallpaperPersist = (
+    timerRef: React.MutableRefObject<number | null>,
+    next: Partial<WorkspaceWallpaperSettings>,
+  ) => {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+    }
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      persistWallpaper(next);
+    }, WALLPAPER_SLIDER_PREVIEW_DEBOUNCE_MS);
+  };
+
+  const flushWallpaperPersist = (
+    timerRef: React.MutableRefObject<number | null>,
+    next: Partial<WorkspaceWallpaperSettings>,
+  ) => {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    persistWallpaper(next);
+  };
+
+  const handleBlurDraftChange = (raw: number) => {
+    const next = sanitizeWorkspaceWallpaperBlur(raw);
+    setBlurDraft(next);
+    previewWallpaper({ wallpaperBlur: next });
+    scheduleWallpaperPersist(blurPersistTimerRef, { wallpaperBlur: next });
+  };
+
+  const commitBlurDraft = () => {
+    const next = sanitizeWorkspaceWallpaperBlur(blurDraft);
+    if (next === (wallpaper.wallpaperBlur ?? 0) && blurPersistTimerRef.current == null) {
       return;
     }
-    persistWallpaper({
-      mode: "custom",
-      customImagePath: selection.trim(),
-    });
+    flushWallpaperPersist(blurPersistTimerRef, { wallpaperBlur: next });
+  };
+
+  const handleDarkenDraftChange = (raw: number) => {
+    const next = sanitizeWorkspaceWallpaperDarken(raw);
+    setDarkenDraft(next);
+    previewWallpaper({ wallpaperDarken: next });
+    scheduleWallpaperPersist(darkenPersistTimerRef, { wallpaperDarken: next });
+  };
+
+  const commitDarkenDraft = () => {
+    const next = sanitizeWorkspaceWallpaperDarken(darkenDraft);
+    if (next === (wallpaper.wallpaperDarken ?? 0) && darkenPersistTimerRef.current == null) {
+      return;
+    }
+    flushWallpaperPersist(darkenPersistTimerRef, { wallpaperDarken: next });
   };
   const resolvedAppearanceLabel = t(
     resolvedAppearanceTheme === "light" ? "settings.themeLight" : "settings.themeDark",
@@ -507,9 +593,7 @@ export function BasicAppearanceSection({
 
         <div
           className={`settings-pref-row settings-pref-row--stack${
-            wallpaper.mode === "custom" || wallpaper.mode === "fluid"
-              ? " is-expanded"
-              : ""
+            wallpaper.mode === "custom" ? " is-expanded" : ""
           }`}
           data-testid="settings-workspace-wallpaper"
         >
@@ -523,27 +607,16 @@ export function BasicAppearanceSection({
                 </div>
               </div>
               <div
-                className="settings-pref-control settings-pref-segmented"
+                className="settings-pref-control settings-pref-segmented settings-pref-segmented--pair"
                 role="radiogroup"
                 aria-label={t("settings.workspaceWallpaper")}
               >
                 <button
                   type="button"
                   role="radio"
-                  aria-checked={wallpaper.mode === "fluid"}
+                  aria-checked={wallpaper.mode !== "custom"}
                   className={`settings-pref-segment ${
-                    wallpaper.mode === "fluid" ? "is-active" : ""
-                  }`}
-                  onClick={() => persistWallpaper({ mode: "fluid" })}
-                >
-                  <span>{t("settings.workspaceWallpaperFluid")}</span>
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={wallpaper.mode === "none"}
-                  className={`settings-pref-segment ${
-                    wallpaper.mode === "none" ? "is-active" : ""
+                    wallpaper.mode !== "custom" ? "is-active" : ""
                   }`}
                   onClick={() => persistWallpaper({ mode: "none" })}
                 >
@@ -562,120 +635,275 @@ export function BasicAppearanceSection({
                 </button>
               </div>
             </div>
-            {wallpaper.mode === "fluid" ? (
-              <>
-                <div
-                  className="settings-pref-inline-control settings-wallpaper-presets"
-                  role="radiogroup"
-                  aria-label={t("settings.workspaceWallpaperPreset")}
-                >
-                  {WORKSPACE_FLUID_PRESETS.map((preset) => {
-                    const tones = fluidPresetToneColors(false, preset);
-                    const active = wallpaper.fluidPreset === preset.id;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        className={`settings-wallpaper-swatch${active ? " is-active" : ""}`}
-                        title={t(`settings.workspaceWallpaperPreset_${preset.id}`)}
-                        aria-label={t(`settings.workspaceWallpaperPreset_${preset.id}`)}
-                        onClick={() => persistWallpaper({ fluidPreset: preset.id })}
-                      >
-                        <span
-                          style={{
-                            background: `linear-gradient(135deg, ${tones.color1} 0%, ${tones.color2} 52%, ${tones.color3} 100%)`,
-                          }}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-                <div
-                  className="settings-pref-inline-control settings-wallpaper-motions"
-                  role="radiogroup"
-                  aria-label={t("settings.workspaceWallpaperMotion")}
-                >
-                  {WORKSPACE_FLUID_MOTIONS.map((motion) => {
-                    const active = wallpaper.fluidMotion === motion.id;
-                    return (
-                      <button
-                        key={motion.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        className={`settings-wallpaper-motion${active ? " is-active" : ""}`}
-                        onClick={() => persistWallpaper({ fluidMotion: motion.id })}
-                      >
-                        {t(`settings.workspaceWallpaperMotion_${motion.id}`)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            ) : null}
             {wallpaper.mode === "custom" ? (
-              <div className="settings-pref-inline-control settings-wallpaper-custom">
-                <button
-                  type="button"
-                  className="settings-web-btn"
-                  onClick={() => {
-                    void handleChooseCustomWallpaper();
-                  }}
-                >
-                  {t("settings.workspaceWallpaperChoose")}
-                </button>
-                {wallpaper.customImagePath ? (
-                  <>
-                    <span
-                      className="settings-pref-value settings-wallpaper-path"
-                      title={wallpaper.customImagePath}
+              <div className="settings-wallpaper-custom">
+                <div className="settings-wallpaper-subrow">
+                  <div className="settings-pref-meta">
+                    <div className="settings-pref-title">
+                      {t("settings.workspaceWallpaperCurrent")}
+                    </div>
+                    <div
+                      className={`settings-pref-desc${currentLabel ? " settings-wallpaper-path" : ""}`}
+                      title={currentLabel ?? undefined}
                     >
-                      {wallpaper.customImagePath}
-                    </span>
+                      {currentLabel ?? t("settings.workspaceWallpaperMissing")}
+                    </div>
+                  </div>
+                  <div className="settings-pref-control settings-wallpaper-current-control">
+                    {selectedLibraryItem?.kind === "video" ? (
+                      <button
+                        type="button"
+                        className="settings-web-btn"
+                        onClick={() =>
+                          persistWallpaper({ paused: wallpaper.paused !== true })
+                        }
+                      >
+                        {wallpaper.paused ? (
+                          <Play size={13} strokeWidth={2.2} aria-hidden />
+                        ) : (
+                          <Pause size={13} strokeWidth={2.2} aria-hidden />
+                        )}
+                        <span>
+                          {wallpaper.paused
+                            ? t("settings.workspaceWallpaperPlay")
+                            : t("settings.workspaceWallpaperPause")}
+                        </span>
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      className="settings-pref-reset"
-                      onClick={() =>
-                        persistWallpaper({
-                          mode: "custom",
-                          customImagePath: null,
-                        })
-                      }
+                      className="settings-wallpaper-chooser"
+                      onClick={() => setPickerOpen(true)}
+                      aria-label={t("settings.workspaceWallpaperChoose")}
                     >
-                      {t("settings.workspaceWallpaperClear")}
+                      <span className="settings-wallpaper-thumb">
+                        {currentWallpaperMedia ? (
+                          <WallpaperPreviewThumb
+                            path={currentWallpaperMedia.path}
+                            kind={currentWallpaperMedia.kind}
+                          />
+                        ) : (
+                          <span className="settings-wallpaper-thumb-fallback" aria-hidden>
+                            <Image size={16} strokeWidth={2} />
+                          </span>
+                        )}
+                      </span>
+                      <span className="settings-web-btn">
+                        {t("settings.workspaceWallpaperChoose")}
+                      </span>
                     </button>
-                  </>
-                ) : (
-                  <span className="settings-pref-desc">
-                    {t("settings.workspaceWallpaperMissing")}
-                  </span>
-                )}
-              </div>
-            ) : null}
-            {wallpaper.mode !== "none" ? (
-              <div className="settings-pref-inline-control">
-                <input
-                  type="range"
-                  min={MIN_WORKSPACE_WALLPAPER_VEIL_OPACITY}
-                  max={MAX_WORKSPACE_WALLPAPER_VEIL_OPACITY}
-                  step={1}
-                  className="settings-input settings-input--range"
-                  aria-label={t("settings.workspaceWallpaperVeil")}
-                  value={veilDraft}
-                  onChange={(event) =>
-                    setVeilDraft(Number(event.target.value))
-                  }
-                  onPointerUp={commitVeilDraft}
-                  onKeyUp={commitVeilDraft}
-                  onBlur={commitVeilDraft}
+                  </div>
+                </div>
+                <div className="settings-wallpaper-subrow">
+                  <div className="settings-pref-meta">
+                    <div className="settings-pref-title">
+                      {t("settings.workspaceWallpaperFit")}
+                    </div>
+                  </div>
+                  <div
+                    className="settings-pref-control settings-pref-segmented settings-wallpaper-fits"
+                    role="radiogroup"
+                    aria-label={t("settings.workspaceWallpaperFit")}
+                  >
+                    {WORKSPACE_WALLPAPER_OBJECT_FITS.map((fit) => {
+                      const active =
+                        (wallpaper.objectFit ?? "cover") === fit;
+                      return (
+                        <button
+                          key={fit}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          className={`settings-pref-segment${active ? " is-active" : ""}`}
+                          onClick={() =>
+                            persistWallpaper({
+                              objectFit: fit as WorkspaceWallpaperObjectFit,
+                            })
+                          }
+                        >
+                          <span>{t(`settings.workspaceWallpaperFit_${fit}`)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {selectedLibraryItem?.kind === "video" ? (
+                  <div className="settings-wallpaper-subrow">
+                    <div className="settings-pref-meta">
+                      <div className="settings-pref-title">
+                        {t("settings.workspaceWallpaperSpeed")}
+                      </div>
+                    </div>
+                    <div
+                      className="settings-pref-control settings-pref-segmented settings-wallpaper-rates"
+                      role="radiogroup"
+                      aria-label={t("settings.workspaceWallpaperSpeed")}
+                    >
+                      {WORKSPACE_WALLPAPER_PLAYBACK_RATES.map((rate) => {
+                        const active =
+                          (wallpaper.playbackRate ??
+                            DEFAULT_WORKSPACE_WALLPAPER_PLAYBACK_RATE) === rate;
+                        return (
+                          <button
+                            key={rate}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            className={`settings-pref-segment${active ? " is-active" : ""}`}
+                            onClick={() => persistWallpaper({ playbackRate: rate })}
+                          >
+                            <span>
+                              {t("settings.workspaceWallpaperSpeedValue", {
+                                value: rate,
+                              })}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="settings-wallpaper-subrow">
+                  <div className="settings-pref-meta">
+                    <div className="settings-pref-title">
+                      {t("settings.workspaceWallpaperFlip")}
+                    </div>
+                  </div>
+                  <div className="settings-pref-control">
+                    <Switch
+                      checked={wallpaper.flip === true}
+                      aria-label={t("settings.workspaceWallpaperFlip")}
+                      onCheckedChange={(checked) =>
+                        persistWallpaper({ flip: checked })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="settings-wallpaper-subrow">
+                  <div className="settings-pref-meta">
+                    <div className="settings-pref-title">
+                      {t("settings.workspaceWallpaperBlur")}
+                    </div>
+                  </div>
+                  <div className="settings-pref-control settings-pref-inline-control">
+                    <input
+                      type="range"
+                      min={MIN_WORKSPACE_WALLPAPER_BLUR}
+                      max={MAX_WORKSPACE_WALLPAPER_BLUR}
+                      step={1}
+                      className="settings-input settings-input--range"
+                      aria-label={t("settings.workspaceWallpaperBlur")}
+                      value={blurDraft}
+                      onChange={(event) =>
+                        handleBlurDraftChange(Number(event.target.value))
+                      }
+                      onPointerUp={commitBlurDraft}
+                      onKeyUp={commitBlurDraft}
+                      onBlur={commitBlurDraft}
+                    />
+                    <span className="settings-pref-value">
+                      {t("settings.workspaceWallpaperBlurValue", {
+                        value: blurDraft,
+                      })}
+                    </span>
+                  </div>
+                </div>
+                <div className="settings-wallpaper-subrow">
+                  <div className="settings-pref-meta">
+                    <div className="settings-pref-title">
+                      {t("settings.workspaceWallpaperDarken")}
+                    </div>
+                  </div>
+                  <div className="settings-pref-control settings-pref-inline-control">
+                    <input
+                      type="range"
+                      min={MIN_WORKSPACE_WALLPAPER_DARKEN}
+                      max={MAX_WORKSPACE_WALLPAPER_DARKEN}
+                      step={1}
+                      className="settings-input settings-input--range"
+                      aria-label={t("settings.workspaceWallpaperDarken")}
+                      value={darkenDraft}
+                      onChange={(event) =>
+                        handleDarkenDraftChange(Number(event.target.value))
+                      }
+                      onPointerUp={commitDarkenDraft}
+                      onKeyUp={commitDarkenDraft}
+                      onBlur={commitDarkenDraft}
+                    />
+                    <span className="settings-pref-value">
+                      {t("settings.workspaceWallpaperDarkenValue", {
+                        value: darkenDraft,
+                      })}
+                    </span>
+                  </div>
+                </div>
+                <div className="settings-wallpaper-subrow">
+                  <div className="settings-pref-meta">
+                    <div className="settings-pref-title">
+                      {t("settings.workspaceWallpaperRotation")}
+                    </div>
+                    {visibleLibraryCount < 2 ? (
+                      <div className="settings-pref-desc">
+                        {t("settings.workspaceWallpaperRotationHint")}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="settings-pref-control">
+                    <Switch
+                      checked={wallpaper.rotationEnabled === true}
+                      disabled={visibleLibraryCount < 2}
+                      aria-label={t("settings.workspaceWallpaperRotation")}
+                      onCheckedChange={(checked) =>
+                        persistWallpaper({ rotationEnabled: checked })
+                      }
+                    />
+                  </div>
+                </div>
+                {wallpaper.rotationEnabled ? (
+                  <div className="settings-wallpaper-subrow">
+                    <div className="settings-pref-meta">
+                      <div className="settings-pref-title">
+                        {t("settings.workspaceWallpaperRotationInterval")}
+                      </div>
+                    </div>
+                    <div
+                      className="settings-pref-control settings-pref-segmented settings-wallpaper-rates"
+                      role="radiogroup"
+                      aria-label={t("settings.workspaceWallpaperRotationInterval")}
+                    >
+                      {WORKSPACE_WALLPAPER_ROTATION_INTERVALS.map((minutes) => {
+                        const active =
+                          (wallpaper.rotationIntervalMinutes ?? 30) === minutes;
+                        return (
+                          <button
+                            key={minutes}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            className={`settings-pref-segment${active ? " is-active" : ""}`}
+                            onClick={() =>
+                              persistWallpaper({
+                                rotationIntervalMinutes: minutes,
+                              })
+                            }
+                          >
+                            <span>
+                              {t("settings.workspaceWallpaperRotationValue", {
+                                value: minutes,
+                              })}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                <WorkspaceWallpaperPicker
+                  open={pickerOpen}
+                  wallpaper={wallpaper}
+                  onClose={() => setPickerOpen(false)}
+                  onChange={persistWallpaper}
                 />
-                <span className="settings-pref-value">
-                  {t("settings.workspaceWallpaperVeilValue", {
-                    value: veilDraft,
-                  })}
-                </span>
               </div>
             ) : null}
           </div>
