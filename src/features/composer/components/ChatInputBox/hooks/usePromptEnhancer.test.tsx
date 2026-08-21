@@ -16,12 +16,13 @@ import {
   usePromptEnhancer,
 } from './usePromptEnhancer';
 import { seedCliEngineVisibility } from '../../../hooks/cliEngineVisibilityStore';
+import type { ProviderModelGroup } from '../modelOptions';
 
 vi.mock('../../../../../services/tauri', () => ({
   engineSendMessageSync: vi.fn(),
 }));
 
-const defaultModelGroups = [
+const defaultModelGroups: ProviderModelGroup[] = [
   {
     providerId: 'claude' as const,
     providerLabel: 'Claude Code',

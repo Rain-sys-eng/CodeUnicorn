@@ -38,7 +38,7 @@ function renderDialog(overrides: Partial<Parameters<typeof PromptEnhancerDialog>
     selectedIntensity: 'light' as const,
     modelOptions: modelGroups[0].models,
     modelGroups,
-    visibleEngines: ['claude'] as const,
+    visibleEngines: ['claude' as const],
     timeoutSeconds: 60,
     timeoutLimits: { minSeconds: 5, maxSeconds: 300 },
     originalPrompt: '帮我优化登录',
