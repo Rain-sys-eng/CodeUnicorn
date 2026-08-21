@@ -3,6 +3,9 @@
 //! Read-only: never writes `$DSH_HOME` or `~/.pi/agent`. The returned
 //! `(base_url, api_key)` pair is fed into the existing
 //! `resolve_quota_route` → `query_by_base_url_and_key` path.
+//!
+//! DSH 0.1.1+ stores keys under `.credentials.yaml` `refs:`; pre-release
+//! files were a flat `ENV: value` mapping. Both layouts are read.
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -19,7 +22,9 @@ const DSH_OFFICIAL_DEEPSEEK_BASE: &str = "https://api.deepseek.com";
 const DSH_CUSTOM_NS: &str = "llm-pi-ai";
 
 pub(crate) fn host_cli_vendor_id(provider_profile_id: Option<&str>) -> Option<String> {
-    let raw = provider_profile_id.map(str::trim).filter(|value| !value.is_empty())?;
+    let raw = provider_profile_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
     if is_host_catalog_sentinel(raw) {
         return None;
     }
@@ -84,10 +89,7 @@ fn derived_vendor_api_key_env(vendor: &str) -> String {
     }
 }
 
-fn resolve_vendor_api_key_env(
-    vendor: &str,
-    profile: Option<&serde_yaml::Mapping>,
-) -> String {
+fn resolve_vendor_api_key_env(vendor: &str, profile: Option<&serde_yaml::Mapping>) -> String {
     if let Some(env_name) = profile.and_then(|map| yaml_str(map, "apiKeyEnv")) {
         return env_name;
     }
@@ -129,7 +131,19 @@ fn yaml_str(map: &serde_yaml::Mapping, key: &str) -> Option<String> {
 }
 
 fn yaml_child<'a>(map: &'a serde_yaml::Mapping, key: &str) -> Option<&'a serde_yaml::Mapping> {
-    map.get(&yaml_key(key)).and_then(serde_yaml::Value::as_mapping)
+    map.get(&yaml_key(key))
+        .and_then(serde_yaml::Value::as_mapping)
+}
+
+fn lookup_credential_value(
+    credentials: Option<&serde_yaml::Mapping>,
+    env_name: &str,
+) -> Option<String> {
+    let map = credentials?;
+    // DSH 0.1.1+ versioned document nests env keys under `refs`.
+    yaml_child(map, "refs")
+        .and_then(|refs| yaml_str(refs, env_name))
+        .or_else(|| yaml_str(map, env_name))
 }
 
 fn lookup_env_or_credentials(
@@ -143,9 +157,7 @@ fn lookup_env_or_credentials(
             return trimmed.to_string();
         }
     }
-    credentials
-        .and_then(|map| yaml_str(map, env_name))
-        .unwrap_or_default()
+    lookup_credential_value(credentials, env_name).unwrap_or_default()
 }
 
 pub(crate) fn resolve_dsh_base_url_and_key(
@@ -278,9 +290,8 @@ fn read_pi_api_key(
     let auth_path = agent_dir.join("auth.json");
     match std::fs::read_to_string(&auth_path) {
         Ok(content) if !content.trim().is_empty() => {
-            let root: Value = serde_json::from_str(&content).map_err(|error| {
-                format!("pi credentials missing (auth.json invalid): {error}")
-            })?;
+            let root: Value = serde_json::from_str(&content)
+                .map_err(|error| format!("pi credentials missing (auth.json invalid): {error}"))?;
             if let Some(entry) = root.get(vendor) {
                 let entry_type = entry
                     .get("type")

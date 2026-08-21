@@ -71,21 +71,31 @@ pub(crate) async fn get_coding_plan_quota_for_session(
                     queried_at: now_millis(),
                 };
             }
-            // 「credentials not found」优先 empty_credentials，避免被 not found 误判为 unsupported
-            let source = if reason.contains("missing")
-                || reason.contains("empty")
-                || reason.contains("credentials")
-                || reason.contains("login")
-            {
-                "empty_credentials"
-            } else if reason.contains("not a known") || reason.contains("not found") {
-                "unsupported"
-            } else {
-                "empty"
-            };
-            empty_snapshot(source, Some(reason))
+            // 「credentials not found」优先 empty_credentials，避免被 not found 误判为 unsupported。
+            // 中文 user error（API 密钥为空 / 未配置服务地址）不含英文 empty，必须对 canonical 文案。
+            empty_snapshot(classify_quota_none_source(&reason), Some(reason))
         }
     }
+}
+
+pub(crate) fn classify_quota_none_source(reason: &str) -> &'static str {
+    if is_empty_credentials_reason(reason) {
+        "empty_credentials"
+    } else if reason.contains("not a known") || reason.contains("not found") {
+        "unsupported"
+    } else {
+        "empty"
+    }
+}
+
+fn is_empty_credentials_reason(reason: &str) -> bool {
+    reason == relay_user_error("empty_key")
+        || reason == relay_user_error("empty_base")
+        || reason == relay_user_error("missing_creds")
+        || reason.contains("missing")
+        || reason.contains("empty")
+        || reason.contains("credentials")
+        || reason.contains("login")
 }
 
 /// 直接用 base_url + api_key 查询（调试 / 前端已有凭据时）。
