@@ -2,7 +2,9 @@ import type { ModelInfo } from "../types";
 
 const PROVIDER_LABEL_SEPARATOR = " / ";
 
-export type DshModelVendorSection<T extends Pick<ModelInfo, "id" | "label"> & Partial<Pick<ModelInfo, "provider">>> = {
+export type DshModelVendorSection<
+  T extends Pick<ModelInfo, "id" | "label"> & Partial<Pick<ModelInfo, "provider">>,
+> = {
   key: string;
   label: string;
   models: T[];
@@ -13,10 +15,19 @@ export type DshModelDisplayLabelOptions = {
   closed?: boolean;
 };
 
+const SLASH_CATALOG_ENGINES = new Set(["dsh", "pi"]);
+
+export function isSlashCatalogEngine(
+  providerId: string | null | undefined,
+): boolean {
+  return Boolean(providerId && SLASH_CATALOG_ENGINES.has(providerId));
+}
+
 /**
  * DSH catalog rows are stored as `{provider} / {model}` and some model ids
- * are routed (`ovh/Qwen2.5-VL-72B-Instruct`). List rows show the last model
- * token; the closed trigger keeps the provider prefix.
+ * are routed (`ovh/Qwen2.5-VL-72B-Instruct`). PI `--list-models` rows use
+ * the same `{provider}/{model}` id. List rows show the last model token; the
+ * closed trigger keeps the provider prefix.
  */
 export function formatDshModelDisplayLabel(
   model: Pick<ModelInfo, "id"> & Partial<Pick<ModelInfo, "model" | "label">>,
@@ -73,6 +84,9 @@ function lastPathSegment(value: string): string {
  * Official DSH picker sections by host catalog `group.name`. mossx flattens
  * that catalog to `{provider} / {model}` labels, so recover the vendor heading
  * from the catalog label prefix, then `provider`, then the catalog id.
+ *
+ * PI reuses the same heading recovery: `pi --list-models` already stores
+ * `provider` plus `{provider}/{model}` ids, so the fallback path is enough.
  */
 export function groupDshModelsByVendor<
   T extends Pick<ModelInfo, "id" | "label"> & Partial<Pick<ModelInfo, "provider">>,

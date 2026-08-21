@@ -10,6 +10,7 @@ import {
 import {
   formatDshModelDisplayLabel,
   groupDshModelsByVendor,
+  isSlashCatalogEngine,
 } from './dshModelDisplayLabel';
 import type { ProviderModelGroup } from '../modelOptions';
 import type { ProviderTargetGroup } from '../hooks/useProviderTargetCatalogOwners';
@@ -406,7 +407,7 @@ type PickerModelRow =
   | { kind: 'model'; key: string; model: ModelInfo };
 
 function pickerRowsForGroup(group: PickerModelGroup): PickerModelRow[] {
-  if (group.providerId !== 'dsh') {
+  if (!isSlashCatalogEngine(group.providerId)) {
     return group.models.map((model) => ({
       kind: 'model' as const,
       key: `${group.providerId}:${model.id}`,
@@ -417,7 +418,7 @@ function pickerRowsForGroup(group: PickerModelGroup): PickerModelRow[] {
   return groupDshModelsByVendor(group.models).flatMap((section) => [
     {
       kind: 'heading' as const,
-      key: `dsh-vendor:${section.key}`,
+      key: `${group.providerId}-vendor:${section.key}`,
       sectionKey: section.key,
       label: section.label,
     },
@@ -757,7 +758,7 @@ export const ModelSelect = memo(({
       }
     }
 
-    if (providerId === 'dsh') {
+    if (isSlashCatalogEngine(providerId)) {
       return formatDshModelDisplayLabel(model, { closed: options?.closed === true });
     }
 
@@ -1329,6 +1330,7 @@ export const ModelSelect = memo(({
                             <DropdownMenuLabel
                               key={entry.key}
                               data-dsh-vendor-group={entry.sectionKey}
+                              data-vendor-group={entry.sectionKey}
                               className="px-2 py-1 text-xs font-medium text-muted-foreground"
                             >
                               {entry.label}

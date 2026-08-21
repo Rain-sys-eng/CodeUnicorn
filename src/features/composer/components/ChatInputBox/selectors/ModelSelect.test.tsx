@@ -451,7 +451,7 @@ describe("ModelSelect", () => {
 
     const buttonText = screen.getByRole("button").textContent ?? "";
 
-    expect(buttonText).toContain("models.selectModel");
+    expect(buttonText).toContain("models.loading");
     expect(buttonText).not.toContain("gpt-5.5");
   });
 
@@ -750,7 +750,7 @@ describe("ModelSelect", () => {
     );
 
     expect(screen.queryByText("sonnet")).toBeNull();
-    expect(screen.getByRole("button").textContent ?? "").toContain("models.selectModel");
+    expect(screen.getByRole("button").textContent ?? "").toContain("models.loading");
   });
 
   it("resolveAtomicSelectedModelDisplay uses executionTarget snapshot when catalog is empty", () => {
@@ -917,7 +917,7 @@ describe("ModelSelect", () => {
     );
 
     expect(screen.getByRole("button").textContent ?? "").toContain(
-      "models.selectModel",
+      "models.loading",
     );
   });
 
@@ -2111,6 +2111,18 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
     return trigger;
   }
 
+  function openVendorHeadings(): string[] {
+    const openMenu = document.querySelector(
+      '[data-slot="dropdown-menu-sub-content"][data-state="open"]',
+    );
+    if (!openMenu) {
+      return [];
+    }
+    return [...openMenu.querySelectorAll("[data-vendor-group]")].map(
+      (node) => node.textContent ?? "",
+    );
+  }
+
   function buildGroupsWithEmptyCodex(): ProviderTargetGroup[] {
     const groups = buildAtomicGroups();
     groups[1].profiles[0].models = [];
@@ -2631,5 +2643,298 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
         reasoning: { effort: "high" },
       }),
     );
+  });
+
+  function piListModels(): Array<{
+    id: string;
+    label: string;
+    provider: string;
+    description?: string;
+  }> {
+    return [
+      {
+        id: "deepseek/deepseek-v4-flash",
+        label: "deepseek/deepseek-v4-flash",
+        provider: "deepseek",
+        description: "ctx 1M · thinking",
+      },
+      {
+        id: "deepseek/deepseek-v4-pro",
+        label: "deepseek/deepseek-v4-pro",
+        provider: "deepseek",
+        description: "ctx 1M · thinking",
+      },
+      {
+        id: "kimi-coding/k3",
+        label: "kimi-coding/k3",
+        provider: "kimi-coding",
+        description: "ctx 1.0M · thinking · vision",
+      },
+      {
+        id: "kimi-coding/k3-256k",
+        label: "kimi-coding/k3-256k",
+        provider: "kimi-coding",
+        description: "ctx 262.1K · thinking · vision",
+      },
+      {
+        id: "minimax-cn/MiniMax-M2.7",
+        label: "minimax-cn/MiniMax-M2.7",
+        provider: "minimax-cn",
+        description: "ctx 204.8K · thinking",
+      },
+      {
+        id: "auto",
+        label: "PI Auto",
+        provider: "pi",
+        description: "Use PI CLI default model",
+      },
+    ];
+  }
+
+  function buildPiTargetGroup(): ProviderTargetGroup {
+    return {
+      providerId: "pi",
+      providerLabel: "PI CLI",
+      enabled: true,
+      profiles: [
+        {
+          id: "__local_pi__",
+          label: "本地配置",
+          source: "disk",
+          loading: false,
+          error: null,
+          models: piListModels(),
+        },
+        {
+          id: "pi-alt",
+          label: "备用渠道",
+          source: "managed",
+          loading: false,
+          error: null,
+          models: [
+            {
+              id: "openai/gpt-5",
+              label: "openai/gpt-5",
+              provider: "openai",
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  function buildDshTargetGroup(): ProviderTargetGroup {
+    return {
+      providerId: "dsh",
+      providerLabel: "DeepSeek Harness",
+      enabled: true,
+      profiles: [
+        {
+          id: "__dsh_host_catalog__",
+          label: "本地配置",
+          source: "disk",
+          loading: false,
+          error: null,
+          models: [
+            {
+              id: "deepseek-official/deepseek-v4-flash",
+              model: "deepseek-v4-flash",
+              label: "DeepSeek / DeepSeek-V4-Flash",
+              provider: "deepseek-official",
+            },
+            {
+              id: "kimi-coding/k3",
+              model: "k3",
+              label: "kimi-coding / Kimi K3",
+              provider: "kimi-coding",
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("groups PI list-models by provider and keeps the full catalog id on pick", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onExecutionTargetChange = vi.fn();
+    const groups: ProviderTargetGroup[] = [
+      ...buildAtomicGroups(),
+      buildPiTargetGroup(),
+    ];
+
+    render(
+      <ModelSelect
+        value="claude-opus-4-8"
+        currentProvider="claude"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onAddModel={vi.fn()}
+        onExecutionTargetChange={onExecutionTargetChange}
+        executionTarget={atomicExecutionTarget}
+        targetGroups={groups}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:Opus 4.8" }),
+    );
+    await screen.findByRole("menuitem", { name: /PI CLI/ });
+    openPickerSubmenu(/PI CLI/);
+
+    expect(
+      [...document.querySelectorAll("[data-vendor-group]")].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["deepseek", "kimi-coding", "minimax-cn", "pi"]);
+    const flashRow = document.querySelector(
+      '[data-model-id="deepseek/deepseek-v4-flash"]',
+    );
+    const k3Row = document.querySelector('[data-model-id="kimi-coding/k3"]');
+    expect(flashRow?.textContent).toContain("deepseek-v4-flash");
+    expect(flashRow?.textContent).not.toContain("deepseek/deepseek-v4-flash");
+    expect(k3Row?.textContent).toContain("k3");
+    expect(k3Row?.textContent).not.toContain("kimi-coding/k3");
+    expect(document.querySelector("[data-submenu-footer='pi']")).toBeTruthy();
+    expect(document.querySelector("[data-channel-select='pi']")).toBeTruthy();
+
+    fireEvent.click(k3Row as Element);
+
+    expect(onExecutionTargetChange).toHaveBeenCalledWith({
+      engine: "pi",
+      providerProfileId: null,
+      modelCatalogEntryId: "kimi-coding/k3",
+      model: "kimi-coding/k3",
+      providerProfileNameSnapshot: "本地配置",
+      providerProfileSource: "disk",
+      reasoning: null,
+    });
+  });
+
+  it("keeps the PI closed trigger prefixed so it cannot collide with DSH last-segment names", async () => {
+    const piTarget: ExecutionTarget = {
+      engine: "pi",
+      providerProfileId: null,
+      modelCatalogEntryId: "kimi-coding/k3",
+      model: "kimi-coding/k3",
+      providerProfileNameSnapshot: "本地配置",
+      providerProfileSource: "disk",
+      reasoning: null,
+    };
+
+    render(
+      <ModelSelect
+        value="kimi-coding/k3"
+        currentProvider="pi"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onExecutionTargetChange={vi.fn()}
+        executionTarget={piTarget}
+        targetGroups={[...buildAtomicGroups(), buildPiTargetGroup()]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "chat.currentModel:kimi-coding / k3",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("does not steal Claude, Codex, or DSH grouping when PI catalog is present", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const groups: ProviderTargetGroup[] = [
+      ...buildAtomicGroups(),
+      buildPiTargetGroup(),
+      buildDshTargetGroup(),
+    ];
+
+    render(
+      <ModelSelect
+        value="claude-opus-4-8"
+        currentProvider="claude"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onAddModel={vi.fn()}
+        onExecutionTargetChange={vi.fn()}
+        executionTarget={atomicExecutionTarget}
+        targetGroups={groups}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:Opus 4.8" }),
+    );
+    await screen.findByRole("menuitem", { name: /Claude Code/ });
+    openPickerSubmenu(/Claude Code/);
+    expect(screen.getByRole("menuitem", { name: /Opus 4\.8/ })).toBeTruthy();
+    expect(document.querySelector("[data-submenu-footer='claude']")).toBeTruthy();
+    expect(openVendorHeadings()).toEqual([]);
+
+    openPickerSubmenu(/Codex CLI/);
+    expect(screen.getByRole("menuitem", { name: /GPT-5\.7/ })).toBeTruthy();
+    expect(document.querySelector("[data-submenu-footer='codex']")).toBeTruthy();
+
+    openPickerSubmenu(/DeepSeek Harness/);
+    expect(openVendorHeadings()).toEqual(["DeepSeek", "kimi-coding"]);
+    expect(document.querySelector("[data-submenu-footer='dsh']")).toBeNull();
+    const dshFlash = document.querySelector(
+      '[data-model-id="deepseek-official/deepseek-v4-flash"]',
+    );
+    expect(dshFlash?.textContent).toContain("deepseek-v4-flash");
+    expect(dshFlash?.textContent).not.toContain("DeepSeek /");
+
+    openPickerSubmenu(/PI CLI/);
+    expect(openVendorHeadings()).toEqual([
+      "deepseek",
+      "kimi-coding",
+      "minimax-cn",
+      "pi",
+    ]);
+    const piK3 = document.querySelector('[data-model-id="kimi-coding/k3"]');
+    expect(piK3?.textContent).toContain("k3");
+    expect(piK3?.textContent).not.toContain("kimi-coding/k3");
+    expect(document.querySelector("[data-submenu-footer='pi']")).toBeTruthy();
+  });
+
+  it("groups native PI modelGroups the same way as atomic target groups", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onProviderModelChange = vi.fn();
+
+    render(
+      <ModelSelect
+        value="kimi-coding/k3"
+        currentProvider="pi"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onProviderModelChange={onProviderModelChange}
+        models={piListModels()}
+        modelGroups={[
+          {
+            providerId: "pi",
+            providerLabel: "PI CLI",
+            enabled: true,
+            models: piListModels(),
+          },
+        ]}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "chat.currentModel:kimi-coding / k3",
+      }),
+    );
+    await screen.findByRole("menuitem", { name: /PI CLI/ });
+    openPickerSubmenu(/PI CLI/);
+
+    expect(
+      [...document.querySelectorAll("[data-vendor-group]")].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["deepseek", "kimi-coding", "minimax-cn", "pi"]);
+    fireEvent.click(
+      document.querySelector('[data-model-id="kimi-coding/k3-256k"]') as Element,
+    );
+    expect(onProviderModelChange).toHaveBeenCalledWith("pi", "kimi-coding/k3-256k");
   });
 });

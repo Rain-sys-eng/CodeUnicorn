@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatDshModelDisplayLabel,
   groupDshModelsByVendor,
+  isSlashCatalogEngine,
   resolveDshVendorSectionLabel,
 } from "./dshModelDisplayLabel";
 
@@ -152,5 +153,73 @@ describe("groupDshModelsByVendor", () => {
         label: "Kimi K3",
       }),
     ).toBe("kimi-coding");
+  });
+
+  it("groups PI list-models rows by provider without inventing DSH display names", () => {
+    const sections = groupDshModelsByVendor([
+      {
+        id: "deepseek/deepseek-v4-flash",
+        label: "deepseek/deepseek-v4-flash",
+        provider: "deepseek",
+      },
+      {
+        id: "deepseek/deepseek-v4-pro",
+        label: "deepseek/deepseek-v4-pro",
+        provider: "deepseek",
+      },
+      {
+        id: "kimi-coding/k3",
+        label: "kimi-coding/k3",
+        provider: "kimi-coding",
+      },
+      {
+        id: "kimi-coding/k3-256k",
+        label: "kimi-coding/k3-256k",
+        provider: "kimi-coding",
+      },
+      {
+        id: "minimax-cn/MiniMax-M2.7",
+        label: "minimax-cn/MiniMax-M2.7",
+        provider: "minimax-cn",
+      },
+      {
+        id: "auto",
+        label: "PI Auto",
+        provider: "pi",
+      },
+    ]);
+
+    expect(sections.map((section) => ({ key: section.key, label: section.label }))).toEqual([
+      { key: "deepseek", label: "deepseek" },
+      { key: "kimi-coding", label: "kimi-coding" },
+      { key: "minimax-cn", label: "minimax-cn" },
+      { key: "pi", label: "pi" },
+    ]);
+    expect(sections[0]?.models.map((model) => model.id)).toEqual([
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-pro",
+    ]);
+    expect(formatDshModelDisplayLabel(sections[1]!.models[0]!)).toBe("k3");
+    expect(
+      formatDshModelDisplayLabel(sections[1]!.models[0]!, { closed: true }),
+    ).toBe("kimi-coding / k3");
+    expect(formatDshModelDisplayLabel({ id: "auto", label: "PI Auto" })).toBe(
+      "PI Auto",
+    );
+    expect(
+      formatDshModelDisplayLabel({ id: "auto", label: "PI Auto" }, { closed: true }),
+    ).toBe("PI Auto");
+  });
+});
+
+describe("isSlashCatalogEngine", () => {
+  it("only opens DSH and PI grouping", () => {
+    expect(isSlashCatalogEngine("dsh")).toBe(true);
+    expect(isSlashCatalogEngine("pi")).toBe(true);
+    expect(isSlashCatalogEngine("claude")).toBe(false);
+    expect(isSlashCatalogEngine("codex")).toBe(false);
+    expect(isSlashCatalogEngine("kimi")).toBe(false);
+    expect(isSlashCatalogEngine("grok")).toBe(false);
+    expect(isSlashCatalogEngine(null)).toBe(false);
   });
 });

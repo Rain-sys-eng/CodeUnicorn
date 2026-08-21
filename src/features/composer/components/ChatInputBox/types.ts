@@ -330,8 +330,9 @@ export interface ModelInfo {
   description?: string;
   source?: string;
   /**
-   * DSH host catalog vendor id (`llm.models` group.id). Used to section
-   * the DeepSeek Harness submenu the same way the official picker does.
+   * Vendor id used to section slash-catalog CLIs.
+   * DSH: host catalog `llm.models` group.id.
+   * PI: `pi --list-models` provider column.
    */
   provider?: string;
   providerProfileId?: string;
