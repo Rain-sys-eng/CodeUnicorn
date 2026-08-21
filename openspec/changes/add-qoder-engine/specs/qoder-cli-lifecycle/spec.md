@@ -2,14 +2,24 @@
 
 ### Requirement: Qoder CLI detection and doctor
 
-mossx SHALL detect `qodercli` on PATH or at a user-configured custom path,
-report version and login state, and provide a `qoder_doctor` diagnostic.
-Detection SHALL distinguish not-installed from not-authenticated.
+mossx SHALL detect `qodercli` on PATH, at the vendor install location
+(`$QODER_HOME/bin/qodercli` or `~/.qoder/bin/qodercli`), or at a
+user-configured custom path, report version and login state, and provide a
+`qoder_doctor` diagnostic. Detection SHALL distinguish not-installed from
+not-authenticated. Detection SHALL NOT require the current process PATH to
+already include the vendor directory.
 
 #### Scenario: Binary present and logged in
 
 - **WHEN** `qodercli --version` succeeds and `qodercli status -o json` reports `logged_in: true`
 - **THEN** the engine status SHALL be installed with version and models
+
+#### Scenario: Windows vendor install without process PATH
+
+- **WHEN** `qodercli.exe` exists at `%USERPROFILE%\.qoder\bin\qodercli\qodercli.exe`
+- **AND** the current process PATH does not include that directory
+- **THEN** detection SHALL still report the engine as installed
+- **AND** the IDE dispatcher `%USERPROFILE%\.qoder\entry\qoder.cmd` SHALL NOT be treated as `qodercli`
 
 #### Scenario: Binary present but not logged in
 

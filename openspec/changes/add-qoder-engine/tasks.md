@@ -107,6 +107,11 @@
 - [x] 12.5 [P1] 10 语言 `qoderUnsupported` + `qoderAuth`；`executable_name=qodercli`；detect 优先级 DSH 先于 Qoder
 - [x] 12.6 后置项落档 `docs/research/mossx-qoder-engine-deferred.md`
 
+## P12 — Windows detect PATH 缺口（2026-08-22）
+
+- [x] 13.1 [P0] extra search 纳入 `~/.qoder/bin/qodercli` 与 `$QODER_HOME/bin/qodercli`；GUI 进程 PATH 未刷新时仍能命中 `qodercli.exe`
+- [x] 13.2 不把 `.qoder/entry/qoder.cmd`（IDE dispatcher）当成 `qodercli`；Unix extra 后置于 `~/.local/bin`，Mac 现有 symlink 命中顺序不变
+
 ## 明确后置（独立 change）
 
 完整记录：[`docs/research/mossx-qoder-engine-deferred.md`](../../../docs/research/mossx-qoder-engine-deferred.md)

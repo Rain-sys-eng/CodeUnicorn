@@ -241,6 +241,9 @@ fn build_windows_extra_search_paths(
         // Hermes ships dsh as a Node-global bin, same layout as macOS ~/.hermes/node/bin.
         paths.push(user_profile.join(".hermes\\node"));
         paths.push(user_profile.join(".hermes\\node\\bin"));
+        // Official Qoder CLI Windows layout: %USERPROFILE%\.qoder\bin\qodercli\qodercli.exe.
+        // Installer writes User PATH, but GUI/dev processes often keep a stale PATH.
+        paths.push(user_profile.join(".qoder\\bin\\qodercli"));
         // Cargo bin
         paths.push(user_profile.join(".cargo\\bin"));
         // Bun
@@ -364,6 +367,7 @@ fn get_extra_search_paths() -> Vec<PathBuf> {
             paths.push(home.join(".cargo/bin"));
             paths.push(home.join(".bun/bin"));
             paths.push(home.join(".volta/bin"));
+            paths.push(home.join(".qoder/bin/qodercli"));
             // nvm
             let nvm_root = home.join(".nvm/versions/node");
             if let Ok(entries) = std::fs::read_dir(nvm_root) {
@@ -374,6 +378,16 @@ fn get_extra_search_paths() -> Vec<PathBuf> {
                     }
                 }
             }
+        }
+    }
+
+    if let Ok(qoder_home) = env::var("QODER_HOME") {
+        let trimmed = qoder_home.trim();
+        if !trimmed.is_empty() {
+            push_unique_path(
+                &mut paths,
+                PathBuf::from(trimmed).join("bin").join("qodercli"),
+            );
         }
     }
 
@@ -2794,6 +2808,7 @@ mod tests {
             "C:\\Users\\Administrator\\.local\\bin",
             "C:\\Users\\Administrator\\.hermes\\node",
             "C:\\Users\\Administrator\\.hermes\\node\\bin",
+            "C:\\Users\\Administrator\\.qoder\\bin\\qodercli",
             "C:\\Users\\Administrator\\.local\\share\\mise\\shims",
             "C:\\Users\\Administrator\\scoop\\shims",
             "C:\\Users\\Administrator\\scoop\\apps\\nodejs\\current",
