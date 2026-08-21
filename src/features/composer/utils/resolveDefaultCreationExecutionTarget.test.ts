@@ -6,6 +6,7 @@ import {
   GROK_LOCAL_PROVIDER_PROFILE_ID,
   LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
 } from "../../threads/constants/codexProviderProfiles";
 import {
   isResolvedCreationExecutionTarget,
@@ -164,6 +165,39 @@ describe("resolveDefaultCreationExecutionTarget", () => {
       providerProfileNameSnapshot: LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
       providerProfileSource: "disk",
     });
+    expect(isResolvedExecutionTarget(target)).toBe(false);
+    expect(isResolvedCreationExecutionTarget(target)).toBe(true);
+  });
+
+  it("builds a resolved Qoder target for home create-session", () => {
+    const target = resolveDefaultCreationExecutionTarget({
+      enabled: true,
+      selectedEngine: "qoder",
+      selectedModelId: "minimax/minimax-m3-cp",
+      providerProfileId: QODER_LOCAL_PROVIDER_PROFILE_ID,
+      models: [
+        {
+          id: "qmodel_38max",
+          model: "qmodel_38max",
+        },
+        {
+          id: "minimax/minimax-m3-cp",
+          model: "minimax/minimax-m3-cp",
+          isDefault: true,
+        },
+      ],
+    });
+
+    expect(target).toEqual({
+      engine: "qoder",
+      providerProfileId: null,
+      modelCatalogEntryId: "minimax/minimax-m3-cp",
+      model: "minimax/minimax-m3-cp",
+      reasoning: null,
+      providerProfileNameSnapshot: LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
+      providerProfileSource: "disk",
+    });
+    // Qoder is Native-only (not Shared)：Shared 契约 fail-closed，创建契约放行。
     expect(isResolvedExecutionTarget(target)).toBe(false);
     expect(isResolvedCreationExecutionTarget(target)).toBe(true);
   });

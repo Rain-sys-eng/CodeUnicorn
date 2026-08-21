@@ -16,6 +16,7 @@ import {
   LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
 } from "../../threads/constants/codexProviderProfiles";
 
 /**
@@ -36,9 +37,10 @@ const LOCAL_PROFILE_IDS: Partial<Record<EngineType, string>> = {
   opencode: OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   pi: PI_LOCAL_PROVIDER_PROFILE_ID,
   dsh: DSH_LOCAL_PROVIDER_PROFILE_ID,
+  qoder: QODER_LOCAL_PROVIDER_PROFILE_ID,
 };
 
-export type CreateSessionSupportedEngine = SharedSessionSupportedEngine | "dsh";
+export type CreateSessionSupportedEngine = SharedSessionSupportedEngine | "dsh" | "qoder";
 
 export type ResolvedCreationExecutionTarget = Omit<ExecutionTarget, "engine"> & {
   engine: CreateSessionSupportedEngine;
@@ -51,7 +53,11 @@ export type ResolvedCreationExecutionTarget = Omit<ExecutionTarget, "engine"> & 
 export function isCreateSessionSupportedEngine(
   engine: EngineType | null | undefined,
 ): engine is CreateSessionSupportedEngine {
-  return isSharedSessionSupportedEngine(engine) || engine === "dsh";
+  return (
+    isSharedSessionSupportedEngine(engine) ||
+    engine === "dsh" ||
+    engine === "qoder"
+  );
 }
 
 function hasResolvedCreationTargetIdentity(
@@ -81,7 +87,8 @@ export function isResolvedCreationExecutionTarget(
   if (!target || !isCreateSessionSupportedEngine(target.engine)) {
     return false;
   }
-  if (target.engine === "dsh") {
+  if (target.engine === "dsh" || target.engine === "qoder") {
+    // Native-only engines (not Shared): model comes from the live runtime catalog.
     return hasResolvedCreationTargetIdentity(target);
   }
   return isResolvedExecutionTarget(target);

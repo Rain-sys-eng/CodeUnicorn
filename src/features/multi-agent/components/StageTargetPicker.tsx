@@ -13,6 +13,7 @@ import {
   KIMI_LOCAL_PROVIDER_PROFILE_ID,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
 } from "../../threads/constants/codexProviderProfiles";
 import type { AgentExecutionTarget } from "../types";
 
@@ -23,6 +24,7 @@ const LOCAL_PROFILE: Record<string, string> = {
   grok: GROK_LOCAL_PROVIDER_PROFILE_ID,
   opencode: OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   pi: PI_LOCAL_PROVIDER_PROFILE_ID,
+  qoder: QODER_LOCAL_PROVIDER_PROFILE_ID,
 };
 
 type StageTargetPickerProps = {

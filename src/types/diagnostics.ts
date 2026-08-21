@@ -110,7 +110,8 @@ export type CliInstallEngine =
   | "kimi"
   | "opencode"
   | "pi"
-  | "dsh";
+  | "dsh"
+  | "qoder";
 
 export type CliInstallAction = "installLatest" | "updateLatest" | "uninstall";
 

@@ -33,6 +33,8 @@ pub(crate) enum CliInstallEngine {
     Pi,
     #[serde(rename = "dsh")]
     Dsh,
+    #[serde(rename = "qoder")]
+    Qoder,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,7 +149,9 @@ pub(crate) fn resolve_effective_strategy(
     requested: CliInstallStrategy,
 ) -> CliInstallStrategy {
     match engine {
-        CliInstallEngine::Claude | CliInstallEngine::Grok => CliInstallStrategy::OfficialNative,
+        CliInstallEngine::Claude | CliInstallEngine::Grok | CliInstallEngine::Qoder => {
+            CliInstallStrategy::OfficialNative
+        }
         CliInstallEngine::Codex
         | CliInstallEngine::Kimi
         | CliInstallEngine::OpenCode
@@ -186,6 +190,8 @@ pub(crate) fn package_name_for_engine(engine: CliInstallEngine) -> &'static str 
         CliInstallEngine::Dsh => "@deepseek-ai/dsh@latest",
         // Grok CLI is not distributed via npm; it uses the official curl installer.
         CliInstallEngine::Grok => unreachable!("grok is not distributed via npm"),
+        // Qoder CLI is not distributed via npm; install via the official installer.
+        CliInstallEngine::Qoder => unreachable!("qoder is not distributed via npm"),
     }
 }
 
@@ -197,6 +203,8 @@ fn uninstall_package_name_for_engine(engine: CliInstallEngine) -> &'static str {
         CliInstallEngine::Pi => "@earendil-works/pi-coding-agent",
         // Grok CLI is not distributed via npm; it uses the official curl installer.
         CliInstallEngine::Grok => unreachable!("grok is not distributed via npm"),
+        // Qoder CLI is not distributed via npm; uninstall is intentionally not supported.
+        CliInstallEngine::Qoder => unreachable!("qoder uninstall is intentionally not supported"),
         // OpenCode uninstall is intentionally not supported (protects auth and session data).
         CliInstallEngine::OpenCode => {
             unreachable!("opencode uninstall is intentionally not supported")
@@ -233,11 +241,7 @@ fn install_timeout_secs(engine: CliInstallEngine) -> u64 {
 }
 
 fn npm_plain_global_install_args(package: &str) -> Vec<String> {
-    vec![
-        "install".to_string(),
-        "-g".to_string(),
-        package.to_string(),
-    ]
+    vec!["install".to_string(), "-g".to_string(), package.to_string()]
 }
 
 fn npm_hardened_global_install_args(package: &str) -> Vec<String> {
@@ -367,6 +371,19 @@ fn command_preview_for(engine: CliInstallEngine, action: CliInstallAction) -> Ve
                     .to_string(),
             ],
         },
+        CliInstallEngine::Qoder => match action {
+            CliInstallAction::InstallLatest => vec![
+                "echo".to_string(),
+                "Install Qoder CLI from the official installer: https://docs.qoder.com/cli/installation"
+                    .to_string(),
+            ],
+            CliInstallAction::UpdateLatest => vec!["qodercli".to_string(), "update".to_string()],
+            CliInstallAction::Uninstall => vec![
+                "echo".to_string(),
+                "Qoder CLI uninstall is intentionally not supported (protects ~/.qoder auth and sessions)."
+                    .to_string(),
+            ],
+        },
         CliInstallEngine::Codex | CliInstallEngine::Kimi | CliInstallEngine::Pi => match action {
             CliInstallAction::InstallLatest | CliInstallAction::UpdateLatest => vec![
                 "npm".to_string(),
@@ -430,6 +447,7 @@ fn engine_binary_name(engine: CliInstallEngine) -> &'static str {
         CliInstallEngine::OpenCode => "opencode",
         CliInstallEngine::Pi => "pi",
         CliInstallEngine::Dsh => "dsh",
+        CliInstallEngine::Qoder => "qodercli",
     }
 }
 
@@ -442,6 +460,7 @@ fn engine_explicit_bin<'a>(engine: CliInstallEngine, settings: &'a AppSettings) 
         CliInstallEngine::OpenCode => settings.opencode_bin.as_deref(),
         CliInstallEngine::Pi => settings.pi_bin.as_deref(),
         CliInstallEngine::Dsh => settings.dsh_bin.as_deref(),
+        CliInstallEngine::Qoder => settings.qoder_bin.as_deref(),
     }
     .filter(|value| !value.trim().is_empty())
 }
@@ -726,6 +745,40 @@ async fn resolve_installer_command(
             CliInstallAction::Uninstall,
         ) => Err(
             "Grok CLI uninstall is intentionally not supported (protects ~/.grok auth and sessions)."
+                .to_string(),
+        ),
+        (
+            CliInstallEngine::Qoder,
+            CliInstallStrategy::OfficialNative,
+            CliInstallAction::InstallLatest,
+        ) => Ok(InstallerCommandSpec {
+            program: "echo".to_string(),
+            args: vec![
+                "Install Qoder CLI from the official installer: https://docs.qoder.com/cli/installation"
+                    .to_string(),
+            ],
+            path_env,
+        }),
+        (
+            CliInstallEngine::Qoder,
+            CliInstallStrategy::OfficialNative,
+            CliInstallAction::UpdateLatest,
+        ) => {
+            let binary = find_cli_binary(engine_binary_name(engine), None)
+                .map(|path| path.to_string_lossy().to_string())
+                .unwrap_or_else(|| engine_binary_name(engine).to_string());
+            Ok(InstallerCommandSpec {
+                program: binary,
+                args: vec!["update".to_string()],
+                path_env,
+            })
+        }
+        (
+            CliInstallEngine::Qoder,
+            CliInstallStrategy::OfficialNative,
+            CliInstallAction::Uninstall,
+        ) => Err(
+            "Qoder CLI uninstall is intentionally not supported (protects ~/.qoder auth and sessions)."
                 .to_string(),
         ),
         (
@@ -1049,7 +1102,7 @@ pub(crate) async fn resolve_cli_version_status(
         .is_some_and(crate::codex::node_satisfies_dsh_requirement);
     let node_ok = match engine {
         CliInstallEngine::Claude => !matches!(current_platform(), CliInstallPlatform::Unknown),
-        CliInstallEngine::Grok => !matches!(
+        CliInstallEngine::Grok | CliInstallEngine::Qoder => !matches!(
             current_platform(),
             CliInstallPlatform::Unknown | CliInstallPlatform::Windows
         ),
@@ -1078,7 +1131,8 @@ pub(crate) async fn resolve_cli_version_status(
         | CliInstallEngine::Grok
         | CliInstallEngine::OpenCode
         | CliInstallEngine::Pi
-        | CliInstallEngine::Dsh => {
+        | CliInstallEngine::Dsh
+        | CliInstallEngine::Qoder => {
             match check_cli_binary(engine_binary_name(engine), path_env.clone()).await {
                 Ok(Some(version)) => Some(version),
                 Ok(None) => None,
@@ -1088,13 +1142,18 @@ pub(crate) async fn resolve_cli_version_status(
     };
     let installed = local_version.is_some();
 
-    let latest_version = if engine == CliInstallEngine::Grok {
-        // Grok CLI is not on npm; there is no registry version probe.
+    let latest_version = if engine == CliInstallEngine::Grok || engine == CliInstallEngine::Qoder {
+        // Grok / Qoder CLI are not on npm; there is no registry version probe.
+        let label = if engine == CliInstallEngine::Qoder {
+            "Qoder CLI"
+        } else {
+            "Grok CLI"
+        };
         details = Some(match details {
             Some(existing) => {
-                format!("{existing}; Grok CLI has no npm registry probe; latest version unknown.")
+                format!("{existing}; {label} has no npm registry probe; latest version unknown.")
             }
-            None => "Grok CLI has no npm registry probe; latest version unknown.".to_string(),
+            None => format!("{label} has no npm registry probe; latest version unknown."),
         });
         None
     } else if registry_ok {
@@ -1217,11 +1276,22 @@ pub(crate) async fn build_cli_install_plan_with_backend(
                     "Grok CLI uninstall is intentionally not supported (protects ~/.grok auth and sessions)."
                         .to_string(),
                 );
-            } else if engine != CliInstallEngine::Claude && engine != CliInstallEngine::Grok {
+            } else if engine == CliInstallEngine::Qoder && action == CliInstallAction::Uninstall {
+                blockers.push(
+                    "Qoder CLI uninstall is intentionally not supported (protects ~/.qoder auth and sessions)."
+                        .to_string(),
+                );
+            } else if engine != CliInstallEngine::Claude
+                && engine != CliInstallEngine::Grok
+                && engine != CliInstallEngine::Qoder
+            {
                 blockers.push(
                     "officialNative is only supported for Claude Code installLatest/updateLatest/uninstall."
                         .to_string(),
                 );
+            } else if engine == CliInstallEngine::Qoder {
+                // InstallLatest echoes the official docs URL (never fabricates curl).
+                // UpdateLatest runs `qodercli update` through the normal binary path.
             } else if engine == CliInstallEngine::Grok && cfg!(target_os = "windows") {
                 blockers.push(
                     "Grok CLI installer requires a Unix shell (bash); on Windows run it inside WSL."
@@ -1669,6 +1739,9 @@ async fn run_post_install_doctor(
         }
         CliInstallEngine::Pi => crate::codex::run_pi_doctor_with_settings(None, settings).await,
         CliInstallEngine::Dsh => crate::codex::run_dsh_doctor_with_settings(None, settings).await,
+        CliInstallEngine::Qoder => {
+            crate::codex::run_qoder_doctor_with_settings(None, settings).await
+        }
     }
 }
 
@@ -1893,6 +1966,23 @@ mod tests {
                 .join(" ")
                 .contains("uninstall is intentionally not supported")
         );
+        assert_eq!(
+            command_preview_for(CliInstallEngine::Qoder, CliInstallAction::InstallLatest),
+            vec![
+                "echo".to_string(),
+                "Install Qoder CLI from the official installer: https://docs.qoder.com/cli/installation"
+                    .to_string()
+            ]
+        );
+        assert_eq!(
+            command_preview_for(CliInstallEngine::Qoder, CliInstallAction::UpdateLatest),
+            vec!["qodercli".to_string(), "update".to_string()]
+        );
+        assert!(
+            command_preview_for(CliInstallEngine::Qoder, CliInstallAction::Uninstall)
+                .join(" ")
+                .contains("uninstall is intentionally not supported")
+        );
     }
 
     #[test]
@@ -1985,6 +2075,22 @@ mod tests {
             ),
             CliInstallStrategy::CliSelfUpdate
         );
+        assert_eq!(
+            resolve_effective_strategy(
+                CliInstallEngine::Qoder,
+                CliInstallAction::InstallLatest,
+                CliInstallStrategy::NpmGlobal,
+            ),
+            CliInstallStrategy::OfficialNative
+        );
+        assert_eq!(
+            resolve_effective_strategy(
+                CliInstallEngine::Qoder,
+                CliInstallAction::UpdateLatest,
+                CliInstallStrategy::CliSelfUpdate,
+            ),
+            CliInstallStrategy::OfficialNative
+        );
     }
 
     #[tokio::test]
@@ -2018,7 +2124,10 @@ mod tests {
             plan.command_preview,
             command_preview_for(CliInstallEngine::Dsh, CliInstallAction::InstallLatest)
         );
-        assert!(plan.command_preview.iter().any(|part| part == "--maxsockets=1"));
+        assert!(plan
+            .command_preview
+            .iter()
+            .any(|part| part == "--maxsockets=1"));
         assert!(plan
             .warnings
             .iter()
@@ -2046,6 +2155,48 @@ mod tests {
             .blockers
             .iter()
             .any(|blocker| blocker.contains("uninstall is intentionally not supported")));
+    }
+
+    #[tokio::test]
+    async fn qoder_uninstall_plan_is_blocked() {
+        let plan = build_cli_install_plan(
+            CliInstallEngine::Qoder,
+            CliInstallAction::Uninstall,
+            CliInstallStrategy::NpmGlobal,
+            &AppSettings::default(),
+        )
+        .await;
+
+        assert!(!plan.can_run);
+        assert!(plan
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("uninstall is intentionally not supported")));
+    }
+
+    #[tokio::test]
+    async fn qoder_install_plan_uses_official_native_without_npm_or_curl() {
+        let plan = build_cli_install_plan(
+            CliInstallEngine::Qoder,
+            CliInstallAction::InstallLatest,
+            CliInstallStrategy::NpmGlobal,
+            &AppSettings::default(),
+        )
+        .await;
+
+        assert_eq!(plan.strategy, CliInstallStrategy::OfficialNative);
+        assert!(!plan
+            .blockers
+            .iter()
+            .any(|blocker| blocker.to_ascii_lowercase().contains("npm")));
+        assert_eq!(
+            plan.command_preview,
+            command_preview_for(CliInstallEngine::Qoder, CliInstallAction::InstallLatest)
+        );
+        assert!(!plan
+            .command_preview
+            .iter()
+            .any(|part| part.contains("curl")));
     }
 
     #[tokio::test]
@@ -2253,11 +2404,12 @@ mod tests {
             DSH_NPM_SCOPE,
             DSH_NPM_PACKAGE,
         );
-        assert!(windows_candidates.iter().any(|path| path.ends_with(
-            Path::new("node_modules")
-                .join("@deepseek-ai")
-                .join("dsh")
-        )));
+        assert!(
+            windows_candidates
+                .iter()
+                .any(|path| path
+                    .ends_with(Path::new("node_modules").join("@deepseek-ai").join("dsh")))
+        );
     }
 
     #[test]

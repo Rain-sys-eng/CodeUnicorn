@@ -538,6 +538,7 @@ describe("buildAppShellDomainContextSlices", () => {
       grokDoctor: null,
       opencodeDoctor: null,
       piDoctor: null,
+      qoderDoctor: null,
       editorHighlightTarget: null,
       editorNavigationTarget: null,
       editorSplitCompanion: null,
@@ -575,7 +576,8 @@ describe("buildAppShellDomainContextSlices", () => {
       setFileReferenceMode: () => {},
       handleTestNotificationSound: () => {},
     } as any);
-    expect(Object.keys(slice).length).toBe(78);
+    // S4 PR-F 咬实测：qoderDoctor 入账 workspaceNavigation 后 78 → 79（贴 navigation hard ≤ 79 顶）。
+    expect(Object.keys(slice).length).toBe(79);
     expect(slice).toHaveProperty("appSettings");
     expect(slice).not.toHaveProperty("activeWorkspaceId");
     expect(slice).not.toHaveProperty("gitStatus");

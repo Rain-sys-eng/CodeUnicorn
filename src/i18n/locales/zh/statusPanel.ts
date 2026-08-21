@@ -168,7 +168,7 @@ const statusPanel = {
         codingPlanEmpty: "已识别套餐供应商，但还没有额度窗口数据",
         error: "额度查询失败：{{message}}",
         unsupported:
-          "{{engine}} 当前 base_url 不是已知 Coding Plan 域名（Kimi/MiniMax/智谱）",
+          "{{engine}} 当前不支持额度查询（无已知 Coding Plan 域名，或该 CLI 无账户额度接口）",
         notSupported: "暂不支持额度查询",
       },
     },

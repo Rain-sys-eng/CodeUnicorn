@@ -41,6 +41,8 @@ type CodexSectionProps = {
   dshDoctorState: DoctorState;
   handleRunPiDoctor: () => Promise<void>;
   piDoctorState: DoctorState;
+  handleRunQoderDoctor: () => Promise<void>;
+  qoderDoctorState: DoctorState;
   handleRunDoctor: () => Promise<void>;
   doctorState: DoctorState;
   remoteHostDraft: string;
@@ -78,7 +80,8 @@ type CliValidationTab =
   | "grok"
   | "opencode"
   | "dsh"
-  | "pi";
+  | "pi"
+  | "qoder";
 
 // Deprecated: Gemini CLI validation entry is intentionally hidden.
 const DEPRECATED_CLI_VALIDATION_ENGINES = new Set(["gemini"]);
@@ -438,6 +441,8 @@ export function CodexSection({
   dshDoctorState,
   handleRunPiDoctor,
   piDoctorState,
+  handleRunQoderDoctor,
+  qoderDoctorState,
   handleRunDoctor,
   doctorState,
   remoteHostDraft,
@@ -734,6 +739,8 @@ export function CodexSection({
                       ? "dsh"
                       : value === "pi"
                         ? "pi"
+                        : value === "qoder"
+                          ? "qoder"
                         : "codex",
           );
         }}
@@ -750,6 +757,7 @@ export function CodexSection({
           </TabsTab>
           <TabsTab value="dsh">{t("settings.cliValidationTabDshCli")}</TabsTab>
           <TabsTab value="pi">{t("settings.cliValidationTabPiCli")}</TabsTab>
+          <TabsTab value="qoder">{t("settings.cliValidationTabQoderCli")}</TabsTab>
         </TabsList>
 
         <TabsPanel value="codex">
@@ -1203,6 +1211,62 @@ export function CodexSection({
               state={piDoctorState}
               successTitleKey="settings.piLooksGood"
               errorTitleKey="settings.piIssueDetected"
+              showAppServer={false}
+            />
+          </div>
+        </TabsPanel>
+
+        <TabsPanel value="qoder">
+          <div className="settings-field">
+            <div className="settings-help">
+              {t("settings.cliPathManagedInVendors")}
+            </div>
+            <div className="settings-help">
+              {t("settings.qoderCliLifecycleHint")}
+            </div>
+            <div className="settings-field-actions">
+              <button
+                type="button"
+                className="ghost settings-button-compact"
+                onClick={() => {
+                  void handleRunQoderDoctor();
+                }}
+                disabled={qoderDoctorState.status === "running"}
+              >
+                <Stethoscope aria-hidden />
+                {qoderDoctorState.status === "running"
+                  ? t("settings.running")
+                  : t("settings.runQoderDoctor")}
+              </button>
+              <button
+                type="button"
+                className="ghost settings-button-compact"
+                onClick={() => {
+                  void requestInstallPlan("qoder", qoderDoctorState.result);
+                }}
+                disabled={installerBusy}
+              >
+                {resolveInstallerAction(qoderDoctorState.result) === "installLatest"
+                  ? t("settings.cliInstallLatest")
+                  : t("settings.cliUpdateLatest")}
+              </button>
+              <button
+                type="button"
+                className="ghost settings-button-compact"
+                onClick={() => {
+                  void requestInstallPlan("qoder", qoderDoctorState.result, "uninstall");
+                }}
+                disabled={installerBusy || !qoderDoctorState.result?.ok}
+              >
+                {t("settings.cliUninstall")}
+              </button>
+            </div>
+
+            <DoctorResultCard
+              t={t}
+              state={qoderDoctorState}
+              successTitleKey="settings.qoderLooksGood"
+              errorTitleKey="settings.qoderIssueDetected"
               showAppServer={false}
             />
           </div>

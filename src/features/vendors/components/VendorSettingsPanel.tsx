@@ -49,6 +49,7 @@ import { KimiProviderDialog } from "./KimiProviderDialog";
 import { GrokProviderDialog } from "./GrokProviderDialog";
 import { OpenCodeProviderDialog } from "./OpenCodeProviderDialog";
 import { PiProviderAuthSection } from "./PiProviderAuthSection";
+import { QoderAuthSection } from "./QoderAuthSection";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { CustomModelDialog } from "./CustomModelDialog";
 import {
@@ -454,6 +455,8 @@ export function VendorSettingsPanel({
         return { path: appSettings.piBin ?? null, args: null };
       case "dsh":
         return { path: appSettings.dshBin ?? null, args: null };
+      case "qoder":
+        return { path: appSettings.qoderBin ?? null, args: null };
       case "codex":
         return {
           path: appSettings.codexBin ?? null,
@@ -499,6 +502,12 @@ export function VendorSettingsPanel({
           await onUpdateAppSettings({
             ...appSettings,
             dshBin: payload.path,
+          });
+          break;
+        case "qoder":
+          await onUpdateAppSettings({
+            ...appSettings,
+            qoderBin: payload.path,
           });
           break;
         case "codex":
@@ -969,10 +978,12 @@ export function VendorSettingsPanel({
         openCodeHasConfig,
         piHasConfig: Boolean(appSettings.piBin?.trim()),
         dshHasConfig: Boolean(appSettings.dshBin?.trim()),
+        qoderHasConfig: Boolean(appSettings.qoderBin?.trim()),
       }),
     [
       appSettings.piBin,
       appSettings.dshBin,
+      appSettings.qoderBin,
       claudeHasConfig,
       codexGlobalConfigExists,
       kimiHasConfig,
@@ -1691,6 +1702,47 @@ export function VendorSettingsPanel({
               })}
             >
               <PiProviderAuthSection piBin={appSettings.piBin ?? null} />
+            </VendorSettingsSection>
+          </div>
+          </CliLifecycleProvider>
+        ) : activeCli === "qoder" ? (
+          <CliLifecycleProvider key="qoder" engine="qoder" active>
+          <div className="vendor-tab-content vendor-tab-content-dense">
+            <CliBrandHeader
+              id="qoder"
+              title="Qoder CLI"
+              description={t("settings.qoderDescription", {
+                defaultValue:
+                  "Install and configure the Qoder CLI used by ccgui. Sign in with qodercli login; models come from the live ACP catalog.",
+              })}
+              helpLabel={t("settings.vendor.openCliDocs", {
+                defaultValue: "Official docs",
+              })}
+              href={CLI_DOCS_HREF_BY_ID.qoder}
+              actions={<CliLifecycleHeaderActions />}
+            />
+            <CliLifecycleInstallerPanel />
+            <VendorSettingsSection
+              label={t("settings.vendor.engineSettings", {
+                defaultValue: "Engine settings",
+              })}
+            >
+              <div className="vendor-group-card">
+                <div className="settings-help" style={{ padding: "8px 12px" }}>
+                  {t("settings.qoderCliLifecycleHint", {
+                    defaultValue:
+                      "Install or update the local Qoder CLI. Use Login below to run qodercli login, or set a PAT in the client.",
+                  })}
+                </div>
+                {renderCustomPathEntry("qoder")}
+              </div>
+            </VendorSettingsSection>
+            <VendorSettingsSection
+              label={t("settings.vendor.qoderAuth.sectionTitle", {
+                defaultValue: "认证",
+              })}
+            >
+              <QoderAuthSection qoderBin={appSettings.qoderBin ?? null} />
             </VendorSettingsSection>
           </div>
           </CliLifecycleProvider>

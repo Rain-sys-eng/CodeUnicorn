@@ -21,10 +21,12 @@ pub(crate) mod claude_history_subagents;
 pub(crate) mod claude_message_content;
 #[path = "../../engine/cli_image_input.rs"]
 pub(crate) mod cli_image_input;
+#[path = "../../engine/dsh/mod.rs"]
+pub mod dsh;
+#[path = "../../engine/dsh_provider_profile.rs"]
+pub(crate) mod dsh_provider_profile;
 #[path = "../../engine/events.rs"]
 pub mod events;
-#[path = "../../engine/session_directory_grant.rs"]
-pub mod session_directory_grant;
 #[path = "../../engine/gemini.rs"]
 pub mod gemini;
 #[path = "../../engine/gemini_history.rs"]
@@ -43,6 +45,13 @@ pub mod kimi;
 pub mod kimi_history;
 #[path = "../../engine/kimi_provider_profile.rs"]
 pub(crate) mod kimi_provider_profile;
+#[allow(dead_code)]
+#[path = "../../engine/manager.rs"]
+pub mod manager;
+#[path = "../../engine/opencode.rs"]
+pub mod opencode;
+#[path = "../../engine/opencode_provider_profile.rs"]
+pub(crate) mod opencode_provider_profile;
 #[path = "../../engine/pi.rs"]
 pub mod pi;
 #[path = "../../engine/pi_auth.rs"]
@@ -51,17 +60,17 @@ pub mod pi_auth;
 pub mod pi_history;
 #[path = "../../engine/pi_provider_profile.rs"]
 pub(crate) mod pi_provider_profile;
-#[path = "../../engine/dsh/mod.rs"]
-pub mod dsh;
-#[path = "../../engine/dsh_provider_profile.rs"]
-pub(crate) mod dsh_provider_profile;
+#[path = "../../engine/qoder.rs"]
+pub mod qoder;
+#[path = "../../engine/qoder_history.rs"]
+pub mod qoder_history;
+#[path = "../../engine/qoder_provider_profile.rs"]
+pub(crate) mod qoder_provider_profile;
 #[allow(dead_code)]
-#[path = "../../engine/manager.rs"]
-pub mod manager;
-#[path = "../../engine/opencode.rs"]
-pub mod opencode;
-#[path = "../../engine/opencode_provider_profile.rs"]
-pub(crate) mod opencode_provider_profile;
+#[path = "../../engine/qoder_auth.rs"]
+pub(crate) mod qoder_auth;
+#[path = "../../engine/session_directory_grant.rs"]
+pub mod session_directory_grant;
 #[allow(dead_code)]
 #[path = "../../engine/status.rs"]
 pub mod status;
@@ -517,6 +526,7 @@ pub enum EngineType {
     Kimi,
     Pi,
     Dsh,
+    Qoder,
 }
 
 impl Default for EngineType {
@@ -536,6 +546,7 @@ impl EngineType {
             EngineType::Kimi => "Kimi CLI",
             EngineType::Pi => "PI CLI",
             EngineType::Dsh => "DeepSeek Harness",
+            EngineType::Qoder => "Qoder CLI",
         }
     }
 
@@ -549,6 +560,7 @@ impl EngineType {
             EngineType::Kimi => "kimi",
             EngineType::Pi => "pi",
             EngineType::Dsh => "dsh",
+            EngineType::Qoder => "qoder",
         }
     }
 }
@@ -571,7 +583,8 @@ pub(crate) fn engine_enabled_in_settings(
         | EngineType::Grok
         | EngineType::Kimi
         | EngineType::Pi
-        | EngineType::Dsh => true,
+        | EngineType::Dsh
+        | EngineType::Qoder => true,
     }
 }
 
@@ -584,7 +597,8 @@ pub(crate) fn engine_disabled_diagnostic(engine_type: EngineType) -> Option<&'st
         | EngineType::Grok
         | EngineType::Kimi
         | EngineType::Pi
-        | EngineType::Dsh => None,
+        | EngineType::Dsh
+        | EngineType::Qoder => None,
     }
 }
 
@@ -853,6 +867,18 @@ impl EngineFeatures {
             mcp: false,
         }
     }
+
+    pub fn qoder() -> Self {
+        Self {
+            reasoning_effort: true,
+            collaboration_mode: false,
+            image_input: true,
+            session_resume: true,
+            tools_control: true,
+            streaming: true,
+            mcp: true,
+        }
+    }
 }
 
 pub(crate) fn disabled_engine_status(engine_type: EngineType) -> EngineStatus {
@@ -865,6 +891,7 @@ pub(crate) fn disabled_engine_status(engine_type: EngineType) -> EngineStatus {
         EngineType::Kimi => EngineFeatures::kimi(),
         EngineType::Pi => EngineFeatures::pi(),
         EngineType::Dsh => EngineFeatures::dsh(),
+        EngineType::Qoder => EngineFeatures::qoder(),
     };
     EngineStatus {
         engine_type,

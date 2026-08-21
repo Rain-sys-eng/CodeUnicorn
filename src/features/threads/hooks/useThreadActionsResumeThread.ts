@@ -9,6 +9,7 @@ import {
   loadKimiSession as loadKimiSessionService,
   loadDshSession as loadDshSessionService,
   loadPiSession as loadPiSessionService,
+  loadQoderSession as loadQoderSessionService,
   resumeThread as resumeThreadService,
 } from "../../../services/tauri";
 import {
@@ -35,6 +36,7 @@ import {
 import { seedDshComposerSelectionFromHost } from "../../../app-shell-parts/selectedComposerSession";
 import { parseDshHistoryMessages } from "../loaders/dshHistoryParser";
 import { parsePiHistoryMessages } from "../loaders/piHistoryParser";
+import { parseQoderHistoryMessages } from "../loaders/qoderHistoryParser";
 import {
   hydrateHistory,
   mergeHistoryProjectionItems,
@@ -1775,6 +1777,49 @@ export function useThreadActionsResumeThreadForWorkspace(
             });
           } catch {
             // Failed to load PI session history — not fatal
+          }
+        }
+        loadedThreadsRef.current[threadId] = true;
+        return threadId;
+      }
+      if (threadId.startsWith("qoder:")) {
+        dispatch({
+          type: "ensureThread",
+          workspaceId,
+          threadId,
+          engine: "qoder",
+        });
+        if (workspacePath && !loadedThreadsRef.current[threadId]) {
+          const realSessionId = threadId.slice("qoder:".length);
+          try {
+            await runNativeHistoryOpenStages({
+              report: (progress) => {
+                if (!isCurrentResumeRequest()) {
+                  return;
+                }
+                setThreadHistoryLoadingProgress?.(threadId, progress);
+              },
+              shouldContinue: isCurrentResumeRequest,
+              load: () => loadQoderSessionService(workspacePath, realSessionId),
+              extractMessages: (payload) =>
+                (payload as { messages?: unknown }).messages ?? payload,
+              parse: parseQoderHistoryMessages,
+              hydrate: async (items) => {
+                if (items.length > 0) {
+                  await applyHydratedItems(threadId, items);
+                }
+              },
+            });
+            if (!isCurrentResumeRequest()) {
+              return threadId;
+            }
+            dispatch({
+              type: "setThreadHistoryRestoredAt",
+              threadId,
+              timestamp: Date.now(),
+            });
+          } catch {
+            // Failed to load Qoder session history — not fatal
           }
         }
         loadedThreadsRef.current[threadId] = true;

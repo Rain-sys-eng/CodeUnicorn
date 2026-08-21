@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "जोड़ना",
     "generatingResponse": "प्रतिक्रिया उत्पन्न हो रही है...",
     "responding": "प्रतिक्रिया में...",
+    "waitingForFirstText": "{{engine}} चल रहा है। पहले टेक्स्ट चंक की प्रतीक्षा हो रही है...",
     "codexWaitingForFirstText": "Codex चल रहा है। पहले टेक्स्ट चंक की प्रतीक्षा हो रही है...",
     "codexSilentSuspected": "कुछ समय से कोई नया Codex आउटपुट नहीं। अभी भी रनटाइम गतिविधि सुनी जा रही है...",
     "nonStreamingHint": "यह मॉडल गैर-स्ट्रीमिंग आउटपुट लौटा सकता है, या नेटवर्क अगम्य हो सकता है। कृपया प्रतीक्षा करें...",

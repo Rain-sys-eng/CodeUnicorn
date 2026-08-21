@@ -1040,6 +1040,8 @@ const settings = {
     projectSessionEngineKimi: "Kimi CLI",
     projectSessionEngineGrok: "Grok CLI",
     projectSessionEnginePi: "PI CLI",
+    projectSessionEngineQoder: "Qoder CLI",
+    projectSessionEngineDsh: "DeepSeek Harness",
     projectSessionEngineShared: "Shared CLI",
     sessionManagementDescription:
       "Manage real session history per project with paged loading, filtering, batch archive, unarchive, and deletion.",
@@ -1756,6 +1758,34 @@ const settings = {
         title: "Confirm Delete",
         message: "Are you sure you want to delete provider \"{{name}}\"? This action cannot be undone.",
       },
+      qoderAuth: {
+        sectionTitle: "Authentication",
+        loginTitle: "Browser login",
+        loginHint: "Run qodercli login in the embedded terminal to complete browser auth",
+        loginDesc: "Account login · qodercli stores the browser token itself",
+        login: "Login",
+        apiKeyTitle: "PAT",
+        apiKeyHint: "Saved to ~/.ccgui/qoder-auth.json and injected as QODER_PERSONAL_ACCESS_TOKEN",
+        configured: "Configured",
+        notConfigured: "Not configured",
+        envActive: "Environment variable active",
+        envActiveHint:
+          "The process environment is active when mossx launches qodercli. Set a PAT to override it.",
+        setKey: "Set Key",
+        overrideSet: "Override",
+        edit: "Edit",
+        collapse: "Collapse",
+        delete: "Delete",
+        save: "Save",
+        saving: "Saving…",
+        keyLabel: "Personal Access Token",
+        keyPlaceholderKeep: "{{mask}} (leave empty to keep)",
+        keyPlaceholderNew: "Paste {{env}}",
+        toggleKeyVisibility: "Show / hide",
+        saveHint: "Writes ~/.ccgui/qoder-auth.json (0600) and injects it when launching qodercli",
+        loadFailed: "Failed to read auth status",
+        resolutionOrder: "Resolution order: process env → qoder-auth.json → qodercli login",
+      },
     },
     cliValidationTitle: "CLI Validation",
     cliValidationDescription:
@@ -1771,6 +1801,7 @@ const settings = {
     cliValidationTabGrokCli: "Grok CLI",
     cliValidationTabDshCli: "DeepSeek Harness",
     cliValidationTabPiCli: "PI CLI",
+    cliValidationTabQoderCli: "Qoder CLI",
     cliEngineEnabledLabel: "Engine enabled",
     geminiCliDisableDescription:
       "Disable Gemini CLI entirely. Once disabled, startup detection and engine entry points stop immediately.",
@@ -1796,6 +1827,10 @@ const settings = {
     piDescription: "Configure PI CLI auth and models. Credentials stay in ~/.pi.",
     piCliLifecycleHint:
       "Install or update the local PI CLI via npm package @earendil-works/pi-coding-agent. Auth and models stay in ~/.pi.",
+    qoderDescription:
+      "Install and configure the Qoder CLI used by ccgui. Sign in with qodercli login; models come from the live ACP catalog.",
+    qoderCliLifecycleHint:
+      "Install or update the local Qoder CLI. Use Login below to run qodercli login, or set a PAT in the client.",
     piAuth: {
       sectionTitle: "Provider authentication",
       oauthTitle: "Subscriptions",
@@ -2050,6 +2085,9 @@ const settings = {
     runPiDoctor: "Run PI Doctor",
     piLooksGood: "PI CLI looks good",
     piIssueDetected: "PI CLI issue detected",
+    runQoderDoctor: "Run Qoder Doctor",
+    qoderLooksGood: "Qoder CLI looks good",
+    qoderIssueDetected: "Qoder CLI issue detected",
     cliInstallLatest: "Install",
     cliUpdateLatest: "Update",
     cliUninstall: "Uninstall",

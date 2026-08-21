@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Ensamblar",
     "generatingResponse": "Generando respuesta...",
     "responding": "Respondiendo...",
+    "waitingForFirstText": "{{engine}} está en ejecución. Esperando el primer fragmento de texto...",
     "codexWaitingForFirstText": "Codex está en ejecución. Esperando el primer fragmento de texto...",
     "codexSilentSuspected": "No hay nueva salida de Codex desde hace un rato. Seguimos escuchando actividad del runtime...",
     "nonStreamingHint": "Este modelo puede devolver una salida sin streaming, o la red puede no estar disponible. Espera...",

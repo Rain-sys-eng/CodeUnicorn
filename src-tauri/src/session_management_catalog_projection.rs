@@ -374,6 +374,9 @@ async fn build_workspace_scope_catalog_data(
     let pi_config = engine_manager
         .get_engine_config(engine::EngineType::Pi)
         .await;
+    let qoder_config = engine_manager
+        .get_engine_config(engine::EngineType::Qoder)
+        .await;
     let claude_config = engine_manager
         .get_engine_config(engine::EngineType::Claude)
         .await;
@@ -1009,6 +1012,97 @@ async fn build_workspace_scope_catalog_data(
                 source_statuses.push(build_degraded_source_status(
                     "pi",
                     SESSION_CATALOG_PARTIAL_PI,
+                ));
+            }
+        }
+
+        // Skip ACP listing unless EngineManager has a Qoder config entry.
+        // Tests construct a bare EngineManager::new() (no configs), and probing
+        // PATH would spawn a live qodercli handshake up to QODER_LIST_TIMEOUT.
+        // Production seeds the config even when qoder_bin is unset, so listing
+        // still falls back to PATH qodercli.
+        let qoder_list_result = if qoder_config.is_some() {
+            engine::qoder_history::list_qoder_sessions(
+                &owner_workspace_path,
+                Some(scan_mode.limit()),
+                qoder_config
+                    .as_ref()
+                    .and_then(|item| item.home_dir.as_deref()),
+            )
+            .await
+        } else {
+            Ok(Vec::new())
+        };
+        match qoder_list_result
+        {
+            Ok(qoder_sessions) => {
+                source_statuses.push(build_success_source_status(
+                    "qoder",
+                    qoder_sessions.len(),
+                    scan_mode,
+                    WorkspaceSessionSourceCompleteness::AuthoritativeEmpty,
+                    None,
+                ));
+                entries.extend(qoder_sessions.into_iter().map(|session| {
+                    let session_id = format!("qoder:{}", session.session_id);
+                    let entry = WorkspaceSessionCatalogEntry {
+                        archived_at: archived_at_for_session(
+                            &owner_metadata,
+                            &owner_workspace_id,
+                            &session_id,
+                        ),
+                        session_id,
+                        stable_session_key: None,
+                        canonical_session_id: Some(session.session_id.clone()),
+                        parent_session_id: None,
+                        workspace_id: owner_workspace_id.clone(),
+                        workspace_label: Some(workspace.name.clone()),
+                        engine: "qoder".to_string(),
+                        title: session.first_message,
+                        native_title: None,
+                        updated_at: session.updated_at.max(0),
+                        thread_kind: "native".to_string(),
+                        source: None,
+                        source_label: None,
+                        provider_profile_id: None,
+                        provider_profile_source: None,
+                        provider_profile_name: None,
+                        provider_availability: None,
+                        source_completeness: None,
+                        source_status_reason: None,
+                        size_bytes: session.file_size_bytes,
+                        cwd: None,
+                        attribution_status: Some(
+                            SessionCatalogAttributionStatus::StrictMatch
+                                .as_str()
+                                .to_string(),
+                        ),
+                        attribution_reason: None,
+                        attribution_confidence: None,
+                        matched_workspace_id: Some(owner_workspace_id.clone()),
+                        matched_workspace_label: Some(workspace.name.clone()),
+                        folder_id: None,
+                        auto_session: None,
+                        exists_on_disk: false,
+                        inconsistency_code: None,
+                        delete_mode: None,
+                        physical_path: None,
+                        children_count: None,
+                        continuation: ProviderContinuationProjection::default(),
+                    };
+                    finalize_existing_catalog_entry(entry, &metadata_by_workspace_id)
+                }));
+            }
+            Err(error) => {
+                log::warn!(
+                    "[session_management.list_workspace_sessions] qoder history unavailable for workspace {}: {}",
+                    owner_workspace_id,
+                    error
+                );
+                partial_sources.push(SESSION_CATALOG_PARTIAL_QODER.to_string());
+                source_statuses.push(build_degraded_source_status(
+                    "qoder",
+                    SESSION_CATALOG_PARTIAL_QODER,
                 ));
             }
         }

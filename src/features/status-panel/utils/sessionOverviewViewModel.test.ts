@@ -157,6 +157,20 @@ describe("buildSessionOverviewQuota", () => {
     expect(quota.windows).toEqual([]);
   });
 
+  it("maps Qoder Native as unsupported, not a coding-plan vendor", () => {
+    const quota = buildSessionOverviewQuota("qoder", null, true, {
+      source: "unsupported",
+      success: false,
+      error:
+        "Qoder CLI 没有可查询的账户额度接口（无 account/rateLimits、无 /usages HTTP）。请在 qodercli 内使用 /usage 查看。",
+      windows: [],
+    });
+    expect(quota.source).toBe("unsupported");
+    expect(quota.providerLabel).toBe("qoder");
+    expect(quota.error).toContain("没有可查询的账户额度接口");
+    expect(quota.windows).toEqual([]);
+  });
+
   it("maps deepseek balance without windows and does not use codex rateLimits", () => {
     const quota = buildSessionOverviewQuota(
       "codex",

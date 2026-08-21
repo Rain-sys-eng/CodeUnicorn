@@ -727,7 +727,7 @@ function attachmentToGeminiImageInput(attachment: Attachment): string | null {
 
 function attachmentsToImageInputs(
   attachments: Attachment[] | undefined,
-  provider: 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh' = 'claude',
+  provider: 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh' | 'qoder' = 'claude',
 ): string[] | undefined {
   if (!attachments || attachments.length === 0) {
     return undefined;
@@ -747,7 +747,7 @@ function attachmentsToImageInputs(
 /**
  * Maps Composer engine types to ChatInputBox provider IDs
  */
-type ChatInputProvider = 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh';
+type ChatInputProvider = 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh' | 'qoder';
 
 function engineToProvider(engine?: EngineType): ChatInputProvider {
   switch (engine) {
@@ -765,6 +765,8 @@ function engineToProvider(engine?: EngineType): ChatInputProvider {
       return 'pi';
     case 'dsh':
       return 'dsh';
+    case 'qoder':
+      return 'qoder';
     case 'claude':
     default:
       return 'claude';
@@ -1860,6 +1862,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         kimi: isEngineEnabled('kimi'),
         pi: isEngineEnabled('pi'),
         dsh: isEngineEnabled('dsh'),
+        qoder: isEngineEnabled('qoder'),
       } as const;
     }, [engines, isSharedSession]);
 
@@ -1880,6 +1883,9 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       const sharedUnsupported = t("sharedSession.dshUnsupported", {
         defaultValue: "Not available in Shared Session",
       });
+      const qoderUnsupported = t("sharedSession.qoderUnsupported", {
+        defaultValue: "Not available in Shared Session",
+      });
       return {
         claude: resolveStatusLabel('claude'),
         codex: resolveStatusLabel('codex'),
@@ -1889,6 +1895,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         kimi: resolveStatusLabel('kimi'),
         pi: resolveStatusLabel('pi'),
         dsh: isSharedSession ? sharedUnsupported : resolveStatusLabel('dsh'),
+        qoder: isSharedSession ? qoderUnsupported : resolveStatusLabel('qoder'),
       } as const;
     }, [engines, isSharedSession, t]);
 
@@ -1906,6 +1913,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         opencode: 'OpenCode',
         pi: 'PI CLI',
         dsh: 'DeepSeek Harness',
+        qoder: 'Qoder CLI',
       };
 
       const byEngine = new Map(engines.map((entry) => [entry.type, entry]));
@@ -1933,6 +1941,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         kimi: resolveVersion('kimi'),
         pi: resolveVersion('pi'),
         dsh: resolveVersion('dsh'),
+        qoder: resolveVersion('qoder'),
       } as const;
     }, [engines]);
 

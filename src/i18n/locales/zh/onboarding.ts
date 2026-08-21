@@ -83,6 +83,10 @@ const onboarding = {
         title: "PI CLI",
         hint: "可选引擎，按需安装。",
       },
+      qoder: {
+        title: "Qoder CLI",
+        hint: "可选引擎，按需安装。登录请使用 qodercli login。",
+      },
     },
     done: {
       title: "可以开始了",

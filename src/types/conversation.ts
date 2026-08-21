@@ -276,7 +276,8 @@ export type ThreadSummary = {
     | "kimi"
     | "opencode"
     | "pi"
-    | "dsh";
+    | "dsh"
+    | "qoder";
   selectedEngine?:
     | "codex"
     | "claude"
@@ -285,7 +286,8 @@ export type ThreadSummary = {
     | "kimi"
     | "opencode"
     | "pi"
-    | "dsh";
+    | "dsh"
+    | "qoder";
   source?: string;
   provider?: string;
   sourceLabel?: string;

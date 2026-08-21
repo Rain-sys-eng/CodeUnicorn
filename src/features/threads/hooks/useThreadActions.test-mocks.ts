@@ -18,6 +18,7 @@ import {
   listKimiSessions,
   listDshSessions,
   listPiSessions,
+  listQoderSessions,
   listThreadTitles,
   listWorkspaceSessionArchiveEvidence,
   listWorkspaceSessions,
@@ -54,11 +55,13 @@ vi.mock("../../../services/tauri", () => ({
   rememberSessionIndexWorkspacePath: vi.fn(),
   listDshSessions: vi.fn(),
   listPiSessions: vi.fn(),
+  listQoderSessions: vi.fn(),
   loadClaudeSession: vi.fn(),
   loadGeminiSession: vi.fn(),
   loadGrokSession: vi.fn(),
   loadKimiSession: vi.fn(),
   loadPiSession: vi.fn(),
+  loadQoderSession: vi.fn(),
   loadCodexSession: vi.fn(),
   listThreadTitles: vi.fn(),
   readWorkspaceFile: vi.fn(),
@@ -75,6 +78,7 @@ vi.mock("../../../services/tauri", () => ({
   deleteKimiSession: vi.fn(),
   deleteOpenCodeSession: vi.fn(),
   deletePiSession: vi.fn(),
+  deleteQoderSession: vi.fn(),
   deleteWorkspaceSessions: vi.fn(),
   tombstoneSessionIndexRows: vi.fn(),
   trashWorkspaceItem: vi.fn(),
@@ -118,6 +122,7 @@ export function resetUseThreadActionsTestMocks() {
   vi.mocked(listGrokSessions).mockResolvedValue([]);
   vi.mocked(listKimiSessions).mockResolvedValue([]);
   vi.mocked(listPiSessions).mockResolvedValue([]);
+  vi.mocked(listQoderSessions).mockResolvedValue([]);
   vi.mocked(listDshSessions).mockResolvedValue([]);
   vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
   vi.mocked(listWorkspaceSessions).mockResolvedValue({

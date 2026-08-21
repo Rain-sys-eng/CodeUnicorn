@@ -87,7 +87,14 @@ export const ModeSelect = memo(({
         disabled: mode.id !== 'default' && mode.id !== 'bypassPermissions',
       }));
     }
-    // Keep non-Claude providers on the existing restricted path.
+    if (provider === 'qoder') {
+      // Headless ACP always uses bypassPermissions; hide selectable access modes.
+      return AVAILABLE_MODES.map((mode) => ({
+        ...mode,
+        disabled: true,
+      }));
+    }
+    // Keep non-Claude providers (including kimi) on the existing restricted path.
     return AVAILABLE_MODES.map((mode) => {
       if (mode.id !== 'bypassPermissions') {
         return { ...mode, disabled: true };

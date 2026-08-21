@@ -421,9 +421,9 @@ describe("VendorSettingsPanel", () => {
       "OpenCode CLI",
       "PI CLI",
       "DeepSeek Harness",
+      "Qoder CLI",
       "Gemini CLI",
       "GLM CLI",
-      "Trae CLI",
     ]);
     expect(navLabels).toEqual(
       expect.arrayContaining(["瑞幸 CLI", "DevEco CLI", "Cursor CLI", "iFlow CLI"]),
@@ -489,9 +489,7 @@ describe("VendorSettingsPanel", () => {
       "Cursor CLI",
       "瑞幸 CLI",
       "DevEco CLI",
-      "PI CLI",
       "iFlow CLI",
-      "Qoder CLI",
       "Qwen CLI",
       "CodeBuddy CLI",
       "Copilot CLI",
@@ -583,6 +581,33 @@ describe("VendorSettingsPanel", () => {
     expect(screen.queryByTestId("provider-list-stub")).toBeNull();
     expect(screen.queryByTestId("kimi-provider-list-stub")).toBeNull();
     // Custom path entry is present for supported engines.
+    expect(
+      screen.getByRole("button", { name: /自定义路径|Custom path|Configure/i }),
+    ).toBeTruthy();
+  });
+
+  it("renders the Qoder CLI tab with lifecycle and custom path instead of coming-soon", async () => {
+    renderPanel();
+
+    await waitFor(() => {
+      expect(readGlobalCodexConfigTomlMock).toHaveBeenCalled();
+      expect(readGlobalCodexAuthJsonMock).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Qoder CLI/ }));
+
+    const brandHeader = screen
+      .getByRole("heading", { name: "Qoder CLI" })
+      .closest(".vendor-brand-header") as HTMLElement;
+    expect(brandHeader).toBeTruthy();
+    const docsLink = within(brandHeader).getByRole("link", {
+      name: "Official docs",
+    });
+    expect(docsLink.getAttribute("href")).toBe(
+      "https://docs.qoder.com/en/cli/using-cli",
+    );
+    expect(screen.queryByText("正在适配此CLI，即将开放")).toBeNull();
+    expect(screen.queryByTestId("provider-list-stub")).toBeNull();
+    expect(screen.queryByTestId("kimi-provider-list-stub")).toBeNull();
     expect(
       screen.getByRole("button", { name: /自定义路径|Custom path|Configure/i }),
     ).toBeTruthy();
@@ -1320,7 +1345,7 @@ describe("VendorSettingsPanel", () => {
   it("shows the empty hint when every supported CLI is disabled", async () => {
     renderPanel({
       appSettings: {
-        disabledCliEngines: ["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh"],
+        disabledCliEngines: ["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh", "qoder"],
       },
     });
 

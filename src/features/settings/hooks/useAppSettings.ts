@@ -10,6 +10,7 @@ import {
   runKimiDoctor,
   runOpenCodeDoctor,
   runPiDoctor,
+  runQoderDoctor,
   takeSettingsRecoveryNotice,
   updateAppSettings,
 } from "../../../services/tauri";
@@ -240,6 +241,7 @@ const defaultSettings: AppSettings = {
   claudeBin: null,
   kimiBin: null,
   piBin: null,
+  qoderBin: null,
   grokBin: null,
   opencodeBin: null,
   dshBin: null,
@@ -434,6 +436,7 @@ function normalizeAppSettings(
     claudeBin: settings.claudeBin?.trim() ? settings.claudeBin.trim() : null,
     kimiBin: settings.kimiBin?.trim() ? settings.kimiBin.trim() : null,
     piBin: settings.piBin?.trim() ? settings.piBin.trim() : null,
+    qoderBin: settings.qoderBin?.trim() ? settings.qoderBin.trim() : null,
     grokBin: settings.grokBin?.trim() ? settings.grokBin.trim() : null,
     opencodeBin: settings.opencodeBin?.trim()
       ? settings.opencodeBin.trim()
@@ -782,6 +785,10 @@ export function useAppSettings() {
     return runPiDoctor(piBin);
   }, []);
 
+  const qoderDoctor = useCallback(async (qoderBin: string | null) => {
+    return runQoderDoctor(qoderBin);
+  }, []);
+
   return {
     settings,
     setSettings,
@@ -792,6 +799,7 @@ export function useAppSettings() {
     grokDoctor,
     opencodeDoctor,
     piDoctor,
+    qoderDoctor,
     isLoading,
   };
 }

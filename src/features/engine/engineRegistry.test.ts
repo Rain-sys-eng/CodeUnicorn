@@ -17,6 +17,9 @@ describe("engineRegistry", () => {
       "grok",
       "kimi",
       "opencode",
+      "pi",
+      "dsh",
+      "qoder",
     ]);
     expect(getEngineRegistryEntry("codex")).toMatchObject({
       protocolFamily: "app-server-json-rpc",
@@ -31,8 +34,13 @@ describe("engineRegistry", () => {
       protocolFamily: "stream-json-cli",
       executionModel: "one-shot",
     });
+    expect(getEngineRegistryEntry("qoder")).toMatchObject({
+      protocolFamily: "acp-stdio",
+      executionModel: "one-shot",
+    });
     expect(isSupportedEngineType("grok")).toBe(true);
     expect(isSupportedEngineType("kimi")).toBe(true);
+    expect(isSupportedEngineType("qoder")).toBe(true);
     expect(isSupportedEngineType("other")).toBe(false);
   });
 

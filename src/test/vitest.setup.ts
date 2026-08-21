@@ -1203,7 +1203,7 @@ const mockTranslate = (key: string, params?: Record<string, unknown>) => {
         "statusPanel.sessionOverview.quota.error":
           "Limit query failed: {{message}}",
         "statusPanel.sessionOverview.quota.unsupported":
-          "{{engine}} base_url is not a known coding-plan host (Kimi / MiniMax / Zhipu).",
+          "{{engine}} does not support quota queries (no known coding-plan host, or this CLI has no account-limit API).",
         "usage.sessionReset": "Session resets",
         "usage.weeklyReset": "Weekly resets",
         "usage.credits": "Credits",

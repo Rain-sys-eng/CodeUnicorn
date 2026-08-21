@@ -44,6 +44,7 @@ const DEFAULT_ENGINE_LABEL_BY_TYPE: Record<EngineType, string> = {
   kimi: "Kimi",
   pi: "PI CLI",
   dsh: "DSH",
+  qoder: "Qoder CLI",
 };
 
 export function createEmptyTopbarSessionWindows(): TopbarSessionWindows {
@@ -100,13 +101,17 @@ export function resolveEngineType(
     engineSource === "kimi" ||
     engineSource === "opencode" ||
     engineSource === "dsh" ||
-    engineSource === "pi"
+    engineSource === "pi" ||
+    engineSource === "qoder"
   ) {
     return engineSource;
   }
   const id = String(threadId ?? "").trim().toLowerCase();
   if (id.startsWith("pi:")) {
     return "pi";
+  }
+  if (id.startsWith("qoder:")) {
+    return "qoder";
   }
   if (id.startsWith("claude:")) {
     return "claude";

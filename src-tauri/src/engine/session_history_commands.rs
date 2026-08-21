@@ -431,10 +431,7 @@ pub async fn list_pi_sessions(
         .await;
     }
     let path = std::path::PathBuf::from(&workspace_path);
-    let config = state
-        .engine_manager
-        .get_engine_config(EngineType::Pi)
-        .await;
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
     let sessions = super::pi_history::list_pi_sessions(
         &path,
         limit,
@@ -462,10 +459,7 @@ pub async fn load_pi_session(
         .await;
     }
     let path = std::path::PathBuf::from(&workspace_path);
-    let config = state
-        .engine_manager
-        .get_engine_config(EngineType::Pi)
-        .await;
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
     let result = super::pi_history::load_pi_session(
         &path,
         &session_id,
@@ -486,11 +480,93 @@ pub async fn delete_pi_session(
         return Err("delete_pi_session is unavailable through the remote backend".to_string());
     }
     let path = std::path::PathBuf::from(&workspace_path);
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
+    super::pi_history::delete_pi_session(
+        &path,
+        &session_id,
+        config.as_ref().and_then(|item| item.home_dir.as_deref()),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn list_qoder_sessions(
+    workspace_path: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let workspace_path = remote_backend::normalize_path_for_remote(workspace_path);
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "list_qoder_sessions",
+            json!({ "workspacePath": workspace_path, "limit": limit }),
+        )
+        .await;
+    }
+    let path = std::path::PathBuf::from(&workspace_path);
     let config = state
         .engine_manager
-        .get_engine_config(EngineType::Pi)
+        .get_engine_config(EngineType::Qoder)
         .await;
-    super::pi_history::delete_pi_session(
+    let sessions = super::qoder_history::list_qoder_sessions(
+        &path,
+        limit,
+        config.as_ref().and_then(|item| item.home_dir.as_deref()),
+    )
+    .await?;
+    serde_json::to_value(sessions).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn load_qoder_session(
+    workspace_path: String,
+    session_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let workspace_path = remote_backend::normalize_path_for_remote(workspace_path);
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "load_qoder_session",
+            json!({ "workspacePath": workspace_path, "sessionId": session_id }),
+        )
+        .await;
+    }
+    let path = std::path::PathBuf::from(&workspace_path);
+    let config = state
+        .engine_manager
+        .get_engine_config(EngineType::Qoder)
+        .await;
+    let result = super::qoder_history::load_qoder_session(
+        &path,
+        &session_id,
+        config.as_ref().and_then(|item| item.home_dir.as_deref()),
+    )
+    .await?;
+    serde_json::to_value(result).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_qoder_session(
+    workspace_path: String,
+    session_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("delete_qoder_session is unavailable through the remote backend".to_string());
+    }
+    let path = std::path::PathBuf::from(&workspace_path);
+    let config = state
+        .engine_manager
+        .get_engine_config(EngineType::Qoder)
+        .await;
+    super::qoder_history::delete_qoder_session(
         &path,
         &session_id,
         config.as_ref().and_then(|item| item.home_dir.as_deref()),
@@ -651,19 +727,21 @@ pub async fn load_dsh_session(
         &session_id,
         limit,
         before.as_deref(),
-        Some(move |progress: &crate::engine::dsh::history::DshHistoryLoadProgress| {
-            if let Err(error) = app_handle.emit(
-                crate::engine::dsh::history::DSH_HISTORY_LOAD_PROGRESS_EVENT,
-                progress,
-            ) {
-                log::warn!(
-                    "[dsh] session_id={} history_progress_emit_failed page={} error={}",
-                    progress.session_id,
-                    progress.page_index,
-                    error
-                );
-            }
-        }),
+        Some(
+            move |progress: &crate::engine::dsh::history::DshHistoryLoadProgress| {
+                if let Err(error) = app_handle.emit(
+                    crate::engine::dsh::history::DSH_HISTORY_LOAD_PROGRESS_EVENT,
+                    progress,
+                ) {
+                    log::warn!(
+                        "[dsh] session_id={} history_progress_emit_failed page={} error={}",
+                        progress.session_id,
+                        progress.page_index,
+                        error
+                    );
+                }
+            },
+        ),
     )
     .await?;
     serde_json::to_value(result).map_err(|error| error.to_string())
@@ -730,10 +808,7 @@ pub async fn fork_dsh_session(
 
 /// Explicitly adopt or spawn the local DSH host. Settings-page start, not probe.
 #[tauri::command]
-pub async fn ensure_dsh_host(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<Value, String> {
+pub async fn ensure_dsh_host(state: State<'_, AppState>, app: AppHandle) -> Result<Value, String> {
     if remote_backend::is_remote_mode(&*state).await {
         return remote_backend::call_remote(&*state, app, "ensure_dsh_host", json!({})).await;
     }
@@ -751,10 +826,7 @@ pub async fn ensure_dsh_host(
 
 /// Cancel an in-flight DSH host start. Settings-page action, not probe.
 #[tauri::command]
-pub async fn cancel_dsh_host(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<Value, String> {
+pub async fn cancel_dsh_host(state: State<'_, AppState>, app: AppHandle) -> Result<Value, String> {
     if remote_backend::is_remote_mode(&*state).await {
         return remote_backend::call_remote(&*state, app, "cancel_dsh_host", json!({})).await;
     }

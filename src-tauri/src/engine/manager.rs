@@ -16,6 +16,7 @@ use super::grok::GrokSession;
 use super::kimi::KimiSession;
 use super::opencode::OpenCodeSession;
 use super::pi::PiSession;
+use super::qoder::QoderSession;
 use super::status::{
     detect_all_engines, detect_claude_status, detect_codex_status, detect_grok_status,
     detect_kimi_status, detect_opencode_status, detect_pi_status,
@@ -52,6 +53,9 @@ pub struct EngineManager {
     /// PI sessions per workspace/provider runtime.
     pi_sessions: Mutex<HashMap<String, PiSessionEntry>>,
 
+    /// Qoder sessions per workspace/provider runtime.
+    qoder_sessions: Mutex<HashMap<String, QoderSessionEntry>>,
+
     /// Engine configurations
     engine_configs: RwLock<HashMap<EngineType, EngineConfig>>,
 }
@@ -82,6 +86,11 @@ struct OpenCodeSessionEntry {
 struct PiSessionEntry {
     workspace_id: String,
     session: Arc<PiSession>,
+}
+
+struct QoderSessionEntry {
+    workspace_id: String,
+    session: Arc<QoderSession>,
 }
 
 fn kimi_engine_config_with_home(
@@ -117,6 +126,17 @@ fn pi_engine_config_with_home(
     config
 }
 
+fn qoder_engine_config_with_home(
+    mut config: Option<EngineConfig>,
+    home_dir: Option<&Path>,
+) -> Option<EngineConfig> {
+    if let Some(home_dir) = home_dir {
+        config.get_or_insert_with(EngineConfig::default).home_dir =
+            Some(home_dir.to_string_lossy().to_string());
+    }
+    config
+}
+
 impl EngineManager {
     /// Create a new engine manager
     pub fn new() -> Self {
@@ -131,6 +151,7 @@ impl EngineManager {
             kimi_sessions: Mutex::new(HashMap::new()),
             grok_sessions: Mutex::new(HashMap::new()),
             pi_sessions: Mutex::new(HashMap::new()),
+            qoder_sessions: Mutex::new(HashMap::new()),
             engine_configs: RwLock::new(HashMap::new()),
         }
     }
@@ -214,6 +235,7 @@ impl EngineManager {
             EngineType::Kimi => detect_kimi_status(bin).await,
             EngineType::Grok => detect_grok_status(bin).await,
             EngineType::Pi => crate::engine::status::detect_pi_status(bin).await,
+            EngineType::Qoder => crate::engine::status::detect_qoder_status(bin).await,
             EngineType::Dsh => {
                 crate::engine::dsh::detect_dsh_status(
                     &crate::engine::dsh::runtime_settings_from_engine_config(config),
@@ -241,7 +263,17 @@ impl EngineManager {
 
     pub async fn detect_engines_with_gates(&self, gemini_enabled: bool) -> Vec<EngineStatus> {
         let gemini_enabled = gemini_enabled && crate::engine_policy::GEMINI_RUNTIME_ENABLED;
-        let (claude_bin, codex_bin, gemini_bin, opencode_bin, kimi_bin, grok_bin, pi_bin, dsh_settings) = {
+        let (
+            claude_bin,
+            codex_bin,
+            gemini_bin,
+            opencode_bin,
+            kimi_bin,
+            grok_bin,
+            pi_bin,
+            qoder_bin,
+            dsh_settings,
+        ) = {
             let configs = self.engine_configs.read().await;
             (
                 configs
@@ -265,6 +297,9 @@ impl EngineManager {
                 configs
                     .get(&EngineType::Pi)
                     .and_then(|c| c.bin_path.clone()),
+                configs
+                    .get(&EngineType::Qoder)
+                    .and_then(|c| c.bin_path.clone()),
                 crate::engine::dsh::runtime_settings_from_engine_config(
                     configs.get(&EngineType::Dsh),
                 ),
@@ -279,6 +314,7 @@ impl EngineManager {
             kimi_bin.as_deref(),
             grok_bin.as_deref(),
             pi_bin.as_deref(),
+            qoder_bin.as_deref(),
             &dsh_settings,
             gemini_enabled,
         )
@@ -809,10 +845,7 @@ impl EngineManager {
             .map(|entry| entry.session.clone())
     }
 
-    pub async fn get_pi_session_for_runtime(
-        &self,
-        runtime_key: &str,
-    ) -> Option<Arc<PiSession>> {
+    pub async fn get_pi_session_for_runtime(&self, runtime_key: &str) -> Option<Arc<PiSession>> {
         self.pi_sessions
             .lock()
             .await
@@ -850,6 +883,98 @@ impl EngineManager {
         } else {
             Err(format!(
                 "failed to interrupt {} PI runtime(s): {}",
+                errors.len(),
+                errors.join("; ")
+            ))
+        }
+    }
+
+    pub async fn get_or_create_qoder_session_for_runtime(
+        &self,
+        workspace_id: &str,
+        workspace_path: &Path,
+        runtime_key: &str,
+        home_dir: Option<&Path>,
+    ) -> Arc<QoderSession> {
+        {
+            let sessions = self.qoder_sessions.lock().await;
+            if let Some(entry) = sessions.get(runtime_key) {
+                return entry.session.clone();
+            }
+        }
+        let config = qoder_engine_config_with_home(
+            self.get_engine_config(EngineType::Qoder).await,
+            home_dir,
+        );
+        let session = Arc::new(QoderSession::new(
+            workspace_id.to_string(),
+            workspace_path.to_path_buf(),
+            config,
+        ));
+        let mut sessions = self.qoder_sessions.lock().await;
+        if let Some(entry) = sessions.get(runtime_key) {
+            return entry.session.clone();
+        }
+        sessions.insert(
+            runtime_key.to_string(),
+            QoderSessionEntry {
+                workspace_id: workspace_id.to_string(),
+                session: session.clone(),
+            },
+        );
+        session
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_qoder_session(&self, workspace_id: &str) -> Option<Arc<QoderSession>> {
+        let sessions = self.qoder_sessions.lock().await;
+        sessions
+            .values()
+            .find(|entry| entry.workspace_id == workspace_id)
+            .map(|entry| entry.session.clone())
+    }
+
+    pub async fn get_qoder_session_for_runtime(
+        &self,
+        runtime_key: &str,
+    ) -> Option<Arc<QoderSession>> {
+        self.qoder_sessions
+            .lock()
+            .await
+            .get(runtime_key)
+            .map(|entry| entry.session.clone())
+    }
+
+    pub async fn get_qoder_sessions(&self, workspace_id: &str) -> Vec<Arc<QoderSession>> {
+        let sessions = self.qoder_sessions.lock().await;
+        sessions
+            .values()
+            .filter(|entry| entry.workspace_id == workspace_id)
+            .map(|entry| entry.session.clone())
+            .collect()
+    }
+
+    pub async fn interrupt_qoder_sessions(
+        &self,
+        workspace_id: &str,
+        turn_id: Option<&str>,
+    ) -> Result<(), String> {
+        let sessions = self.get_qoder_sessions(workspace_id).await;
+        let mut errors = Vec::new();
+        for session in sessions {
+            let result = match turn_id {
+                Some(turn_id) => session.interrupt_turn(turn_id).await,
+                None => session.interrupt().await,
+            };
+            if let Err(error) = result {
+                errors.push(error);
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "failed to interrupt {} Qoder runtime(s): {}",
                 errors.len(),
                 errors.join("; ")
             ))

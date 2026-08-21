@@ -406,6 +406,7 @@ export const APP_SHELL_DOMAIN_CONTEXT_OWNED_KEYS: Record<
     "grokDoctor",
     "opencodeDoctor",
     "piDoctor",
+    "qoderDoctor",
     "editorHighlightTarget",
     "editorNavigationTarget",
     "editorSplitCompanion",

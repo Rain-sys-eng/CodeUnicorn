@@ -638,6 +638,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           ? "kimi"
         : action.threadId.startsWith("pi:")
           ? "pi"
+        : action.threadId.startsWith("qoder:")
+          ? "qoder"
         : action.threadId.startsWith("opencode:")
           ? "opencode"
         : action.threadId.startsWith("dsh:")

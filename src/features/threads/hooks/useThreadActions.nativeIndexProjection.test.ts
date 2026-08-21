@@ -26,6 +26,7 @@ describe("native Session Index projection", () => {
       indexRow("claude", "claude-1"),
       indexRow("grok", "grok-1"),
       indexRow("pi", "pi-1"),
+      indexRow("qoder", "qoder-1"),
       indexRow("dsh", "dsh-1"),
     ];
     expect(shouldRememberHideUnreadiness(false)).toBe(true);
@@ -40,7 +41,7 @@ describe("native Session Index projection", () => {
     );
     const engines = projected.map((row) => row.engineSource);
     expect(engines).toEqual(
-      expect.arrayContaining(["claude", "grok", "pi", "dsh"]),
+      expect.arrayContaining(["claude", "grok", "pi", "qoder", "dsh"]),
     );
     expect(engines).not.toEqual(["pi"]);
   });

@@ -35,7 +35,10 @@ use super::remote_bridge::{
     call_remote_typed, remote_detect_engines_request, remote_engine_interrupt_request,
     remote_engine_send_message_sync_request,
 };
-use super::status::{detect_grok_status, detect_kimi_status, detect_pi_status, load_opencode_models};
+use super::status::{
+    detect_grok_status, detect_kimi_status, detect_pi_status, detect_qoder_status,
+    load_opencode_models,
+};
 use super::{
     engine_disabled_diagnostic, engine_enabled_in_settings, EngineConfig, EngineStatus, EngineType,
 };
@@ -151,6 +154,7 @@ fn features_for_engine(engine: EngineType) -> super::EngineFeatures {
         EngineType::Kimi => super::EngineFeatures::kimi(),
         EngineType::Pi => super::EngineFeatures::pi(),
         EngineType::Dsh => super::EngineFeatures::dsh(),
+        EngineType::Qoder => super::EngineFeatures::qoder(),
     }
 }
 
@@ -222,6 +226,7 @@ fn collect_stale_child_candidates(
                 | EngineType::Grok
                 | EngineType::Kimi
                 | EngineType::Pi
+                | EngineType::Qoder
                 | EngineType::Dsh => "unsupported",
                 // Codex is intentionally not part of this child-process parity
                 // path (it has its own wrapper runtime).
@@ -251,6 +256,7 @@ fn engine_type_label(engine: EngineType) -> &'static str {
         EngineType::Kimi => "kimi",
         EngineType::Pi => "pi",
         EngineType::Dsh => "dsh",
+        EngineType::Qoder => "qoder",
     }
 }
 
@@ -1512,6 +1518,23 @@ pub async fn get_engine_models(
             }
             Ok(fresh_status.models)
         }
+        EngineType::Qoder => {
+            let config = manager.get_engine_config(EngineType::Qoder).await;
+            let custom_bin = config
+                .as_ref()
+                .and_then(|cfg| cfg.bin_path.as_ref())
+                .map(|s| s.as_str());
+            let fresh_status = detect_qoder_status(custom_bin).await;
+            if !fresh_status.models.is_empty() {
+                return Ok(fresh_status.models);
+            }
+            if let Some(cached) = manager.get_engine_status(EngineType::Qoder).await {
+                if !cached.models.is_empty() {
+                    return Ok(cached.models);
+                }
+            }
+            Ok(fresh_status.models)
+        }
         EngineType::Grok => {
             let config = manager.get_engine_config(EngineType::Grok).await;
             let custom_bin = config
@@ -1623,6 +1646,9 @@ fn build_provider_engine_dispatch_receipt(
             ) | (
                 EngineType::Pi,
                 super::pi_provider_profile::PI_LOCAL_PROVIDER_PROFILE_ID
+            ) | (
+                EngineType::Qoder,
+                super::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID
             )
         )
     });
@@ -2536,10 +2562,8 @@ pub async fn engine_send_message(
                         // fusion (onAgentMessageCompleted) runs even after TextDelta.
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -2802,10 +2826,8 @@ pub async fn engine_send_message(
                         // fusion runs after normal TextDelta streaming (Claude-parity).
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -3071,10 +3093,8 @@ pub async fn engine_send_message(
                         // fusion runs after normal TextDelta streaming (Claude-parity).
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -3152,6 +3172,235 @@ pub async fn engine_send_message(
 
             Ok(json!({
                 "engine": "pi",
+                "sessionId": response_session_id,
+                "result": {
+                    "turn": {
+                        "id": turn_id,
+                        "status": "started"
+                    },
+                },
+                "mossxDispatchReceipt": dispatch_receipt,
+                "turn": {
+                    "id": turn_id,
+                    "status": "started"
+                }
+            }))
+        }
+        EngineType::Qoder => {
+            let workspace_path = {
+                let workspaces = state.workspaces.lock().await;
+                workspaces
+                    .get(&workspace_id)
+                    .map(|w| std::path::PathBuf::from(&w.path))
+                    .ok_or_else(|| "Workspace not found".to_string())?
+            };
+            let provider_binding_lookup_session_id = session_id
+                .as_deref()
+                .or(thread_id.as_deref())
+                .map(str::to_string);
+            let effective_provider_profile_id =
+                crate::session_management::resolve_engine_provider_profile_id(
+                    state.storage_path.as_path(),
+                    &workspace_id,
+                    provider_binding_lookup_session_id.as_deref(),
+                    "qoder",
+                    provider_profile_id.as_deref(),
+                )?;
+            let provider_launch_profile =
+                super::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                    &workspace_id,
+                    effective_provider_profile_id.as_deref(),
+                    None,
+                )?;
+            let session = manager
+                .get_or_create_qoder_session_for_runtime(
+                    &workspace_id,
+                    &workspace_path,
+                    &provider_launch_profile.runtime_key,
+                    provider_launch_profile.home_dir.as_deref(),
+                )
+                .await;
+
+            let resolved_session_id = super::qoder::resolve_qoder_session_id_for_engine_send(
+                continue_session,
+                session_id,
+                session.get_session_id().await,
+            );
+            let response_session_id = resolved_session_id.clone();
+            let runtime_model = model
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let dispatch_receipt = build_provider_engine_dispatch_receipt(
+                EngineType::Qoder,
+                effective_provider_profile_id.as_deref(),
+                &provider_launch_profile.runtime_key,
+                runtime_model.as_deref(),
+                effort.as_deref(),
+            );
+
+            // Qoder ACP runs headless with bypassPermissions (design §2); the
+            // composer access-mode selector stays disabled for qoder (kimi-parity).
+            let params = super::SendMessageParams {
+                text,
+                model: runtime_model,
+                effort,
+                disable_thinking: false,
+                access_mode,
+                images,
+                continue_session,
+                session_id: resolved_session_id,
+                fork_session_id: None,
+                agent: None,
+                variant: None,
+                collaboration_mode: None,
+                custom_spec_root: normalized_custom_spec_root.clone(),
+            };
+
+            let turn_id = format!("qoder-turn-{}", uuid::Uuid::new_v4());
+            let thread_id = thread_id.unwrap_or_else(|| turn_id.clone());
+            let item_id = format!("qoder-item-{}", uuid::Uuid::new_v4());
+
+            let mut receiver = session.subscribe();
+            let app_clone = app.clone();
+            let mut current_thread_id = thread_id.clone();
+            let item_id_clone = item_id.clone();
+            let turn_id_for_forwarder = turn_id.clone();
+            let mut accumulated_agent_text = String::new();
+            let provider_runtime_key_for_forwarder = provider_launch_profile.runtime_key.clone();
+            let mut native_session_id_for_forwarder = response_session_id
+                .clone()
+                .or_else(|| provider_binding_lookup_session_id.clone());
+            tokio::spawn(async move {
+                let mut render_state = GeminiRenderRoutingState::default();
+                loop {
+                    let turn_event = match receiver.recv().await {
+                        Ok(event) => event,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            log::warn!(
+                                "Qoder event forwarder lagged; skipped {} events for turn {}",
+                                skipped,
+                                turn_id_for_forwarder
+                            );
+                            continue;
+                        }
+                    };
+                    if turn_event.turn_id != turn_id_for_forwarder {
+                        continue;
+                    }
+
+                    let event = turn_event.event;
+                    let is_terminal = event.is_terminal();
+                    let render_lane = match &event {
+                        EngineEvent::TextDelta { .. } => GeminiRenderLane::Text,
+                        EngineEvent::ReasoningDelta { .. } => GeminiRenderLane::Reasoning,
+                        EngineEvent::ToolStarted { .. }
+                        | EngineEvent::ToolCompleted { .. }
+                        | EngineEvent::ToolInputUpdated { .. }
+                        | EngineEvent::ToolOutputDelta { .. } => GeminiRenderLane::Tool,
+                        _ => GeminiRenderLane::Other,
+                    };
+                    let routed_item_id =
+                        next_gemini_routed_item_id(&mut render_state, render_lane, &item_id_clone);
+
+                    if let EngineEvent::TextDelta { text, .. } = &event {
+                        render_state.saw_text_delta = true;
+                        accumulated_agent_text.push_str(text);
+                    }
+
+                    let mut app_server_events = Vec::new();
+                    if let EngineEvent::TurnCompleted { result, .. } = &event {
+                        let fallback_text =
+                            extract_turn_result_text(result.as_ref()).unwrap_or_default();
+                        let completed_text = if should_prefer_turn_result_text(result.as_ref()) {
+                            fallback_text
+                        } else if accumulated_agent_text.trim().is_empty() {
+                            fallback_text
+                        } else {
+                            accumulated_agent_text.clone()
+                        };
+                        if !completed_text.trim().is_empty() {
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
+                            let synthetic = AppServerEvent {
+                                workspace_id: event.workspace_id().to_string(),
+                                message: json!({
+                                    "method": "item/completed",
+                                    "params": {
+                                        "threadId": &current_thread_id,
+                                        "item": {
+                                            "id": completion_item_id,
+                                            "type": "agentMessage",
+                                            "text": completed_text,
+                                            "status": "completed",
+                                        }
+                                    }
+                                }),
+                            };
+                            app_server_events.push(synthetic);
+                        }
+                    }
+
+                    if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
+                        &event,
+                        &current_thread_id,
+                        &routed_item_id,
+                        Some(&turn_id_for_forwarder),
+                    ) {
+                        app_server_events.push(payload);
+                    }
+                    fan_out_provider_engine_event(
+                        &app_clone,
+                        &provider_runtime_key_for_forwarder,
+                        EngineType::Qoder,
+                        &turn_id_for_forwarder,
+                        native_session_id_for_forwarder.as_deref(),
+                        &event,
+                        app_server_events,
+                    );
+
+                    if let EngineEvent::SessionStarted {
+                        session_id, engine, ..
+                    } = &event
+                    {
+                        if !session_id.is_empty() && session_id != "pending" {
+                            if matches!(engine, EngineType::Qoder) {
+                                current_thread_id = format!("qoder:{}", session_id);
+                                native_session_id_for_forwarder = Some(session_id.clone());
+                            }
+                        }
+                    }
+
+                    if is_terminal {
+                        break;
+                    }
+                }
+            });
+
+            let session_clone = session.clone();
+            let turn_id_clone = turn_id.clone();
+            tokio::spawn(async move {
+                if let Err(e) = session_clone.send_message(params, &turn_id_clone).await {
+                    log::error!("Qoder send_message failed: {}", e);
+                }
+            });
+            if let (Some(session_id), Some(metadata)) =
+                (response_session_id.as_deref(), auto_session.clone())
+            {
+                record_auto_session_metadata_if_present(
+                    &state,
+                    &workspace_id,
+                    Some(session_id),
+                    Some(metadata),
+                    "qoder",
+                )
+                .await;
+            }
+
+            Ok(json!({
+                "engine": "qoder",
                 "sessionId": response_session_id,
                 "result": {
                     "turn": {
@@ -3339,10 +3588,8 @@ pub async fn engine_send_message(
                         // fusion runs after normal TextDelta streaming (Claude-parity).
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -4036,6 +4283,87 @@ pub async fn engine_send_message_sync(
                 "text": response
             }))
         }
+        EngineType::Qoder => {
+            let workspace_path = {
+                let workspaces = state.workspaces.lock().await;
+                workspaces
+                    .get(&workspace_id)
+                    .map(|w| std::path::PathBuf::from(&w.path))
+                    .ok_or_else(|| "Workspace not found".to_string())?
+            };
+
+            let effective_provider_profile_id =
+                crate::session_management::resolve_engine_provider_profile_id(
+                    state.storage_path.as_path(),
+                    &workspace_id,
+                    session_id.as_deref(),
+                    "qoder",
+                    None,
+                )?;
+            let provider_launch_profile =
+                super::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                    &workspace_id,
+                    effective_provider_profile_id.as_deref(),
+                    None,
+                )?;
+            let session = manager
+                .get_or_create_qoder_session_for_runtime(
+                    &workspace_id,
+                    &workspace_path,
+                    &provider_launch_profile.runtime_key,
+                    provider_launch_profile.home_dir.as_deref(),
+                )
+                .await;
+            let resolved_session_id = super::qoder::resolve_qoder_session_id_for_engine_send(
+                continue_session,
+                session_id,
+                session.get_session_id().await,
+            );
+            let runtime_model = model
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string());
+
+            let params = super::SendMessageParams {
+                text,
+                model: runtime_model,
+                effort,
+                disable_thinking: false,
+                access_mode,
+                images,
+                continue_session,
+                session_id: resolved_session_id,
+                fork_session_id: None,
+                agent: None,
+                variant: None,
+                collaboration_mode: None,
+                custom_spec_root: normalized_custom_spec_root.clone(),
+            };
+
+            let turn_id = format!("qoder-sync-{}", uuid::Uuid::new_v4());
+            let response = timeout(
+                Duration::from_secs(900),
+                session.send_message(params, &turn_id),
+            )
+            .await
+            .map_err(|_| "Qoder response timed out".to_string())??;
+            let response_session_id = session.get_session_id().await;
+            record_auto_session_metadata_if_present(
+                &state,
+                &workspace_id,
+                response_session_id.as_deref(),
+                auto_session,
+                "qoder",
+            )
+            .await;
+
+            Ok(json!({
+                "engine": "qoder",
+                "sessionId": response_session_id,
+                "text": response
+            }))
+        }
         EngineType::Grok => {
             let workspace_path = {
                 let workspaces = state.workspaces.lock().await;
@@ -4244,6 +4572,7 @@ pub async fn engine_interrupt(
         }
         EngineType::Kimi => manager.interrupt_kimi_sessions(&workspace_id, None).await,
         EngineType::Pi => manager.interrupt_pi_sessions(&workspace_id, None).await,
+        EngineType::Qoder => manager.interrupt_qoder_sessions(&workspace_id, None).await,
         EngineType::Grok => manager.interrupt_grok_sessions(&workspace_id, None).await,
         EngineType::Dsh => {
             let settings = read_app_settings_snapshot(&state).await;
@@ -4331,6 +4660,11 @@ pub async fn engine_interrupt_turn(
         EngineType::Pi => {
             manager
                 .interrupt_pi_sessions(&workspace_id, Some(&turn_id))
+                .await
+        }
+        EngineType::Qoder => {
+            manager
+                .interrupt_qoder_sessions(&workspace_id, Some(&turn_id))
                 .await
         }
         EngineType::Grok => {

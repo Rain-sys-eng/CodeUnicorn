@@ -739,6 +739,8 @@ export function SessionManagementSection({
       kimi: t("settings.projectSessionEngineKimi"),
       grok: t("settings.projectSessionEngineGrok"),
       pi: t("settings.projectSessionEnginePi"),
+      qoder: t("settings.projectSessionEngineQoder"),
+      dsh: t("settings.projectSessionEngineDsh"),
       shared: t("settings.projectSessionEngineShared"),
     }),
     [t],
@@ -2048,6 +2050,12 @@ export function SessionManagementSection({
                         </SelectItem>
                         <SelectItem value="pi">
                           {engineFilterLabel.pi}
+                        </SelectItem>
+                        <SelectItem value="qoder">
+                          {engineFilterLabel.qoder}
+                        </SelectItem>
+                        <SelectItem value="dsh">
+                          {engineFilterLabel.dsh}
                         </SelectItem>
                         <SelectItem value="shared">
                           {engineFilterLabel.shared}

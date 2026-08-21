@@ -31,7 +31,7 @@ type ExitPlanToolContentProps = {
   copiedPlanMarkdown: boolean;
   onToggle: () => void;
   onCopiedPlanMarkdownChange: (copied: boolean) => void;
-  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
   selectedExecutionMode?: ExitPlanExecutionMode | null;
   onExecute?: (itemId: string, mode: ExitPlanExecutionMode) => Promise<void> | void;
   shouldShowRawOutput: boolean;

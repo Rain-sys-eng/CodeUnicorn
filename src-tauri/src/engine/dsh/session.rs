@@ -140,11 +140,15 @@ pub fn permission_command_line(preset: &str) -> String {
     format!("/permission {preset}")
 }
 
+/// DSH `0.1.1-rc.2` Typert Gateway matches `commands/execute` args by
+/// exact key set (`agentId`, `line`, `images`). Missing `images` is
+/// `arguments-invalid` even for `/permission`, which has no attachments.
 pub fn execute_command_payload(session_id: &str, line: &str) -> Value {
     json!({
         "args": {
             "agentId": session_id,
             "line": line,
+            "images": [],
         }
     })
 }
@@ -606,8 +610,18 @@ mod tests {
             "session-1",
             "/permission danger-full-access",
         );
-        assert_eq!(payload["args"]["agentId"], "session-1");
-        assert_eq!(payload["args"]["line"], "/permission danger-full-access");
+        let args = payload.get("args").expect("typert args envelope");
+        assert_eq!(args["agentId"], "session-1");
+        assert_eq!(args["line"], "/permission danger-full-access");
+        assert_eq!(args["images"], json!([]));
+        let mut keys: Vec<&str> = args
+            .as_object()
+            .expect("args object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, vec!["agentId", "images", "line"]);
         assert_eq!(
             permission_command_line(DSH_PERMISSION_PRESET_WORKSPACE_WRITE),
             "/permission workspace-write"

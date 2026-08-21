@@ -198,6 +198,26 @@ fn kimi_cli_token_refresh_skew() {
 }
 
 #[test]
+fn qoder_engine_has_no_coding_plan_credential_resolver() {
+    let err = resolve_engine_base_url_and_key("qoder", Some("__local_qoder__")).unwrap_err();
+    assert!(err.contains("no coding-plan quota API"));
+    assert!(!err.contains("Native CLI /usage quota"));
+}
+
+#[tokio::test]
+async fn qoder_engine_quota_is_unsupported_without_scraping_tui() {
+    let snapshot = get_coding_plan_quota_for_session("qoder", Some("__local_qoder__")).await;
+    assert_eq!(snapshot.source, "unsupported");
+    assert!(!snapshot.success);
+    assert!(snapshot.windows.is_empty());
+    assert!(snapshot
+        .error
+        .as_deref()
+        .unwrap_or("")
+        .contains("没有可查询的账户额度接口"));
+}
+
+#[test]
 fn kimi_engine_route_is_not_confused_with_claude_http_kimi() {
     // Claude + Kimi HTTP base 仍应走 CodingPlanApi（不进 engine=kimi CLI 短路）
     let route = resolve_quota_route(

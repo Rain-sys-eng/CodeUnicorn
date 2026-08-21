@@ -928,6 +928,8 @@ pub(crate) struct AppSettings {
     pub(crate) pi_bin: Option<String>,
     #[serde(default, rename = "dshBin")]
     pub(crate) dsh_bin: Option<String>,
+    #[serde(default, rename = "qoderBin")]
+    pub(crate) qoder_bin: Option<String>,
     #[serde(default, rename = "dshHost")]
     pub(crate) dsh_host: Option<String>,
     #[serde(default, rename = "dshPort")]
@@ -1198,10 +1200,7 @@ pub(crate) struct AppSettings {
     pub(crate) canvas_width_mode: String,
     #[serde(default = "default_layout_mode", rename = "layoutMode")]
     pub(crate) layout_mode: String,
-    #[serde(
-        default = "default_workspace_wallpaper",
-        rename = "workspaceWallpaper"
-    )]
+    #[serde(default = "default_workspace_wallpaper", rename = "workspaceWallpaper")]
     pub(crate) workspace_wallpaper: WorkspaceWallpaperSettings,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
@@ -2044,6 +2043,7 @@ impl Default for AppSettings {
             kimi_bin: None,
             pi_bin: None,
             dsh_bin: None,
+            qoder_bin: None,
             dsh_host: None,
             dsh_port: None,
             dsh_auto_start: None,

@@ -13,7 +13,8 @@ export type ConversationEngine =
   | "kimi"
   | "opencode"
   | "pi"
-  | "dsh";
+  | "dsh"
+  | "qoder";
 
 export const NORMALIZED_ITEM_KINDS = [
   "message",
@@ -44,6 +45,7 @@ export const NORMALIZED_EVENT_DICTIONARY: Readonly<Record<string, NormalizedConv
   tool: "tool",
   tool_call: "tool",
   tool_result: "tool",
+  "qoder/raw": "tool",
 };
 
 export type NormalizedThreadEvent = {

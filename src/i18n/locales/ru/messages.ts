@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Сборка",
     "generatingResponse": "Генерация ответа...",
     "responding": "Ответ...",
+    "waitingForFirstText": "{{engine}} работает. Ожидание первого фрагмента текста...",
     "codexWaitingForFirstText": "Codex работает. Ожидание первого фрагмента текста...",
     "codexSilentSuspected": "Некоторое время нет нового вывода Codex. Продолжаем слушать активность среды выполнения...",
     "nonStreamingHint": "Эта модель может возвращать нестриминговый вывод, либо сеть недоступна. Пожалуйста, подождите...",

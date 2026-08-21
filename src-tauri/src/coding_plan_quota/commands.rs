@@ -6,6 +6,8 @@ use super::types::*;
 /// 按当前会话引擎 + provider profile 解析路由并查询额度。
 /// 原则：
 /// - `engine=kimi`（Kimi CLI 本体）→ CLI OAuth refresh + `/usages`，via=cli（对齐 `/status`）
+/// - `engine=qoder` → unsupported。qodercli 无 account/rateLimits RPC、无 /usages HTTP、
+///   `status -o json` 不含套餐额度；账户额度只在 TUI `/usage`。不刮 TUI、不读 ~/.qoder。
 /// - Claude/Codex + Kimi/MiniMax/… HTTP 中转 → CodingPlanApi + API key，via=api
 pub(crate) async fn get_coding_plan_quota_for_session(
     engine: &str,
@@ -17,6 +19,16 @@ pub(crate) async fn get_coding_plan_quota_for_session(
     // Claude Code / Codex 绑 Kimi HTTP 不会命中这里（engine 是 claude/codex）。
     if engine_lc == "kimi" {
         return query_kimi_cli_status().await;
+    }
+
+    if engine_lc == "qoder" {
+        return empty_snapshot(
+            "unsupported",
+            Some(
+                "Qoder CLI 没有可查询的账户额度接口（无 account/rateLimits、无 /usages HTTP）。请在 qodercli 内使用 /usage 查看。"
+                    .to_string(),
+            ),
+        );
     }
 
     match resolve_quota_route(engine, provider_profile_id) {

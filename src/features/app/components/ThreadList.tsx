@@ -826,6 +826,8 @@ export function ThreadList({
             ? "PI CLI"
             : engineSource === "dsh"
               ? "DSH"
+            : engineSource === "qoder"
+              ? "Qoder CLI"
             : "Codex";
     const engineTitle = isSharedThread
       ? `Shared Session · ${baseEngineTitle}`

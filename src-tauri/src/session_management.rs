@@ -936,6 +936,10 @@ pub(crate) async fn delete_workspace_sessions_core(
         .get_engine_config(engine::EngineType::Pi)
         .await
         .and_then(|item| item.home_dir);
+    let qoder_home_dir = engine_manager
+        .get_engine_config(engine::EngineType::Qoder)
+        .await
+        .and_then(|item| item.home_dir);
     let dsh_config = engine_manager
         .get_engine_config(engine::EngineType::Dsh)
         .await;
@@ -1012,6 +1016,20 @@ pub(crate) async fn delete_workspace_sessions_core(
                         &workspace_path,
                         &raw_id,
                         pi_home_dir.as_deref(),
+                    )
+                    .await
+                });
+                async_delete_handles.push((target, handle));
+            }
+            "qoder" => {
+                let workspace_path = target.owner_workspace_path.clone();
+                let qoder_home_dir = qoder_home_dir.clone();
+                let raw_id = target.native_session_id.clone();
+                let handle = tokio::spawn(async move {
+                    engine::qoder_history::delete_qoder_session(
+                        &workspace_path,
+                        &raw_id,
+                        qoder_home_dir.as_deref(),
                     )
                     .await
                 });
@@ -1854,7 +1872,7 @@ fn is_stable_catalog_metadata_key(session_id: &str) -> bool {
     let canonical_session_id = parts.next().unwrap_or_default();
     matches!(
         engine,
-        "codex" | "claude" | "gemini" | "grok" | "kimi" | "pi" | "opencode" | "shared"
+        "codex" | "claude" | "gemini" | "grok" | "kimi" | "pi" | "qoder" | "opencode" | "shared"
     ) && !workspace_id.trim().is_empty()
         && !canonical_session_id.trim().is_empty()
 }

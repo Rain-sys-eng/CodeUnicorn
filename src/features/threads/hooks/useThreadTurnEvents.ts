@@ -196,7 +196,7 @@ function extractThreadProviderMetadata(thread: Record<string, unknown>) {
   };
 }
 
-type PendingNativeEngine = "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+type PendingNativeEngine = "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
 
 function uniquePendingEngine(
   pendingByEngine: Record<PendingNativeEngine, string | null>,
@@ -258,11 +258,11 @@ type UseThreadTurnEventsOptions = {
   ) => Promise<void>;
   resolvePendingThreadForSession?: (
     workspaceId: string,
-    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh",
+    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
   ) => string | null;
   resolvePendingThreadForTurn?: (
     workspaceId: string,
-    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh",
+    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
     turnId: string | null | undefined,
   ) => string | null;
   getActiveTurnIdForThread?: (threadId: string) => string | null;
@@ -387,6 +387,8 @@ export function useThreadTurnEvents({
           ? "claude"
         : threadId.startsWith("dsh:")
           ? "dsh"
+        : threadId.startsWith("qoder:")
+          ? "qoder"
           : null;
       if (!engine) {
         return null;
@@ -1239,7 +1241,7 @@ export function useThreadTurnEvents({
       workspaceId: string,
       threadId: string,
       sessionId: string,
-      engineHint?: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+      engineHint?: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
       turnId?: string | null,
     ) => {
       const explicitEnginePrefix = threadId.startsWith("claude:")
@@ -1258,6 +1260,9 @@ export function useThreadTurnEvents({
         : threadId.startsWith("pi:")
           || threadId.startsWith("pi-pending-")
           ? "pi"
+        : threadId.startsWith("qoder:")
+          || threadId.startsWith("qoder-pending-")
+          ? "qoder"
         : threadId.startsWith("opencode:")
           || threadId.startsWith("opencode-pending-")
           ? "opencode"
@@ -1266,7 +1271,7 @@ export function useThreadTurnEvents({
           ? "dsh"
           : null;
       const hintedEngine =
-        engineHint === "claude" || engineHint === "gemini" || engineHint === "grok" || engineHint === "kimi" || engineHint === "pi" || engineHint === "opencode" || engineHint === "dsh"
+        engineHint === "claude" || engineHint === "gemini" || engineHint === "grok" || engineHint === "kimi" || engineHint === "pi" || engineHint === "qoder" || engineHint === "opencode" || engineHint === "dsh"
           ? engineHint
           : null;
       const pendingByEngine: Record<PendingNativeEngine, string | null> = {
@@ -1276,6 +1281,7 @@ export function useThreadTurnEvents({
         kimi: resolvePendingThreadForSession?.(workspaceId, "kimi") ?? null,
         claude: resolvePendingThreadForSession?.(workspaceId, "claude") ?? null,
         pi: resolvePendingThreadForSession?.(workspaceId, "pi") ?? null,
+        qoder: resolvePendingThreadForSession?.(workspaceId, "qoder") ?? null,
         dsh: resolvePendingThreadForSession?.(workspaceId, "dsh") ?? null,
       };
       const pendingOpenCode = pendingByEngine.opencode;
@@ -1283,6 +1289,7 @@ export function useThreadTurnEvents({
       const pendingGrok = pendingByEngine.grok;
       const pendingKimi = pendingByEngine.kimi;
       const pendingPi = pendingByEngine.pi;
+      const pendingQoder = pendingByEngine.qoder;
       const pendingClaude = pendingByEngine.claude;
       const pendingDsh = pendingByEngine.dsh;
       logSessionTrace("event", {
@@ -1297,6 +1304,7 @@ export function useThreadTurnEvents({
         pendingGrok,
         pendingKimi,
         pendingPi,
+        pendingQoder,
         pendingClaude,
         pendingDsh,
       });
@@ -1339,6 +1347,8 @@ export function useThreadTurnEvents({
         || threadId.startsWith("kimi-pending-")
         || threadId.startsWith("pi:")
         || threadId.startsWith("pi-pending-")
+        || threadId.startsWith("qoder:")
+        || threadId.startsWith("qoder-pending-")
         || threadId.startsWith("opencode:")
         || threadId.startsWith("opencode-pending-")
         || threadId.startsWith("dsh:")
@@ -1349,6 +1359,7 @@ export function useThreadTurnEvents({
         || (enginePrefix !== "grok" && (threadId.startsWith("grok:") || threadId.startsWith("grok-pending-")))
         || (enginePrefix !== "kimi" && (threadId.startsWith("kimi:") || threadId.startsWith("kimi-pending-")))
         || (enginePrefix !== "pi" && (threadId.startsWith("pi:") || threadId.startsWith("pi-pending-")))
+        || (enginePrefix !== "qoder" && (threadId.startsWith("qoder:") || threadId.startsWith("qoder-pending-")))
         || (enginePrefix !== "opencode" && (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")))
         || (enginePrefix !== "dsh" && (threadId.startsWith("dsh:") || threadId.startsWith("dsh-pending-")))
       );

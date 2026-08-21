@@ -27,6 +27,7 @@ describe("engineImageInput", () => {
     ["kimi", true],
     ["opencode", true],
     ["pi", true],
+    ["qoder", true],
   ] as const)("engineSupportsImageInput(%s) => %s", (engine, expected) => {
     expect(engineSupportsImageInput(engine)).toBe(expected);
   });

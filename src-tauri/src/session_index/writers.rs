@@ -143,9 +143,9 @@ pub(crate) fn is_mossx_shared_protocol_owner_text(text: &str) -> bool {
         "MOSSX_NATIVE_CONTEXT",
         "MOSSX_CONTEXT_ACCEPTED",
     ];
-    TOKENS
-        .iter()
-        .any(|token| trimmed.len() >= token.len() && trimmed[..token.len()].eq_ignore_ascii_case(token))
+    TOKENS.iter().any(|token| {
+        trimmed.len() >= token.len() && trimmed[..token.len()].eq_ignore_ascii_case(token)
+    })
 }
 
 fn is_generic_claude_session_title(title: &str) -> bool {
@@ -257,8 +257,8 @@ fn claude_index_row_from_file(
         return None;
     }
     let updated_at = file_mtime_ms(path);
-    let protocol_raw = peek_claude_first_user_raw(path)
-        .filter(|text| is_mossx_program_control_text(text));
+    let protocol_raw =
+        peek_claude_first_user_raw(path).filter(|text| is_mossx_program_control_text(text));
     let (title, title_from_history) = if let Some(raw) = protocol_raw {
         (truncate_title(&raw, 80), None)
     } else {
@@ -1450,6 +1450,8 @@ fn peek_engine_disk_newest_mtime(engine: &str, workspace_path: &Path) -> Option<
             let encoded = encode_project_path(&workspace_path.to_string_lossy());
             newest_child_mtime_ms(&claude_home.join("projects").join(encoded), 1)
         }
+        // qoder history is ACP-based with no vendor disk sessions root
+        // (add-qoder-engine design: skip prune/fingerprint wiring).
         "kimi" => {
             let home = std::env::var("KIMI_HOME")
                 .ok()
@@ -1572,6 +1574,18 @@ pub(crate) fn opencode_source_fingerprint(workspace_path: &Path) -> String {
     )
 }
 
+pub(crate) fn qoder_source_fingerprint(workspace_path: &Path) -> String {
+    // Qoder history is ACP session/list, not a vendor disk sessions root.
+    // Use a wall-clock bucket so sidebar light-sync can refresh without force
+    // while still de-duping storms (same idea as OpenCode).
+    let bucket = now_ms_fallback() / 15_000;
+    format!(
+        "qoder:{}:{}",
+        normalize_path_key(&workspace_path.to_string_lossy()),
+        bucket
+    )
+}
+
 pub(crate) fn dsh_source_fingerprint(workspace_path: &Path) -> String {
     // DSH sessions live in the host process / $DSH_HOME. Home mtime catches
     // durable writes; a short wall-clock bucket still re-probes live host
@@ -1642,6 +1656,41 @@ pub(crate) fn rows_from_pi_summaries(
             };
             SessionIndexRow {
                 engine: "pi".into(),
+                session_id: session.session_id.clone(),
+                title,
+                native_title: None,
+                updated_at: session.updated_at,
+                created_at: Some(session.created_at).filter(|value| *value > 0),
+                cwd: Some(workspace_key.clone()),
+                workspace_path: Some(workspace_key.clone()),
+                physical_path: None,
+                parent_session_id: None,
+                size_bytes: session.file_size_bytes,
+                provider_profile_id: None,
+                provider_profile_name: None,
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn rows_from_qoder_summaries(
+    workspace_path: &Path,
+    sessions: &[crate::engine::qoder_history::QoderSessionSummary],
+) -> Vec<SessionIndexRow> {
+    let workspace_key = normalize_path_key(&workspace_path.to_string_lossy());
+    sessions
+        .iter()
+        .map(|session| {
+            let title = {
+                let trimmed = session.first_message.trim();
+                if trimmed.is_empty() {
+                    "Qoder Session".to_string()
+                } else {
+                    truncate_title(trimmed, 80)
+                }
+            };
+            SessionIndexRow {
+                engine: "qoder".into(),
                 session_id: session.session_id.clone(),
                 title,
                 native_title: None,
@@ -1865,6 +1914,32 @@ mod tests {
             "session-aba863d5-ef07-4a41-94a6-4dc7c2226d3d"
         );
         assert_eq!(rows[0].title, "无法查看DSH历史记录");
+        assert!(rows[0]
+            .workspace_path
+            .as_deref()
+            .is_some_and(|path| path.contains("desktop-cc-gui")));
+    }
+
+    #[test]
+    fn rows_from_qoder_summaries_prefix_engine_and_title() {
+        let rows = rows_from_qoder_summaries(
+            Path::new("/Users/zhukunpeng/Desktop/CC GUI 项目/desktop-cc-gui"),
+            &[crate::engine::qoder_history::QoderSessionSummary {
+                session_id: "019ffb7b-dedc-7b36-8d2f-f85f35501036".into(),
+                first_message: "我是 Qoder".into(),
+                updated_at: 1_786_896_696_172,
+                created_at: 1_786_896_696_172,
+                message_count: 2,
+                file_size_bytes: None,
+                engine: Some("qoder".into()),
+                canonical_session_id: Some("019ffb7b-dedc-7b36-8d2f-f85f35501036".into()),
+                attribution_status: None,
+            }],
+        );
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].engine, "qoder");
+        assert_eq!(rows[0].session_id, "019ffb7b-dedc-7b36-8d2f-f85f35501036");
+        assert_eq!(rows[0].title, "我是 Qoder");
         assert!(rows[0]
             .workspace_path
             .as_deref()
@@ -2098,7 +2173,8 @@ mod tests {
         let ws = Path::new("/tmp/ws");
         let titles = HashMap::new();
         assert!(claude_index_row_from_file(&empty, ws, &titles).is_none());
-        let control_row = claude_index_row_from_file(&control, ws, &titles).expect("keep mossx owner for protocol hide");
+        let control_row = claude_index_row_from_file(&control, ws, &titles)
+            .expect("keep mossx owner for protocol hide");
         assert!(control_row.title.starts_with("MOSSX_CONTEXT_PACKAGE"));
         assert!(control_row.native_title.is_none());
         assert!(claude_index_row_from_file(&agent, ws, &titles).is_none());
@@ -2125,10 +2201,7 @@ mod tests {
         )
         .expect("write");
         let mut titles = HashMap::new();
-        titles.insert(
-            "1807f883-011c-46bd-94d5-ff483ffb1a4a".into(),
-            "继续".into(),
-        );
+        titles.insert("1807f883-011c-46bd-94d5-ff483ffb1a4a".into(), "继续".into());
         let row = claude_index_row_from_file(&path, Path::new("/tmp/ws"), &titles)
             .expect("protocol owner stays in index");
         assert!(
@@ -2194,7 +2267,9 @@ mod tests {
         assert!(should_omit_codex_index_title(""));
         assert!(should_omit_codex_index_title("Codex Session"));
         assert!(should_omit_codex_index_title("codex session"));
-        assert!(!should_omit_codex_index_title("MOSSX_CONTEXT_PACKAGE:sha25"));
+        assert!(!should_omit_codex_index_title(
+            "MOSSX_CONTEXT_PACKAGE:sha25"
+        ));
         assert!(should_omit_codex_index_title(
             "Generate a concise title for a coding chat thread from the first user message."
         ));
@@ -2225,7 +2300,10 @@ mod tests {
         assert_eq!(kept, vec!["mossx", "real", "nick"]);
         let omitted_ids: Vec<&str> = omitted.iter().map(|(_, id)| id.as_str()).collect();
         assert_eq!(omitted_ids, vec!["empty", "generic", "helper"]);
-        let mossx_row = rows.iter().find(|row| row.session_id == "mossx").expect("keep");
+        let mossx_row = rows
+            .iter()
+            .find(|row| row.session_id == "mossx")
+            .expect("keep");
         assert!(mossx_row.title.starts_with("MOSSX_CONTEXT_PACKAGE"));
     }
 }

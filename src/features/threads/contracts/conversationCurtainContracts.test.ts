@@ -90,5 +90,6 @@ describe("conversationCurtainContracts", () => {
     expect(NORMALIZED_EVENT_DICTIONARY.tool_call).toBe("tool");
     expect(NORMALIZED_EVENT_DICTIONARY.reasoning_delta).toBe("reasoning");
     expect(NORMALIZED_EVENT_DICTIONARY.image_generation_call).toBe("generatedImage");
+    expect(NORMALIZED_EVENT_DICTIONARY["qoder/raw"]).toBe("tool");
   });
 });

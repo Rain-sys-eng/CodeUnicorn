@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Assemblage",
     "generatingResponse": "Génération de la réponse...",
     "responding": "Réponse en cours...",
+    "waitingForFirstText": "{{engine}} est en cours d'exécution. En attente du premier bloc de texte...",
     "codexWaitingForFirstText": "Codex est en cours d'exécution. En attente du premier bloc de texte...",
     "codexSilentSuspected": "Aucune nouvelle sortie de Codex depuis un moment. Toujours à l'écoute de l'activité d'exécution...",
     "nonStreamingHint": "Ce modèle peut renvoyer une sortie non diffusée en continu, ou le réseau peut être injoignable. Veuillez patienter...",

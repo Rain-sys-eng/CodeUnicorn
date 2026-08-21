@@ -12,7 +12,8 @@ const failures = [];
 // DSH catalog is host-runtime (`llm.models`). A static fallback roster would
 // lie about models the user has not configured. Empty / absent is the decision.
 const STATIC_FALLBACK_ENGINES = ["codex", "gemini", "grok", "kimi", "opencode"];
-const RUNTIME_ONLY_ENGINES = ["dsh"];
+// Qoder catalog is ACP runtime (models.availableModels via qodercli --acp), not static.
+const RUNTIME_ONLY_ENGINES = ["dsh", "qoder"];
 
 for (const engine of STATIC_FALLBACK_ENGINES) {
   const entries = artifact.engines?.[engine];

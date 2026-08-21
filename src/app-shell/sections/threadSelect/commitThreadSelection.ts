@@ -39,7 +39,7 @@ export type ThreadSelectChromeActions = {
   setActiveEngine?: (engine: EngineType) => void;
 };
 
-const PREFIXED_NATIVE_ENGINE = /^(claude|gemini|grok|kimi|opencode|pi|dsh):/i;
+const PREFIXED_NATIVE_ENGINE = /^(claude|gemini|grok|kimi|opencode|pi|dsh|qoder):/i;
 
 export function resolveThreadSelectEngine(
   engineSource: unknown,

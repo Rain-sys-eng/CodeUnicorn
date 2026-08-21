@@ -8,12 +8,12 @@ use super::{
     build_provider_engine_dispatch_receipt, build_provider_prefill_query,
     collect_stale_child_candidates, delete_opencode_session_files,
     delete_opencode_session_from_datastore, ensure_engine_enabled, extract_turn_result_text,
-    filter_opencode_sessions_for_workspace, is_likely_foreign_model_for_gemini,
-    is_likely_legacy_claude_model_id, is_valid_claude_model_for_passthrough, merge_opencode_agents,
-    gemini_agent_completion_item_id, next_gemini_routed_item_id, normalize_provider_key,
-    opencode_data_candidate_roots,
-    opencode_session_candidate_paths, parse_imported_session_id, parse_json_value,
-    parse_opencode_agent_list, parse_opencode_auth_providers, parse_opencode_debug_config_agents,
+    filter_opencode_sessions_for_workspace, gemini_agent_completion_item_id,
+    is_likely_foreign_model_for_gemini, is_likely_legacy_claude_model_id,
+    is_valid_claude_model_for_passthrough, merge_opencode_agents, next_gemini_routed_item_id,
+    normalize_provider_key, opencode_data_candidate_roots, opencode_session_candidate_paths,
+    parse_imported_session_id, parse_json_value, parse_opencode_agent_list,
+    parse_opencode_auth_providers, parse_opencode_debug_config_agents,
     parse_opencode_help_commands, parse_opencode_mcp_servers, parse_opencode_session_list,
     parse_opencode_updated_at, provider_keys_match,
     record_claude_auto_session_metadata_for_sync_result,
@@ -123,6 +123,24 @@ fn provider_engine_dispatch_receipt_normalizes_pi_local_sentinel() {
     assert_eq!(receipt["providerProfileSource"], "local");
     assert_eq!(receipt["providerRuntimeKey"], "workspace-local");
     assert_eq!(receipt["model"], "kimi-coding/k3");
+    assert!(receipt["reasoningEffort"].is_null());
+}
+
+#[test]
+fn provider_engine_dispatch_receipt_normalizes_qoder_local_sentinel() {
+    let receipt = build_provider_engine_dispatch_receipt(
+        crate::engine::EngineType::Qoder,
+        Some(crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID),
+        "workspace-local",
+        Some("qoder/auto"),
+        None,
+    );
+
+    assert_eq!(receipt["engine"], "qoder");
+    assert!(receipt["providerProfileId"].is_null());
+    assert_eq!(receipt["providerProfileSource"], "local");
+    assert_eq!(receipt["providerRuntimeKey"], "workspace-local");
+    assert_eq!(receipt["model"], "qoder/auto");
     assert!(receipt["reasoningEffort"].is_null());
 }
 

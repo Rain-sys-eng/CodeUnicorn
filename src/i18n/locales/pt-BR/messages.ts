@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Montar",
     "generatingResponse": "Gerando resposta...",
     "responding": "Respondendo...",
+    "waitingForFirstText": "{{engine}} está em execução. Aguardando o primeiro trecho de texto...",
     "codexWaitingForFirstText": "O Codex está em execução. Aguardando o primeiro trecho de texto...",
     "codexSilentSuspected": "Sem nova saída do Codex há algum tempo. Ainda escutando por atividade de execução...",
     "nonStreamingHint": "Este modelo pode retornar saída não incremental, ou a rede pode estar inacessível. Aguarde...",

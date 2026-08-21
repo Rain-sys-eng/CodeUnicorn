@@ -104,6 +104,10 @@ describe("Provider target catalog owners", () => {
     expect(isProviderProfileEngine("dsh")).toBe(false);
   });
 
+  it("keeps Qoder outside the Provider Profile picker", () => {
+    expect(isProviderProfileEngine("qoder")).toBe(false);
+  });
+
   it("loads profiles once and models only for the opened binding", async () => {
     const { result } = renderHook(() =>
       useAtomicProviderTargetCatalog({
@@ -256,9 +260,11 @@ describe("Provider target catalog owners", () => {
       "opencode",
       "pi",
       "dsh",
+      "qoder",
     ]);
     expect(result.current.groups.every((group) => group.enabled)).toBe(true);
     expect(isProviderProfileEngine("dsh")).toBe(false);
+    expect(isProviderProfileEngine("qoder")).toBe(false);
     expect(
       result.current.groups.find((group) => group.providerId === "dsh")?.profiles,
     ).toEqual([
@@ -267,6 +273,33 @@ describe("Provider target catalog owners", () => {
         source: "disk",
       }),
     ]);
+  });
+
+  it("exposes Qoder as a Native engine on Home create-session without making it a Provider Profile engine", async () => {
+    const { result } = renderHook(() =>
+      useAtomicProviderTargetCatalog({
+        enabled: true,
+        mode: "create-session",
+        currentProvider: "opencode",
+        currentProviderProfileId: "opencode-e",
+        resolveProviderLabel: (provider) => provider,
+        kimiDisabledReason: "native only",
+      }),
+    );
+
+    await act(async () => {
+      await result.current.ensureProfiles();
+    });
+
+    expect(
+      result.current.groups.find((group) => group.providerId === "qoder")?.profiles,
+    ).toEqual([
+      expect.objectContaining({
+        id: "__local_qoder__",
+        source: "disk",
+      }),
+    ]);
+    expect(isProviderProfileEngine("qoder")).toBe(false);
   });
 
   it("loads DSH models from the host catalog without a provider profile", async () => {
@@ -1070,6 +1103,32 @@ describe("Provider target catalog owners", () => {
         "kimi",
         "opencode",
         "pi",
+        "qoder",
+      ]);
+    });
+
+    it("hides user-disabled Qoder from Home create-session groups", () => {
+      seedCliEngineVisibility(["qoder"]);
+
+      const { result } = renderHook(() =>
+        useAtomicProviderTargetCatalog({
+          enabled: true,
+          mode: "create-session",
+          currentProvider: "claude",
+          currentProviderProfileId: null,
+          resolveProviderLabel: (provider) => provider,
+          kimiDisabledReason: "source only",
+        }),
+      );
+
+      expect(result.current.groups.map((group) => group.providerId)).toEqual([
+        "claude",
+        "codex",
+        "grok",
+        "kimi",
+        "opencode",
+        "pi",
+        "dsh",
       ]);
     });
 

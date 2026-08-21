@@ -89,6 +89,7 @@ const messages = {
     restoringHistoryPhaseHydrate: "Assemble",
     generatingResponse: "Generating response...",
     responding: "Responding...",
+    waitingForFirstText: "{{engine}} is running. Waiting for the first text chunk...",
     codexWaitingForFirstText:
       "Codex is running. Waiting for the first text chunk...",
     codexSilentSuspected:

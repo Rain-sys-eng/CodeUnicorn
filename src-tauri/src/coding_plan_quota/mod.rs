@@ -15,9 +15,12 @@ mod commands;
 
 pub(crate) use commands::*;
 #[cfg(test)]
+pub(crate) use commands::get_coding_plan_quota_for_session;
+#[cfg(test)]
 pub(crate) use credentials::{
     extract_codex_base_url_and_key, is_official_grok_base, kimi_cli_token_needs_refresh,
-    pick_base_url_api_key, resolve_grok_base_url_and_key, resolve_quota_route, KimiCliCredentials,
+    pick_base_url_api_key, resolve_engine_base_url_and_key, resolve_grok_base_url_and_key,
+    resolve_quota_route, KimiCliCredentials,
 };
 #[cfg(test)]
 pub(crate) use host_cli::{
