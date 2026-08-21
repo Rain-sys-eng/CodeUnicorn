@@ -26,7 +26,6 @@ import {
   WORKSPACE_WALLPAPER_MEDIA_EXTENSIONS,
   findDuplicateWallpaperLibraryItem,
   resolveSelectedLibraryId,
-  sanitizeWorkspaceWallpaper,
   visibleWallpaperLibraryItems,
   wallpaperFileName,
 } from "../utils/workspaceWallpaper";
