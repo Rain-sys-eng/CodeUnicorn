@@ -362,10 +362,11 @@ mod workspace_settings;
 mod codex {
     pub(crate) type WorkspaceSession = crate::backend::app_server::WorkspaceSession;
     pub(crate) use crate::codex_doctor::{
-        dsh_node_requirement_error, node_satisfies_dsh_requirement, run_claude_doctor_with_settings,
-        run_codex_doctor_with_settings, run_dsh_doctor_with_settings,
-        run_grok_doctor_with_settings, run_kimi_doctor_with_settings,
+        dsh_node_requirement_error, node_satisfies_dsh_requirement,
+        run_claude_doctor_with_settings, run_codex_doctor_with_settings,
+        run_dsh_doctor_with_settings, run_grok_doctor_with_settings, run_kimi_doctor_with_settings,
         run_opencode_doctor_with_settings, run_pi_doctor_with_settings,
+        run_qoder_doctor_with_settings,
     };
     pub(crate) use crate::codex_installer::{
         build_cli_install_plan_with_backend, resolve_cli_version_status,
@@ -640,10 +641,7 @@ fn next_gemini_routed_item_id(
 
 /// Prefer the last text-lane item id so synthetic `item/completed` upserts the
 /// same assistant bubble as streamed TextDelta (Claude-parity; avoids double bubbles).
-fn gemini_agent_completion_item_id(
-    state: &GeminiRenderRoutingState,
-    base_item_id: &str,
-) -> String {
+fn gemini_agent_completion_item_id(state: &GeminiRenderRoutingState, base_item_id: &str) -> String {
     if let Some(id) = state.active_text_item_id.as_ref() {
         return id.clone();
     }
@@ -1103,6 +1101,7 @@ fn parse_engine_type_string(value: Option<&str>) -> Option<engine::EngineType> {
         "kimi" => Some(engine::EngineType::Kimi),
         "grok" => Some(engine::EngineType::Grok),
         "dsh" => Some(engine::EngineType::Dsh),
+        "qoder" => Some(engine::EngineType::Qoder),
         _ => None,
     }
 }
@@ -1894,6 +1893,10 @@ async fn handle_rpc_request(
             let dsh_bin = parse_optional_string(&params, "dshBin");
             state.dsh_doctor(dsh_bin).await
         }
+        "qoder_doctor" => {
+            let qoder_bin = parse_optional_string(&params, "qoderBin");
+            state.qoder_doctor(qoder_bin).await
+        }
         "ensure_dsh_host" => state.ensure_dsh_host().await,
         "cancel_dsh_host" => state.cancel_dsh_host().await,
         "cli_install_plan" => {
@@ -2172,6 +2175,11 @@ async fn handle_rpc_request(
             let limit = parse_optional_u32(&params, "limit").map(|value| value as usize);
             state.list_grok_sessions(workspace_path, limit).await
         }
+        "list_qoder_sessions" => {
+            let workspace_path = parse_string(&params, "workspacePath")?;
+            let limit = parse_optional_u32(&params, "limit").map(|value| value as usize);
+            state.list_qoder_sessions(workspace_path, limit).await
+        }
         "list_workspace_sessions" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let query = parse_optional_value(&params, "query")
@@ -2363,6 +2371,11 @@ async fn handle_rpc_request(
             let session_id = parse_string(&params, "sessionId")?;
             state.load_grok_session(workspace_path, session_id).await
         }
+        "load_qoder_session" => {
+            let workspace_path = parse_string(&params, "workspacePath")?;
+            let session_id = parse_string(&params, "sessionId")?;
+            state.load_qoder_session(workspace_path, session_id).await
+        }
         "load_codex_session" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let session_id = parse_string(&params, "sessionId")?;
@@ -2389,6 +2402,14 @@ async fn handle_rpc_request(
             let session_id = parse_string(&params, "sessionId")?;
             state
                 .delete_grok_session(workspace_path, session_id)
+                .await?;
+            Ok(json!({ "ok": true }))
+        }
+        "delete_qoder_session" => {
+            let workspace_path = parse_string(&params, "workspacePath")?;
+            let session_id = parse_string(&params, "sessionId")?;
+            state
+                .delete_qoder_session(workspace_path, session_id)
                 .await?;
             Ok(json!({ "ok": true }))
         }

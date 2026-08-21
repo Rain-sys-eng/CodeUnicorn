@@ -15,6 +15,7 @@ import { createGrokHistoryLoader } from "./grokHistoryLoader";
 import { createDshHistoryLoader } from "./dshHistoryLoader";
 import { createKimiHistoryLoader } from "./kimiHistoryLoader";
 import { createPiHistoryLoader } from "./piHistoryLoader";
+import { createQoderHistoryLoader } from "./qoderHistoryLoader";
 
 describe("history loaders", () => {
   it("loads codex history into normalized snapshot", async () => {
@@ -1141,6 +1142,67 @@ describe("history loaders", () => {
     expect(loadPiSession).not.toHaveBeenCalled();
     expect(snapshot.engine).toBe("pi");
     expect(snapshot.threadId).toBe("pi:session-1");
+    expect(snapshot.items).toHaveLength(0);
+  });
+
+  it("loads qoder history into normalized snapshot", async () => {
+    const loadQoderSession = vi.fn().mockResolvedValue({
+      messages: [
+        {
+          id: "qoder-user-1",
+          kind: "message",
+          role: "user",
+          text: "1+1",
+        },
+        {
+          id: "qoder-assistant-1",
+          kind: "message",
+          role: "assistant",
+          text: "2",
+        },
+      ],
+    });
+    const loader = createQoderHistoryLoader({
+      workspaceId: "ws-qoder",
+      workspacePath: "/tmp/workspace",
+      loadQoderSession,
+    });
+
+    const snapshot = await loader.load("qoder:019ffb7b-dedc-7b36-8d2f-f85f35501036");
+    expect(loadQoderSession).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "019ffb7b-dedc-7b36-8d2f-f85f35501036",
+    );
+    expect(snapshot.engine).toBe("qoder");
+    expect(snapshot.threadId).toBe("qoder:019ffb7b-dedc-7b36-8d2f-f85f35501036");
+    expect(snapshot.meta.historyHasMore).toBe(false);
+    expect(snapshot.meta.historyNextCursor).toBeNull();
+    expect(snapshot.items).toEqual([
+      expect.objectContaining({
+        kind: "message",
+        role: "user",
+        text: "1+1",
+      }),
+      expect.objectContaining({
+        kind: "message",
+        role: "assistant",
+        text: "2",
+      }),
+    ]);
+  });
+
+  it("returns an empty qoder snapshot when workspace path is missing", async () => {
+    const loadQoderSession = vi.fn();
+    const loader = createQoderHistoryLoader({
+      workspaceId: "ws-qoder",
+      workspacePath: null,
+      loadQoderSession,
+    });
+
+    const snapshot = await loader.load("qoder:session-1");
+    expect(loadQoderSession).not.toHaveBeenCalled();
+    expect(snapshot.engine).toBe("qoder");
+    expect(snapshot.threadId).toBe("qoder:session-1");
     expect(snapshot.items).toHaveLength(0);
   });
 

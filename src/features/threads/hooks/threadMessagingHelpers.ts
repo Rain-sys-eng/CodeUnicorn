@@ -229,7 +229,7 @@ export function extractSessionIdFromEngineSendResponse(
   return null;
 }
 
-type NativePendingEngine = "claude" | "gemini" | "grok" | "kimi" | "opencode" | "dsh";
+type NativePendingEngine = "claude" | "gemini" | "grok" | "kimi" | "opencode" | "dsh" | "qoder";
 
 export function resolveNativeSessionIdForSend(input: {
   engine: EngineType;
@@ -400,6 +400,13 @@ export function pickLikelyKimiSessionId(
 }
 
 export function pickLikelyPiSessionId(
+  payload: unknown,
+  minUpdatedAt: number,
+): string | null {
+  return pickLikelyGeminiSessionId(payload, minUpdatedAt);
+}
+
+export function pickLikelyQoderSessionId(
   payload: unknown,
   minUpdatedAt: number,
 ): string | null {

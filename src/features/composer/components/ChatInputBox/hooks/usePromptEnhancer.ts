@@ -28,6 +28,7 @@ export const PROMPT_ENHANCER_ENGINE_OPTIONS: EngineType[] = [
   'opencode',
   'pi',
   'dsh',
+  'qoder',
 ];
 
 export type PromptEnhancerIntensity = 'light' | 'struct' | 'exec';

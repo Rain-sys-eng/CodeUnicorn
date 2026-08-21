@@ -429,6 +429,11 @@ export function mapCommonRealtimeEvent(
   if (!threadId) {
     return null;
   }
+  // Qoder is Native-only. Shared threads must fail closed here the same way
+  // gemini/dsh never project as Shared owners from this mapper.
+  if (engine === "qoder" && threadId.startsWith("shared:")) {
+    return null;
+  }
 
   const codexRawGeneratedImageEvent = mapCodexRawGeneratedImageEvent({
     engine,

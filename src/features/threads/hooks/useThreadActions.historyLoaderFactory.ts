@@ -5,6 +5,7 @@ import {
   loadGrokSession as loadGrokSessionService,
   loadKimiSession as loadKimiSessionService,
   loadPiSession as loadPiSessionService,
+  loadQoderSession as loadQoderSessionService,
   loadDshSession as loadDshSessionService,
   resumeThread as resumeThreadService,
 } from "../../../services/tauri";
@@ -14,6 +15,7 @@ import { createGeminiHistoryLoader } from "../loaders/geminiHistoryLoader";
 import { createGrokHistoryLoader } from "../loaders/grokHistoryLoader";
 import { createKimiHistoryLoader } from "../loaders/kimiHistoryLoader";
 import { createPiHistoryLoader } from "../loaders/piHistoryLoader";
+import { createQoderHistoryLoader } from "../loaders/qoderHistoryLoader";
 import { createDshHistoryLoader } from "../loaders/dshHistoryLoader";
 import { createOpenCodeHistoryLoader } from "../loaders/opencodeHistoryLoader";
 import { createSharedHistoryLoader } from "../loaders/sharedHistoryLoader";
@@ -99,6 +101,14 @@ export function createThreadHistoryLoaderForThread({
       workspaceId,
       workspacePath,
       loadPiSession: loadPiSessionService,
+      onProgress: onHistoryProgress,
+    });
+  }
+  if (targetThreadId.startsWith("qoder:")) {
+    return createQoderHistoryLoader({
+      workspaceId,
+      workspacePath,
+      loadQoderSession: loadQoderSessionService,
       onProgress: onHistoryProgress,
     });
   }

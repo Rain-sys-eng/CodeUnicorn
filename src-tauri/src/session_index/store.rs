@@ -427,7 +427,7 @@ pub(crate) fn invalidate_source_freshness(
 }
 
 const INDEX_LIST_ENGINES: &[&str] = &[
-    "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh",
+    "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
 ];
 
 fn list_slice_for_workspace_engine(
@@ -923,7 +923,14 @@ pub(crate) fn delete_engine_session_rows(
 
 fn strip_known_engine_prefix(id: &str) -> &str {
     const PREFIXES: [&str; 8] = [
-        "codex:", "claude:", "kimi:", "grok:", "opencode:", "pi:", "gemini:", "dsh:",
+        "codex:",
+        "claude:",
+        "kimi:",
+        "grok:",
+        "opencode:",
+        "pi:",
+        "gemini:",
+        "dsh:",
     ];
     let lower = id.to_ascii_lowercase();
     for prefix in PREFIXES {
@@ -1006,10 +1013,11 @@ fn resolve_visible_parent_id(
         return Some(visible.clone());
     }
     let uuid = extract_codex_canonical_session_id(parent_session_id)?;
-    visible_id_by_identifier
-        .get(&uuid)
-        .cloned()
-        .or_else(|| visible_id_by_identifier.get(&format!("codex:{uuid}")).cloned())
+    visible_id_by_identifier.get(&uuid).cloned().or_else(|| {
+        visible_id_by_identifier
+            .get(&format!("codex:{uuid}"))
+            .cloned()
+    })
 }
 
 fn retain_codex_parent_tree_within_limit(rows: &mut Vec<SessionIndexRow>, requested_limit: usize) {
@@ -1436,11 +1444,9 @@ mod tests {
             listed.iter().any(|row| row.session_id == parent_id),
             "parent outside the mtime window must still be hydrated"
         );
-        assert!(
-            listed
-                .iter()
-                .any(|row| row.parent_session_id.as_deref() == Some(parent_id))
-        );
+        assert!(listed
+            .iter()
+            .any(|row| row.parent_session_id.as_deref() == Some(parent_id)));
     }
 
     #[test]
@@ -1587,7 +1593,7 @@ mod tests {
         let writers = include_str!("writers.rs");
         let commands = include_str!("commands.rs");
         let required = [
-            "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh",
+            "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
         ];
         let engine_table = store
             .split("const INDEX_LIST_ENGINES")

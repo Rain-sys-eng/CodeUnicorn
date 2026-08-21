@@ -79,6 +79,7 @@ const messages = {
     restoringHistoryPhaseHydrate: "组装",
     generatingResponse: "正在生成响应...",
     responding: "响应中...",
+    waitingForFirstText: "{{engine}} 已启动，正在等待首段文本...",
     codexWaitingForFirstText: "Codex 已启动，正在等待首段文本...",
     codexSilentSuspected: "Codex 暂时没有新输出，仍在监听运行状态...",
     nonStreamingHint: "该模型可能非流式返回，或网络暂不可达，请稍候...",

@@ -68,6 +68,7 @@ const workspace = {
     engineGemini: "Gemini",
     engineKimi: "Kimi CLI",
     enginePi: "PI CLI",
+    engineQoder: "Qoder CLI",
     engineGrok: "Grok CLI",
     engineOpenCode: "OpenCode",
     engineDsh: "DeepSeek Harness",
@@ -320,6 +321,7 @@ const workspace = {
   },
   sharedSession: {
     dshUnsupported: "Shared Session 暂不支持 DSH",
+    qoderUnsupported: "Shared Session 暂不支持 Qoder CLI",
   },
 };
 

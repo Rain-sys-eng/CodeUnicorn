@@ -27,6 +27,23 @@ describe("codingPlanQuotaVendor", () => {
     ).toBe("vision-http");
   });
 
+  it("does not treat Qoder Native as a coding-plan vendor", () => {
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "qoder",
+        providerProfileId: "__local_qoder__",
+        selectedModel: "qoder/qwen3-coder",
+      }),
+    ).toBeNull();
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "qoder",
+        providerProfileId: null,
+        selectedModel: null,
+      }),
+    ).toBeNull();
+  });
+
   it("does not treat a bare model name as a vendor", () => {
     expect(
       resolveCodingPlanQuotaVendorId({

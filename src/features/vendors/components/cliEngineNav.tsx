@@ -32,7 +32,6 @@ import {
 import type { VendorTab } from "../types";
 
 type UnsupportedCliEngineId =
-  | "qoder"
   | "qwen"
   | "codebuddy"
   | "copilot"
@@ -173,6 +172,7 @@ export function buildCliEngineNavItems(options: {
   openCodeHasConfig: boolean;
   piHasConfig: boolean;
   dshHasConfig: boolean;
+  qoderHasConfig: boolean;
 }): CliEngineNavItem[] {
   return [
     { key: "claude", label: "Claude Code CLI", hasConfig: options.claudeHasConfig, supported: true, docsUrl: CLI_DOCS_HREF_BY_ID.claude },
@@ -183,13 +183,13 @@ export function buildCliEngineNavItems(options: {
     { key: "opencode", label: "OpenCode CLI", hasConfig: options.openCodeHasConfig, supported: true, docsUrl: CLI_DOCS_HREF_BY_ID.opencode },
     { key: "pi", label: "PI CLI", hasConfig: options.piHasConfig, supported: true, docsUrl: CLI_DOCS_HREF_BY_ID.pi },
     { key: "dsh", label: "DeepSeek Harness", hasConfig: options.dshHasConfig, supported: true, docsUrl: CLI_DOCS_HREF_BY_ID.dsh },
+    { key: "qoder", label: "Qoder CLI", hasConfig: options.qoderHasConfig, supported: true, docsUrl: CLI_DOCS_HREF_BY_ID.qoder },
     { key: "glm", label: "GLM CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.glm },
     { key: "trae", label: "Trae CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.trae },
     { key: "cursor", label: "Cursor CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.cursor },
     { key: "ruixing", label: "瑞幸 CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.ruixing },
     { key: "deveco", label: "DevEco CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.deveco },
     { key: "iflow", label: "iFlow CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.iflow },
-    { key: "qoder", label: "Qoder CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.qoder },
     { key: "qwen", label: "Qwen CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.qwen },
     { key: "codebuddy", label: "CodeBuddy CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.codebuddy },
     { key: "copilot", label: "Copilot CLI", supported: false, docsUrl: CLI_DOCS_HREF_BY_ID.copilot },

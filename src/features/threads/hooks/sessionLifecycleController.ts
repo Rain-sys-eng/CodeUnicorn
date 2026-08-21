@@ -12,6 +12,7 @@ import {
   LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
   type EngineProviderProfileOption,
 } from "../constants/codexProviderProfiles";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
@@ -180,6 +181,7 @@ const LOCAL_PROVIDER_PROFILE_IDS = new Set([
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
   DSH_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
 ]);
 
 export function isManagedEngineProviderProfileId(
@@ -197,15 +199,19 @@ export function localProviderBindingForEngine(
       ? CLAUDE_LOCAL_PROVIDER_PROFILE_ID
       : engine === "codex"
         ? CODEX_DISK_PROVIDER_PROFILE_ID
-        : engine === "kimi" || engine === "grok"
+        : engine === "kimi"
           ? KIMI_LOCAL_PROVIDER_PROFILE_ID
-          : engine === "opencode"
-            ? OPENCODE_LOCAL_PROVIDER_PROFILE_ID
-            : engine === "pi"
-              ? PI_LOCAL_PROVIDER_PROFILE_ID
-              : engine === "dsh"
-                ? DSH_LOCAL_PROVIDER_PROFILE_ID
-                : null;
+          : engine === "grok"
+            ? GROK_LOCAL_PROVIDER_PROFILE_ID
+            : engine === "opencode"
+              ? OPENCODE_LOCAL_PROVIDER_PROFILE_ID
+              : engine === "pi"
+                ? PI_LOCAL_PROVIDER_PROFILE_ID
+                : engine === "dsh"
+                  ? DSH_LOCAL_PROVIDER_PROFILE_ID
+                  : engine === "qoder"
+                    ? QODER_LOCAL_PROVIDER_PROFILE_ID
+                    : null;
   if (!localId) {
     return {};
   }

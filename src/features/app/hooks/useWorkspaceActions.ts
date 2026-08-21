@@ -174,6 +174,8 @@ export function useWorkspaceActions({
           return t("workspace.engineOpenCode");
         case "pi":
           return t("workspace.enginePi");
+        case "qoder":
+          return t("workspace.engineQoder");
         case "dsh":
           return t("workspace.engineDsh");
         case "claude":

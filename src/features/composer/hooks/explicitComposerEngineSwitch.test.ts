@@ -17,6 +17,7 @@ const NATIVE_ENGINES: EngineType[] = [
   "opencode",
   "pi",
   "dsh",
+  "qoder",
 ];
 
 afterEach(() => {

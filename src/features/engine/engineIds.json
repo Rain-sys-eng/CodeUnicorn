@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "engineIds": ["claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh"],
+  "engineIds": ["claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder"],
   "engines": [
     {
       "id": "claude",
@@ -73,6 +73,15 @@
       "protocolFamily": "dsh-host-rpc",
       "executionModel": "persistent",
       "capabilityProfile": "dsh"
+    },
+    {
+      "id": "qoder",
+      "displayName": "Qoder CLI",
+      "shortName": "Qoder",
+      "adapterId": "builtin.qoder",
+      "protocolFamily": "acp-stdio",
+      "executionModel": "one-shot",
+      "capabilityProfile": "qoder"
     }
   ]
 }

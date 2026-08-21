@@ -172,6 +172,7 @@ describe('usePromptEnhancer', () => {
       'opencode',
       'pi',
       'dsh',
+      'qoder',
     ]);
     expect(result.current.selectedEnhancerEngine).toBe('opencode');
     expect(result.current.visibleEnhancerEngines).toContain('opencode');
@@ -206,7 +207,7 @@ describe('usePromptEnhancer', () => {
   it('does not start enhancement when no executable CLI is enabled', async () => {
     const sendSync = vi.mocked(engineSendMessageSync);
     act(() => {
-      seedCliEngineVisibility(['claude', 'codex', 'grok', 'kimi', 'opencode', 'pi', 'dsh']);
+      seedCliEngineVisibility(['claude', 'codex', 'grok', 'kimi', 'opencode', 'pi', 'dsh', 'qoder']);
     });
     const { result } = renderPromptEnhancer();
 
@@ -1011,6 +1012,7 @@ describe('resolveVisibleEnhancerEngines', () => {
       'opencode',
       'pi',
       'dsh',
+      'qoder',
     ]);
   });
 });

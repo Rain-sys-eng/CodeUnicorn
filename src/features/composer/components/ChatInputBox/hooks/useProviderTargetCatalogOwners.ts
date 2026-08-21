@@ -25,6 +25,8 @@ import {
   OPENCODE_LOCAL_PROVIDER_PROFILE_NAME,
   PI_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_NAME,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_NAME,
   type EngineProviderProfileOption,
 } from "../../../../threads/constants/codexProviderProfiles";
 import type { ModelInfo, ProviderId } from "../types";
@@ -61,7 +63,7 @@ type ProfileCatalog = Partial<
   >
 >;
 
-type ProviderProfileEngine = Exclude<ProviderId, "gemini" | "dsh">;
+type ProviderProfileEngine = Exclude<ProviderId, "gemini" | "dsh" | "qoder">;
 
 const PROVIDER_PROFILE_ENGINES: readonly ProviderProfileEngine[] = [
   "claude",
@@ -271,6 +273,8 @@ function isLocalProviderProfile(
       return providerProfileId === PI_LOCAL_PROVIDER_PROFILE_ID;
     case "dsh":
       return providerProfileId === DSH_LOCAL_PROVIDER_PROFILE_ID;
+    case "qoder":
+      return providerProfileId === QODER_LOCAL_PROVIDER_PROFILE_ID;
     default:
       return false;
   }
@@ -496,7 +500,7 @@ function useProviderTargetCatalogOwner({
     ): Promise<ModelInfo[]> => {
       if (
         !enabled ||
-        !["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh"].includes(
+        !["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh", "qoder"].includes(
           engine,
         )
       ) {
@@ -736,6 +740,36 @@ function useProviderTargetCatalogOwner({
           {
             id: DSH_LOCAL_PROVIDER_PROFILE_ID,
             label: DSH_LOCAL_PROVIDER_PROFILE_NAME,
+            source: "disk",
+            enabled: true,
+            disabledReason: undefined,
+            models:
+              loadedModels[key] ?? modelCatalogCache.get(key) ?? EMPTY_MODELS,
+            loading: loadingBindings.has(key),
+            reloadingConfig: catalogActions.has(`reload-config:${key}`),
+            discoveringModels: false,
+            discoverySupported: false,
+            error: modelErrors[key] ?? null,
+          },
+        ],
+      });
+    }
+    // Qoder is Native-only, same as DSH. Shared stays fail-closed; Home
+    // create-session needs a picker row so Qoder catalog models can be chosen.
+    const showQoder =
+      mode !== "shared" &&
+      (currentProvider === "qoder" || !disabledCliEngineIds.has("qoder"));
+    if (showQoder) {
+      const key = modelCatalogKey("qoder", QODER_LOCAL_PROVIDER_PROFILE_ID);
+      groups.push({
+        providerId: "qoder",
+        providerLabel: resolveProviderLabel("qoder"),
+        enabled: true,
+        disabledReason: undefined,
+        profiles: [
+          {
+            id: QODER_LOCAL_PROVIDER_PROFILE_ID,
+            label: QODER_LOCAL_PROVIDER_PROFILE_NAME,
             source: "disk",
             enabled: true,
             disabledReason: undefined,

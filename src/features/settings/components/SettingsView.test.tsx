@@ -200,6 +200,7 @@ const baseSettings: AppSettings = {
   claudeBin: null,
   kimiBin: null,
   piBin: null,
+  qoderBin: null,
   grokBin: null,
   opencodeBin: null,
   dshBin: null,

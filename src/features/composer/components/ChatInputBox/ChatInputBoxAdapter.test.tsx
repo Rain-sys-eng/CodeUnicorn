@@ -2109,6 +2109,8 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
         { type: 'kimi', installed: true, version: '1.0.0' },
         { type: 'grok', installed: true, version: '1.0.0' },
         { type: 'dsh', installed: true, version: '1.0.0' },
+        { type: 'qoder', installed: true, version: '1.0.0' },
+        { type: 'pi', installed: true, version: '1.0.0' },
       ],
     });
 
@@ -2126,6 +2128,8 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       kimi: true,
       grok: true,
       dsh: false,
+      qoder: false,
+      pi: true,
     });
   });
 

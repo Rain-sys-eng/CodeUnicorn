@@ -175,6 +175,7 @@ export type SettingsViewProps = {
     opencodeBin: string | null,
   ) => Promise<CodexDoctorResult>;
   onRunPiDoctor?: (piBin: string | null) => Promise<CodexDoctorResult>;
+  onRunQoderDoctor?: (qoderBin: string | null) => Promise<CodexDoctorResult>;
   onRunDoctor?: (
     codexBin: string | null,
     codexArgs: string | null,
@@ -337,6 +338,7 @@ export function SettingsView({
   onRunGrokDoctor,
   onRunOpenCodeDoctor,
   onRunPiDoctor,
+  onRunQoderDoctor,
   onRunDoctor,
   activeWorkspace,
   activeThreadId = null,
@@ -479,6 +481,10 @@ export function SettingsView({
     result: CodexDoctorResult | null;
   }>({ status: "idle", result: null });
   const [piDoctorState, setPiDoctorState] = useState<{
+    status: "idle" | "running" | "done";
+    result: CodexDoctorResult | null;
+  }>({ status: "idle", result: null });
+  const [qoderDoctorState, setQoderDoctorState] = useState<{
     status: "idle" | "running" | "done";
     result: CodexDoctorResult | null;
   }>({ status: "idle", result: null });
@@ -1549,6 +1555,33 @@ export function SettingsView({
     }
   };
 
+  const handleRunQoderDoctor = async () => {
+    const qoderBin = appSettings.qoderBin ?? null;
+    setQoderDoctorState({ status: "running", result: null });
+    try {
+      if (!onRunQoderDoctor) {
+        throw new Error("Qoder doctor is not available.");
+      }
+      const result = await onRunQoderDoctor(qoderBin);
+      setQoderDoctorState({ status: "done", result });
+    } catch (error) {
+      setQoderDoctorState({
+        status: "done",
+        result: {
+          ok: false,
+          codexBin: qoderBin,
+          version: null,
+          appServerOk: false,
+          details: error instanceof Error ? error.message : String(error),
+          path: null,
+          nodeOk: false,
+          nodeVersion: null,
+          nodeDetails: null,
+        },
+      });
+    }
+  };
+
   const handleReloadCodexRuntimeConfig = useCallback(async () => {
     setCodexRuntimeReloadState({ status: "reloading", message: null });
     try {
@@ -2388,6 +2421,8 @@ export function SettingsView({
                 dshDoctorState={dshDoctorState}
                 handleRunPiDoctor={handleRunPiDoctor}
                 piDoctorState={piDoctorState}
+                handleRunQoderDoctor={handleRunQoderDoctor}
+                qoderDoctorState={qoderDoctorState}
                 handleRunDoctor={handleRunDoctor}
                 doctorState={doctorState}
                 remoteHostDraft={remoteHostDraft}
@@ -2416,6 +2451,8 @@ export function SettingsView({
                     setDshDoctorState({ status: "done", result });
                   } else if (engine === "pi") {
                     setPiDoctorState({ status: "done", result });
+                  } else if (engine === "qoder") {
+                    setQoderDoctorState({ status: "done", result });
                   } else {
                     setClaudeDoctorState({ status: "done", result });
                   }

@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "조립",
     "generatingResponse": "응답 생성 중...",
     "responding": "응답 중...",
+    "waitingForFirstText": "{{engine}}가 실행 중입니다. 첫 번째 텍스트 청크를 기다리는 중...",
     "codexWaitingForFirstText": "Codex가 실행 중입니다. 첫 번째 텍스트 청크를 기다리는 중...",
     "codexSilentSuspected": "한동안 새로운 Codex 출력이 없습니다. 런타임 활동을 계속 수신 중...",
     "nonStreamingHint": "이 모델은 비스트리밍 출력을 반환하거나 네트워크에 연결할 수 없을 수 있습니다. 기다려 주세요...",

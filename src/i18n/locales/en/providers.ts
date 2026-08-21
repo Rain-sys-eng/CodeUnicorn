@@ -26,6 +26,9 @@ const providers = {
     dsh: {
       label: "DeepSeek Harness",
     },
+    qoder: {
+      label: "Qoder CLI",
+    },
   },
 };
 

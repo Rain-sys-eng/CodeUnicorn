@@ -306,6 +306,12 @@ export function inferThreadEngineSource(
     return "pi";
   }
   if (
+    normalized.startsWith("qoder:") ||
+    normalized.startsWith("qoder-pending-")
+  ) {
+    return "qoder";
+  }
+  if (
     normalized.startsWith("opencode:") ||
     normalized.startsWith("opencode-pending-")
   ) {
@@ -328,6 +334,7 @@ export function isPendingThreadId(threadId: string): boolean {
     normalized.startsWith("grok-pending-") ||
     normalized.startsWith("kimi-pending-") ||
     normalized.startsWith("pi-pending-") ||
+    normalized.startsWith("qoder-pending-") ||
     normalized.startsWith("opencode-pending-") ||
     normalized.startsWith("dsh-pending-") ||
     normalized.startsWith("codex-pending-")
@@ -1202,6 +1209,12 @@ export function normalizePiSessionSummaries(
   return normalizeGeminiSessionSummaries(value);
 }
 
+export function normalizeQoderSessionSummaries(
+  value: unknown,
+): KimiSessionSummary[] {
+  return normalizeGeminiSessionSummaries(value);
+}
+
 function normalizeDshSessionSummary(value: unknown): DshSessionSummary | null {
   const base = normalizeGeminiSessionSummary(value);
   if (!base) {
@@ -1440,8 +1453,8 @@ function mergeNativeCliSessionSummaries(params: {
       agentPreset?: string | null;
     }
   >;
-  idPrefix: "gemini" | "grok" | "kimi" | "pi" | "dsh";
-  engineSource: "gemini" | "grok" | "kimi" | "pi" | "dsh";
+  idPrefix: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder";
+  engineSource: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder";
   fallbackTitle: string;
   workspaceId: string;
   mappedTitles: Record<string, string>;
@@ -1648,6 +1661,27 @@ export function mergePiSessionSummaries(
   });
 }
 
+export function mergeQoderSessionSummaries(
+  baseSummaries: ThreadSummary[],
+  qoderSessions: KimiSessionSummary[],
+  workspaceId: string,
+  mappedTitles: Record<string, string>,
+  getCustomName: (workspaceId: string, threadId: string) => string | undefined,
+  hiddenSharedBindingIds?: ReadonlySet<string>,
+): ThreadSummary[] {
+  return mergeNativeCliSessionSummaries({
+    baseSummaries,
+    sessions: qoderSessions,
+    idPrefix: "qoder",
+    engineSource: "qoder",
+    fallbackTitle: "Qoder Session",
+    workspaceId,
+    mappedTitles,
+    getCustomName,
+    hiddenSharedBindingIds,
+  });
+}
+
 export function mergeDshSessionSummaries(
   baseSummaries: ThreadSummary[],
   dshSessions: DshSessionSummary[],
@@ -1707,6 +1741,7 @@ function normalizeCatalogEngine(
     case "grok":
     case "kimi":
     case "pi":
+    case "qoder":
     case "opencode":
     case "dsh":
       return engine;
@@ -1846,6 +1881,8 @@ export function mergeCodexCatalogSessionSummaries(
               ? "Kimi Session"
               : engineSource === "pi"
                 ? "PI Session"
+                : engineSource === "qoder"
+                  ? "Qoder Session"
                 : engineSource === "opencode"
                   ? "OpenCode Session"
                   : engineSource === "dsh"
@@ -1946,6 +1983,7 @@ const PENDING_PREFIXES_BY_ENGINE: Partial<Record<EngineSource, string>> = {
   grok: "grok-pending-",
   kimi: "kimi-pending-",
   pi: "pi-pending-",
+  qoder: "qoder-pending-",
 };
 
 function isPendingEngineThreadId(

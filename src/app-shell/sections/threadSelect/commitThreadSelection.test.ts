@@ -142,6 +142,20 @@ describe("commitThreadSelection", () => {
     expect(chromeActions.setActiveEngine).not.toHaveBeenCalled();
   });
 
+  it("switches chrome to Qoder from a prefixed native thread id", () => {
+    const chromeActions = createChromeActions();
+
+    applyThreadSelectChrome(
+      {
+        preserveEditor: false,
+        threadId: "qoder:session-1",
+      },
+      chromeActions,
+    );
+
+    expect(chromeActions.setActiveEngine).toHaveBeenCalledWith("qoder");
+  });
+
   it("ignores unknown engine sources on chrome", () => {
     const chromeActions = createChromeActions();
 

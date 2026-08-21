@@ -481,7 +481,7 @@ pub(crate) fn is_pending_shared_binding_thread_id(engine: EngineType, thread_id:
         EngineType::Pi => normalized.starts_with("pi-pending-shared-"),
         EngineType::Grok => normalized.starts_with("grok-pending-shared-"),
         EngineType::OpenCode => normalized.starts_with("opencode-pending-shared-"),
-        EngineType::Gemini | EngineType::Dsh => false,
+        EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => false,
     }
 }
 
@@ -504,7 +504,7 @@ pub(crate) fn binding_uses_established_native_thread(engine: EngineType, thread_
                 .unwrap_or(normalized)
                 .trim()
         }
-        EngineType::Codex | EngineType::Gemini => normalized,
+        EngineType::Codex | EngineType::Gemini | EngineType::Qoder => normalized,
     };
     if raw.is_empty() || is_pending_shared_binding_thread_id(engine, raw) {
         return false;
@@ -516,7 +516,7 @@ pub(crate) fn binding_uses_established_native_thread(engine: EngineType, thread_
         | EngineType::Pi
         | EngineType::Grok
         | EngineType::OpenCode => true,
-        EngineType::Gemini | EngineType::Dsh => false,
+        EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => false,
     }
 }
 
@@ -530,6 +530,8 @@ pub(crate) fn engine_binding_thread_id(engine: EngineType, seed: &str) -> String
         EngineType::OpenCode => format!("opencode-pending-shared-{seed}"),
         EngineType::Gemini => format!("gemini-pending-shared-{seed}"),
         EngineType::Dsh => format!("dsh-pending-shared-{seed}"),
+        // Qoder is never a Shared target (fail-closed); the arm exists for exhaustiveness.
+        EngineType::Qoder => format!("qoder-pending-shared-{seed}"),
     }
 }
 
@@ -1856,7 +1858,8 @@ pub async fn send_shared_session_message(
         | EngineType::Grok
         | EngineType::Kimi
         | EngineType::Pi
-        | EngineType::Dsh => {
+        | EngineType::Dsh
+        | EngineType::Qoder => {
             return Err(format!(
                 "Unsupported shared session engine: {}",
                 engine.icon()

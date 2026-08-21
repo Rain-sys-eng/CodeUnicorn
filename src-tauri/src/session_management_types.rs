@@ -19,6 +19,7 @@ pub(crate) const SESSION_CATALOG_PARTIAL_GROK: &str = "grok-history-unavailable"
 pub(crate) const SESSION_CATALOG_PARTIAL_KIMI: &str = "kimi-history-unavailable";
 pub(crate) const SESSION_CATALOG_PARTIAL_DSH: &str = "dsh-history-unavailable";
 pub(crate) const SESSION_CATALOG_PARTIAL_PI: &str = "pi-history-unavailable";
+pub(crate) const SESSION_CATALOG_PARTIAL_QODER: &str = "qoder-history-unavailable";
 pub(crate) const SESSION_CATALOG_PARTIAL_OPENCODE: &str = "opencode-history-unavailable";
 pub(crate) const SESSION_CATALOG_PARTIAL_SHARED: &str = "shared-history-unavailable";
 pub(crate) const SESSION_CATALOG_PARTIAL_ARCHIVE_METADATA: &str = "archive-metadata-unavailable";
@@ -569,6 +570,7 @@ pub(crate) enum SessionCatalogIdentity {
     Grok { session_id: String },
     Kimi { session_id: String },
     Pi { session_id: String },
+    Qoder { session_id: String },
     OpenCode { session_id: String },
     Dsh { session_id: String },
     Shared { session_id: String },
@@ -583,6 +585,7 @@ impl SessionCatalogIdentity {
             Self::Grok { .. } => "grok",
             Self::Kimi { .. } => "kimi",
             Self::Pi { .. } => "pi",
+            Self::Qoder { .. } => "qoder",
             Self::OpenCode { .. } => "opencode",
             Self::Dsh { .. } => "dsh",
             Self::Shared { .. } => "shared",
@@ -597,6 +600,7 @@ impl SessionCatalogIdentity {
             | Self::Grok { session_id }
             | Self::Kimi { session_id }
             | Self::Pi { session_id }
+            | Self::Qoder { session_id }
             | Self::OpenCode { session_id }
             | Self::Dsh { session_id }
             | Self::Shared { session_id } => session_id,
@@ -627,6 +631,11 @@ pub(crate) fn parse_catalog_identity(session_id: &str) -> SessionCatalogIdentity
     }
     if let Some(raw_id) = session_id.strip_prefix("pi:") {
         return SessionCatalogIdentity::Pi {
+            session_id: raw_id.to_string(),
+        };
+    }
+    if let Some(raw_id) = session_id.strip_prefix("qoder:") {
+        return SessionCatalogIdentity::Qoder {
             session_id: raw_id.to_string(),
         };
     }

@@ -284,6 +284,8 @@ export function resolveEngineLabel(engine: EngineType): string {
       return "OpenCode";
     case "dsh":
       return "DeepSeek Harness";
+    case "qoder":
+      return "Qoder CLI";
   }
 }
 

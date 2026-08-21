@@ -24,6 +24,7 @@ export const THREAD_ENGINE_SOURCES: ThreadEngineSource[] = [
   "grok",
   "kimi",
   "pi",
+  "qoder",
 ];
 
 export function findCatalogSourceStatusForEngine(

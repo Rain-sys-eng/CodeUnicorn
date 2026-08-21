@@ -13,6 +13,7 @@ import {
   listGrokSessions as listGrokSessionsService,
   listKimiSessions as listKimiSessionsService,
   listPiSessions as listPiSessionsService,
+  listQoderSessions as listQoderSessionsService,
   listDshSessions as listDshSessionsService,
   getOpenCodeSessionList as getOpenCodeSessionListService,
   listSessionIndexForWorkspace as listSessionIndexForWorkspaceService,
@@ -86,12 +87,14 @@ import {
   mergeGrokSessionSummaries,
   mergeKimiSessionSummaries,
   mergePiSessionSummaries,
+  mergeQoderSessionSummaries,
   mergeDshSessionSummaries,
   mergeThreadSummaryPreservingStableIdentity,
   normalizeGeminiSessionSummaries,
   normalizeGrokSessionSummaries,
   normalizeKimiSessionSummaries,
   normalizePiSessionSummaries,
+  normalizeQoderSessionSummaries,
   normalizeDshSessionSummaries,
   normalizeThreadListPartialSource,
   resolveThreadSourceMeta,
@@ -133,6 +136,8 @@ import {
   DSH_SESSION_FETCH_TIMEOUT_MS,
   PI_SESSION_CACHE_TTL_MS,
   PI_SESSION_FETCH_TIMEOUT_MS,
+  QODER_SESSION_CACHE_TTL_MS,
+  QODER_SESSION_FETCH_TIMEOUT_MS,
   NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
   OPENCODE_FULL_CATALOG_FETCH_TIMEOUT_MS,
   THREAD_LIST_LIVE_REQUEST_TIMEOUT_MS,
@@ -208,6 +213,10 @@ export function useThreadActions({
     Record<string, { fetchedAt: number; sessions: KimiSessionSummary[] }>
   >({});
   const piRefreshAttemptedRef = useRef<Record<string, boolean>>({});
+  const qoderSessionCacheRef = useRef<
+    Record<string, { fetchedAt: number; sessions: KimiSessionSummary[] }>
+  >({});
+  const qoderRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const grokSessionCacheRef = useRef<
     Record<string, { fetchedAt: number; sessions: GrokSessionSummary[] }>
   >({});
@@ -747,6 +756,20 @@ export function useThreadActions({
         const hasFreshPiCache =
           !!cachedPi &&
           Date.now() - cachedPi.fetchedAt <= PI_SESSION_CACHE_TTL_MS;
+        const hasQoderSignal =
+          existingThreads.some(
+            (thread) =>
+              thread.engineSource === "qoder" ||
+              thread.id.startsWith("qoder:") ||
+              thread.id.startsWith("qoder-pending-"),
+          ) ||
+          activeThreadId.startsWith("qoder:") ||
+          activeThreadId.startsWith("qoder-pending-") ||
+          Object.keys(mappedTitles).some((id) => id.startsWith("qoder:"));
+        const cachedQoder = qoderSessionCacheRef.current[workspace.id];
+        const hasFreshQoderCache =
+          !!cachedQoder &&
+          Date.now() - cachedQoder.fetchedAt <= QODER_SESSION_CACHE_TTL_MS;
         const hasGrokSignal =
           existingThreads.some(
             (thread) =>
@@ -1714,6 +1737,22 @@ export function useThreadActions({
             hiddenSharedBindingIds,
           );
         }
+        if (hasFreshQoderCache && cachedQoder.sessions.length > 0) {
+          allSummaries = mergeQoderSessionSummaries(
+            allSummaries,
+            cachedQoder.sessions.filter(
+              (session) =>
+                !threadIdInHiddenSharedBindingSet(
+                  `qoder:${session.sessionId}`,
+                  hiddenSharedBindingIds,
+                ),
+            ),
+            workspace.id,
+            mappedTitles,
+            getCustomName,
+            hiddenSharedBindingIds,
+          );
+        }
         if (hasFreshGrokCache && cachedGrok.sessions.length > 0) {
           allSummaries = mergeGrokSessionSummaries(
             allSummaries,
@@ -2489,6 +2528,71 @@ export function useThreadActions({
             const nextSummaries = mergePiSessionSummaries(
               baselineSummaries,
               normalizedPiSessions,
+              workspace.id,
+              mappedTitles,
+              getCustomName,
+              hiddenSharedBindingIds,
+            );
+            const visibleNextSummaries = applySessionArchiveState(
+              nextSummaries,
+              await archivedSessionMapPromise,
+            );
+            if (!isLatestThreadListRequest()) {
+              return;
+            }
+            dispatch({
+              type: "setThreads",
+              workspaceId: workspace.id,
+              threads: visibleNextSummaries,
+              unionMembership: true,
+            });
+            latestThreadsByWorkspaceRef.current = {
+              ...latestThreadsByWorkspaceRef.current,
+              [workspace.id]: visibleNextSummaries,
+            };
+          })();
+        }
+        const hasAttemptedQoderRefresh =
+          qoderRefreshAttemptedRef.current[workspace.id] === true;
+        const shouldRefreshQoderSessions =
+          isLatestThreadListRequest() &&
+          includeEngineDiskLists &&
+          (hasQoderSignal || !!cachedQoder || !hasAttemptedQoderRefresh);
+        if (shouldRefreshQoderSessions) {
+          void (async () => {
+            qoderRefreshAttemptedRef.current[workspace.id] = true;
+            const qoderResult = await withTimeout(
+              listQoderSessionsService(workspace.path, 50),
+              QODER_SESSION_FETCH_TIMEOUT_MS,
+            );
+            if (!isLatestThreadListRequest()) {
+              return;
+            }
+            if (qoderResult === null) {
+              onDebug?.({
+                id: `${Date.now()}-client-qoder-session-timeout`,
+                timestamp: Date.now(),
+                source: "client",
+                label: "thread/list qoder timeout",
+                payload: {
+                  workspaceId: workspace.id,
+                  timeoutMs: QODER_SESSION_FETCH_TIMEOUT_MS,
+                },
+              });
+              return;
+            }
+            const normalizedQoderSessions = normalizeQoderSessionSummaries(qoderResult);
+            qoderSessionCacheRef.current[workspace.id] = {
+              fetchedAt: Date.now(),
+              sessions: normalizedQoderSessions,
+            };
+            const currentSnapshot =
+              latestThreadsByWorkspaceRef.current[workspace.id] ?? [];
+            const baselineSummaries =
+              currentSnapshot.length > 0 ? currentSnapshot : allSummaries;
+            const nextSummaries = mergeQoderSessionSummaries(
+              baselineSummaries,
+              normalizedQoderSessions,
               workspace.id,
               mappedTitles,
               getCustomName,

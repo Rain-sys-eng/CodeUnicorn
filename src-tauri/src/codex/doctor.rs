@@ -382,7 +382,185 @@ pub(crate) async fn run_pi_doctor_with_settings(
     }))
 }
 
-/// Run `grok doctor` (terminal/config self-check, exit 0 = healthy) best-effort.
+pub(crate) async fn run_qoder_doctor_with_settings(
+    qoder_bin: Option<String>,
+    settings: &AppSettings,
+) -> Result<Value, String> {
+    let default_bin = settings.qoder_bin.clone();
+    let resolved = qoder_bin
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or(default_bin);
+    let requested_bin = match crate::engine::qoder::resolve_qodercli_bin(resolved.as_deref()) {
+        Ok(bin) => bin,
+        Err(error) => {
+            return Ok(json!({
+                "ok": false,
+                "codexBin": resolved,
+                "version": Value::Null,
+                "appServerOk": false,
+                "details": error,
+                "path": Value::Null,
+                "nodeOk": false,
+                "nodeVersion": Value::Null,
+                "nodeDetails": Value::Null,
+                "resolvedBinaryPath": Value::Null,
+                "wrapperKind": Value::Null,
+                "pathEnvUsed": Value::Null,
+                "proxyEnvSnapshot": Value::Null,
+                "appServerProbeStatus": Value::Null,
+                "fallbackRetried": false,
+                "environmentDiagnosis": Value::Null,
+                "proxyDiagnosis": Value::Null,
+                "networkDiagnosis": Value::Null,
+                "qoderHomeExists": false,
+                "qoderHome": Value::Null,
+                "loggedIn": Value::Null,
+                "acpHandshake": Value::Null,
+                "debug": Value::Null,
+            }));
+        }
+    };
+    if crate::engine::qoder::is_qoder_ide_launcher_bin(&requested_bin) {
+        return Ok(json!({
+            "ok": false,
+            "codexBin": resolved,
+            "version": Value::Null,
+            "appServerOk": false,
+            "details": "qoderBin must point to qodercli, not the Qoder IDE launcher (qoder)",
+            "path": Value::Null,
+            "nodeOk": false,
+            "nodeVersion": Value::Null,
+            "nodeDetails": Value::Null,
+            "resolvedBinaryPath": Value::Null,
+            "wrapperKind": Value::Null,
+            "pathEnvUsed": Value::Null,
+            "proxyEnvSnapshot": Value::Null,
+            "appServerProbeStatus": Value::Null,
+            "fallbackRetried": false,
+            "environmentDiagnosis": Value::Null,
+            "proxyDiagnosis": Value::Null,
+            "networkDiagnosis": Value::Null,
+            "qoderHomeExists": false,
+            "qoderHome": Value::Null,
+            "loggedIn": Value::Null,
+            "acpHandshake": Value::Null,
+            "debug": Value::Null,
+        }));
+    }
+    let path_env = build_codex_path_env(Some(requested_bin.as_str()));
+    let debug_info = get_cli_debug_info(Some(requested_bin.as_str()));
+    let version_result = check_cli_binary(&requested_bin, path_env.clone()).await;
+    let (version, mut cli_error, fallback_retried) = match version_result {
+        Ok(Some(version)) => (Some(version), None, false),
+        Ok(None) => (Some("unknown".to_string()), None, true),
+        Err(error) => (None, Some(error), false),
+    };
+    let launch_context = resolve_codex_launch_context(Some(requested_bin.as_str()));
+    let (node_ok, node_version, node_details) = probe_node_runtime(path_env.as_ref()).await;
+    let environment_diagnosis =
+        build_engine_environment_diagnosis("qoder", Some(requested_bin.as_str()), &debug_info);
+    let home = crate::engine::status::get_qoder_home_dir();
+    let home_exists = home.as_ref().map(|p| p.is_dir()).unwrap_or(false);
+    let logged_in = if version.is_some() {
+        crate::engine::status::parse_qoder_status_json(
+            &probe_qoder_status_json(&requested_bin, path_env.as_ref())
+                .await
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+    if logged_in == Some(false) && !crate::engine::qoder_auth::qoder_has_pat_credential() {
+        cli_error = Some("Qoder CLI 未登录：请先运行 qodercli login".to_string());
+    }
+    let acp_handshake = if version.is_some()
+        && (logged_in != Some(false) || crate::engine::qoder_auth::qoder_has_pat_credential())
+    {
+        probe_qoder_acp_handshake(&requested_bin, home.as_ref().and_then(|p| p.to_str())).await
+    } else {
+        Value::Null
+    };
+    let acp_ok = acp_handshake
+        .get("ok")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    Ok(json!({
+        "ok": version.is_some()
+            && (logged_in != Some(false) || crate::engine::qoder_auth::qoder_has_pat_credential())
+            && (acp_handshake.is_null() || acp_ok),
+        "codexBin": resolved,
+        "version": version,
+        "appServerOk": acp_ok,
+        "details": cli_error,
+        "path": path_env,
+        "nodeOk": node_ok,
+        "nodeVersion": node_version,
+        "nodeDetails": node_details,
+        "resolvedBinaryPath": launch_context.resolved_bin,
+        "wrapperKind": launch_context.wrapper_kind,
+        "pathEnvUsed": launch_context.path_env,
+        "proxyEnvSnapshot": debug_info.get("proxyEnvSnapshot").cloned().unwrap_or(Value::Null),
+        "appServerProbeStatus": acp_handshake.get("protocolVersion").cloned().unwrap_or(Value::Null),
+        "fallbackRetried": fallback_retried,
+        "environmentDiagnosis": environment_diagnosis,
+        "proxyDiagnosis": debug_info.get("proxyDiagnosis").cloned().unwrap_or(Value::Null),
+        "networkDiagnosis": Value::Null,
+        "qoderHomeExists": home_exists,
+        "qoderHome": home.map(|p| p.to_string_lossy().to_string()),
+        "loggedIn": logged_in,
+        "acpHandshake": acp_handshake,
+        "debug": debug_info,
+    }))
+}
+
+async fn probe_qoder_status_json(binary: &str, path_env: Option<&String>) -> Option<String> {
+    let mut command = crate::utils::async_command(binary);
+    if let Some(path_env) = path_env {
+        command.env("PATH", path_env);
+    }
+    command.args(["status", "-o", "json"]);
+    command.stdout(std::process::Stdio::piped());
+    command.stderr(std::process::Stdio::null());
+    crate::engine::qoder_auth::apply_qoder_pat_env(&mut command);
+    let output = timeout(Duration::from_secs(10), command.output())
+        .await
+        .ok()?
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+async fn probe_qoder_acp_handshake(binary: &str, home_dir: Option<&str>) -> Value {
+    let cwd = std::env::temp_dir();
+    match crate::engine::qoder::run_qoder_acp_initialized(
+        Some(binary),
+        &cwd,
+        home_dir,
+        crate::engine::qoder::QODER_DOCTOR_HANDSHAKE_TIMEOUT,
+        |_acp| {
+            // run_qoder_acp_initialized already performs initialize();
+            // doctor only needs that handshake to succeed.
+            Box::pin(async move { Ok(json!(1)) })
+        },
+    )
+    .await
+    {
+        Ok(protocol_version) => json!({
+            "ok": true,
+            "protocolVersion": protocol_version,
+        }),
+        Err(error) => json!({
+            "ok": false,
+            "protocolVersion": Value::Null,
+            "details": error,
+        }),
+    }
+}
+
+/// Run grok doctor (terminal/config self-check, exit 0 = healthy) best-effort.
 async fn probe_grok_cli_doctor(binary: &str, path_env: Option<&String>) -> Value {
     let mut command = crate::utils::async_command(binary);
     if let Some(path_env) = path_env {
@@ -719,7 +897,10 @@ fn parse_node_semver(raw: &str) -> Option<(u64, u64, u64)> {
     let mut parts = rest.split(|ch: char| !ch.is_ascii_digit());
     let major = parts.next()?.parse::<u64>().ok()?;
     let minor = parts.next()?.parse::<u64>().ok()?;
-    let patch = parts.next().and_then(|value| value.parse::<u64>().ok()).unwrap_or(0);
+    let patch = parts
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
     Some((major, minor, patch))
 }
 
@@ -797,10 +978,7 @@ pub(crate) async fn run_dsh_doctor_with_settings(
 
     let mut details = cli_error.clone();
     if details.is_none() {
-        if let Some(node_error) = node_details
-            .as_deref()
-            .filter(|_| !node_ok)
-        {
+        if let Some(node_error) = node_details.as_deref().filter(|_| !node_ok) {
             details = Some(node_error.to_string());
         }
     }
@@ -850,8 +1028,8 @@ mod tests {
     use super::{
         dsh_node_requirement_error, node_satisfies_dsh_requirement,
         opencode_default_model_probe_from_document, run_claude_doctor_with_settings,
-        run_dsh_doctor_with_settings, run_grok_doctor_with_settings,
-        run_kimi_doctor_with_settings, run_opencode_doctor_with_settings,
+        run_dsh_doctor_with_settings, run_grok_doctor_with_settings, run_kimi_doctor_with_settings,
+        run_opencode_doctor_with_settings, run_qoder_doctor_with_settings,
     };
     use crate::types::AppSettings;
     use serde_json::{json, Value};
@@ -886,6 +1064,50 @@ mod tests {
         assert_eq!(diagnostics["ok"], false);
         assert!(diagnostics["kimiDoctor"].is_null());
         assert!(diagnostics["debug"].is_object());
+    }
+
+    #[tokio::test]
+    async fn qoder_doctor_failure_keeps_structured_diagnostics_fields() {
+        let diagnostics = run_qoder_doctor_with_settings(
+            Some("/definitely/missing/qodercli".to_string()),
+            &AppSettings::default(),
+        )
+        .await
+        .expect("doctor should return structured diagnostics even on failure");
+
+        for key in [
+            "ok",
+            "codexBin",
+            "version",
+            "details",
+            "nodeOk",
+            "environmentDiagnosis",
+            "networkDiagnosis",
+            "qoderHomeExists",
+            "loggedIn",
+            "acpHandshake",
+            "debug",
+        ] {
+            assert!(
+                diagnostics.get(key).is_some(),
+                "missing structured diagnostics field: {key}"
+            );
+        }
+
+        assert_eq!(diagnostics["codexBin"], "/definitely/missing/qodercli");
+        assert_eq!(diagnostics["ok"], false);
+        assert!(diagnostics["acpHandshake"].is_null() || diagnostics["acpHandshake"].is_object());
+        assert!(diagnostics["debug"].is_object() || diagnostics["debug"].is_null());
+
+        let launcher =
+            run_qoder_doctor_with_settings(Some("qoder".to_string()), &AppSettings::default())
+                .await
+                .expect("doctor should reject IDE launcher");
+        assert_eq!(launcher["ok"], false);
+        assert!(launcher["details"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("qodercli"));
     }
 
     #[tokio::test]

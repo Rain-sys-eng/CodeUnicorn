@@ -15,7 +15,7 @@ import {
 } from "../utils/threadSummarySort";
 
 const GENERIC_EMPTY_SESSION_TITLE =
-  /^(?:(?:claude|codex|gemini|grok|kimi|pi|opencode|dsh) session(?:\s+[a-f0-9-]{4,40})?|deepseek harness session)$/i;
+  /^(?:(?:claude|codex|gemini|grok|kimi|pi|qoder|opencode|dsh) session(?:\s+[a-f0-9-]{4,40})?|deepseek harness session)$/i;
 
 const PLACEHOLDER_DRAFT_ENGINES = new Set([
   "claude",
@@ -24,6 +24,7 @@ const PLACEHOLDER_DRAFT_ENGINES = new Set([
   "grok",
   "kimi",
   "pi",
+  "qoder",
   "opencode",
   "dsh",
 ]);
@@ -88,6 +89,7 @@ const ENGINE_PREFIX: Record<string, string> = {
   grok: "grok:",
   kimi: "kimi:",
   pi: "pi:",
+  qoder: "qoder:",
   opencode: "opencode:",
   dsh: "dsh:",
 };
@@ -105,6 +107,7 @@ function normalizeEngine(
     value === "grok" ||
     value === "kimi" ||
     value === "pi" ||
+    value === "qoder" ||
     value === "opencode" ||
     value === "dsh"
   ) {
@@ -181,7 +184,9 @@ export function sessionIndexRowsToThreadSummaries(
                 ? "Grok Session"
                 : engine === "pi"
                   ? "PI Session"
-                  : engine === "dsh"
+                  : engine === "qoder"
+                    ? "Qoder Session"
+                    : engine === "dsh"
                     ? "DeepSeek Harness Session"
                     : "Session";
     const mappedTitle = options.mappedTitles[id];

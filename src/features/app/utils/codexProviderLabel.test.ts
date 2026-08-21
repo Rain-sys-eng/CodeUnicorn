@@ -78,7 +78,7 @@ describe("resolveCodexProviderLabel", () => {
     ).toBe("local");
   });
 
-  it.each(["kimi", "grok", "opencode", "pi", "dsh"] as const)(
+  it.each(["kimi", "grok", "opencode", "pi", "dsh", "qoder"] as const)(
     "labels %s local config as local",
     (engineSource) => {
       expect(
@@ -92,7 +92,9 @@ describe("resolveCodexProviderLabel", () => {
                 ? "__local_pi__"
                 : engineSource === "dsh"
                   ? "__dsh_host_catalog__"
-                  : "__local_config_toml__",
+                  : engineSource === "qoder"
+                    ? "__local_qoder__"
+                    : "__local_config_toml__",
           providerProfileName: "Local config",
         }),
       ).toBe("local");

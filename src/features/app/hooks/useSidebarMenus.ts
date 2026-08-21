@@ -83,6 +83,7 @@ const NEW_SESSION_ENGINE_ACTION_IDS: Readonly<Record<string, EngineType>> = {
   "new-session-grok": "grok",
   "new-session-pi": "pi",
   "new-session-dsh": "dsh",
+  "new-session-qoder": "qoder",
 };
 
 type ProviderEngine = LastProviderEngine;
@@ -185,6 +186,7 @@ export type WorkspaceMenuIconKind =
   | "engine-grok"
   | "engine-pi"
   | "engine-dsh"
+  | "engine-qoder"
   | "new-shared"
   | "alias"
   | "assign-group"
@@ -1767,6 +1769,16 @@ export function useSidebarMenus({
           ...resolveEngineActionMeta(workspace, "pi"),
           onSelect: async () => {
             const threadId = await runAddAgent("pi");
+            await handleCreatedSession(threadId);
+          },
+        },
+        {
+          id: "new-session-qoder",
+          label: t("workspace.engineQoder"),
+          iconKind: "engine-qoder",
+          ...resolveEngineActionMeta(workspace, "qoder"),
+          onSelect: async () => {
+            const threadId = await runAddAgent("qoder");
             await handleCreatedSession(threadId);
           },
         },

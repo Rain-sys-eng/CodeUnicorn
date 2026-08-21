@@ -188,6 +188,8 @@ pub(super) fn is_codex_thread_id(thread_id: &str) -> bool {
         && !normalized.starts_with("kimi-pending-")
         && !normalized.starts_with("dsh:")
         && !normalized.starts_with("dsh-pending-")
+        && !normalized.starts_with("qoder:")
+        && !normalized.starts_with("qoder-pending-")
 }
 
 pub(super) fn evaluate_auto_compaction_state(

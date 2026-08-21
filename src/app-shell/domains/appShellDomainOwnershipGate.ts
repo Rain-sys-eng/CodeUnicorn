@@ -42,8 +42,8 @@ export const APP_SHELL_DOMAIN_KEY_HARD_BUDGETS: Record<
   modeRoutingContext: 32,
   /** S4 PR-F：实测 11 咬死 */
   accountSurfaceContext: 11,
-  /** S4 PR-F：实测 79 咬死（原 T1.7 门 80 → 贴顶，新增必须先出后进） */
-  workspaceNavigationContext: 78,
+  /** S4 PR-F：实测 79 咬死；qoder doctor 入账后 79（贴顶，新增必须先出后进） */
+  workspaceNavigationContext: 79,
   /** S4 PR-C：141 → 39 达标；S4 PR-F：实测 41 咬死（≤60 目标内零余量） */
   composerContext: 41,
   /** S4 PR-E：95 → 48 达标；S4 PR-F：实测 48 咬死 */

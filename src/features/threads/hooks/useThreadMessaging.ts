@@ -40,6 +40,7 @@ import {
   listGrokSessions as listGrokSessionsService,
   listKimiSessions as listKimiSessionsService,
   listPiSessions as listPiSessionsService,
+  listQoderSessions as listQoderSessionsService,
   invalidateSessionIndexForWorkspace as invalidateSessionIndexForWorkspaceService,
 } from "../../../services/tauri";
 import { sendSharedSessionTurnRouted } from "../../shared-session/runtime/sendSharedSessionTurn";
@@ -261,6 +262,7 @@ import {
   pickLikelyGrokSessionId,
   pickLikelyKimiSessionId,
   pickLikelyPiSessionId,
+  pickLikelyQoderSessionId,
   primeThreadStreamLatencyForSend,
   resolveCollaborationModeIdFromPayload,
   resolveRecoverableCodexFirstPacketTimeout,
@@ -359,7 +361,7 @@ type HandleFusionStalledOptions = {
 type RunWithCreateSessionLoading = <T>(
   params: {
     workspace: WorkspaceInfo;
-    engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+    engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
   },
   action: () => Promise<T>,
 ) => Promise<T>;
@@ -400,7 +402,7 @@ type UseThreadMessagingOptions = {
   claudeThinkingVisible?: boolean;
   steerEnabled: boolean;
   customPrompts: CustomPromptOption[];
-  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
   threadStatusById: ThreadState["threadStatusById"];
   itemsByThread: ThreadState["itemsByThread"];
   activeTurnIdByThread: ThreadState["activeTurnIdByThread"];
@@ -417,7 +419,7 @@ type UseThreadMessagingOptions = {
   getThreadEngine: (
     workspaceId: string,
     threadId: string,
-  ) => "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | undefined;
+  ) => "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | undefined;
   getThreadKind?: (
     workspaceId: string,
     threadId: string,
@@ -461,7 +463,7 @@ type UseThreadMessagingOptions = {
     workspaceId: string,
     options?: {
       activate?: boolean;
-      engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+      engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
       folderId?: string | null;
       autoSession?: AutoSessionMetadata | null;
       providerProfileId?: string | null;
@@ -561,6 +563,7 @@ export function useThreadMessaging({
     kimiSessionIdByPendingThreadRef,
     dshSessionIdByPendingThreadRef,
     piSessionIdByPendingThreadRef,
+    qoderSessionIdByPendingThreadRef,
     isClaudePendingThreadAwaitingNativeSession,
     isThreadIdCompatibleWithEngine,
     normalizeEngineSelection,
@@ -2672,6 +2675,14 @@ export function useThreadMessaging({
                                       ? (piSessionIdByPendingThreadRef.current.get(
                                           threadId,
                                         ) ?? null)
+                                      : resolvedEngine === "qoder" &&
+                                          threadId.startsWith("qoder:")
+                                        ? threadId.slice("qoder:".length)
+                                        : resolvedEngine === "qoder" &&
+                                            threadId.startsWith("qoder-pending-")
+                                          ? (qoderSessionIdByPendingThreadRef.current.get(
+                                              threadId,
+                                            ) ?? null)
                                       : resolvedEngine === "opencode" &&
                                           isOpenCodeSession
                                         ? threadId.slice("opencode:".length)
@@ -3081,6 +3092,55 @@ export function useThreadMessaging({
                 });
               }
             }
+            if (
+              resolvedEngine === "qoder" &&
+              threadId.startsWith("qoder-pending-")
+            ) {
+              let responseSessionId =
+                extractSessionIdFromEngineSendResponse(response);
+              if (!responseSessionId) {
+                const workspacePath = workspace.path?.trim();
+                if (workspacePath) {
+                  try {
+                    const sessions = await listQoderSessionsService(
+                      workspacePath,
+                      6,
+                    );
+                    responseSessionId = pickLikelyQoderSessionId(
+                      sessions,
+                      sendRequestedAt - 120_000,
+                    );
+                  } catch {
+                    responseSessionId = null;
+                  }
+                }
+              }
+              if (responseSessionId) {
+                qoderSessionIdByPendingThreadRef.current.set(
+                  threadId,
+                  responseSessionId,
+                );
+                if (
+                  typeof invalidateSessionIndexForWorkspaceService === "function"
+                ) {
+                  void invalidateSessionIndexForWorkspaceService(
+                    workspace.id,
+                  ).catch(() => undefined);
+                }
+                onDebug?.({
+                  id: `${Date.now()}-client-qoder-session-cache`,
+                  timestamp: Date.now(),
+                  source: "client",
+                  label: "thread/session cached",
+                  payload: {
+                    workspaceId: workspace.id,
+                    threadId,
+                    sessionId: responseSessionId,
+                    source: "qoderSessionListFallback",
+                  },
+                });
+              }
+            }
 
             // Extract turn ID - streaming events will handle the rest
             const result = (response?.result ?? response) as Record<
@@ -3442,6 +3502,7 @@ export function useThreadMessaging({
       kimiSessionIdByPendingThreadRef,
       dshSessionIdByPendingThreadRef,
       piSessionIdByPendingThreadRef,
+      qoderSessionIdByPendingThreadRef,
       getCustomName,
       getThreadEngine,
       isClaudePendingThreadAwaitingNativeSession,

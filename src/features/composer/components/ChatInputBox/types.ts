@@ -364,7 +364,7 @@ export interface ProviderInfo {
   enabled: boolean;
 }
 
-export type ProviderId = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+export type ProviderId = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
 export type ProviderModelCatalogs = Partial<Record<ProviderId, ModelInfo[]>>;
 /** Atomic 双栏 catalog 语义：Shared 持久化 vs 首页/会话 create-session 投影。 */
 export type ProviderTargetPickerMode = 'shared' | 'create-session';
@@ -383,6 +383,7 @@ export const AVAILABLE_PROVIDERS: ProviderInfo[] = [
   { id: 'opencode', label: 'OpenCode', icon: 'codicon-terminal', enabled: true },
   { id: 'pi', label: 'PI CLI', icon: 'codicon-terminal', enabled: true },
   { id: 'dsh', label: 'DeepSeek Harness', icon: 'codicon-terminal', enabled: true },
+  { id: 'qoder', label: 'Qoder CLI', icon: 'codicon-terminal', enabled: true },
 ];
 
 /**

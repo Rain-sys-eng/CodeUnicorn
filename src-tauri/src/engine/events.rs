@@ -259,7 +259,10 @@ impl ToolItemKind {
     }
 }
 
-fn first_non_empty_object_string<'a>(map: &'a serde_json::Map<String, Value>, keys: &[&str]) -> Option<&'a str> {
+fn first_non_empty_object_string<'a>(
+    map: &'a serde_json::Map<String, Value>,
+    keys: &[&str],
+) -> Option<&'a str> {
     keys.iter().find_map(|key| {
         map.get(*key)
             .and_then(Value::as_str)
@@ -272,9 +275,9 @@ fn parse_tool_input_object(input: Option<&Value>) -> Option<serde_json::Map<Stri
     let value = input?;
     match value {
         Value::Object(map) => Some(map.clone()),
-        Value::String(raw) => serde_json::from_str::<Value>(raw).ok().and_then(|parsed| {
-            parsed.as_object().cloned()
-        }),
+        Value::String(raw) => serde_json::from_str::<Value>(raw)
+            .ok()
+            .and_then(|parsed| parsed.as_object().cloned()),
         _ => None,
     }
 }
@@ -283,11 +286,8 @@ fn input_looks_like_command(input: Option<&Value>) -> bool {
     let Some(map) = parse_tool_input_object(input) else {
         return false;
     };
-    first_non_empty_object_string(
-        &map,
-        &["command", "cmd", "script", "shell_command", "bash"],
-    )
-    .is_some()
+    first_non_empty_object_string(&map, &["command", "cmd", "script", "shell_command", "bash"])
+        .is_some()
 }
 
 fn compact_tool_name(tool_name: &str) -> String {
@@ -494,6 +494,7 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                     EngineType::Kimi => "kimi",
                     EngineType::Pi => "pi",
                     EngineType::Dsh => "dsh",
+                    EngineType::Qoder => "qoder",
                 },
             }
         }),
@@ -1790,8 +1791,7 @@ mod tests {
                 "{tool_name}"
             );
             assert_eq!(
-                mapped.message["params"]["item"]["arguments"]["todos"],
-                todos,
+                mapped.message["params"]["item"]["arguments"]["todos"], todos,
                 "{tool_name}"
             );
         }

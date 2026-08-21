@@ -33,8 +33,8 @@ use self::commit_message::{build_commit_message_prompt, combine_repository_diff_
 pub(crate) use self::doctor::{
     dsh_node_requirement_error, node_satisfies_dsh_requirement, run_claude_doctor_with_settings,
     run_codex_doctor_with_settings, run_dsh_doctor_with_settings, run_grok_doctor_with_settings,
-    run_kimi_doctor_with_settings, run_opencode_doctor_with_settings,
-    run_pi_doctor_with_settings,
+    run_kimi_doctor_with_settings, run_opencode_doctor_with_settings, run_pi_doctor_with_settings,
+    run_qoder_doctor_with_settings,
 };
 pub(crate) use self::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 pub(crate) use self::installer::{
@@ -565,6 +565,15 @@ pub(crate) fn remote_pi_doctor_request(pi_bin: Option<String>) -> (&'static str,
     )
 }
 
+pub(crate) fn remote_qoder_doctor_request(qoder_bin: Option<String>) -> (&'static str, Value) {
+    (
+        "qoder_doctor",
+        json!({
+            "qoderBin": qoder_bin.map(remote_backend::normalize_path_for_remote),
+        }),
+    )
+}
+
 pub(crate) fn remote_dsh_doctor_request(dsh_bin: Option<String>) -> (&'static str, Value) {
     (
         "dsh_doctor",
@@ -632,6 +641,21 @@ pub(crate) async fn pi_doctor(
 
     let settings = state.app_settings.lock().await.clone();
     run_pi_doctor_with_settings(pi_bin, &settings).await
+}
+
+#[tauri::command]
+pub(crate) async fn qoder_doctor(
+    qoder_bin: Option<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let (method, params) = remote_qoder_doctor_request(qoder_bin);
+        return remote_backend::call_remote(&*state, app, method, params).await;
+    }
+
+    let settings = state.app_settings.lock().await.clone();
+    run_qoder_doctor_with_settings(qoder_bin, &settings).await
 }
 
 #[tauri::command]

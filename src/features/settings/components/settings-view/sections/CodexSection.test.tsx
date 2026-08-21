@@ -119,6 +119,8 @@ function renderCodexSection(
       dshDoctorState={{ status: "idle", result: null }}
       handleRunPiDoctor={vi.fn()}
       piDoctorState={{ status: "idle", result: null }}
+      handleRunQoderDoctor={vi.fn()}
+      qoderDoctorState={{ status: "idle", result: null }}
       handleRunDoctor={vi.fn()}
       doctorState={{ status: "done", result: { ok: false } as any }}
       remoteHostDraft=""

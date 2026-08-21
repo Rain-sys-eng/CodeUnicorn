@@ -446,6 +446,38 @@ export async function deletePiSession(
   });
 }
 
+export async function listQoderSessions(
+  workspacePath: string,
+  limit?: number | null,
+): Promise<Record<string, unknown> | unknown[] | null> {
+  return traceStartupInvoke("list_qoder_sessions", "global", () =>
+    invoke<Record<string, unknown> | unknown[] | null>("list_qoder_sessions", {
+      workspacePath,
+      limit: limit ?? null,
+    }),
+  );
+}
+
+export async function loadQoderSession(
+  workspacePath: string,
+  sessionId: string,
+): Promise<Record<string, unknown> | null> {
+  return invoke<Record<string, unknown> | null>("load_qoder_session", {
+    workspacePath,
+    sessionId,
+  });
+}
+
+export async function deleteQoderSession(
+  workspacePath: string,
+  sessionId: string,
+): Promise<void> {
+  return invoke<void>("delete_qoder_session", {
+    workspacePath,
+    sessionId,
+  });
+}
+
 /**
  * Delete a Kimi CLI session (remove session file from disk).
  */

@@ -507,6 +507,10 @@ pub(crate) fn resolve_engine_base_url_and_key(
             pick_from_providers_map(providers, profile_id)
                 .ok_or_else(|| "OpenCode provider credentials not found".into())
         }
+        "qoder" => Err(
+            "engine qoder has no coding-plan quota API (account limits live in TUI /usage only)"
+                .to_string(),
+        ),
         other => Err(format!(
             "engine {other} has no coding-plan credential resolver"
         )),

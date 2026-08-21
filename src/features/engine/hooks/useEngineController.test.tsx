@@ -525,6 +525,7 @@ describe("useEngineController", () => {
       "opencode",
       "pi",
       "dsh",
+      "qoder",
     ]);
     expect(
       result.current.availableEngines.every(
@@ -712,6 +713,7 @@ describe("useEngineController", () => {
       "opencode",
       "pi",
       "dsh",
+      "qoder",
     ]);
     expect(result.current.activeEngine).toBe("opencode");
   });

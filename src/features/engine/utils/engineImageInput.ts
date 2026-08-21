@@ -21,6 +21,7 @@ const ENGINE_IMAGE_LABEL: Record<EngineType, string> = {
   opencode: "OpenCode",
   pi: "PI CLI",
   dsh: "DeepSeek Harness",
+  qoder: "Qoder CLI",
 };
 
 /**

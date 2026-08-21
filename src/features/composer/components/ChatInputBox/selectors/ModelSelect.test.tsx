@@ -1908,6 +1908,26 @@ describe("buildProviderExecutionTarget", () => {
       providerProfileSource: "disk",
       reasoning: { effort: "high" },
     });
+    expect(
+      buildProviderExecutionTarget(
+        null,
+        "qoder",
+        "__local_qoder__",
+        "minimax/minimax-m3-cp",
+        "本地配置",
+        "disk",
+        true,
+        "minimax/minimax-m3-cp",
+      ),
+    ).toEqual({
+      engine: "qoder",
+      providerProfileId: null,
+      modelCatalogEntryId: "minimax/minimax-m3-cp",
+      model: "minimax/minimax-m3-cp",
+      providerProfileNameSnapshot: "本地配置",
+      providerProfileSource: "disk",
+      reasoning: null,
+    });
   });
 
   it("keeps catalog identity but freezes the runtime model for execution", () => {
@@ -2096,6 +2116,15 @@ describe("resolveActiveProviderProfileId", () => {
     ).toBe("__local_pi__");
     expect(
       normalizeExecutionProviderProfileId("pi", "__local_pi__"),
+    ).toBeNull();
+    expect(
+      resolveActiveProviderProfileId("qoder", {
+        engine: "claude",
+        providerProfileId: null,
+      }),
+    ).toBe("__local_qoder__");
+    expect(
+      normalizeExecutionProviderProfileId("qoder", "__local_qoder__"),
     ).toBeNull();
   });
 

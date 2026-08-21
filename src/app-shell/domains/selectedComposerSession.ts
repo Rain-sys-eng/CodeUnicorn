@@ -21,7 +21,7 @@ const DSH_REASONING_EFFORTS = new Set(["off", "low", "high", "max"]);
 
 export function resolveThreadEngine(
   threadId: string,
-): "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "codex" | null {
+): "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | "codex" | null {
   if (
     threadId.startsWith("claude:") ||
     threadId.startsWith("claude-pending-") ||
@@ -46,6 +46,9 @@ export function resolveThreadEngine(
   }
   if (threadId.startsWith("pi:") || threadId.startsWith("pi-pending-")) {
     return "pi";
+  }
+  if (threadId.startsWith("qoder:") || threadId.startsWith("qoder-pending-")) {
+    return "qoder";
   }
   if (threadId.startsWith("codex:") || threadId.startsWith("codex-pending-")) {
     return "codex";
@@ -104,6 +107,8 @@ export function normalizeComposerSessionSelectionForThread(
     effort = effort && GROK_REASONING_EFFORTS.has(effort) ? effort : null;
   } else if (engine === "dsh") {
     effort = effort && DSH_REASONING_EFFORTS.has(effort) ? effort : null;
+  } else if (engine === "qoder") {
+    effort = effort || null;
   } else if (engine === "gemini" || engine === "kimi" || engine === "opencode" || engine === "pi") {
     effort = null;
   }

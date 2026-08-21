@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "組み立て",
     "generatingResponse": "応答を生成中...",
     "responding": "応答中...",
+    "waitingForFirstText": "{{engine}} を実行中です。最初のテキストチャンクを待機しています...",
     "codexWaitingForFirstText": "Codex を実行中です。最初のテキストチャンクを待機しています...",
     "codexSilentSuspected": "しばらく Codex の新しい出力がありません。ランタイムのアクティビティを引き続き待機しています...",
     "nonStreamingHint": "このモデルは非ストリーミング出力を返す場合や、ネットワークに到達できない場合があります。お待ちください...",

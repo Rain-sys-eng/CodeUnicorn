@@ -141,6 +141,16 @@ impl AppState {
 
         self.engine_manager
             .set_engine_config(
+                EngineType::Qoder,
+                EngineConfig {
+                    bin_path: settings.qoder_bin.clone(),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        self.engine_manager
+            .set_engine_config(
                 EngineType::Dsh,
                 EngineConfig {
                     bin_path: settings.dsh_bin.clone(),

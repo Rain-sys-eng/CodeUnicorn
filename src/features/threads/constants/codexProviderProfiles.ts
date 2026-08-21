@@ -15,6 +15,9 @@ export const PI_LOCAL_PROVIDER_PROFILE_NAME = LOCAL_PROVIDER_PROFILE_DISPLAY_NAM
 /** DSH has no mossx provider profiles; this id is a synthetic local host slot. */
 export const DSH_LOCAL_PROVIDER_PROFILE_ID = "__dsh_host_catalog__";
 export const DSH_LOCAL_PROVIDER_PROFILE_NAME = LOCAL_PROVIDER_PROFILE_DISPLAY_NAME;
+/** Qoder has no mossx provider profiles (account login / PAT); local sentinel only. */
+export const QODER_LOCAL_PROVIDER_PROFILE_ID = "__local_qoder__";
+export const QODER_LOCAL_PROVIDER_PROFILE_NAME = LOCAL_PROVIDER_PROFILE_DISPLAY_NAME;
 
 export type EngineProviderProfileOption = {
   id: string;

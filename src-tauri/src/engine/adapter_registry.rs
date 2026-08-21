@@ -46,6 +46,7 @@ pub enum EngineProtocolFamily {
     StreamJsonCli,
     AppServerJsonRpc,
     DshHostRpc,
+    AcpStdio,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,6 +167,7 @@ impl EngineProtocol for BuiltinEngineProtocol {
         match self.engine {
             EngineType::Codex => EngineProtocolFamily::AppServerJsonRpc,
             EngineType::Dsh => EngineProtocolFamily::DshHostRpc,
+            EngineType::Qoder => EngineProtocolFamily::AcpStdio,
             _ => EngineProtocolFamily::StreamJsonCli,
         }
     }
@@ -178,7 +180,11 @@ impl EngineProtocol for BuiltinEngineProtocol {
     }
 
     fn executable_name(&self) -> &str {
-        engine_id(self.engine)
+        match self.engine {
+            // engine id stays `qoder`; the CLI binary is `qodercli` (IDE launcher is `qoder`).
+            EngineType::Qoder => "qodercli",
+            _ => engine_id(self.engine),
+        }
     }
 
     fn parse_wire_event(&self, payload: &Value) -> Result<Value, String> {
@@ -209,6 +215,7 @@ impl EngineAdapterRegistry {
             EngineType::OpenCode,
             EngineType::Pi,
             EngineType::Dsh,
+            EngineType::Qoder,
         ] {
             let protocol = BuiltinEngineProtocol::new(engine);
             let adapter = BuiltinEngineAdapter::new(engine);
@@ -285,6 +292,7 @@ pub fn engine_id(engine: EngineType) -> &'static str {
         EngineType::OpenCode => "opencode",
         EngineType::Pi => "pi",
         EngineType::Dsh => "dsh",
+        EngineType::Qoder => "qoder",
     }
 }
 
@@ -295,7 +303,7 @@ mod tests {
     #[test]
     fn builtins_cover_one_shot_and_persistent_protocol_models() {
         let registry = EngineAdapterRegistry::with_builtins();
-        assert_eq!(registry.len(), 7);
+        assert_eq!(registry.len(), 9);
         assert_eq!(
             registry
                 .get(&EngineId::builtin(EngineType::Kimi))
@@ -322,6 +330,15 @@ mod tests {
             .expect("dsh");
         assert_eq!(dsh.execution_model, EngineExecutionModel::Persistent);
         assert_eq!(dsh.protocol_family, EngineProtocolFamily::DshHostRpc);
+        let qoder = registry
+            .get(&EngineId::builtin(EngineType::Qoder))
+            .expect("qoder");
+        assert_eq!(qoder.execution_model, EngineExecutionModel::OneShot);
+        assert_eq!(qoder.protocol_family, EngineProtocolFamily::AcpStdio);
+        assert_eq!(
+            BuiltinEngineProtocol::new(EngineType::Qoder).executable_name(),
+            "qodercli"
+        );
     }
 
     #[test]

@@ -97,15 +97,17 @@ pub(crate) fn context_capabilities(target: &ExecutionTargetInput) -> RuntimeCont
             // response 当作 context acceptance。fingerprint 只用于审计，不参与降级。
             strong_context_ack: true,
         },
-        EngineType::Kimi | EngineType::Grok | EngineType::OpenCode | EngineType::Pi => RuntimeContextCapabilities {
-            native_delta: false,
-            structured_history_import: false,
-            native_clone: false,
-            user_channel_transcript: true,
-            tool_history: false,
-            image_history: false,
-            strong_context_ack: false,
-        },
+        EngineType::Kimi | EngineType::Grok | EngineType::OpenCode | EngineType::Pi => {
+            RuntimeContextCapabilities {
+                native_delta: false,
+                structured_history_import: false,
+                native_clone: false,
+                user_channel_transcript: true,
+                tool_history: false,
+                image_history: false,
+                strong_context_ack: false,
+            }
+        }
         _ => RuntimeContextCapabilities {
             native_delta: false,
             structured_history_import: false,
@@ -407,7 +409,12 @@ mod execution_target_contract_tests {
 
     #[test]
     fn execution_target_validation_accepts_new_shared_cli_local_catalogs() {
-        for engine in [EngineType::Kimi, EngineType::Grok, EngineType::OpenCode, EngineType::Pi] {
+        for engine in [
+            EngineType::Kimi,
+            EngineType::Grok,
+            EngineType::OpenCode,
+            EngineType::Pi,
+        ] {
             let catalog = crate::engine::status::get_local_engine_models_for_validation(engine)
                 .unwrap_or_else(|| panic!("missing local catalog for {engine:?}"));
             let selected = catalog
@@ -488,7 +495,12 @@ mod execution_target_contract_tests {
 
     #[test]
     fn newly_supported_shared_engines_use_weak_user_channel_context() {
-        for engine in [EngineType::Kimi, EngineType::Grok, EngineType::OpenCode, EngineType::Pi] {
+        for engine in [
+            EngineType::Kimi,
+            EngineType::Grok,
+            EngineType::OpenCode,
+            EngineType::Pi,
+        ] {
             let target = ExecutionTargetInput {
                 engine,
                 provider_profile_id: None,
@@ -2333,8 +2345,7 @@ pub fn rebuild_binding_core(
     // Main durable path still requires key == engine:provider to prevent identity mix-ups.
     let is_squad_binding = binding_key.starts_with("squad:");
     if !is_squad_binding {
-        let durable_binding_key =
-            shared_target_binding_key(engine, provider_profile_id.as_deref());
+        let durable_binding_key = shared_target_binding_key(engine, provider_profile_id.as_deref());
         if durable_binding_key != binding_key {
             return Err(format!(
                 "binding owner mismatch: key '{binding_key}' does not match durable owner '{durable_binding_key}'"
@@ -4641,7 +4652,9 @@ pub(crate) async fn shared_context_retrieve_artifact(
 }
 
 #[tauri::command]
-pub(crate) async fn shared_context_scan_orphans(state: State<'_, AppState>) -> Result<Value, String> {
+pub(crate) async fn shared_context_scan_orphans(
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
     let writer = require_writer(&state)?;
     // ponytail: report-only maintenance path，按 artifact 读取 session events；
     // artifact 量显著增长后可升级为一次性 packageId index。
@@ -5901,7 +5914,9 @@ mod shared_interrupt_owner_tests {
                 EngineType::Grok => "ccgui/grok-4.5".to_string(),
                 EngineType::OpenCode => "ccgui/opencode-model".to_string(),
                 EngineType::Pi => "auto".to_string(),
-                EngineType::Gemini | EngineType::Dsh => "unsupported".to_string(),
+                EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => {
+                    "unsupported".to_string()
+                }
             }),
             reasoning_effort: Some("medium".to_string()),
             provider_profile_name_snapshot: Some(provider.to_string()),
@@ -5974,7 +5989,7 @@ mod shared_interrupt_owner_tests {
             | EngineType::OpenCode => {
                 format!("{}:native-{provider}", engine.icon())
             }
-            EngineType::Codex | EngineType::Gemini | EngineType::Dsh => {
+            EngineType::Codex | EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => {
                 format!("native-{provider}")
             }
         };
@@ -6616,8 +6631,7 @@ mod shared_interrupt_owner_tests {
             Some("squad-worker-binding-recovery-required"),
         )
         .expect("mark squad recovery");
-        let rebuilt =
-            rebuild_binding_core(&writer, session_id, &squad_key).expect("rebuild squad");
+        let rebuilt = rebuild_binding_core(&writer, session_id, &squad_key).expect("rebuild squad");
         assert!(rebuilt.replaced_attempt_ids.is_empty());
         let binding = writer
             .binding_state(session_id, &squad_key)

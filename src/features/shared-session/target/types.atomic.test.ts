@@ -19,6 +19,33 @@ describe("isAtomicExecutionTarget", () => {
     expect(isResolvedExecutionTarget(target)).toBe(true);
   });
 
+  it("accepts Qoder local disk target as atomic but not Shared-resolved", () => {
+    const target = {
+      engine: "qoder" as const,
+      providerProfileId: null,
+      modelCatalogEntryId: "minimax/minimax-m3-cp",
+      model: "minimax/minimax-m3-cp",
+      providerProfileNameSnapshot: "本地配置",
+      providerProfileSource: "disk" as const,
+      reasoning: null,
+    };
+    expect(isAtomicExecutionTarget(target)).toBe(true);
+    expect(isResolvedExecutionTarget(target)).toBe(false);
+  });
+
+  it("rejects an unnormalized Qoder local sentinel with disk source", () => {
+    const target = {
+      engine: "qoder" as const,
+      providerProfileId: "__local_qoder__",
+      modelCatalogEntryId: "minimax/minimax-m3-cp",
+      model: "minimax/minimax-m3-cp",
+      providerProfileNameSnapshot: "本地配置",
+      providerProfileSource: "disk" as const,
+      reasoning: null,
+    };
+    expect(isAtomicExecutionTarget(target)).toBe(false);
+  });
+
   it("still accepts shared engines as both atomic and resolved", () => {
     const target = {
       engine: "kimi" as const,
