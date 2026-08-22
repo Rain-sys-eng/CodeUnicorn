@@ -1,10 +1,15 @@
-//! Qoder session history via official ACP session/list, session/load, session/delete.
+//! Qoder session history.
 //!
-//! Never touch ~/.qoder files directly. Empty list is a soft-empty success.
+//! Primary: read `~/.qoder/projects/<cwd-slug>/<sessionId>.jsonl` (Grok/PI/Kimi
+//! NativeHistoryReader shape). ACP `session/list` / `session/load` is fallback
+//! when the jsonl is missing. Delete still goes through ACP `session/delete`
+//! (红线 21: do not mutate vendor files).
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -13,8 +18,10 @@ use super::qoder::{
     extract_qoder_tool_name, parse_acp_line, run_qoder_acp_initialized, AcpLine,
     QODER_DELETE_TIMEOUT, QODER_LIST_TIMEOUT, QODER_LOAD_TIMEOUT, QODER_RPC_HANDSHAKE_TIMEOUT,
 };
+use super::qoder_provider_profile::resolve_qoder_home_dir;
 
 const MAX_TITLE_CHARS: usize = 80;
+const MAX_QODER_PROJECT_DIR_SCAN: usize = 128;
 
 fn normalize_session_id(session_id: &str) -> Result<String, String> {
     let normalized = session_id.trim();
@@ -112,6 +119,584 @@ fn normalize_path_for_comparison(path: &str) -> String {
 
 pub(crate) fn paths_match(left: &str, right: &str) -> bool {
     normalize_path_for_comparison(left) == normalize_path_for_comparison(right)
+}
+
+fn workspace_path_variants(workspace_path: &Path) -> Vec<String> {
+    let raw = workspace_path.to_string_lossy().replace('\\', "/");
+    let mut variants = vec![raw.clone()];
+    if let Ok(canonical) = fs::canonicalize(workspace_path) {
+        variants.push(canonical.to_string_lossy().replace('\\', "/"));
+    }
+    if let Some(rest) = raw.strip_prefix("/private/tmp") {
+        variants.push(format!("/tmp{rest}"));
+    } else if let Some(rest) = raw.strip_prefix("/tmp") {
+        variants.push(format!("/private/tmp{rest}"));
+    }
+    variants.sort();
+    variants.dedup();
+    variants
+}
+
+fn record_matches_workspace_path(record_path: &str, workspace_path: &Path) -> bool {
+    workspace_path_variants(workspace_path)
+        .iter()
+        .any(|workspace| paths_match(record_path, workspace))
+}
+
+/// `/Users/foo/bar` → `-Users-foo-bar` (qodercli 1.1.28 project dir names).
+pub(crate) fn encode_qoder_project_slug(path: &str) -> String {
+    let mut value = path.trim().replace('\\', "/");
+    while value.ends_with('/') && value.len() > 1 {
+        value.pop();
+    }
+    if value.is_empty() {
+        return String::new();
+    }
+    value.replace('/', "-")
+}
+
+fn push_unique_slug(slugs: &mut Vec<String>, path: &str) {
+    let slug = encode_qoder_project_slug(path);
+    if !slug.is_empty() && !slugs.iter().any(|existing| existing == &slug) {
+        slugs.push(slug);
+    }
+}
+
+pub(crate) fn candidate_qoder_project_slugs(workspace_path: &Path) -> Vec<String> {
+    let mut slugs = Vec::new();
+    for path in workspace_path_variants(workspace_path) {
+        push_unique_slug(&mut slugs, &path);
+    }
+    slugs
+}
+
+fn qoder_projects_root(home_dir: Option<&str>) -> PathBuf {
+    resolve_qoder_home_dir(home_dir.map(Path::new))
+        .unwrap_or_else(|| PathBuf::from(".qoder"))
+        .join("projects")
+}
+
+fn is_sidechain_record(record: &Value) -> bool {
+    match record.get("isSidechain") {
+        Some(Value::Bool(true)) => true,
+        Some(Value::String(value)) => value.eq_ignore_ascii_case("true"),
+        _ => false,
+    }
+}
+
+fn extract_command_name(text: &str) -> Option<String> {
+    let start = text.find("<command-name>")?;
+    let rest = &text[start + "<command-name>".len()..];
+    let end = rest.find("</command-name>")?;
+    let name = rest[..end].trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+fn extract_user_visible_text(record: &Value) -> Option<String> {
+    if record.get("toolUseResult").is_some() {
+        return None;
+    }
+    if is_sidechain_record(record) {
+        return None;
+    }
+    if let Some(text) = record
+        .get("humanInput")
+        .and_then(|input| input.get("text"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        return Some(text.to_string());
+    }
+    match record
+        .get("message")
+        .and_then(|message| message.get("content"))
+    {
+        Some(Value::String(text)) => {
+            if let Some(command) = extract_command_name(text) {
+                return Some(command);
+            }
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn file_mtime_millis(path: &Path) -> i64 {
+    fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|time| {
+            time.duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|duration| duration.as_millis() as i64)
+        })
+        .unwrap_or(0)
+}
+
+fn find_qoder_session_jsonl(
+    workspace_path: &Path,
+    session_id: &str,
+    home_dir: Option<&str>,
+) -> Option<PathBuf> {
+    let root = qoder_projects_root(home_dir);
+    for slug in candidate_qoder_project_slugs(workspace_path) {
+        let candidate = root.join(&slug).join(format!("{session_id}.jsonl"));
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    find_qoder_session_jsonl_by_workspace_metadata(&root, workspace_path, session_id)
+}
+
+fn find_qoder_session_jsonl_by_workspace_metadata(
+    projects_root: &Path,
+    workspace_path: &Path,
+    session_id: &str,
+) -> Option<PathBuf> {
+    let entries = fs::read_dir(projects_root).ok()?;
+    let mut scanned_dirs = 0usize;
+    for entry in entries.flatten() {
+        let project_dir = entry.path();
+        if !project_dir.is_dir() {
+            continue;
+        }
+        scanned_dirs += 1;
+        if scanned_dirs > MAX_QODER_PROJECT_DIR_SCAN {
+            break;
+        }
+        let candidate = project_dir.join(format!("{session_id}.jsonl"));
+        if candidate.is_file() && jsonl_cwd_matches(&candidate, workspace_path) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn tool_result_text(record: &Value) -> (Option<String>, Option<Value>, Option<String>) {
+    let output = record.get("toolUseResult").cloned();
+    let mut tool_id = None;
+    let mut text = String::new();
+    if let Some(blocks) = record
+        .get("message")
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_array)
+    {
+        for block in blocks {
+            if block.get("type").and_then(Value::as_str) != Some("tool_result") {
+                continue;
+            }
+            if tool_id.is_none() {
+                tool_id = block
+                    .get("tool_use_id")
+                    .or_else(|| block.get("toolUseId"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+            }
+            let chunk = match block.get("content") {
+                Some(Value::String(value)) => value.clone(),
+                other => extract_content_text(other),
+            };
+            if !chunk.trim().is_empty() {
+                if !text.is_empty() {
+                    text.push('\n');
+                }
+                text.push_str(&chunk);
+            }
+        }
+    }
+    (
+        tool_id,
+        output,
+        if text.trim().is_empty() {
+            None
+        } else {
+            Some(text)
+        },
+    )
+}
+
+pub(crate) fn parse_qoder_jsonl_messages(path: &Path) -> Vec<QoderSessionMessage> {
+    let Ok(file) = fs::File::open(path) else {
+        return Vec::new();
+    };
+    let mut messages: Vec<QoderSessionMessage> = Vec::new();
+    let mut tool_positions: HashMap<String, usize> = HashMap::new();
+    for line in BufReader::new(file).lines() {
+        let Ok(line) = line else {
+            continue;
+        };
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(record) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let kind = record.get("type").and_then(Value::as_str).unwrap_or("");
+        if is_sidechain_record(&record) {
+            continue;
+        }
+        let timestamp = record
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        match kind {
+            "user" => {
+                if record.get("toolUseResult").is_some() {
+                    let (tool_id, output, text) = tool_result_text(&record);
+                    let Some(tool_id) = tool_id else {
+                        continue;
+                    };
+                    if let Some(&index) = tool_positions.get(&tool_id) {
+                        let existing = &mut messages[index];
+                        if let Some(text) = text {
+                            if existing.text.is_empty() {
+                                existing.text = text;
+                            }
+                        }
+                        if existing.tool_output.is_none() {
+                            existing.tool_output = output;
+                        }
+                    }
+                    continue;
+                }
+                let Some(text) = extract_user_visible_text(&record) else {
+                    continue;
+                };
+                let id = record
+                    .get("uuid")
+                    .and_then(Value::as_str)
+                    .map(|uuid| format!("message:{uuid}"))
+                    .unwrap_or_else(|| format!("qoder-user-{}", messages.len() + 1));
+                messages.push(QoderSessionMessage {
+                    id,
+                    role: "user".to_string(),
+                    text,
+                    images: None,
+                    timestamp,
+                    kind: "message".to_string(),
+                    tool_type: None,
+                    title: None,
+                    tool_input: None,
+                    tool_output: None,
+                });
+            }
+            "assistant" => {
+                let uuid = record.get("uuid").and_then(Value::as_str);
+                let content = record
+                    .get("message")
+                    .and_then(|message| message.get("content"));
+                match content {
+                    Some(Value::Array(blocks)) => {
+                        for block in blocks {
+                            let block_type =
+                                block.get("type").and_then(Value::as_str).unwrap_or("");
+                            match block_type {
+                                "thinking" => {
+                                    let text = extract_content_text(Some(block));
+                                    if text.trim().is_empty() {
+                                        continue;
+                                    }
+                                    let id = uuid
+                                        .map(|value| format!("reasoning:{value}"))
+                                        .unwrap_or_else(|| {
+                                            format!("qoder-reasoning-{}", messages.len() + 1)
+                                        });
+                                    messages.push(QoderSessionMessage {
+                                        id,
+                                        role: "assistant".to_string(),
+                                        text,
+                                        images: None,
+                                        timestamp: timestamp.clone(),
+                                        kind: "reasoning".to_string(),
+                                        tool_type: None,
+                                        title: None,
+                                        tool_input: None,
+                                        tool_output: None,
+                                    });
+                                }
+                                "text" => {
+                                    let text = extract_content_text(Some(block));
+                                    if text.trim().is_empty() {
+                                        continue;
+                                    }
+                                    let id = uuid
+                                        .map(|value| format!("message:{value}"))
+                                        .unwrap_or_else(|| {
+                                            format!("qoder-assistant-{}", messages.len() + 1)
+                                        });
+                                    messages.push(QoderSessionMessage {
+                                        id,
+                                        role: "assistant".to_string(),
+                                        text,
+                                        images: None,
+                                        timestamp: timestamp.clone(),
+                                        kind: "message".to_string(),
+                                        tool_type: None,
+                                        title: None,
+                                        tool_input: None,
+                                        tool_output: None,
+                                    });
+                                }
+                                "tool_use" => {
+                                    let tool_id = block
+                                        .get("id")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("")
+                                        .to_string();
+                                    if tool_id.is_empty() {
+                                        continue;
+                                    }
+                                    let name = block
+                                        .get("name")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("tool")
+                                        .to_string();
+                                    let message_id = format!("tool:{tool_id}");
+                                    tool_positions.insert(tool_id, messages.len());
+                                    messages.push(QoderSessionMessage {
+                                        id: message_id,
+                                        role: "assistant".to_string(),
+                                        text: String::new(),
+                                        images: None,
+                                        timestamp: timestamp.clone(),
+                                        kind: "tool".to_string(),
+                                        tool_type: Some(name.clone()),
+                                        title: Some(name),
+                                        tool_input: block.get("input").cloned(),
+                                        tool_output: None,
+                                    });
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Some(Value::String(text)) if !text.trim().is_empty() => {
+                        let id = uuid
+                            .map(|value| format!("message:{value}"))
+                            .unwrap_or_else(|| format!("qoder-assistant-{}", messages.len() + 1));
+                        messages.push(QoderSessionMessage {
+                            id,
+                            role: "assistant".to_string(),
+                            text: text.clone(),
+                            images: None,
+                            timestamp,
+                            kind: "message".to_string(),
+                            tool_type: None,
+                            title: None,
+                            tool_input: None,
+                            tool_output: None,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+    messages
+}
+
+fn summarize_qoder_jsonl(path: &Path, session_id: &str) -> Option<QoderSessionSummary> {
+    let file = fs::File::open(path).ok()?;
+    let file_size_bytes = fs::metadata(path).ok().map(|meta| meta.len());
+    let mut first_message = String::new();
+    let mut ai_title = String::new();
+    let mut last_prompt = String::new();
+    let mut created_at = 0i64;
+    let mut updated_at = 0i64;
+    let mut message_count = 0usize;
+    for line in BufReader::new(file).lines() {
+        let Ok(line) = line else {
+            continue;
+        };
+        let Ok(record) = serde_json::from_str::<Value>(line.trim()) else {
+            continue;
+        };
+        let kind = record.get("type").and_then(Value::as_str).unwrap_or("");
+        let ts = parse_millis(record.get("timestamp"));
+        if created_at == 0 && ts > 0 {
+            created_at = ts;
+        }
+        if ts > updated_at {
+            updated_at = ts;
+        }
+        match kind {
+            "ai-title" => {
+                if let Some(title) = record.get("aiTitle").and_then(Value::as_str) {
+                    if !title.trim().is_empty() {
+                        ai_title = title.to_string();
+                    }
+                }
+            }
+            "last-prompt" => {
+                if let Some(prompt) = record.get("lastPrompt").and_then(Value::as_str) {
+                    if !prompt.trim().is_empty() {
+                        last_prompt = prompt.to_string();
+                    }
+                }
+            }
+            "user" => {
+                if extract_user_visible_text(&record).is_some() {
+                    message_count += 1;
+                    if first_message.is_empty() {
+                        if let Some(text) = extract_user_visible_text(&record) {
+                            first_message = text;
+                        }
+                    }
+                }
+            }
+            "assistant" => message_count += 1,
+            _ => {}
+        }
+    }
+    let title = if !ai_title.is_empty() {
+        ai_title
+    } else if !first_message.is_empty() {
+        first_message
+    } else {
+        last_prompt
+    };
+    if updated_at == 0 {
+        updated_at = file_mtime_millis(path);
+    }
+    Some(QoderSessionSummary {
+        session_id: session_id.to_string(),
+        first_message: truncate_chars(&title, MAX_TITLE_CHARS),
+        updated_at,
+        created_at,
+        message_count,
+        file_size_bytes,
+        engine: Some("qoder".to_string()),
+        canonical_session_id: Some(session_id.to_string()),
+        attribution_status: Some("strict-match".to_string()),
+    })
+}
+
+fn list_qoder_jsonl_in_dir(dir: &Path) -> Vec<QoderSessionSummary> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut sessions = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+            continue;
+        }
+        if !path.is_file() {
+            continue;
+        }
+        let Some(session_id) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            continue;
+        };
+        if let Some(summary) = summarize_qoder_jsonl(&path, session_id) {
+            sessions.push(summary);
+        }
+    }
+    sessions
+}
+
+fn jsonl_cwd_matches(path: &Path, workspace_path: &Path) -> bool {
+    let Ok(file) = fs::File::open(path) else {
+        return false;
+    };
+    for line in BufReader::new(file).lines().take(8) {
+        let Ok(line) = line else {
+            continue;
+        };
+        let Ok(record) = serde_json::from_str::<Value>(line.trim()) else {
+            continue;
+        };
+        if record.get("type").and_then(Value::as_str) == Some("workspace-directories") {
+            if let Some(dirs) = record.get("directories").and_then(Value::as_array) {
+                if dirs.iter().any(|dir| {
+                    dir.as_str()
+                        .is_some_and(|value| record_matches_workspace_path(value, workspace_path))
+                }) {
+                    return true;
+                }
+            }
+        }
+        if let Some(cwd) = record.get("cwd").and_then(Value::as_str) {
+            if record_matches_workspace_path(cwd, workspace_path) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn list_qoder_sessions_from_disk(
+    workspace_path: &Path,
+    home_dir: Option<&str>,
+) -> (Vec<QoderSessionSummary>, bool) {
+    let root = qoder_projects_root(home_dir);
+    if !root.is_dir() {
+        return (Vec::new(), false);
+    }
+    let mut sessions = Vec::new();
+    let mut seen = HashSet::new();
+    let mut found_workspace_source = false;
+    for slug in candidate_qoder_project_slugs(workspace_path) {
+        let dir = root.join(&slug);
+        if !dir.is_dir() {
+            continue;
+        }
+        found_workspace_source = true;
+        for summary in list_qoder_jsonl_in_dir(&dir) {
+            if seen.insert(summary.session_id.clone()) {
+                sessions.push(summary);
+            }
+        }
+    }
+    if sessions.is_empty() && !found_workspace_source {
+        if let Ok(entries) = fs::read_dir(&root) {
+            let mut scanned_dirs = 0usize;
+            for entry in entries.flatten() {
+                let dir = entry.path();
+                if !dir.is_dir() {
+                    continue;
+                }
+                scanned_dirs += 1;
+                if scanned_dirs > MAX_QODER_PROJECT_DIR_SCAN {
+                    break;
+                }
+                let Ok(files) = fs::read_dir(&dir) else {
+                    continue;
+                };
+                for file in files.flatten() {
+                    let path = file.path();
+                    if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl")
+                        || !path.is_file()
+                        || !jsonl_cwd_matches(&path, workspace_path)
+                    {
+                        continue;
+                    }
+                    let Some(session_id) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                        continue;
+                    };
+                    if seen.insert(session_id.to_string()) {
+                        if let Some(summary) = summarize_qoder_jsonl(&path, session_id) {
+                            found_workspace_source = true;
+                            sessions.push(summary);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    (sessions, found_workspace_source)
 }
 
 fn parse_millis(value: Option<&Value>) -> i64 {
@@ -412,7 +997,7 @@ where
     run_qoder_acp_initialized(None, workspace_path, home_dir, timeout_dur, body).await
 }
 
-pub async fn list_qoder_sessions(
+async fn list_qoder_sessions_from_acp(
     workspace_path: &Path,
     limit: Option<usize>,
     home_dir: Option<&str>,
@@ -440,22 +1025,35 @@ pub async fn list_qoder_sessions(
             Ok(sessions)
         }
         Err(error) => {
-            // Soft-empty stays, but keep the cause visible: auth / handshake /
-            // CLI-version failures previously surfaced as an "empty history" UI.
-            log::warn!("list_qoder_sessions failed, returning empty list: {error}");
+            log::warn!("list_qoder_sessions ACP fallback failed: {error}");
             Ok(Vec::new())
         }
     }
 }
 
-pub async fn load_qoder_session(
+pub async fn list_qoder_sessions(
+    workspace_path: &Path,
+    limit: Option<usize>,
+    home_dir: Option<&str>,
+) -> Result<Vec<QoderSessionSummary>, String> {
+    let (mut sessions, found_workspace_source) =
+        list_qoder_sessions_from_disk(workspace_path, home_dir);
+    if sessions.is_empty() && !found_workspace_source {
+        sessions = list_qoder_sessions_from_acp(workspace_path, limit, home_dir).await?;
+    }
+    if let Some(limit) = limit {
+        sessions.truncate(limit);
+    }
+    Ok(sessions)
+}
+
+async fn load_qoder_session_from_acp(
     workspace_path: &Path,
     session_id: &str,
     home_dir: Option<&str>,
 ) -> Result<QoderSessionLoadResult, String> {
-    let session_id = normalize_session_id(session_id)?;
     let workspace_owned = workspace_path.to_path_buf();
-    let session_owned = session_id.clone();
+    let session_owned = session_id.to_string();
     let result = with_initialized_acp(
         workspace_path,
         home_dir,
@@ -471,8 +1069,6 @@ pub async fn load_qoder_session(
                     json!({
                         "sessionId": session_owned,
                         "cwd": workspace_owned.to_string_lossy(),
-                        // qoder ACP requires mcpServers (validated array); omitting
-                        // it fails with -32602 and history renders empty.
                         "mcpServers": [],
                     }),
                     QODER_LOAD_TIMEOUT,
@@ -487,6 +1083,28 @@ pub async fn load_qoder_session(
         messages: project_replayed_updates(&result),
         usage: None,
     })
+}
+
+pub async fn load_qoder_session(
+    workspace_path: &Path,
+    session_id: &str,
+    home_dir: Option<&str>,
+) -> Result<QoderSessionLoadResult, String> {
+    let session_id = normalize_session_id(session_id)?;
+    if let Some(path) = find_qoder_session_jsonl(workspace_path, &session_id, home_dir) {
+        let messages = parse_qoder_jsonl_messages(&path);
+        if !messages.is_empty() || fs::metadata(&path).is_ok_and(|metadata| metadata.len() == 0) {
+            return Ok(QoderSessionLoadResult {
+                messages,
+                usage: None,
+            });
+        }
+        log::warn!(
+            "Qoder native history had no renderable records; falling back to ACP: {}",
+            path.display()
+        );
+    }
+    load_qoder_session_from_acp(workspace_path, &session_id, home_dir).await
 }
 
 pub async fn delete_qoder_session(
@@ -521,6 +1139,69 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn temporary_qoder_home(label: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "mossx-qoder-history-{label}-{}-{nonce}",
+            std::process::id()
+        ))
+    }
+
+    fn write_qoder_jsonl(path: &Path, records: &[Value], malformed_line: bool) {
+        let parent = path.parent().expect("session parent");
+        fs::create_dir_all(parent).expect("create session parent");
+        let mut content = records
+            .iter()
+            .map(serde_json::to_string)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("serialize fixture")
+            .join("\n");
+        if malformed_line {
+            content.push_str("\n{ not json }");
+        }
+        content.push('\n');
+        fs::write(path, content).expect("write Qoder fixture");
+    }
+
+    fn qoder_turn_records(workspace: &Path) -> Vec<Value> {
+        let cwd = workspace.to_string_lossy();
+        vec![
+            json!({"type":"workspace-directories","directories":[cwd.as_ref()]}),
+            json!({"type":"user","uuid":"user-1","timestamp":"2026-08-22T00:00:00Z","humanInput":{"text":"first prompt"},"message":{"content":"first prompt"}}),
+            json!({"type":"user","uuid":"hidden","isSidechain":true,"humanInput":{"text":"hidden prompt"},"message":{"content":"hidden prompt"}}),
+            json!({"type":"assistant","uuid":"assistant-1","timestamp":"2026-08-22T00:00:01Z","message":{"content":[
+                {"type":"thinking","thinking":"reasoning"},
+                {"type":"text","text":"before tool"},
+                {"type":"tool_use","id":"tool-1","name":"Read","input":{"path":"README.md"}}
+            ]}}),
+            json!({"type":"user","timestamp":"2026-08-22T00:00:02Z","toolUseResult":{"ok":true},"message":{"content":[
+                {"type":"tool_result","tool_use_id":"tool-1","content":"file body"}
+            ]}}),
+            json!({"type":"ai-title","aiTitle":"Generated title"}),
+            json!({"type":"assistant","uuid":"assistant-2","timestamp":"2026-08-22T00:00:03Z","message":{"content":[
+                {"type":"text","text":"after tool"}
+            ]}}),
+        ]
+    }
+
+    fn write_workspace_session(
+        home: &Path,
+        storage_slug: &str,
+        workspace: &Path,
+        session_id: &str,
+        malformed_line: bool,
+    ) -> PathBuf {
+        let path = home
+            .join("projects")
+            .join(storage_slug)
+            .join(format!("{session_id}.jsonl"));
+        write_qoder_jsonl(&path, &qoder_turn_records(workspace), malformed_line);
+        path
+    }
+
     #[test]
     fn maps_session_list_and_filters_cwd() {
         let workspace = PathBuf::from("/tmp/ws");
@@ -534,6 +1215,92 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].session_id, "keep");
         assert_eq!(sessions[0].first_message, "hello");
+    }
+
+    #[test]
+    fn native_jsonl_summary_and_projection_preserve_tool_timeline() {
+        let home = temporary_qoder_home("projection");
+        let workspace = PathBuf::from("/tmp/mossx-qoder-history-projection");
+        let session_id = "session-1";
+        let storage_slug = encode_qoder_project_slug(&workspace.to_string_lossy());
+        let path = write_workspace_session(&home, &storage_slug, &workspace, session_id, true);
+
+        let summary = summarize_qoder_jsonl(&path, session_id).expect("session summary");
+        assert_eq!(summary.first_message, "Generated title");
+        assert_eq!(summary.message_count, 3);
+        assert_eq!(summary.engine.as_deref(), Some("qoder"));
+        assert_eq!(summary.attribution_status.as_deref(), Some("strict-match"));
+
+        let messages = parse_qoder_jsonl_messages(&path);
+        assert_eq!(messages.len(), 5);
+        assert_eq!(messages[0].text, "first prompt");
+        assert_eq!(messages[1].kind, "reasoning");
+        assert_eq!(messages[1].text, "reasoning");
+        assert_eq!(messages[2].text, "before tool");
+        assert_eq!(messages[3].kind, "tool");
+        assert_eq!(messages[3].tool_type.as_deref(), Some("Read"));
+        assert_eq!(messages[3].tool_input, Some(json!({"path":"README.md"})));
+        assert_eq!(messages[3].tool_output, Some(json!({"ok":true})));
+        assert_eq!(messages[3].text, "file body");
+        assert_eq!(messages[4].text, "after tool");
+        assert!(!messages
+            .iter()
+            .any(|message| message.text == "hidden prompt"));
+
+        fs::remove_dir_all(&home).expect("remove temp Qoder home");
+    }
+
+    #[test]
+    fn native_lookup_uses_workspace_metadata_when_slug_is_unknown() {
+        let home = temporary_qoder_home("metadata-fallback");
+        let workspace = PathBuf::from("/tmp/mossx-qoder-history-target");
+        let session_id = "session-shared-id";
+        let matching = write_workspace_session(
+            &home,
+            "legacy-qoder-project-slug",
+            &workspace,
+            session_id,
+            false,
+        );
+        let foreign_workspace = PathBuf::from("/tmp/mossx-qoder-history-foreign");
+        write_workspace_session(
+            &home,
+            "foreign-qoder-project-slug",
+            &foreign_workspace,
+            session_id,
+            false,
+        );
+
+        let home_text = home.to_string_lossy();
+        assert_eq!(
+            find_qoder_session_jsonl(&workspace, session_id, Some(&home_text)),
+            Some(matching)
+        );
+        let (listed, found_workspace_source) =
+            list_qoder_sessions_from_disk(&workspace, Some(&home_text));
+        assert!(found_workspace_source);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].session_id, session_id);
+
+        fs::remove_dir_all(&home).expect("remove temp Qoder home");
+    }
+
+    #[tokio::test]
+    async fn load_prefers_native_jsonl_without_acp() {
+        let home = temporary_qoder_home("native-load");
+        let workspace = PathBuf::from("/tmp/mossx-qoder-history-native-load");
+        let session_id = "session-native-load";
+        let storage_slug = encode_qoder_project_slug(&workspace.to_string_lossy());
+        write_workspace_session(&home, &storage_slug, &workspace, session_id, false);
+
+        let home_text = home.to_string_lossy();
+        let loaded = load_qoder_session(&workspace, session_id, Some(&home_text))
+            .await
+            .expect("native Qoder history loads");
+        assert_eq!(loaded.messages.len(), 5);
+        assert_eq!(loaded.messages[3].kind, "tool");
+
+        fs::remove_dir_all(&home).expect("remove temp Qoder home");
     }
 
     #[test]
