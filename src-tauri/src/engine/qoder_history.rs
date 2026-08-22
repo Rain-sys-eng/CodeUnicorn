@@ -325,23 +325,33 @@ fn tool_result_text(record: &Value) -> (Option<String>, Option<Value>, Option<St
     )
 }
 
-pub(crate) fn parse_qoder_jsonl_messages(path: &Path) -> Vec<QoderSessionMessage> {
-    let Ok(file) = fs::File::open(path) else {
-        return Vec::new();
-    };
+fn parse_qoder_jsonl_messages_checked(path: &Path) -> Result<Vec<QoderSessionMessage>, String> {
+    let file = fs::File::open(path).map_err(|error| {
+        format!(
+            "Failed to read Qoder native history {}: {error}",
+            path.display()
+        )
+    })?;
     let mut messages: Vec<QoderSessionMessage> = Vec::new();
     let mut tool_positions: HashMap<String, usize> = HashMap::new();
+    let mut saw_nonempty_line = false;
+    let mut parsed_record_count = 0usize;
     for line in BufReader::new(file).lines() {
-        let Ok(line) = line else {
-            continue;
-        };
+        let line = line.map_err(|error| {
+            format!(
+                "Failed to read Qoder native history {}: {error}",
+                path.display()
+            )
+        })?;
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
+        saw_nonempty_line = true;
         let Ok(record) = serde_json::from_str::<Value>(line) else {
             continue;
         };
+        parsed_record_count += 1;
         let kind = record.get("type").and_then(Value::as_str).unwrap_or("");
         if is_sidechain_record(&record) {
             continue;
@@ -504,7 +514,17 @@ pub(crate) fn parse_qoder_jsonl_messages(path: &Path) -> Vec<QoderSessionMessage
             _ => {}
         }
     }
-    messages
+    if saw_nonempty_line && parsed_record_count == 0 {
+        return Err(format!(
+            "Qoder native history is not valid NDJSON: {}",
+            path.display()
+        ));
+    }
+    Ok(messages)
+}
+
+pub(crate) fn parse_qoder_jsonl_messages(path: &Path) -> Vec<QoderSessionMessage> {
+    parse_qoder_jsonl_messages_checked(path).unwrap_or_default()
 }
 
 fn summarize_qoder_jsonl(path: &Path, session_id: &str) -> Option<QoderSessionSummary> {
@@ -1092,17 +1112,18 @@ pub async fn load_qoder_session(
 ) -> Result<QoderSessionLoadResult, String> {
     let session_id = normalize_session_id(session_id)?;
     if let Some(path) = find_qoder_session_jsonl(workspace_path, &session_id, home_dir) {
-        let messages = parse_qoder_jsonl_messages(&path);
-        if !messages.is_empty() || fs::metadata(&path).is_ok_and(|metadata| metadata.len() == 0) {
-            return Ok(QoderSessionLoadResult {
-                messages,
-                usage: None,
-            });
+        match parse_qoder_jsonl_messages_checked(&path) {
+            Ok(messages) => {
+                return Ok(QoderSessionLoadResult {
+                    messages,
+                    usage: None,
+                });
+            }
+            Err(error) => log::warn!(
+                "Qoder native history is unavailable; falling back to ACP: {} ({error})",
+                path.display()
+            ),
         }
-        log::warn!(
-            "Qoder native history had no renderable records; falling back to ACP: {}",
-            path.display()
-        );
     }
     load_qoder_session_from_acp(workspace_path, &session_id, home_dir).await
 }
@@ -1300,6 +1321,42 @@ mod tests {
         assert_eq!(loaded.messages.len(), 5);
         assert_eq!(loaded.messages[3].kind, "tool");
 
+        fs::remove_dir_all(&home).expect("remove temp Qoder home");
+    }
+
+    #[test]
+    fn readable_metadata_only_history_is_authoritative_empty() {
+        let home = temporary_qoder_home("metadata-only");
+        let workspace = PathBuf::from("/tmp/mossx-qoder-history-metadata-only");
+        let session_id = "session-metadata-only";
+        let storage_slug = encode_qoder_project_slug(&workspace.to_string_lossy());
+        let path = home
+            .join("projects")
+            .join(storage_slug)
+            .join(format!("{session_id}.jsonl"));
+        write_qoder_jsonl(
+            &path,
+            &[json!({
+                "type": "workspace-directories",
+                "directories": [workspace.to_string_lossy()],
+            })],
+            false,
+        );
+
+        assert!(parse_qoder_jsonl_messages_checked(&path)
+            .expect("readable metadata-only history")
+            .is_empty());
+        fs::remove_dir_all(&home).expect("remove temp Qoder home");
+    }
+
+    #[test]
+    fn malformed_native_history_requires_acp_fallback() {
+        let home = temporary_qoder_home("malformed");
+        let path = home.join("projects").join("project").join("bad.jsonl");
+        write_qoder_jsonl(&path, &[], true);
+
+        let error = parse_qoder_jsonl_messages_checked(&path).expect_err("invalid NDJSON");
+        assert!(error.contains("not valid NDJSON"), "{error}");
         fs::remove_dir_all(&home).expect("remove temp Qoder home");
     }
 

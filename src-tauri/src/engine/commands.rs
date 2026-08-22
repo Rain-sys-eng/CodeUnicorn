@@ -35,10 +35,7 @@ use super::remote_bridge::{
     call_remote_typed, remote_detect_engines_request, remote_engine_interrupt_request,
     remote_engine_send_message_sync_request,
 };
-use super::status::{
-    detect_grok_status, detect_kimi_status, detect_pi_status, detect_qoder_status,
-    load_opencode_models,
-};
+use super::status::{detect_grok_status, detect_kimi_status, detect_pi_status, load_opencode_models};
 use super::{
     engine_disabled_diagnostic, engine_enabled_in_settings, EngineConfig, EngineStatus, EngineType,
 };
@@ -1524,7 +1521,11 @@ pub async fn get_engine_models(
                 .as_ref()
                 .and_then(|cfg| cfg.bin_path.as_ref())
                 .map(|s| s.as_str());
-            let fresh_status = detect_qoder_status(custom_bin).await;
+            let fresh_status = super::status::detect_qoder_status_with_home(
+                custom_bin,
+                config.as_ref().and_then(|cfg| cfg.home_dir.as_deref()),
+            )
+            .await;
             if !fresh_status.models.is_empty() {
                 return Ok(fresh_status.models);
             }
@@ -3221,11 +3222,17 @@ pub async fn engine_send_message(
                 )
                 .await;
 
-            let resolved_session_id = super::qoder::resolve_qoder_session_id_for_engine_send(
-                continue_session,
-                session_id,
-                session.get_session_id().await,
-            );
+            let normalized_fork_session_id =
+                super::qoder::normalize_qoder_fork_session_id(fork_session_id.as_deref())?;
+            let resolved_session_id = if normalized_fork_session_id.is_some() {
+                None
+            } else {
+                super::qoder::resolve_qoder_session_id_for_engine_send(
+                    continue_session,
+                    session_id,
+                    session.get_session_id().await,
+                )
+            };
             let response_session_id = resolved_session_id.clone();
             let runtime_model = model
                 .as_ref()
@@ -3251,7 +3258,7 @@ pub async fn engine_send_message(
                 images,
                 continue_session,
                 session_id: resolved_session_id,
-                fork_session_id: None,
+                fork_session_id: normalized_fork_session_id,
                 agent: None,
                 variant: None,
                 collaboration_mode: None,
@@ -4314,11 +4321,17 @@ pub async fn engine_send_message_sync(
                     provider_launch_profile.home_dir.as_deref(),
                 )
                 .await;
-            let resolved_session_id = super::qoder::resolve_qoder_session_id_for_engine_send(
-                continue_session,
-                session_id,
-                session.get_session_id().await,
-            );
+            let normalized_fork_session_id =
+                super::qoder::normalize_qoder_fork_session_id(fork_session_id.as_deref())?;
+            let resolved_session_id = if normalized_fork_session_id.is_some() {
+                None
+            } else {
+                super::qoder::resolve_qoder_session_id_for_engine_send(
+                    continue_session,
+                    session_id,
+                    session.get_session_id().await,
+                )
+            };
             let runtime_model = model
                 .as_ref()
                 .map(|value| value.trim())
@@ -4334,7 +4347,7 @@ pub async fn engine_send_message_sync(
                 images,
                 continue_session,
                 session_id: resolved_session_id,
-                fork_session_id: None,
+                fork_session_id: normalized_fork_session_id,
                 agent: None,
                 variant: None,
                 collaboration_mode: None,

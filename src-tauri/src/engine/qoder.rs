@@ -28,6 +28,9 @@ const QODER_IDE_LAUNCHER_NAME: &str = "qoder";
 const ACP_PROTOCOL_VERSION: u32 = 1;
 const QODER_POST_TERMINAL_DRAIN: Duration = Duration::from_millis(250);
 const QODER_STDERR_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
+/// `session/cancel` 通常会立即产生 typed prompt response；在 fallback kill
+/// 卡死的 qodercli 前，先保留 ACP reader 等待该 response。
+const QODER_CANCEL_SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 pub(crate) const QODER_RPC_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 /// session/new scans the workspace on first contact (measured 30.1s in a large
 /// repo, 0.1s in /tmp; see mossx-qoder-capability-spike latency table), so the
@@ -61,6 +64,22 @@ pub fn resolve_qoder_session_id_for_engine_send(
         .flatten()
 }
 
+pub(crate) fn normalize_qoder_fork_session_id(
+    value: Option<&str>,
+) -> Result<Option<String>, String> {
+    match value {
+        None => Ok(None),
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                Err("forkSessionId is required for Qoder fork session".to_string())
+            } else {
+                Ok(Some(trimmed.to_string()))
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct QoderTurnEvent {
     pub turn_id: String,
@@ -77,7 +96,8 @@ pub struct QoderSession {
     home_dir: Option<String>,
     custom_args: Option<String>,
     active_processes: Mutex<HashMap<String, ActiveQoderChildProcess>>,
-    interrupted_turns: Mutex<HashSet<String>>,
+    cancel_requested_turns: Mutex<HashSet<String>>,
+    forced_cancelled_turns: Mutex<HashSet<String>>,
 }
 
 #[allow(dead_code)]
@@ -115,18 +135,6 @@ impl ActiveQoderChildProcess {
             registered_age_ms: sampled_at_ms.saturating_sub(self.started_at_ms),
         })
     }
-}
-
-fn apply_interrupt_result(
-    active_processes: &mut HashMap<String, ActiveQoderChildProcess>,
-    interrupted_turns: &mut HashSet<String>,
-    turn_id: &str,
-    kill_result: Result<(), String>,
-) -> Result<(), String> {
-    kill_result?;
-    interrupted_turns.insert(turn_id.to_string());
-    active_processes.remove(turn_id);
-    Ok(())
 }
 
 fn unix_timestamp_ms_for_process_diagnostics() -> u64 {
@@ -1093,6 +1101,41 @@ fn parse_rpc_error_message(message: &str) -> String {
     message.to_string()
 }
 
+fn qoder_session_setting_error(setting: &str, value: &str, error: String) -> String {
+    format!("Qoder {setting} `{value}` setup failed: {error}")
+}
+
+fn qoder_usage_update(workspace_id: &str, result: &Value) -> Option<EngineEvent> {
+    let usage = result.get("usage")?;
+    let input_tokens = usage.get("inputTokens").and_then(Value::as_i64);
+    let output_tokens = usage.get("outputTokens").and_then(Value::as_i64);
+    if input_tokens.is_none() && output_tokens.is_none() {
+        return None;
+    }
+    Some(EngineEvent::UsageUpdate {
+        workspace_id: workspace_id.to_string(),
+        input_tokens,
+        output_tokens,
+        cached_tokens: None,
+        model_context_window: None,
+        context_used_tokens: None,
+        context_usage_source: None,
+        context_usage_freshness: None,
+        context_used_percent: None,
+        context_remaining_percent: None,
+        context_tool_usages: None,
+        context_tool_usages_truncated: None,
+        context_category_usages: None,
+    })
+}
+
+fn qoder_cancelled_result(response_text: String) -> Value {
+    json!({
+        "text": response_text,
+        "stopReason": "cancelled",
+    })
+}
+
 impl QoderSession {
     pub fn new(
         workspace_id: String,
@@ -1110,7 +1153,8 @@ impl QoderSession {
             home_dir: config.home_dir,
             custom_args: config.custom_args,
             active_processes: Mutex::new(HashMap::new()),
-            interrupted_turns: Mutex::new(HashSet::new()),
+            cancel_requested_turns: Mutex::new(HashSet::new()),
+            forced_cancelled_turns: Mutex::new(HashSet::new()),
         }
     }
 
@@ -1222,6 +1266,8 @@ impl QoderSession {
         let result = async {
             acp.initialize().await?;
             let cwd = self.workspace_path.to_string_lossy().to_string();
+            let fork_session_id =
+                normalize_qoder_fork_session_id(params.fork_session_id.as_deref())?;
             let resume_id = params
                 .session_id
                 .as_ref()
@@ -1229,7 +1275,18 @@ impl QoderSession {
                 .filter(|value| !value.is_empty())
                 .filter(|_| params.continue_session)
                 .map(str::to_string);
-            let session_result = if let Some(session_id) = resume_id.as_ref() {
+            let session_result = if let Some(session_id) = fork_session_id.as_ref() {
+                acp.request(
+                    "session/fork",
+                    json!({
+                        "cwd": cwd,
+                        "mcpServers": [],
+                        "sessionId": session_id,
+                    }),
+                    QODER_SESSION_RESUME_TIMEOUT,
+                )
+                .await?
+            } else if let Some(session_id) = resume_id.as_ref() {
                 acp.request(
                     "session/resume",
                     json!({
@@ -1276,16 +1333,16 @@ impl QoderSession {
                 .map(|value| value.trim())
                 .filter(|value| !value.is_empty())
             {
-                let _ = acp
-                    .request(
-                        "session/set_model",
-                        json!({
-                            "sessionId": session_id,
-                            "modelId": model,
-                        }),
-                        QODER_RPC_HANDSHAKE_TIMEOUT,
-                    )
-                    .await;
+                acp.request(
+                    "session/set_model",
+                    json!({
+                        "sessionId": session_id,
+                        "modelId": model,
+                    }),
+                    QODER_RPC_HANDSHAKE_TIMEOUT,
+                )
+                .await
+                .map_err(|error| qoder_session_setting_error("model", model, error))?;
             }
             if let Some(effort) = params
                 .effort
@@ -1293,17 +1350,17 @@ impl QoderSession {
                 .map(|value| value.trim())
                 .filter(|value| !value.is_empty())
             {
-                let _ = acp
-                    .request(
-                        "session/set_config_option",
-                        json!({
-                            "sessionId": session_id,
-                            "configId": "reasoning_effort",
-                            "value": effort,
-                        }),
-                        QODER_RPC_HANDSHAKE_TIMEOUT,
-                    )
-                    .await;
+                acp.request(
+                    "session/set_config_option",
+                    json!({
+                        "sessionId": session_id,
+                        "configId": "reasoning_effort",
+                        "value": effort,
+                    }),
+                    QODER_RPC_HANDSHAKE_TIMEOUT,
+                )
+                .await
+                .map_err(|error| qoder_session_setting_error("reasoning effort", effort, error))?;
             }
             acp.request(
                 "session/set_mode",
@@ -1409,25 +1466,42 @@ impl QoderSession {
 
         tokio::time::sleep(QODER_POST_TERMINAL_DRAIN).await;
         let stderr_text = self.cleanup_child(turn_id, &mut stderr_task).await;
-        let was_interrupted = self.interrupted_turns.lock().await.remove(turn_id);
+        let cancel_requested = self.cancel_requested_turns.lock().await.remove(turn_id);
+        let forced_cancelled = self.forced_cancelled_turns.lock().await.remove(turn_id);
 
-        if was_interrupted {
-            let error_msg = "Session stopped.".to_string();
-            self.emit_error(turn_id, error_msg.clone());
-            return Err(error_msg);
-        }
         if let Some(mut result) = prompt_result {
             if result.get("text").is_none() {
                 result["text"] = json!(response_text.clone());
             }
             if result.get("stopReason").is_none() {
-                result["stopReason"] = json!("end_turn");
+                result["stopReason"] = json!(if cancel_requested || forced_cancelled {
+                    "cancelled"
+                } else {
+                    "end_turn"
+                });
+            }
+            if forced_cancelled {
+                result["stopReason"] = json!("cancelled");
+            }
+            if let Some(usage_event) = qoder_usage_update(&self.workspace_id, &result) {
+                self.emit_turn_event(turn_id, usage_event);
             }
             self.emit_turn_event(
                 turn_id,
                 EngineEvent::TurnCompleted {
                     workspace_id: self.workspace_id.clone(),
                     result: Some(result),
+                },
+            );
+            return Ok(response_text);
+        }
+
+        if cancel_requested || forced_cancelled {
+            self.emit_turn_event(
+                turn_id,
+                EngineEvent::TurnCompleted {
+                    workspace_id: self.workspace_id.clone(),
+                    result: Some(qoder_cancelled_result(response_text.clone())),
                 },
             );
             return Ok(response_text);
@@ -1479,33 +1553,119 @@ impl QoderSession {
         }
     }
 
-    pub async fn interrupt(&self) -> Result<(), String> {
+    async fn request_turn_cancellations(
+        &self,
+        turn_ids: &[String],
+    ) -> (Vec<String>, Vec<String>, Vec<String>) {
         let mut active = self.active_processes.lock().await;
-        let mut interrupted = self.interrupted_turns.lock().await;
-        let mut killed_turn_ids = Vec::new();
+        let mut graceful_turn_ids = Vec::new();
+        let mut forced_turn_ids = Vec::new();
         let mut errors = Vec::new();
-        for (turn_id, process) in active.iter_mut() {
-            if let Some(session_id) = process.acp_session_id.clone() {
-                if let Some(stdin) = process.stdin.lock().await.as_mut() {
-                    let payload =
-                        jsonrpc_notification("session/cancel", json!({ "sessionId": session_id }));
-                    if let Ok(bytes) = encode_ndjson(&payload) {
-                        let _ = stdin.write_all(&bytes).await;
-                        let _ = stdin.flush().await;
+
+        for turn_id in turn_ids {
+            let Some(process) = active.get_mut(turn_id) else {
+                continue;
+            };
+            let Some(session_id) = process.acp_session_id.clone() else {
+                forced_turn_ids.push(turn_id.clone());
+                continue;
+            };
+            let payload =
+                jsonrpc_notification("session/cancel", json!({ "sessionId": session_id }));
+            let bytes = match encode_ndjson(&payload) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    forced_turn_ids.push(turn_id.clone());
+                    errors.push(format!(
+                        "{turn_id}: failed to encode session/cancel: {error}"
+                    ));
+                    continue;
+                }
+            };
+            let mut stdin = process.stdin.lock().await;
+            let Some(stdin) = stdin.as_mut() else {
+                forced_turn_ids.push(turn_id.clone());
+                continue;
+            };
+            if let Err(error) = stdin.write_all(&bytes).await {
+                forced_turn_ids.push(turn_id.clone());
+                errors.push(format!("{turn_id}: failed to send session/cancel: {error}"));
+                continue;
+            }
+            if let Err(error) = stdin.flush().await {
+                forced_turn_ids.push(turn_id.clone());
+                errors.push(format!(
+                    "{turn_id}: failed to flush session/cancel: {error}"
+                ));
+                continue;
+            }
+            graceful_turn_ids.push(turn_id.clone());
+        }
+        drop(active);
+
+        if !graceful_turn_ids.is_empty() {
+            let mut requested = self.cancel_requested_turns.lock().await;
+            requested.extend(graceful_turn_ids.iter().cloned());
+        }
+
+        (graceful_turn_ids, forced_turn_ids, errors)
+    }
+
+    async fn force_cancel_turns(&self, turn_ids: &[String]) -> Vec<String> {
+        let mut active = self.active_processes.lock().await;
+        let mut forced_turn_ids = Vec::new();
+        let mut errors = Vec::new();
+
+        for turn_id in turn_ids {
+            let Some(process) = active.get_mut(turn_id) else {
+                continue;
+            };
+            match process.child.try_wait() {
+                Ok(Some(_)) => forced_turn_ids.push(turn_id.clone()),
+                Ok(None) => match process.child.kill().await {
+                    Ok(()) => forced_turn_ids.push(turn_id.clone()),
+                    Err(error) => {
+                        errors.push(format!("{turn_id}: failed to kill qodercli: {error}"))
                     }
+                },
+                Err(error) => {
+                    errors.push(format!("{turn_id}: failed to inspect qodercli: {error}"))
                 }
             }
-            match process.child.kill().await {
-                Ok(()) => {
-                    interrupted.insert(turn_id.clone());
-                    killed_turn_ids.push(turn_id.clone());
+        }
+        drop(active);
+
+        if !forced_turn_ids.is_empty() {
+            let mut forced = self.forced_cancelled_turns.lock().await;
+            forced.extend(forced_turn_ids);
+        }
+
+        errors
+    }
+
+    async fn interrupt_turn_ids(
+        self: &std::sync::Arc<Self>,
+        turn_ids: &[String],
+    ) -> Result<(), String> {
+        let (graceful_turn_ids, forced_turn_ids, mut errors) =
+            self.request_turn_cancellations(turn_ids).await;
+        errors.extend(self.force_cancel_turns(&forced_turn_ids).await);
+
+        if !graceful_turn_ids.is_empty() {
+            let session = std::sync::Arc::clone(self);
+            tokio::spawn(async move {
+                tokio::time::sleep(QODER_CANCEL_SETTLE_TIMEOUT).await;
+                let watchdog_errors = session.force_cancel_turns(&graceful_turn_ids).await;
+                if !watchdog_errors.is_empty() {
+                    log::warn!(
+                        "Qoder cancel watchdog could not stop {} turn(s): {}",
+                        watchdog_errors.len(),
+                        watchdog_errors.join("; ")
+                    );
                 }
-                Err(error) => errors.push(format!("{turn_id}: {error}")),
-            }
+            });
         }
-        for turn_id in &killed_turn_ids {
-            active.remove(turn_id);
-        }
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -1517,28 +1677,19 @@ impl QoderSession {
         }
     }
 
-    pub async fn interrupt_turn(&self, turn_id: &str) -> Result<(), String> {
-        let mut active = self.active_processes.lock().await;
-        let Some(process) = active.get_mut(turn_id) else {
-            return Ok(());
-        };
-        if let Some(session_id) = process.acp_session_id.clone() {
-            if let Some(stdin) = process.stdin.lock().await.as_mut() {
-                let payload =
-                    jsonrpc_notification("session/cancel", json!({ "sessionId": session_id }));
-                if let Ok(bytes) = encode_ndjson(&payload) {
-                    let _ = stdin.write_all(&bytes).await;
-                    let _ = stdin.flush().await;
-                }
-            }
-        }
-        let kill_result = process
-            .child
-            .kill()
+    pub async fn interrupt(self: &std::sync::Arc<Self>) -> Result<(), String> {
+        let turn_ids = self
+            .active_processes
+            .lock()
             .await
-            .map_err(|e| format!("Failed to kill process: {e}"));
-        let mut interrupted_turns = self.interrupted_turns.lock().await;
-        apply_interrupt_result(&mut active, &mut interrupted_turns, turn_id, kill_result)
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        self.interrupt_turn_ids(&turn_ids).await
+    }
+
+    pub async fn interrupt_turn(self: &std::sync::Arc<Self>, turn_id: &str) -> Result<(), String> {
+        self.interrupt_turn_ids(&[turn_id.to_string()]).await
     }
 
     #[allow(dead_code)]
@@ -1596,6 +1747,7 @@ impl Drop for QoderSession {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::fs;
 
     #[test]
     fn parses_response_notification_and_agent_request() {
@@ -1752,6 +1904,203 @@ mod tests {
     }
 
     #[test]
+    fn session_setting_error_names_the_rejected_value() {
+        assert_eq!(
+            qoder_session_setting_error(
+                "model",
+                "qoder-max",
+                "rpc:-32602: invalid model".to_string(),
+            ),
+            "Qoder model `qoder-max` setup failed: rpc:-32602: invalid model"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rejected_model_stops_before_session_prompt() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture_dir =
+            std::env::temp_dir().join(format!("mossx-qoder-model-reject-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&fixture_dir).expect("create fixture directory");
+        let trace_path = fixture_dir.join("acp-trace.ndjson");
+        let script_path = fixture_dir.join("qodercli-fixture");
+        let script = format!(
+            r#"#!/bin/sh
+TRACE="{}"
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> "$TRACE"
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":1,"result":{{}}}}'
+      ;;
+    *'"method":"session/new"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"sessionId":"fixture-session"}}}}'
+      ;;
+    *'"method":"session/set_model"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":3,"error":{{"code":-32602,"message":"invalid model"}}}}'
+      ;;
+    *'"method":"session/prompt"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":5,"result":{{"stopReason":"end_turn"}}}}'
+      ;;
+  esac
+done
+"#,
+            trace_path.display()
+        );
+        fs::write(&script_path, script).expect("write fixture CLI");
+        let mut permissions = fs::metadata(&script_path)
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("make fixture executable");
+
+        let session = QoderSession::new(
+            "ws".into(),
+            fixture_dir.clone(),
+            Some(EngineConfig {
+                bin_path: Some(script_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+        );
+        let error = session
+            .send_message(
+                SendMessageParams {
+                    text: "hello".to_string(),
+                    model: Some("missing-model".to_string()),
+                    ..Default::default()
+                },
+                "turn-model-reject",
+            )
+            .await
+            .expect_err("invalid model stops the turn");
+        assert!(
+            error.contains("model `missing-model` setup failed"),
+            "{error}"
+        );
+
+        let trace = fs::read_to_string(&trace_path).expect("read ACP trace");
+        assert!(trace.contains("session/set_model"), "{trace}");
+        assert!(!trace.contains("session/prompt"), "{trace}");
+        fs::remove_dir_all(&fixture_dir).expect("remove fixture directory");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn fork_uses_the_child_session_for_prompt() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture_dir =
+            std::env::temp_dir().join(format!("mossx-qoder-fork-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&fixture_dir).expect("create fixture directory");
+        let trace_path = fixture_dir.join("acp-trace.ndjson");
+        let script_path = fixture_dir.join("qodercli-fixture");
+        let script = format!(
+            r#"#!/bin/sh
+TRACE="{}"
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> "$TRACE"
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":1,"result":{{}}}}'
+      ;;
+    *'"method":"session/fork"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"sessionId":"child-session"}}}}'
+      ;;
+    *'"method":"session/set_mode"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{}}}}'
+      ;;
+    *'"method":"session/prompt"'*)
+      printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{"stopReason":"end_turn"}}}}'
+      ;;
+  esac
+done
+"#,
+            trace_path.display()
+        );
+        fs::write(&script_path, script).expect("write fixture CLI");
+        let mut permissions = fs::metadata(&script_path)
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("make fixture executable");
+
+        let session = QoderSession::new(
+            "ws".into(),
+            fixture_dir.clone(),
+            Some(EngineConfig {
+                bin_path: Some(script_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+        );
+        let mut receiver = session.subscribe();
+        session
+            .send_message(
+                SendMessageParams {
+                    text: "hello".to_string(),
+                    fork_session_id: Some("parent-session".to_string()),
+                    ..Default::default()
+                },
+                "turn-fork",
+            )
+            .await
+            .expect("forked prompt succeeds");
+
+        let trace = fs::read_to_string(&trace_path).expect("read ACP trace");
+        assert!(trace.contains("session/fork"), "{trace}");
+        assert!(!trace.contains("session/new"), "{trace}");
+        assert!(!trace.contains("session/resume"), "{trace}");
+        assert!(trace.contains("\"sessionId\":\"child-session\""), "{trace}");
+
+        let events = std::iter::from_fn(|| receiver.try_recv().ok()).collect::<Vec<_>>();
+        assert!(events.iter().any(|event| matches!(
+            &event.event,
+            EngineEvent::SessionStarted { session_id, .. } if session_id == "child-session"
+        )));
+        fs::remove_dir_all(&fixture_dir).expect("remove fixture directory");
+    }
+
+    #[test]
+    fn usage_update_reads_only_token_usage() {
+        let event = qoder_usage_update(
+            "ws",
+            &json!({
+                "usage": {
+                    "inputTokens": 123,
+                    "outputTokens": 45,
+                    "totalTokens": 168,
+                },
+                "_meta": { "quota": { "token_count": 168 } },
+            }),
+        )
+        .expect("usage event");
+        match event {
+            EngineEvent::UsageUpdate {
+                workspace_id,
+                input_tokens,
+                output_tokens,
+                cached_tokens,
+                ..
+            } => {
+                assert_eq!(workspace_id, "ws");
+                assert_eq!(input_tokens, Some(123));
+                assert_eq!(output_tokens, Some(45));
+                assert_eq!(cached_tokens, None);
+            }
+            other => panic!("expected UsageUpdate, got {other:?}"),
+        }
+        assert!(qoder_usage_update("ws", &json!({"_meta": {"quota": {}}})).is_none());
+    }
+
+    #[test]
+    fn forced_cancellation_has_typed_terminal_result() {
+        assert_eq!(
+            qoder_cancelled_result("partial answer".to_string()),
+            json!({"text":"partial answer","stopReason":"cancelled"})
+        );
+    }
+
+    #[test]
     fn permission_auto_answer_selects_first_allow_kind() {
         let params = json!({
             "options": [
@@ -1830,6 +2179,22 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_qoder_fork_session_id() {
+        assert_eq!(
+            normalize_qoder_fork_session_id(Some(" parent-session ")).expect("fork id"),
+            Some("parent-session".to_string())
+        );
+        assert_eq!(
+            normalize_qoder_fork_session_id(None).expect("no fork"),
+            None
+        );
+        assert_eq!(
+            normalize_qoder_fork_session_id(Some(" ")).expect_err("blank fork rejected"),
+            "forkSessionId is required for Qoder fork session"
+        );
+    }
+
+    #[test]
     fn build_command_rejects_ide_launcher_named_qoder() {
         let session = QoderSession::new(
             "ws".into(),
@@ -1853,8 +2218,10 @@ mod tests {
 
     #[tokio::test]
     async fn interrupt_unknown_turn_is_idempotent() {
-        let session = QoderSession::new("ws".into(), std::env::temp_dir(), None);
+        let session =
+            std::sync::Arc::new(QoderSession::new("ws".into(), std::env::temp_dir(), None));
         session.interrupt_turn("missing").await.expect("idempotent");
-        assert!(session.interrupted_turns.lock().await.is_empty());
+        assert!(session.cancel_requested_turns.lock().await.is_empty());
+        assert!(session.forced_cancelled_turns.lock().await.is_empty());
     }
 }

@@ -235,7 +235,13 @@ impl EngineManager {
             EngineType::Kimi => detect_kimi_status(bin).await,
             EngineType::Grok => detect_grok_status(bin).await,
             EngineType::Pi => crate::engine::status::detect_pi_status(bin).await,
-            EngineType::Qoder => crate::engine::status::detect_qoder_status(bin).await,
+            EngineType::Qoder => {
+                crate::engine::status::detect_qoder_status_with_home(
+                    bin,
+                    config.and_then(|item| item.home_dir.as_deref()),
+                )
+                .await
+            }
             EngineType::Dsh => {
                 crate::engine::dsh::detect_dsh_status(
                     &crate::engine::dsh::runtime_settings_from_engine_config(config),

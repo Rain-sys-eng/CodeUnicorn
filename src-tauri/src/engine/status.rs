@@ -4,7 +4,7 @@
 
 use serde::Deserialize;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
@@ -873,13 +873,7 @@ fn get_pi_home_dir() -> Option<PathBuf> {
 }
 
 pub fn get_qoder_home_dir() -> Option<PathBuf> {
-    if let Ok(env_home) = std::env::var("QODER_HOME") {
-        let trimmed = env_home.trim();
-        if !trimmed.is_empty() {
-            return Some(PathBuf::from(trimmed));
-        }
-    }
-    dirs::home_dir().map(|home| home.join(".qoder"))
+    crate::engine::qoder_provider_profile::resolve_qoder_home_dir(None)
 }
 
 /// Parse `qodercli status -o json`; returns Some(logged_in) when the probe ran.
@@ -888,8 +882,16 @@ pub(crate) fn parse_qoder_status_json(stdout: &str) -> Option<bool> {
     value.get("logged_in")?.as_bool()
 }
 
-async fn probe_qoder_logged_in(bin: &str, path_env: Option<&String>) -> Option<bool> {
+async fn probe_qoder_logged_in(
+    bin: &str,
+    path_env: Option<&String>,
+    home_dir: Option<&Path>,
+) -> Option<bool> {
     let mut command = crate::backend::app_server::build_command_for_binary(bin);
+    if let Some(home_dir) = home_dir {
+        command.env("QODER_HOME", home_dir);
+        command.arg("--config-dir").arg(home_dir);
+    }
     command.args(["status", "-o", "json"]);
     command.stdout(std::process::Stdio::piped());
     command.stderr(std::process::Stdio::null());
@@ -956,6 +958,13 @@ async fn get_qoder_models(
 const QODER_MODEL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 pub async fn detect_qoder_status(custom_bin: Option<&str>) -> EngineStatus {
+    detect_qoder_status_with_home(custom_bin, None).await
+}
+
+pub async fn detect_qoder_status_with_home(
+    custom_bin: Option<&str>,
+    configured_home_dir: Option<&str>,
+) -> EngineStatus {
     let bin_path = resolve_bin_path("qodercli", custom_bin);
     let bin = bin_path
         .as_ref()
@@ -966,8 +975,10 @@ pub async fn detect_qoder_status(custom_bin: Option<&str>) -> EngineStatus {
     if !installed {
         return not_installed_status(EngineType::Qoder, error);
     }
-    let home_dir = get_qoder_home_dir();
-    let logged_in = probe_qoder_logged_in(&bin, path_env.as_ref()).await;
+    let home_dir = crate::engine::qoder_provider_profile::resolve_qoder_home_dir(
+        configured_home_dir.map(Path::new),
+    );
+    let logged_in = probe_qoder_logged_in(&bin, path_env.as_ref(), home_dir.as_deref()).await;
     let has_pat = crate::engine::qoder_auth::qoder_has_pat_credential();
     if logged_in == Some(false) && !has_pat {
         return EngineStatus {
