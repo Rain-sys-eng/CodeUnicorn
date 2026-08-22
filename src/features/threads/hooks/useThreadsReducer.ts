@@ -24,6 +24,7 @@ import {
   isIncrementalDerivationEnabled,
   isReducerNoopGuardEnabled,
 } from "../utils/realtimePerfFlags";
+import { boundToolOutput } from "../utils/boundToolOutput";
 import {
   buildLegacyTextDeltaItemId,
   findAssistantMessageIndexByLegacyTextDelta,
@@ -2630,7 +2631,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           title: "Command",
           detail: "",
           status: "running",
-          output: action.delta,
+          output: boundToolOutput(action.delta, "commandExecution"),
         };
         return {
           ...state,
@@ -2644,7 +2645,10 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       if (!isToolConversationItem(existing)) {
         return state;
       }
-      const nextOutput = mergeStreamingText(existing.output ?? "", action.delta);
+      const nextOutput = boundToolOutput(
+        mergeStreamingText(existing.output ?? "", action.delta),
+        existing.toolType ?? "commandExecution",
+      );
       if (
         INCREMENTAL_DERIVATION_ENABLED &&
         nextOutput === (existing.output ?? "")

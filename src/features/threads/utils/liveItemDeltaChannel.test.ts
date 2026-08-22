@@ -1,4 +1,9 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  COMMAND_EXECUTION_OUTPUT_BUDGET,
+  COMMAND_EXECUTION_OUTPUT_HEAD,
+} from "./boundToolOutput";
 import {
   appendLiveItemDelta,
   clearLiveItemDelta,
@@ -6,20 +11,29 @@ import {
   drainLiveItemDeltaTail,
   getLiveItemDeltaSnapshot,
   LIVE_ITEM_DELTA_PUBLISH_INTERVAL_MS,
+  LIVE_TOOL_OUTPUT_DISPLAY_LINES,
   peekLiveItemDelta,
   peekLiveItemDeltaEntry,
   resetLiveItemDeltaChannelForTests,
   subscribeLiveItemDelta,
+  takeLastLines,
 } from "./liveItemDeltaChannel";
+import {
+  __resetRealtimePerfFlagCacheForTests,
+  resetRealtimePerfFlags,
+} from "./realtimePerfFlags";
 
 describe("liveItemDeltaChannel", () => {
   beforeEach(() => {
     resetLiveItemDeltaChannelForTests();
+    resetRealtimePerfFlags();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   });
 
   afterEach(() => {
     resetLiveItemDeltaChannelForTests();
+    resetRealtimePerfFlags();
+    __resetRealtimePerfFlagCacheForTests();
     vi.useRealTimers();
   });
 
@@ -176,5 +190,101 @@ describe("liveItemDeltaChannel", () => {
     unsubscribe();
     appendLiveItemDelta("t1", "item-1", "reasoningContent", "a");
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("takeLastLines keeps the original text when under the cap", () => {
+    expect(takeLastLines("a\nb\nc", 10)).toBe("a\nb\nc");
+    expect(takeLastLines("a\nb\nc", 3)).toBe("a\nb\nc");
+  });
+
+  it("takeLastLines returns only the last N lines", () => {
+    expect(takeLastLines("a\nb\nc", 2)).toBe("b\nc");
+    const lines = Array.from({ length: LIVE_TOOL_OUTPUT_DISPLAY_LINES + 1 }, (_, i) => `L${i}`);
+    const tailed = takeLastLines(lines.join("\n"), LIVE_TOOL_OUTPUT_DISPLAY_LINES);
+    expect(tailed.split("\n")).toHaveLength(LIVE_TOOL_OUTPUT_DISPLAY_LINES);
+    expect(tailed.startsWith("L1\n")).toBe(true);
+    expect(tailed.endsWith(`L${LIVE_TOOL_OUTPUT_DISPLAY_LINES}`)).toBe(true);
+  });
+
+  it("bounds commandExecution toolOutput and keeps reasoning unbounded", () => {
+    const head = "H".repeat(COMMAND_EXECUTION_OUTPUT_HEAD);
+    const middle = "M".repeat(400_000);
+    const tail = "T".repeat(80_000);
+    appendLiveItemDelta("t1", "cmd-1", "toolOutput", `${head}${middle}${tail}`);
+    appendLiveItemDelta("t1", "think-1", "reasoningContent", "R".repeat(300_000));
+
+    const bounded = peekLiveItemDelta("t1", "cmd-1", "toolOutput");
+    expect(bounded.length).toBeLessThanOrEqual(COMMAND_EXECUTION_OUTPUT_BUDGET);
+    expect(bounded.startsWith(head)).toBe(true);
+    expect(bounded).toMatch(/omitted \d+ chars/);
+    expect(peekLiveItemDelta("t1", "think-1", "reasoningContent").length).toBe(300_000);
+  });
+
+  it("keeps drain prefix-stable after bounding commandExecution output", () => {
+    const first = "S".repeat(1000);
+    appendLiveItemDelta("t1", "cmd-1", "toolOutput", first, "commandExecution");
+    appendLiveItemDelta(
+      "t1",
+      "cmd-1",
+      "toolOutput",
+      `${"X".repeat(400_000)}Y`.repeat(1),
+      "commandExecution",
+    );
+    const peek = peekLiveItemDelta("t1", "cmd-1", "toolOutput");
+    const entry = peekLiveItemDeltaEntry("t1", "cmd-1", "toolOutput");
+    expect(entry).not.toBeNull();
+    const drained = drainLiveItemDeltaTail("t1");
+    expect(drained).toHaveLength(1);
+    expect(`${first}${drained[0]?.text}`).toBe(peek);
+  });
+
+  it("publishes only the display tail for commandExecution toolOutput", () => {
+    const lines = Array.from(
+      { length: LIVE_TOOL_OUTPUT_DISPLAY_LINES + 50 },
+      (_, i) => `row-${i}`,
+    );
+    appendLiveItemDelta("t1", "cmd-1", "toolOutput", lines.join("\n"), "commandExecution");
+    const snapshot = getLiveItemDeltaSnapshot("t1").get("cmd-1:toolOutput") ?? "";
+    expect(snapshot.split("\n").length).toBe(LIVE_TOOL_OUTPUT_DISPLAY_LINES);
+    expect(peekLiveItemDelta("t1", "cmd-1", "toolOutput").split("\n").length).toBe(
+      LIVE_TOOL_OUTPUT_DISPLAY_LINES + 50,
+    );
+  });
+
+  it("does not apply the 256KiB command cap to fileChange live output", () => {
+    const diff = "d".repeat(300_000);
+    appendLiveItemDelta("t1", "diff-1", "toolOutput", diff, "fileChange");
+    expect(peekLiveItemDelta("t1", "diff-1", "toolOutput")).toBe(diff);
+    expect(getLiveItemDeltaSnapshot("t1").get("diff-1:toolOutput")).toBe(diff);
+  });
+
+  it("returns unbounded commandExecution toolOutput when the budget flag is off", () => {
+    window.localStorage.setItem("ccgui.perf.toolOutputBudget", "off");
+    __resetRealtimePerfFlagCacheForTests();
+    const text = "z".repeat(COMMAND_EXECUTION_OUTPUT_BUDGET + 10_000);
+    appendLiveItemDelta("t1", "cmd-1", "toolOutput", text, "commandExecution");
+    expect(peekLiveItemDelta("t1", "cmd-1", "toolOutput")).toBe(text);
+  });
+
+  it("bounds a path-agnostic listing streamed in 4KiB chunks", () => {
+    const line = "dir/file-0000.txt extra-padding-for-chunk-size\n";
+    const listing = line.repeat(20_000);
+    const chunkSize = 4 * 1024;
+    for (let offset = 0; offset < listing.length; offset += chunkSize) {
+      appendLiveItemDelta(
+        "t1",
+        "cmd-1",
+        "toolOutput",
+        listing.slice(offset, offset + chunkSize),
+        "commandExecution",
+      );
+    }
+    const peek = peekLiveItemDelta("t1", "cmd-1", "toolOutput");
+    expect(peek.length).toBeLessThanOrEqual(COMMAND_EXECUTION_OUTPUT_BUDGET);
+    expect(peek).toMatch(/omitted \d+ chars/);
+    vi.advanceTimersByTime(LIVE_ITEM_DELTA_PUBLISH_INTERVAL_MS);
+    const snapshot = getLiveItemDeltaSnapshot("t1").get("cmd-1:toolOutput") ?? "";
+    expect(snapshot.split("\n").length).toBeLessThanOrEqual(LIVE_TOOL_OUTPUT_DISPLAY_LINES);
+    expect(snapshot.length).toBeLessThanOrEqual(COMMAND_EXECUTION_OUTPUT_HEAD);
   });
 });

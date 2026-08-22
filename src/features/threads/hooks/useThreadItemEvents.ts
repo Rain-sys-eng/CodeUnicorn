@@ -290,6 +290,7 @@ type RealtimeDeltaOperation =
       itemId: string;
       delta: string;
       turnId?: string | null;
+      toolType?: "commandExecution" | "fileChange";
     };
 
 // 32ms (~30 flush/s)：12ms 时顶层 thread reducer 每秒最高 dispatch ~83 次，
@@ -627,6 +628,7 @@ export function useThreadItemEvents({
           operation.itemId,
           lane,
           operation.delta,
+          operation.kind === "toolOutputDelta" ? operation.toolType : undefined,
         );
         if (!isFirst) {
           return;
@@ -1749,11 +1751,7 @@ export function useThreadItemEvents({
           // Re-decompose the key into the original tuple. The gate is
           // append-only, so we forward the merged text as a single delta.
           // The reducer is idempotent for repeated text appends.
-          const [workspaceId, itemId] = key.split("\0") as [
-            string,
-            string,
-            string,
-          ];
+          const [workspaceId, itemId, kindToken] = key.split("\0");
           const metadata = toolOutputMetadataRef.current.get(key);
           const threadId = metadata?.threadId ?? "";
           if (!workspaceId || !threadId || !itemId) return;
@@ -1764,6 +1762,7 @@ export function useThreadItemEvents({
             itemId,
             delta: fullText,
             turnId: metadata?.turnId ?? null,
+            toolType: kindToken === "fileChange" ? "fileChange" : "commandExecution",
           });
         },
       }),

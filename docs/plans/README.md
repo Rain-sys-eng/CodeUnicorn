@@ -23,6 +23,7 @@ status: active
 
 ## Implemented historical plans
 
+- [终端工具输出 live ingest 预算](./2026-08-22-tool-output-live-ingest-budget.md) — P0 已落地：`liveItemDeltaChannel` + `appendToolOutput` 复用 `boundToolOutput`（256KiB 头+尾），published 快照只发最后 200 行；`fileChange` / reasoning 不走帽；`ccgui.perf.toolOutputBudget=off` 可回退。
 - [Composer popup fix](./2026-02-10-composer-popup-fix.md)
 - [Unified workspace search](./2026-02-10-unified-workspace-search.md)
 - [Project session management center](./2026-04-19-project-session-management-center-implementation.md)
