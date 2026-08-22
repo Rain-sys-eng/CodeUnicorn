@@ -136,6 +136,22 @@ fn raw_engine_session_id(engine: EngineType, value: &str) -> Option<&str> {
     (!raw.is_empty()).then_some(raw)
 }
 
+fn raw_qoder_session_id(
+    value: &str,
+    provider_profile_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    if crate::shared_sessions::is_pending_shared_binding_thread_id(EngineType::Qoder, value) {
+        return Ok(None);
+    }
+    Ok(Some(
+        crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
+            value,
+            provider_profile_id,
+        )?
+        .raw_session_id,
+    ))
+}
+
 pub(crate) fn codex_import_items(package: &crate::shared_context::ContextPackage) -> Vec<Value> {
     codex_import_projection(package).0
 }
@@ -3797,7 +3813,7 @@ async fn materialize_attempt_binding(
         }
         // Kimi / OpenCode / Pi 真实 id 由 CLI 事后回写；首轮可暂存 pending，
         // settlement 后 rebind 到 `engine:{raw}`。若已有 established 前缀 id 则复用。
-        EngineType::Kimi | EngineType::OpenCode | EngineType::Pi | EngineType::Qoder => {
+        EngineType::Kimi | EngineType::OpenCode | EngineType::Pi => {
             if let Some(existing_id) = existing.as_deref().filter(|value| {
                 crate::shared_sessions::binding_uses_established_native_thread(owner.engine, value)
             }) {
@@ -3815,6 +3831,26 @@ async fn materialize_attempt_binding(
                     owner.engine,
                     Uuid::new_v4().to_string().as_str(),
                 )
+            }
+        }
+        EngineType::Qoder => {
+            let existing_id = existing.as_deref().filter(|value| {
+                !crate::shared_sessions::is_pending_shared_binding_thread_id(
+                    EngineType::Qoder,
+                    value,
+                )
+            });
+            match existing_id {
+                Some(existing_id) => {
+                    crate::engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                        existing_id,
+                        owner.provider_profile_id.as_deref(),
+                    )?
+                }
+                None => crate::shared_sessions::engine_binding_thread_id(
+                    EngineType::Qoder,
+                    Uuid::new_v4().to_string().as_str(),
+                ),
             }
         }
         _ => {
@@ -4629,14 +4665,21 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
                 owner.engine,
                 &native_session_id,
             );
-            let runtime_session_id = raw_engine_session_id(owner.engine, &native_session_id)
-                .filter(|raw| {
-                    !crate::shared_sessions::is_pending_shared_binding_thread_id(
-                        owner.engine,
-                        raw,
-                    )
-                })
-                .map(str::to_string);
+            let runtime_session_id = if owner.engine == EngineType::Qoder {
+                raw_qoder_session_id(
+                    &native_session_id,
+                    runtime_provider_profile_id.as_deref(),
+                )?
+            } else {
+                raw_engine_session_id(owner.engine, &native_session_id)
+                    .filter(|raw| {
+                        !crate::shared_sessions::is_pending_shared_binding_thread_id(
+                            owner.engine,
+                            raw,
+                        )
+                    })
+                    .map(str::to_string)
+            };
             let continue_session = had_native_binding && established;
             crate::engine::engine_send_message(
                 workspace_id.clone(),
@@ -5999,16 +6042,26 @@ pub(crate) async fn shared_session_v2_probe_binding(
             {
                 Some(session) => {
                     let runtime_session_id = session.get_session_id().await;
-                    let expected_session_id = row
+                    let expected_session_id = match row.native_session_id.as_deref() {
+                        Some(value) => raw_qoder_session_id(
+                            value,
+                            row.provider_profile_id.as_deref(),
+                        )?,
+                        None => None,
+                    };
+                    let awaiting_session = row
                         .native_session_id
                         .as_deref()
-                        .and_then(|value| raw_engine_session_id(EngineType::Qoder, value));
+                        .is_some_and(|value| {
+                            crate::shared_sessions::is_pending_shared_binding_thread_id(
+                                EngineType::Qoder,
+                                value,
+                            )
+                        });
                     json!({
-                        "status": if runtime_session_id.as_deref() == expected_session_id {
+                        "status": if runtime_session_id.as_deref() == expected_session_id.as_deref() {
                             "matched"
-                        } else if expected_session_id
-                            .is_some_and(|value| value.starts_with("qoder-pending-shared-"))
-                        {
+                        } else if awaiting_session {
                             "runtime-created-awaiting-session"
                         } else {
                             "mismatch"
@@ -6304,16 +6357,16 @@ mod shared_interrupt_owner_tests {
         assert_eq!(route.provider_profile_id.as_deref(), Some(provider));
         assert_eq!(route.binding_key, binding_key);
         // 与 SharedRuntimeCoordinator::normalize_native_session_identity 对齐：
-        // Claude/Kimi/Pi/Grok/OpenCode/Qoder 使用 engine: 前缀；Codex/Gemini/Dsh 保持 raw。
+        // Qoder 额外带 distribution；其余 CLI 使用 engine: 前缀；Codex/Gemini/Dsh 保持 raw。
         let expected_native_thread_id = match engine {
             EngineType::Claude
             | EngineType::Kimi
             | EngineType::Pi
             | EngineType::Grok
-            | EngineType::OpenCode
-            | EngineType::Qoder => {
+            | EngineType::OpenCode => {
                 format!("{}:native-{provider}", engine.icon())
             }
+            EngineType::Qoder => format!("qoder:{provider}:native-{provider}"),
             EngineType::Codex | EngineType::Gemini | EngineType::Dsh => {
                 format!("native-{provider}")
             }

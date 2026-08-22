@@ -136,6 +136,30 @@ describe("sharedSessionSummaries", () => {
     ).toBe(false);
   });
 
+  it("keeps Qoder Global/CN Shared owner projection isolated for the same raw id", () => {
+    const globalOwner = "qoder:__qoder_global__:same-raw-session";
+    const cnOwner = "qoder:__qoder_cn__:same-raw-session";
+    const keys = buildSharedSidebarHiddenParentKeys([
+      {
+        id: "shared:qoder-global-owner",
+        name: "Qoder Global Shared",
+        updatedAt: 1,
+        engineSource: "qoder" as const,
+        threadKind: "shared" as const,
+        nativeThreadIds: [globalOwner],
+      },
+    ]);
+
+    expect(keys.has(globalOwner)).toBe(true);
+    expect(keys.has("same-raw-session")).toBe(false);
+    expect(
+      isSharedSidebarHiddenPup({ id: "qoder:global-pup" }, globalOwner, keys),
+    ).toBe(true);
+    expect(
+      isSharedSidebarHiddenPup({ id: "qoder:cn-pup" }, cnOwner, keys),
+    ).toBe(false);
+  });
+
   it("remaps grok subagent parents from hidden native owner to shared thread", () => {
     const summary = normalizeSharedSessionSummary({
       id: "shared-session-1",

@@ -1485,7 +1485,11 @@ impl DaemonState {
                                         current_thread_id = format!("dsh:{}", session_id);
                                     }
                                     engine::EngineType::Qoder => {
-                                        current_thread_id = format!("qoder:{}", session_id);
+                                        // Claude runtime 没有 Qoder distribution owner，不能
+                                        // 在此处伪造会丢失分发信息的 Qoder identity。
+                                        log::warn!(
+                                            "[claude] ignored unexpected Qoder SessionStarted event"
+                                        );
                                     }
                                     engine::EngineType::Codex => {}
                                 }
@@ -2499,7 +2503,8 @@ impl DaemonState {
                     continue_session,
                     session_id,
                     session.get_session_id().await,
-                );
+                    Some(provider_launch_profile.distribution.provider_profile_id()),
+                )?;
                 let response_session_id = resolved_session_id.clone();
                 let sanitized_model = model
                     .as_ref()
@@ -2552,6 +2557,8 @@ impl DaemonState {
                 let provider_binding_for_forwarder = provider_launch_profile.binding.clone();
                 let provider_binding_storage_path = self.storage_path.clone();
                 let provider_binding_workspace_id = workspace_id.clone();
+                let qoder_provider_profile_id_for_forwarder =
+                    provider_launch_profile.distribution.provider_profile_id();
                 tokio::spawn(async move {
                     let mut render_state = GeminiRenderRoutingState::default();
                     loop {
@@ -2669,7 +2676,16 @@ impl DaemonState {
                                 && session_id != "pending"
                                 && matches!(engine, engine::EngineType::Qoder)
                             {
-                                current_thread_id = format!("qoder:{}", session_id);
+                                match engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                                    session_id,
+                                    Some(qoder_provider_profile_id_for_forwarder),
+                                ) {
+                                    Ok(identity) => current_thread_id = identity,
+                                    Err(error) => eprintln!(
+                                        "[qoder] ignored invalid SessionStarted identity for {}: {error}",
+                                        qoder_provider_profile_id_for_forwarder,
+                                    ),
+                                }
                             }
                         }
 
@@ -2686,9 +2702,24 @@ impl DaemonState {
                         eprintln!("Qoder send_message failed: {error}");
                     }
                 });
+                let metadata_session_id = response_session_id.as_deref().and_then(|session_id| {
+                    match engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                        session_id,
+                        Some(provider_launch_profile.distribution.provider_profile_id()),
+                    ) {
+                        Ok(identity) => Some(identity),
+                        Err(error) => {
+                            log::warn!(
+                                "[qoder] skipped auto-session metadata for invalid identity: {}",
+                                error
+                            );
+                            None
+                        }
+                    }
+                });
                 self.record_auto_session_metadata_if_present(
                     &workspace_id,
-                    response_session_id.as_deref(),
+                    metadata_session_id.as_deref(),
                     auto_session,
                     "qoder",
                 )
@@ -3392,7 +3423,8 @@ impl DaemonState {
                     continue_session,
                     session_id,
                     session.get_session_id().await,
-                );
+                    Some(provider_launch_profile.distribution.provider_profile_id()),
+                )?;
                 let sanitized_model = model
                     .as_ref()
                     .map(|value| value.trim())
@@ -3435,9 +3467,24 @@ impl DaemonState {
                     )
                     .await?;
                 }
+                let metadata_session_id = response_session_id.as_deref().and_then(|session_id| {
+                    match engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                        session_id,
+                        Some(provider_launch_profile.distribution.provider_profile_id()),
+                    ) {
+                        Ok(identity) => Some(identity),
+                        Err(error) => {
+                            log::warn!(
+                                "[qoder] skipped auto-session metadata for invalid identity: {}",
+                                error
+                            );
+                            None
+                        }
+                    }
+                });
                 self.record_auto_session_metadata_if_present(
                     &workspace_id,
-                    response_session_id.as_deref(),
+                    metadata_session_id.as_deref(),
                     auto_session,
                     "qoder",
                 )

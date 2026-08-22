@@ -14,8 +14,56 @@ const VISIBILITY_BUSY_TIMEOUT: Duration = Duration::from_millis(200);
 const BINDING_EVENT_SCAN_LIMIT: i64 = 80;
 
 pub(crate) fn insert_shared_binding_identity(target: &mut BTreeSet<String>, value: &str) {
+    insert_shared_binding_identity_with_context(target, None, None, value);
+}
+
+pub(crate) fn insert_shared_binding_identity_with_context(
+    target: &mut BTreeSet<String>,
+    engine: Option<&str>,
+    provider_profile_id: Option<&str>,
+    value: &str,
+) {
     let trimmed = value.trim();
     if trimmed.is_empty() {
+        return;
+    }
+    let is_qoder = engine.is_some_and(|engine| engine.trim().eq_ignore_ascii_case("qoder"))
+        || trimmed.starts_with(crate::engine::qoder_provider_profile::QODER_NATIVE_SESSION_PREFIX);
+    if is_qoder {
+        match crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
+            trimmed,
+            provider_profile_id,
+        ) {
+            Ok(identity) => {
+                target.insert(identity.canonical_id());
+                // 只有缺失 explicit owner 的历史 Global raw Binding 才保留 alias。
+                // 已携带 Global/CN owner 的 raw 值会在读取时升级为 canonical，绝不能
+                // 再投影到 bare raw，否则 Global/CN 会互相隐藏。
+                let preserves_legacy_global_aliases = identity.is_legacy
+                    && matches!(
+                        provider_profile_id.map(str::trim),
+                        None
+                            | Some(
+                                crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID
+                            )
+                    );
+                if preserves_legacy_global_aliases {
+                    target.insert(format!(
+                        "{}{}",
+                        crate::engine::qoder_provider_profile::QODER_NATIVE_SESSION_PREFIX,
+                        identity.raw_session_id
+                    ));
+                    target.insert(identity.raw_session_id);
+                }
+            }
+            Err(error) => {
+                log::warn!(
+                    "[shared_binding_visibility] ignored malformed Qoder identity `{trimmed}`: {error}"
+                );
+                // 保留 exact malformed value，避免把未知数据扩散成跨 distribution alias。
+                target.insert(trimmed.to_string());
+            }
+        }
         return;
     }
     target.insert(trimmed.to_string());
@@ -27,7 +75,12 @@ pub(crate) fn insert_shared_binding_identity(target: &mut BTreeSet<String>, valu
     }
 }
 
-fn collect_ids_from_json_value(value: &Value, target: &mut BTreeSet<String>) {
+fn collect_ids_from_json_value(
+    value: &Value,
+    target: &mut BTreeSet<String>,
+    inherited_engine: Option<&str>,
+    inherited_provider_profile_id: Option<&str>,
+) {
     const KEYS: &[&str] = &[
         "archivedNativeSessionId",
         "archived_native_session_id",
@@ -35,23 +88,42 @@ fn collect_ids_from_json_value(value: &Value, target: &mut BTreeSet<String>) {
         "native_session_id",
     ];
     if let Some(object) = value.as_object() {
+        let engine = object
+            .get("engine")
+            .and_then(Value::as_str)
+            .or(inherited_engine);
+        let provider_profile_id = object
+            .get("providerProfileId")
+            .or_else(|| object.get("provider_profile_id"))
+            .and_then(Value::as_str)
+            .or(inherited_provider_profile_id);
         for key in KEYS {
             if let Some(raw) = object.get(*key).and_then(Value::as_str) {
-                insert_shared_binding_identity(target, raw);
+                insert_shared_binding_identity_with_context(
+                    target,
+                    engine,
+                    provider_profile_id,
+                    raw,
+                );
             }
         }
         if let Some(nested) = object.get("provisioning") {
-            collect_ids_from_json_value(nested, target);
+            collect_ids_from_json_value(nested, target, engine, provider_profile_id);
         }
     }
 }
 
-fn collect_ids_from_json_text(raw: &str, target: &mut BTreeSet<String>) {
+fn collect_ids_from_json_text(
+    raw: &str,
+    target: &mut BTreeSet<String>,
+    engine: Option<&str>,
+    provider_profile_id: Option<&str>,
+) {
     if raw.trim().is_empty() {
         return;
     }
     if let Ok(value) = serde_json::from_str::<Value>(raw) {
-        collect_ids_from_json_value(&value, target);
+        collect_ids_from_json_value(&value, target, engine, provider_profile_id);
     }
 }
 
@@ -73,7 +145,7 @@ pub(crate) fn collect_v2_shared_binding_ids_by_session(
     let mut ids_by_session = BTreeMap::new();
     let mut state_statement = connection
         .prepare(
-            "SELECT native_session_id, provisioning_json
+            "SELECT engine, provider_profile_id, native_session_id, provisioning_json
              FROM shared_binding_state
              WHERE session_id = ?1",
         )
@@ -93,19 +165,31 @@ pub(crate) fn collect_v2_shared_binding_ids_by_session(
         let state_rows = state_statement
             .query_map(params![session_id], |row| {
                 Ok((
-                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, String>(0)?,
                     row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
                 ))
             })
             .map_err(|error| format!("query-binding-state:{error}"))?;
         for row in state_rows {
-            let (native_session_id, provisioning_json) =
+            let (engine, provider_profile_id, native_session_id, provisioning_json) =
                 row.map_err(|error| format!("map-binding-state:{error}"))?;
             if let Some(native_session_id) = native_session_id {
-                insert_shared_binding_identity(&mut binding_ids, &native_session_id);
+                insert_shared_binding_identity_with_context(
+                    &mut binding_ids,
+                    Some(engine.as_str()),
+                    provider_profile_id.as_deref(),
+                    &native_session_id,
+                );
             }
             if let Some(provisioning_json) = provisioning_json {
-                collect_ids_from_json_text(&provisioning_json, &mut binding_ids);
+                collect_ids_from_json_text(
+                    &provisioning_json,
+                    &mut binding_ids,
+                    Some(engine.as_str()),
+                    provider_profile_id.as_deref(),
+                );
             }
         }
 
@@ -116,7 +200,7 @@ pub(crate) fn collect_v2_shared_binding_ids_by_session(
             .map_err(|error| format!("query-binding-events:{error}"))?;
         for row in event_rows {
             let payload = row.map_err(|error| format!("map-binding-event:{error}"))?;
-            collect_ids_from_json_text(&payload, &mut binding_ids);
+            collect_ids_from_json_text(&payload, &mut binding_ids, None, None);
         }
 
         if !binding_ids.is_empty() {
@@ -155,7 +239,10 @@ mod tests {
         collect_ids_from_json_text(
             r#"{"state":"prepared","archivedNativeSessionId":"qoder:old-1"}"#,
             &mut hidden,
+            None,
+            None,
         );
+        assert!(hidden.contains("qoder:__qoder_global__:old-1"));
         assert!(hidden.contains("qoder:old-1"));
         assert!(hidden.contains("old-1"));
     }
@@ -208,11 +295,11 @@ mod tests {
                     "INSERT INTO shared_binding_state (
                         session_id, binding_key, engine, provider_profile_id, native_session_id,
                         provisioning_json, availability, updated_at
-                     ) VALUES (?1, 'qoder:__qoder_global__', 'qoder', '__qoder_global__', ?2, ?3, 'ready', 1)",
+                    ) VALUES (?1, 'qoder:__qoder_global__', 'qoder', '__qoder_global__', ?2, ?3, 'ready', 1)",
                     params![
                         "shared-qoder",
-                        "qoder:native-global-current",
-                        r#"{"archivedNativeSessionId":"qoder:native-global-archived"}"#
+                        "same-qoder-session",
+                        r#"{"archivedNativeSessionId":"same-qoder-session"}"#
                     ],
                 )
                 .expect("insert Qoder Global binding");
@@ -221,11 +308,11 @@ mod tests {
                     "INSERT INTO shared_binding_state (
                         session_id, binding_key, engine, provider_profile_id, native_session_id,
                         provisioning_json, availability, updated_at
-                     ) VALUES (?1, 'qoder:__qoder_cn__', 'qoder', '__qoder_cn__', ?2, ?3, 'ready', 1)",
+                    ) VALUES (?1, 'qoder:__qoder_cn__', 'qoder', '__qoder_cn__', ?2, ?3, 'ready', 1)",
                     params![
                         "shared-qoder",
-                        "qoder:native-cn-current",
-                        r#"{"archivedNativeSessionId":"qoder:native-cn-archived"}"#
+                        "same-qoder-session",
+                        r#"{"archivedNativeSessionId":"same-qoder-session"}"#
                     ],
                 )
                 .expect("insert Qoder CN binding");
@@ -244,7 +331,7 @@ mod tests {
                         session_id, sequence, event_id, fact_type, payload_json,
                         payload_checksum, fidelity, committed_at
                      ) VALUES ('shared-qoder', 1, 'e1', 'binding.rebuilt',
-                        '{\"nativeSessionId\":\"qoder:native-global-historical\"}', 'x', 'full', 1)",
+                        '{\"engine\":\"qoder\",\"providerProfileId\":\"__qoder_global__\",\"nativeSessionId\":\"same-qoder-session\"}', 'x', 'full', 1)",
                     [],
                 )
                 .expect("insert qoder event");
@@ -256,13 +343,10 @@ mod tests {
         )
         .expect("query");
         let qoder_ids = ids_by_session.get("shared-qoder").expect("qoder owner ids");
-        assert!(qoder_ids.contains("qoder:native-global-current"));
-        assert!(qoder_ids.contains("native-global-current"));
-        assert!(qoder_ids.contains("qoder:native-global-archived"));
-        assert!(qoder_ids.contains("qoder:native-global-historical"));
-        assert!(qoder_ids.contains("qoder:native-cn-current"));
-        assert!(qoder_ids.contains("native-cn-current"));
-        assert!(qoder_ids.contains("qoder:native-cn-archived"));
+        assert!(qoder_ids.contains("qoder:__qoder_global__:same-qoder-session"));
+        assert!(qoder_ids.contains("qoder:__qoder_cn__:same-qoder-session"));
+        assert!(!qoder_ids.contains("qoder:same-qoder-session"));
+        assert!(!qoder_ids.contains("same-qoder-session"));
         assert!(!qoder_ids.contains("pi:native-pi"));
         assert!(ids_by_session
             .get("shared-pi")
