@@ -84,6 +84,7 @@ describe("sharedSessionSummaries", () => {
       "opencode:ses_opc_1",
       "pi:real-pi-session",
       "pi-pending-shared-2",
+      "qoder:real-qoder-session",
     ]);
 
     expect(expanded.has("grok:real-session-1")).toBe(true);
@@ -100,6 +101,39 @@ describe("sharedSessionSummaries", () => {
     expect(expanded.has("real-pi-session")).toBe(true);
     expect(expanded.has("pi:pi-pending-shared-2")).toBe(true);
     expect(expanded.has("pi-pending-shared-2")).toBe(true);
+    expect(expanded.has("qoder:real-qoder-session")).toBe(true);
+    expect(expanded.has("real-qoder-session")).toBe(true);
+  });
+
+  it("hides Qoder Shared pups when their parent uses the raw native id", () => {
+    const threads = [
+      {
+        id: "shared:qoder-owner",
+        name: "Qoder Shared",
+        updatedAt: 1,
+        engineSource: "qoder" as const,
+        threadKind: "shared" as const,
+        nativeThreadIds: ["qoder:shared-qoder-owner"],
+      },
+    ];
+    const keys = buildSharedSidebarHiddenParentKeys(threads);
+
+    expect(keys.has("qoder:shared-qoder-owner")).toBe(true);
+    expect(keys.has("shared-qoder-owner")).toBe(true);
+    expect(
+      isSharedSidebarHiddenPup(
+        { id: "qoder:shared-pup" },
+        "shared-qoder-owner",
+        keys,
+      ),
+    ).toBe(true);
+    expect(
+      isSharedSidebarHiddenPup(
+        { id: "qoder:user-pup" },
+        "qoder:user-owned-parent",
+        keys,
+      ),
+    ).toBe(false);
   });
 
   it("remaps grok subagent parents from hidden native owner to shared thread", () => {

@@ -12,6 +12,7 @@ export const SHARED_HIDE_ENGINE_PREFIXES = [
   "grok",
   "opencode",
   "pi",
+  "qoder",
 ] as const;
 
 const UUID_RE =

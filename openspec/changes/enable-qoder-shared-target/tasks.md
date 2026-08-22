@@ -8,7 +8,7 @@
 - [x] 0.1 Shared 语境补采：probe10（跨进程 resume 回忆）/ probe11（`session/list` probe + `--config-dir` 隔离）
 - [x] 0.2 spike §14 落档 + 后置记录 §2 更新
 - [x] 0.3 创建 `openspec/changes/enable-qoder-shared-target/`（proposal / design / tasks / spec delta）
-- [ ] 0.4 `openspec validate enable-qoder-shared-target --strict --no-interactive` 通过
+- [x] 0.4 `openspec validate enable-qoder-shared-target --strict --no-interactive` 通过
 
 ## Phase 1 — F 层 wiring（单 PR，前后端同集合）
 
@@ -26,6 +26,7 @@
 - [x] 2.2 Shared negative-path：qoder 加入 `shared_interrupt_route_isolates_same_engine_provider_owners`；ACK 不确定 → `recovery-required` / cancel race / 迟到 chunk 幂等为引擎无关通用路径，存量套件覆盖（267+1 全绿）
 - [x] 2.3 基石 §14.3.5 Contract Test Suite qoder 覆盖：引擎参数化用例全部带上 qoder（`provider_engine_events_settle_exact_shared_attempts` #1/#4/#12、`newly_supported_shared_engines_use_weak_user_channel_context` #7、`newly_supported_engine_receipts_accept_local_and_managed_identity`、interrupt route 隔离 #6/#10）；新增 `qoder_shared_runtime_key_matches_native_ownership` / `qoder_runtime_only_catalog_passes_target_validation`；#9/#11/#13/#14 为引擎无关 durable 路径由存量套件覆盖
 - [x] 2.4 存量回归：matrix gate / 前端 1719 项 / Rust shared 套件全绿（3 项预存失败与 qoder 无关：codex 目录漂移 2 项、DSH app-shell bridge 欠账 1 项，均已实证 HEAD 可复现）
+- [x] 2.5 F15：`sharedHideIdentity.ts` 将 `qoder` 加入现有 `SHARED_HIDE_ENGINE_PREFIXES`；复用 raw / `engine:` identity 展开，确保 Qoder Shared-owned binding 的裸 parent pup 不进入 sidebar，独立 Qoder Native parent 不受影响；补 focused Vitest 与 `shared-session-thread` delta（22 assertions、target ESLint、typecheck、strict validate 全绿）。
 
 ## Phase 3 — 验收与校准回写
 

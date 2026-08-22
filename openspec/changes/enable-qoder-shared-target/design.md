@@ -36,6 +36,7 @@ Qoder L1 Native 已交付：spawn-per-turn `acp-stdio` runtime、typed terminal�
 - **D5 provider profile**：Shared `ExecutionTarget` 携带 qoder provider profile 时，runtime 以 `--config-dir <profile dir>` spawn（probe11 证明隔离下 resume/list 成立）；local/disk sentinel 按接入指南归一为 `providerProfileId = null`。
 - **D6 写路径放行 + 读路径兼容**：`assertSharedSessionWriteEngine` / `is_supported_shared_session_engine` 加 qoder 后，`normalizeSharedSessionEngine("qoder")` 自然返回 `qoder`（在集合内）；历史 snapshot 中不可能存在 qoder Shared binding（write gate 此前 fail-closed），无迁移负担。
 - **D7 幕布四件套**：qoder 的 Shared 渲染复用 Native 已验白的 `qoderRealtimeAdapter` 归一事件面（thought/tool/usage 全词汇已 live）；本 change 在真实 Shared 会话目视验收 streaming 光标 / reasoning 折叠 / tool 块 / 历史一致。
+- **D8 Shared sidebar hide identity**：Qoder 进入既有 `SHARED_HIDE_ENGINE_PREFIXES`，使 `qoder:<sessionId>` 与裸 `sessionId` 在 `expandHiddenSharedBindingIds`、owner lookup 和 `isSharedSidebarHiddenPup` 中互认。只匹配 Shared 的 `nativeThreadIds` / verified hide set；不以标题推断，不隐藏独立 Qoder Native Session。
 
 ## 3. 触点清单（F 层逐处）
 
@@ -55,13 +56,15 @@ Qoder L1 Native 已交付：spawn-per-turn `acp-stdio` runtime、typed terminal�
 | F12 | `src/app-shell/sections/core/useAppShellSections.ts` + `src/features/app/hooks/useSidebarMenus.ts` | Shared 引擎标签 Record + 侧栏 Shared 新建子菜单加 qoder（`workspace.engineQoder` 10 locale 已有） |
 | F13 | `src/features/threads/adapters/sharedRealtimeAdapter.ts` | 拆除 L1 fail-closed 守卫（`qoder` + `shared:` threadId 直接 return null）——它会把 qoder Shared live 事件全部挡在 normalized 路由外，丢 target badge / receipt 附着（验收实测发现） |
 | F14 | `src/features/app/hooks/useAppServerEvents.ts` | qoder 加入 thread/started pending 解析白名单 + `shouldRebindSharedNativeThreadOnStartedEvent`（pending → `qoder:<uuid>>` 前端 bridge 重定钥，与后端 binding 晋升一致） |
-| 测试 | `sharedSessionEngines.test.ts`、`types.atomic.test.ts`、`useProviderTargetCatalogOwners.test.tsx`、`ChatInputBoxAdapter.test.tsx`、`useSidebarMenus.test.tsx`、`resolveDefaultCreationExecutionTarget.test.ts`、`shared_session_v2.rs` fixtures | 旧 fail-closed 断言翻正例；pi  submenu 存量断言欠账顺手补齐 |
+| F15 | `src/features/shared-session/runtime/sharedHideIdentity.ts` | `SHARED_HIDE_ENGINE_PREFIXES` 加 `qoder`；复用 raw / `engine:` 等价展开，修复 Qoder Shared 下崽的 bare parent 漏藏 |
+| 测试 | `sharedSessionEngines.test.ts`、`types.atomic.test.ts`、`useProviderTargetCatalogOwners.test.tsx`、`ChatInputBoxAdapter.test.tsx`、`useSidebarMenus.test.tsx`、`resolveDefaultCreationExecutionTarget.test.ts`、`shared_session_v2.rs` fixtures、`sharedHideIdentity.test.ts`、`sharedSessionSummaries.test.ts` | 旧 fail-closed 断言翻正例；Qoder hide identity / raw-parent pup 回归；pi submenu 存量断言欠账顺手补齐 |
 
 ## 4. 测试
 
 - 既有断言翻转：`sharedSessionEngines.test.ts` 中 `isSharedSessionSupportedEngine("qoder") === false` / `assertSharedSessionWriteEngine("qoder")` 抛错 / `normalizeSharedSessionEngine("qoder") === "claude"` 三条反例改为正例。
 - Shared negative-path：qoder target 的 ACK 不确定 → `recovery-required`（不盲建）；cancel race exactly-once；terminal 后迟到 chunk 幂等。
 - 基石 §14.3.5 Contract Test Suite 15 项 qoder 覆盖（重点 #9 typed final 与 cleanup 分域、#10 cancel race、#12 early event hold/replay、#14 projection failure 不走 Native recovery）。
+- Qoder hide identity：`qoder:<sessionId>` 必须展开为 raw id；raw parent 指向该 Shared binding 的 pup 不进 sidebar，独立 Qoder Native parent 保持可见。
 - 手工 diff 前后端双集合（接入指南 F 层自检）。
 
 ## 5. 验收
@@ -69,4 +72,5 @@ Qoder L1 Native 已交付：spawn-per-turn `acp-stdio` runtime、typed terminal�
 - Shared Session 四级 picker 中 Qoder CLI 可选，Provider/Model/Reasoning 目录来自 ACP 实时返回。
 - qoder target 连续多 turn（跨进程 re-attach）+ 切换到其他 CLI 再切回（user-channel context delivery）行为正确。
 - 幕布四件套目视通过（真实 Shared 会话）。
+- Qoder Shared binding 及其 raw-parent pup 不出现在 sidebar；用户主动创建的 Qoder Native Session 仍可见。
 - `pnpm vitest run src/features/shared-session/utils/sharedSessionEngines.test.ts` + Shared negative-path tests + matrix/parity gate 全绿。

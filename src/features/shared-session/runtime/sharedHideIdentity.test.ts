@@ -127,8 +127,10 @@ describe("sharedHideIdentity", () => {
     it("strips only known engines and leaves unrelated colons alone", () => {
       expect(stripKnownSharedEnginePrefix("claude:abc")).toBe("abc");
       expect(stripKnownSharedEnginePrefix("CODEX:xyz")).toBe("xyz");
+      expect(stripKnownSharedEnginePrefix("qoder:session")).toBe("session");
       expect(stripKnownSharedEnginePrefix("gemini:session")).toBe("gemini:session");
       expect(hasKnownSharedEnginePrefix("grok:session")).toBe(true);
+      expect(hasKnownSharedEnginePrefix("qoder:session")).toBe(true);
       expect(hasKnownSharedEnginePrefix("gemini:session")).toBe(false);
     });
   });

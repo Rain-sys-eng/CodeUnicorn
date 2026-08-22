@@ -19,6 +19,7 @@
 - **F3 `shared_runtime_coordinator.rs`**：`shared_pending_id` normalize 识别 `qoder-pending-shared-`（identity passthrough 臂已存在，本次补 pending 识别）。
 - **F4 `shared_projection/commands.rs`**：投影能力 match + 支持引擎数组加 qoder。
 - **F5 `shared_sessions.rs`**：`is_pending_shared_binding_thread_id` / `binding_uses_established_native_thread` Qoder 臂从 fail-closed 改为真实判断（`qoder-pending-shared-` 前缀 + `qoder:` 前缀 strip）；发送 dispatch match 加 qoder。
+- **F15 Shared sidebar hide identity**：`SHARED_HIDE_ENGINE_PREFIXES` 加 `qoder`，让 `qoder:<sessionId>` 与裸 `sessionId` 走现有 Shared-owned parent / pup hide 链路；禁止新增 Qoder 专属标题过滤。
 - Shared negative-path tests + 基石 §14.3.5 统一 Contract Test Suite 的 qoder 覆盖。
 
 ## Capabilities
@@ -30,6 +31,7 @@
 ### Modified Capabilities
 
 - `shared-session-engine-selection`: Shared 支持集合从 6 引擎扩到 7 引擎（+ Qoder CLI）；picker / write gate / normalize 的 qoder 行为从 fail-closed 转为支持。本 delta **取代** `add-qoder-engine` 中「Shared Engine Exclusion Includes Qoder」排除 delta（该 change 归档时须相应修订或先于本 change 归档后由本 delta 覆盖）。
+- `shared-session-thread`: Qoder Shared-owned native binding 与其裸 parent-id 下的 pup MUST 复用同级引擎 hide identity，且不得影响用户主动创建的 Qoder Native Session。
 
 ## 非目标
 
