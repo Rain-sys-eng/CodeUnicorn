@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildProviderExecutionTarget,
+  isAtomicEmptyModelSelection,
   isSameProviderExecutionProfile,
   ModelSelect,
   normalizeExecutionProviderProfileId,
@@ -919,6 +920,93 @@ describe("ModelSelect", () => {
     expect(screen.getByRole("button").textContent ?? "").toContain(
       "models.loading",
     );
+  });
+
+  it("treats engine-only atomic target as empty selection, not loading", () => {
+    expect(
+      isAtomicEmptyModelSelection(
+        {
+          engine: "claude",
+          providerProfileId: null,
+          modelCatalogEntryId: null,
+          model: null,
+          reasoning: { effort: "high" },
+          providerProfileNameSnapshot: null,
+          providerProfileSource: null,
+        },
+        "",
+      ),
+    ).toBe(true);
+    expect(
+      isAtomicEmptyModelSelection(
+        {
+          engine: "claude",
+          providerProfileId: null,
+          modelCatalogEntryId: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-6",
+          reasoning: null,
+          providerProfileNameSnapshot: "本地配置",
+          providerProfileSource: "disk",
+        },
+        "",
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps engine-only atomic target clickable instead of infinite loading", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onExecutionTargetChange = vi.fn();
+    const targetGroups: ProviderTargetGroup[] = [
+      {
+        providerId: "claude",
+        providerLabel: "Claude Code",
+        enabled: true,
+        profiles: [
+          {
+            id: "__local_settings_json__",
+            label: "本地配置",
+            source: "disk",
+            enabled: true,
+            models: [{ id: "claude-sonnet-4-6", label: "Sonnet 4.6" }],
+            loading: false,
+            reloadingConfig: false,
+            discoveringModels: false,
+            discoverySupported: false,
+            error: null,
+          },
+        ],
+      },
+    ];
+
+    render(
+      <ModelSelect
+        value=""
+        currentProvider="claude"
+        onChange={vi.fn()}
+        targetGroups={targetGroups}
+        executionTarget={{
+          engine: "claude",
+          providerProfileId: null,
+          modelCatalogEntryId: null,
+          model: null,
+          reasoning: { effort: "high" },
+          providerProfileNameSnapshot: null,
+          providerProfileSource: null,
+        }}
+        onExecutionTargetChange={onExecutionTargetChange}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "models.selectModel" });
+    expect((trigger as HTMLButtonElement).disabled).toBe(false);
+    expect(trigger.getAttribute("data-model-loading")).toBeNull();
+    expect(trigger.textContent ?? "").toContain("Claude Code");
+    expect(trigger.textContent ?? "").not.toContain("models.loading");
+
+    await user.click(trigger);
+    expect(
+      await screen.findByRole("menuitem", { name: /Claude Code/ }),
+    ).toBeTruthy();
   });
 
   it("shows native codex selection from executionTarget when atomic catalog is still empty", () => {

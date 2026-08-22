@@ -351,6 +351,24 @@ export function resolveAtomicSelectedModelDisplay(
 }
 
 /**
+ * Atomic 空选：有引擎、无 model identity。
+ * 这是模板编辑器的合法未配齐态，不是 Composer 冷启 loading。
+ */
+export function isAtomicEmptyModelSelection(
+  executionTarget: ExecutionTarget | null | undefined,
+  selectedModelValue: string,
+): boolean {
+  if (!executionTarget?.engine) {
+    return false;
+  }
+  return (
+    !executionTarget.modelCatalogEntryId?.trim() &&
+    !executionTarget.model?.trim() &&
+    !selectedModelValue.trim()
+  );
+}
+
+/**
  * Resolve the model id used for brand-icon matching.
  * Claude：与列表文案同源（{@link resolveClaudeCatalogModelLabel}）——
  * catalog runtime 优先，禁止陈旧 localStorage mapping 把「k3」行画成 DeepSeek 鲸。
@@ -821,10 +839,22 @@ export const ModelSelect = memo(({
       ? executionTarget.engine
       : currentProvider;
   const modelResolved = Boolean(currentModel);
-  // 未解析到已选模型时：固定占位 loading，禁止用「选择模型」空缺再闪成真名（冷启/切会话 UX）
+  const isEmptyAtomicSelection =
+    hasTargetGroups &&
+    isAtomicEmptyModelSelection(executionTarget, selectedModelValue);
+  const triggerReady = modelResolved || isEmptyAtomicSelection;
+  const emptyAtomicLabel = isEmptyAtomicSelection
+    ? pickerGroups.find((group) => group.providerId === executionTarget?.engine)
+        ?.providerLabel ||
+      t("models.selectModel", { defaultValue: "选择模型" })
+    : "";
+  // 冷启 / 切会话：executionTarget 尚未到位 → 固定 loading，禁止闪「选择模型」。
+  // 模板空选：engine-only target → 显示 CLI 名，允许打开菜单配齐。
   const currentModelLabel = modelResolved
     ? getModelLabel(currentModel!, selectedModelProvider, { closed: true })
-    : t('models.loading', { defaultValue: '加载中' });
+    : isEmptyAtomicSelection
+      ? emptyAtomicLabel
+      : t("models.loading", { defaultValue: "加载中" });
   const hasConfigActions = Boolean(onAddModel || onRefreshConfig);
 
   const isGroupCurrent = (group: PickerModelGroup): boolean =>
@@ -1150,24 +1180,28 @@ export const ModelSelect = memo(({
     <button
       className={triggerVariant === 'readiness' ? 'composer-readiness-target composer-readiness-target-button' : 'selector-button'}
       title={
-        modelResolved
-          ? t('chat.currentModel', { model: currentModelLabel })
-          : t('models.loading', { defaultValue: '加载中' })
+        triggerReady
+          ? isEmptyAtomicSelection
+            ? t("models.selectModel", { defaultValue: "选择模型" })
+            : t("chat.currentModel", { model: currentModelLabel })
+          : t("models.loading", { defaultValue: "加载中" })
       }
       aria-label={
-        modelResolved
-          ? t('chat.currentModel', { model: currentModelLabel })
-          : t('models.loading', { defaultValue: '加载中' })
+        triggerReady
+          ? isEmptyAtomicSelection
+            ? t("models.selectModel", { defaultValue: "选择模型" })
+            : t("chat.currentModel", { model: currentModelLabel })
+          : t("models.loading", { defaultValue: "加载中" })
       }
-      aria-busy={!modelResolved}
-      data-model-loading={modelResolved ? undefined : 'true'}
-      // 加载中不展开菜单；宽度跟内容走，避免与 ModeSelect 之间被撑空
-      disabled={!modelResolved}
+      aria-busy={!triggerReady}
+      data-model-loading={triggerReady ? undefined : "true"}
+      // 真 loading 不展开菜单；空选必须可点，否则模板永远卡在「加载中」
+      disabled={!triggerReady}
     >
       {triggerVariant === 'readiness' ? (
         <>
           <span className="composer-readiness-icon" aria-hidden="true">
-            {modelResolved ? (
+            {modelResolved || isEmptyAtomicSelection ? (
               <ModelIcon
                 provider={selectedModelProvider}
                 model={currentModel}
@@ -1190,7 +1224,7 @@ export const ModelSelect = memo(({
         </>
       ) : (
         <>
-          {modelResolved ? (
+          {modelResolved || isEmptyAtomicSelection ? (
             <ModelIcon
               provider={selectedModelProvider}
               model={currentModel}
@@ -1208,7 +1242,7 @@ export const ModelSelect = memo(({
             />
           )}
           <span className="selector-button-text">{currentModelLabel}</span>
-          {modelResolved ? (
+          {triggerReady ? (
             <span className={`codicon codicon-chevron-${isOpen ? 'up' : 'down'}`} style={{ fontSize: '10px', marginLeft: '2px' }} />
           ) : null}
         </>
