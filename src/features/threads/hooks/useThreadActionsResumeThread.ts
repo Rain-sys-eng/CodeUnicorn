@@ -37,6 +37,7 @@ import { seedDshComposerSelectionFromHost } from "../../../app-shell-parts/selec
 import { parseDshHistoryMessages } from "../loaders/dshHistoryParser";
 import { parsePiHistoryMessages } from "../loaders/piHistoryParser";
 import { parseQoderHistoryMessages } from "../loaders/qoderHistoryParser";
+import { parseQoderSessionIdentity } from "../utils/qoderSessionIdentity";
 import {
   hydrateHistory,
   mergeHistoryProjectionItems,
@@ -1798,8 +1799,7 @@ export function useThreadActionsResumeThreadForWorkspace(
           engine: "qoder",
         });
         if (workspacePath && !loadedThreadsRef.current[threadId]) {
-          const realSessionId = threadId.slice("qoder:".length);
-          const qoderProviderProfileId =
+          const storedQoderProviderProfileId =
             latestThreadsByWorkspaceRef.current[workspaceId]?.find(
               (thread) => thread.id === threadId,
             )?.providerProfileId ??
@@ -1807,6 +1807,16 @@ export function useThreadActionsResumeThreadForWorkspace(
               (thread) => thread.id === threadId,
             )?.providerProfileId ??
             null;
+          const qoderIdentity = parseQoderSessionIdentity(
+            threadId,
+            storedQoderProviderProfileId,
+          );
+          if (!qoderIdentity) {
+            // Embedded profile 与 stored owner 冲突时不回落到 Global，避免同 raw
+            // id 的 Global/CN 历史被错误读取。
+            loadedThreadsRef.current[threadId] = true;
+            return threadId;
+          }
           try {
             await runNativeHistoryOpenStages({
               report: (progress) => {
@@ -1817,13 +1827,11 @@ export function useThreadActionsResumeThreadForWorkspace(
               },
               shouldContinue: isCurrentResumeRequest,
               load: () =>
-                qoderProviderProfileId
-                  ? loadQoderSessionService(
-                      workspacePath,
-                      realSessionId,
-                      qoderProviderProfileId,
-                    )
-                  : loadQoderSessionService(workspacePath, realSessionId),
+                loadQoderSessionService(
+                  workspacePath,
+                  qoderIdentity.rawSessionId,
+                  qoderIdentity.providerProfileId,
+                ),
               extractMessages: (payload) =>
                 (payload as { messages?: unknown }).messages ?? payload,
               parse: parseQoderHistoryMessages,

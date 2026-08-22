@@ -2626,6 +2626,32 @@ describe("useThreadMessaging", () => {
     expect(interruptTurn).not.toHaveBeenCalled();
   });
 
+  it("does not broaden a Qoder CN interrupt when turn-scoped rpc is unavailable", async () => {
+    vi.mocked(engineInterruptTurn).mockRejectedValue(
+      new Error("unknown method: engine_interrupt_turn"),
+    );
+    const threadId = "qoder:__qoder_cn__:session-cn";
+    const { result } = makeThreadMessagingHook("qoder", {
+      activeThreadId: threadId,
+      ensuredThreadId: threadId,
+      activeTurnIdByThread: { [threadId]: "turn-cn" },
+      threadEngineById: { [threadId]: "qoder" },
+      providerProfileByThread: { [threadId]: "__qoder_cn__" },
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    expect(engineInterruptTurn).toHaveBeenCalledWith(
+      "ws-1",
+      "turn-cn",
+      "qoder",
+      "__qoder_cn__",
+    );
+    expect(engineInterrupt).not.toHaveBeenCalled();
+  });
+
   it("interrupt on cli-managed engine queues pending interrupt when turn id is not ready", async () => {
     const { result, pendingInterruptsRef } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude:session-1",

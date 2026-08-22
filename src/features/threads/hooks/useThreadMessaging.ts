@@ -81,6 +81,10 @@ import {
   shouldSpawnNativeThreadForEngineMismatch,
 } from "../../composer/hooks/explicitComposerEngineSwitch";
 import { resolveSendProviderProfileId } from "./sessionLifecycleController";
+import {
+  canonicalQoderProviderProfileId,
+  parseQoderSessionIdentity,
+} from "../utils/qoderSessionIdentity";
 import { getComposerEnginePrefForEngine } from "../../composer/hooks/composerEnginePrefsStore";
 import {
   persistableDshAgentPreset,
@@ -2677,7 +2681,19 @@ export function useThreadMessaging({
                                         ) ?? null)
                                       : resolvedEngine === "qoder" &&
                                           threadId.startsWith("qoder:")
-                                        ? threadId.slice("qoder:".length)
+                                        ? (() => {
+                                            const threadProviderProfileId =
+                                              getThreadProviderProfileId?.(
+                                                workspace.id,
+                                                threadId,
+                                              ) ?? null;
+                                            const identity =
+                                              parseQoderSessionIdentity(
+                                                threadId,
+                                                threadProviderProfileId,
+                                              );
+                                            return identity?.rawSessionId ?? null;
+                                          })()
                                         : resolvedEngine === "qoder" &&
                                             threadId.startsWith("qoder-pending-")
                                           ? (qoderSessionIdByPendingThreadRef.current.get(
@@ -2691,6 +2707,25 @@ export function useThreadMessaging({
             realSessionId === null && Boolean(customSpecRoot);
 
           if (cliEngine) {
+            const threadProviderProfileId =
+              getThreadProviderProfileId?.(workspace.id, threadId) ?? null;
+            const qoderThreadIdentity =
+              resolvedEngine === "qoder" && threadId.startsWith("qoder:")
+                ? parseQoderSessionIdentity(threadId, threadProviderProfileId)
+                : null;
+            if (
+              resolvedEngine === "qoder" &&
+              threadId.startsWith("qoder:") &&
+              !qoderThreadIdentity
+            ) {
+              const message =
+                "Qoder session identity conflicts with its saved distribution.";
+              markProcessing(threadId, false);
+              setActiveTurnId(threadId, null);
+              pushThreadErrorMessage(workspace.id, threadId, message);
+              safeMessageActivity();
+              return;
+            }
             if (
               resolvedEngine === "claude" &&
               isClaudePendingThreadAwaitingNativeSession(threadId, {
@@ -2759,10 +2794,14 @@ export function useThreadMessaging({
             }
 
             const sendRequestedAt = Date.now();
-            const providerProfileId = resolveSendProviderProfileId({
-              threadProviderProfileId:
-                getThreadProviderProfileId?.(workspace.id, threadId) ?? null,
-            });
+            const providerProfileId =
+              resolvedEngine === "qoder"
+                ? (qoderThreadIdentity?.providerProfileId ??
+                  canonicalQoderProviderProfileId(threadProviderProfileId) ??
+                  resolveSendProviderProfileId({
+                    threadProviderProfileId,
+                  }))
+                : resolveSendProviderProfileId({ threadProviderProfileId });
             response = await engineSendMessageService(workspace.id, {
               text: finalText,
               engine: resolvedEngine,
@@ -3096,8 +3135,11 @@ export function useThreadMessaging({
               resolvedEngine === "qoder" &&
               threadId.startsWith("qoder-pending-")
             ) {
-              let responseSessionId =
-                extractSessionIdFromEngineSendResponse(response);
+              const responseIdentity = parseQoderSessionIdentity(
+                extractSessionIdFromEngineSendResponse(response),
+                providerProfileId,
+              );
+              let responseSessionId = responseIdentity?.rawSessionId ?? null;
               if (!responseSessionId) {
                 const workspacePath = workspace.path?.trim();
                 if (workspacePath) {
@@ -3105,6 +3147,7 @@ export function useThreadMessaging({
                     const sessions = await listQoderSessionsService(
                       workspacePath,
                       6,
+                      providerProfileId,
                     );
                     responseSessionId = pickLikelyQoderSessionId(
                       sessions,
@@ -3995,12 +4038,41 @@ export function useThreadMessaging({
         // threads must carry their persisted distribution binding when
         // interrupting; omitting it intentionally resolves the legacy Global
         // runtime in Rust.
-        const nativeQoderProviderProfileId =
+        const nativeQoderStoredProfileId =
           activeThreadKind === "native" && resolvedThreadEngine === "qoder"
-            ? getThreadProviderProfileId?.(
+            ? (getThreadProviderProfileId?.(
                 activeWorkspace.id,
                 activeThreadId,
-              )?.trim() || null
+              ) ?? null)
+            : null;
+        const nativeQoderIdentity =
+          activeThreadKind === "native" &&
+          resolvedThreadEngine === "qoder" &&
+          activeThreadId.startsWith("qoder:")
+            ? parseQoderSessionIdentity(
+                activeThreadId,
+                nativeQoderStoredProfileId,
+              )
+            : null;
+        if (
+          activeThreadKind === "native" &&
+          resolvedThreadEngine === "qoder" &&
+          activeThreadId.startsWith("qoder:") &&
+          !nativeQoderIdentity
+        ) {
+          onDebug?.({
+            id: `${Date.now()}-client-qoder-interrupt-identity-rejected`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "turn/interrupt Qoder identity rejected",
+            payload: { workspaceId: activeWorkspace.id, threadId: activeThreadId },
+          });
+          return;
+        }
+        const nativeQoderProviderProfileId =
+          resolvedThreadEngine === "qoder"
+            ? (nativeQoderIdentity?.providerProfileId ??
+              canonicalQoderProviderProfileId(nativeQoderStoredProfileId))
             : null;
         if (usesSharedV2Control) {
           // Shared V2 已由 durable attempt owner 精确中断；禁止再走 mutable
@@ -4035,11 +4107,16 @@ export function useThreadMessaging({
                 );
               }
             } catch (error) {
-              if (isUnknownEngineInterruptTurnMethodError(error)) {
+              if (
+                isUnknownEngineInterruptTurnMethodError(error) &&
+                resolvedThreadEngine !== "qoder"
+              ) {
                 // Compatibility fallback for stale daemon/runtime that doesn't
                 // implement engine_interrupt_turn yet.
                 await engineInterruptService(activeWorkspace.id);
               } else {
+                // Qoder Global/CN 不能降级到 workspace-wide interrupt：旧 RPC
+                // 无法携带 distribution，可能误中断同 workspace 的另一套 runtime。
                 throw error;
               }
             }

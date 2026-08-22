@@ -1939,9 +1939,11 @@ export function mergeCodexCatalogSessionSummaries(
     // Live catalog still emits them from session_meta-only files; skip so
     // hydration cannot resurrect the same pups.
     if (
+      !isProviderContinuation &&
       !nativeTitle &&
       !customTitle &&
       !mappedTitle &&
+      !isCollabWorkerAgentNumberTitle(title) &&
       shouldHidePlaceholderNativeDraftFromSidebar({
         engine: engineSource,
         threadId: session.sessionId,

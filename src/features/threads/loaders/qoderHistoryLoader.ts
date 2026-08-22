@@ -3,6 +3,7 @@ import { normalizeHistorySnapshot } from "../contracts/conversationCurtainContra
 import type { HistoryLoadingProgressListener } from "../utils/historyLoadingProgress";
 import { runNativeHistoryFetchAndParse } from "../utils/runNativeHistoryOpenStages";
 import { parseQoderHistoryMessages } from "./qoderHistoryParser";
+import { parseQoderSessionIdentity } from "../utils/qoderSessionIdentity";
 
 type QoderHistoryLoaderOptions = {
   workspaceId: string;
@@ -26,9 +27,11 @@ export function createQoderHistoryLoader({
   return {
     engine: "qoder",
     async load(threadId: string) {
-      const sessionId = threadId.startsWith("qoder:")
-        ? threadId.slice("qoder:".length)
-        : threadId;
+      const identity = parseQoderSessionIdentity(threadId, providerProfileId);
+      if (!identity) {
+        throw new Error("Qoder session identity is invalid or conflicts with its distribution");
+      }
+      const sessionId = identity.rawSessionId;
       if (!workspacePath) {
         return normalizeHistorySnapshot({
           engine: "qoder",
@@ -52,9 +55,11 @@ export function createQoderHistoryLoader({
         },
         shouldContinue: () => true,
         load: () =>
-          providerProfileId
-            ? loadQoderSession(workspacePath, sessionId, providerProfileId)
-            : loadQoderSession(workspacePath, sessionId),
+          loadQoderSession(
+            workspacePath,
+            sessionId,
+            identity.providerProfileId,
+          ),
         extractMessages: (payload) =>
           ((payload ?? {}) as { messages?: unknown }).messages ?? payload,
         parse: parseQoderHistoryMessages,
