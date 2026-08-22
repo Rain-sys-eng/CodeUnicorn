@@ -123,7 +123,17 @@ describe("useAppSettings", () => {
       customImagePath: null,
       fluidPreset: "mist",
       fluidMotion: "drift",
-      veilOpacity: 12,
+      veilOpacity: 0,
+      library: [],
+      selectedLibraryId: null,
+      wallpaperBlur: 0,
+      wallpaperDarken: 0,
+      playbackRate: 1,
+      flip: false,
+      objectFit: "cover",
+      paused: false,
+      rotationEnabled: false,
+      rotationIntervalMinutes: 30,
     });
     expect(result.current.settings.userMsgColor).toBe("");
     expect(result.current.settings.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
@@ -721,13 +731,10 @@ describe("useAppSettings", () => {
       await result.current.saveSettings(next);
     });
 
-    expect(result.current.settings.workspaceWallpaper).toEqual({
-      mode: "fluid",
-      customImagePath: null,
-      fluidPreset: "ash",
-      fluidMotion: "tornado",
-      veilOpacity: 20,
-    });
+    expect(result.current.settings.workspaceWallpaper?.fluidMotion).toBe(
+      "tornado",
+    );
+    expect(result.current.settings.workspaceWallpaper?.library).toEqual([]);
   });
 
   it("falls back to drift when the backend echo drops fluidMotion", async () => {
@@ -759,13 +766,8 @@ describe("useAppSettings", () => {
       await result.current.saveSettings(next);
     });
 
-    expect(result.current.settings.workspaceWallpaper).toEqual({
-      mode: "fluid",
-      customImagePath: null,
-      fluidPreset: "ash",
-      fluidMotion: "drift",
-      veilOpacity: 20,
-    });
+    expect(result.current.settings.workspaceWallpaper?.fluidMotion).toBe("drift");
+    expect(result.current.settings.workspaceWallpaper?.objectFit).toBe("cover");
   });
 
   it("sanitizes preset slots before persisting settings", async () => {

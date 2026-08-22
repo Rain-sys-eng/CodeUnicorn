@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_WORKSPACE_WALLPAPER,
+  findDuplicateWallpaperLibraryItem,
+  resolveWorkspaceWallpaperMedia,
   resolveWorkspaceWallpaperMode,
   sanitizeCustomWallpaperPath,
   sanitizeWorkspaceWallpaper,
@@ -23,11 +25,9 @@ describe("workspaceWallpaper", () => {
         customImagePath: "/Users/me/Wall.png",
       }),
     ).toEqual({
+      ...DEFAULT_WORKSPACE_WALLPAPER,
       mode: "none",
       customImagePath: "/Users/me/Wall.png",
-      fluidPreset: "mist",
-      fluidMotion: "drift",
-      veilOpacity: 12,
     });
     expect(
       sanitizeWorkspaceWallpaper({
@@ -36,11 +36,10 @@ describe("workspaceWallpaper", () => {
         fluidPreset: "orchid",
       }),
     ).toEqual({
+      ...DEFAULT_WORKSPACE_WALLPAPER,
       mode: "fluid",
       customImagePath: "C:\\Pictures\\bg.webp",
       fluidPreset: "orchid",
-      fluidMotion: "drift",
-      veilOpacity: 12,
     });
   });
 
@@ -57,7 +56,17 @@ describe("workspaceWallpaper", () => {
       customImagePath: null,
       fluidPreset: "ash",
       fluidMotion: "tornado",
-      veilOpacity: 12,
+      veilOpacity: 0,
+      library: [],
+      selectedLibraryId: null,
+      wallpaperBlur: 0,
+      wallpaperDarken: 0,
+      playbackRate: 1,
+      flip: false,
+      objectFit: "cover",
+      paused: false,
+      rotationEnabled: false,
+      rotationIntervalMinutes: 30,
     });
     expect(
       sanitizeWorkspaceWallpaper({
@@ -87,7 +96,17 @@ describe("workspaceWallpaper", () => {
       customImagePath: null,
       fluidPreset: "mist",
       fluidMotion: "storm",
-      veilOpacity: 12,
+      veilOpacity: 0,
+      library: [],
+      selectedLibraryId: null,
+      wallpaperBlur: 0,
+      wallpaperDarken: 0,
+      playbackRate: 1,
+      flip: false,
+      objectFit: "cover",
+      paused: false,
+      rotationEnabled: false,
+      rotationIntervalMinutes: 30,
     });
   });
 
@@ -102,7 +121,17 @@ describe("workspaceWallpaper", () => {
       customImagePath: null,
       fluidPreset: "mist",
       fluidMotion: "drift",
-      veilOpacity: 12,
+      veilOpacity: 0,
+      library: [],
+      selectedLibraryId: null,
+      wallpaperBlur: 0,
+      wallpaperDarken: 0,
+      playbackRate: 1,
+      flip: false,
+      objectFit: "cover",
+      paused: false,
+      rotationEnabled: false,
+      rotationIntervalMinutes: 30,
     });
     expect(
       sanitizeWorkspaceWallpaper({
@@ -110,11 +139,8 @@ describe("workspaceWallpaper", () => {
         customImagePath: "  ",
       }),
     ).toEqual({
+      ...DEFAULT_WORKSPACE_WALLPAPER,
       mode: "custom",
-      customImagePath: null,
-      fluidPreset: "mist",
-      fluidMotion: "drift",
-      veilOpacity: 12,
     });
     expect(
       sanitizeWorkspaceWallpaper({
@@ -122,11 +148,8 @@ describe("workspaceWallpaper", () => {
         customImagePath: "/tmp/notes.txt",
       }),
     ).toEqual({
+      ...DEFAULT_WORKSPACE_WALLPAPER,
       mode: "custom",
-      customImagePath: null,
-      fluidPreset: "mist",
-      fluidMotion: "drift",
-      veilOpacity: 12,
     });
     expect(
       sanitizeWorkspaceWallpaper({
@@ -134,11 +157,8 @@ describe("workspaceWallpaper", () => {
         customImagePath: "https://example.com/bg.png",
       }),
     ).toEqual({
+      ...DEFAULT_WORKSPACE_WALLPAPER,
       mode: "custom",
-      customImagePath: null,
-      fluidPreset: "mist",
-      fluidMotion: "drift",
-      veilOpacity: 12,
     });
   });
 
@@ -156,7 +176,7 @@ describe("workspaceWallpaper", () => {
         mode: "fluid",
         customImagePath: null,
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("fluid");
     expect(
@@ -164,7 +184,7 @@ describe("workspaceWallpaper", () => {
         mode: "custom",
         customImagePath: "/tmp/wall.png",
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("custom");
     expect(
@@ -172,7 +192,7 @@ describe("workspaceWallpaper", () => {
         mode: "custom",
         customImagePath: null,
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("fluid");
     expect(
@@ -180,24 +200,136 @@ describe("workspaceWallpaper", () => {
         mode: "none",
         customImagePath: null,
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("none");
   });
 
-  it("clamps frost blur to the readable chrome range", () => {
+  it("keeps a video library item and falls hidden selection back to the first visible", () => {
+    const sanitized = sanitizeWorkspaceWallpaper({
+      mode: "custom",
+      customImagePath: null,
+      library: [
+        {
+          id: "hidden-one",
+          kind: "image",
+          path: "/tmp/one.png",
+          hidden: true,
+        },
+        {
+          id: "video-two",
+          kind: "video",
+          path: "/tmp/loop.mp4",
+          sourcePath: "/Users/me/loop.mp4",
+        },
+        {
+          id: "bad",
+          kind: "image",
+          path: "/tmp/notes.txt",
+        },
+      ],
+      selectedLibraryId: "hidden-one",
+      wallpaperBlur: 80,
+      wallpaperDarken: -2,
+      playbackRate: 1.5,
+      flip: true,
+      objectFit: "contain",
+      rotationIntervalMinutes: 15,
+    });
+    expect(sanitized.library).toEqual([
+      {
+        id: "hidden-one",
+        kind: "image",
+        path: "/tmp/one.png",
+        sourcePath: null,
+        hidden: true,
+      },
+      {
+        id: "video-two",
+        kind: "video",
+        path: "/tmp/loop.mp4",
+        sourcePath: "/Users/me/loop.mp4",
+        hidden: false,
+      },
+    ]);
+    expect(sanitized.selectedLibraryId).toBe("video-two");
+    expect(sanitized.wallpaperBlur).toBe(40);
+    expect(sanitized.wallpaperDarken).toBe(0);
+    expect(sanitized.playbackRate).toBe(1.5);
+    expect(sanitized.flip).toBe(true);
+    expect(sanitized.objectFit).toBe("contain");
+    expect(resolveWorkspaceWallpaperMedia(sanitized)).toEqual({
+      kind: "video",
+      path: "/tmp/loop.mp4",
+      libraryId: "video-two",
+    });
+  });
+
+  it("reuses an existing library item when the same source path is imported again", () => {
+    const duplicate = findDuplicateWallpaperLibraryItem(
+      [
+        {
+          id: "keep",
+          kind: "image",
+          path: "/Users/me/.ccgui/wallpapers/keep.png",
+          sourcePath: "C:\\Pictures\\Wall.PNG",
+        },
+      ],
+      "c:/pictures/wall.png",
+    );
+    expect(duplicate?.id).toBe("keep");
+  });
+
+  it("reuses a downloaded market wallpaper by Wallhaven page URL", () => {
+    const duplicate = findDuplicateWallpaperLibraryItem(
+      [
+        {
+          id: "from-market",
+          kind: "image",
+          path: "/Users/me/.ccgui/wallpapers/from-market.jpg",
+          sourcePath: "https://wallhaven.cc/w/abc123",
+        },
+      ],
+      "HTTPS://Wallhaven.cc/w/abc123",
+    );
+    expect(duplicate?.id).toBe("from-market");
+    expect(
+      sanitizeWorkspaceWallpaper({
+        mode: "custom",
+        customImagePath: null,
+        library: [
+          {
+            id: "from-market",
+            kind: "image",
+            path: "/Users/me/.ccgui/wallpapers/from-market.jpg",
+            sourcePath: "https://wallhaven.cc/w/abc123",
+          },
+        ],
+        selectedLibraryId: "from-market",
+      }).library?.[0]?.sourcePath,
+    ).toBe("https://wallhaven.cc/w/abc123");
+  });
+
+  it("clears persisted frost so wallpaper stays sharp", () => {
+    expect(
+      sanitizeWorkspaceWallpaper({
+        mode: "custom",
+        customImagePath: "/tmp/wall.png",
+        veilOpacity: 12,
+      }).veilOpacity,
+    ).toBe(0);
+    expect(
+      sanitizeWorkspaceWallpaper({
+        mode: "custom",
+        customImagePath: "/tmp/wall.png",
+        veilOpacity: 6,
+      }).veilOpacity,
+    ).toBe(0);
     expect(
       sanitizeWorkspaceWallpaper({
         mode: "fluid",
         customImagePath: null,
         veilOpacity: 16,
-      }).veilOpacity,
-    ).toBe(16);
-    expect(
-      sanitizeWorkspaceWallpaper({
-        mode: "fluid",
-        customImagePath: null,
-        veilOpacity: -4,
       }).veilOpacity,
     ).toBe(0);
     expect(
@@ -206,6 +338,6 @@ describe("workspaceWallpaper", () => {
         customImagePath: null,
         veilOpacity: 48,
       }).veilOpacity,
-    ).toBe(20);
+    ).toBe(0);
   });
 });

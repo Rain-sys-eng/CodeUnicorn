@@ -2,7 +2,7 @@ import type { EngineType } from "../../types";
 import registryData from "./engineIds.json";
 
 export type EngineId = string & { readonly __brand: "EngineId" };
-export type EngineProtocolFamily = "stream-json-cli" | "app-server-json-rpc" | "dsh-host-rpc";
+export type EngineProtocolFamily = "stream-json-cli" | "app-server-json-rpc" | "dsh-host-rpc" | "acp-stdio";
 export type EngineExecutionModel = "one-shot" | "persistent";
 export type EngineRegistrySource =
   | Readonly<{

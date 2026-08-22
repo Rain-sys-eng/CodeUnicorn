@@ -708,7 +708,33 @@ describe("Messages live behavior", () => {
     );
 
     expect(container.querySelector(".working-text")?.textContent ?? "").toContain(
-      "messages.codexWaitingForFirstText",
+      "messages.waitingForFirstText",
+    );
+  });
+
+  it("shows Qoder first-text waiting state before assistant text arrives", () => {
+    const { container } = render(
+      <Messages
+        items={[
+          {
+            id: "user-qoder-first-text",
+            kind: "message",
+            role: "user",
+            text: "你是谁",
+          },
+        ]}
+        threadId="qoder:session-first-text"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        activeEngine="qoder"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".working-text")?.textContent ?? "").toContain(
+      "messages.waitingForFirstText",
     );
   });
 
@@ -736,7 +762,7 @@ describe("Messages live behavior", () => {
 
     const label = container.querySelector(".working-text")?.textContent ?? "";
     expect(label).toContain("messages.codexSilentSuspected");
-    expect(label).not.toContain("messages.codexWaitingForFirstText");
+    expect(label).not.toContain("messages.waitingForFirstText");
   });
 
   it("shows approval resume status as the primary working label for Claude file approvals", () => {

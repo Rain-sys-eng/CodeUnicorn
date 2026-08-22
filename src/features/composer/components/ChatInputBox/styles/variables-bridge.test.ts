@@ -14,4 +14,13 @@ describe("chat input variables bridge", () => {
     expect(variablesBridgeCss).toContain("var(--text-primary, #e6e7ea) 86%");
     expect(variablesBridgeCss).toContain("var(--text-primary, #333333) 84%");
   });
+
+  it("keeps dark composer placeholder and toolbar ink on the bright-dim ramp", () => {
+    expect(variablesBridgeCss).toContain("--input-placeholder: var(--text-faint, #b4b4b4);");
+    expect(variablesBridgeCss).toContain("--text-secondary: var(--text-muted, #c8c8c8);");
+    expect(variablesBridgeCss).toContain("--text-muted: var(--text-faint, #b4b4b4);");
+    expect(variablesBridgeCss).not.toContain(
+      "--input-placeholder: color-mix(in srgb, var(--text-muted, #b3b3b3) 82%, transparent);",
+    );
+  });
 });

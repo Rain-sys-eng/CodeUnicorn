@@ -17,7 +17,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::backend::events::AppServerEvent;
@@ -151,6 +150,7 @@ fn features_for_engine(engine: EngineType) -> super::EngineFeatures {
         EngineType::Kimi => super::EngineFeatures::kimi(),
         EngineType::Pi => super::EngineFeatures::pi(),
         EngineType::Dsh => super::EngineFeatures::dsh(),
+        EngineType::Qoder => super::EngineFeatures::qoder(),
     }
 }
 
@@ -222,6 +222,7 @@ fn collect_stale_child_candidates(
                 | EngineType::Grok
                 | EngineType::Kimi
                 | EngineType::Pi
+                | EngineType::Qoder
                 | EngineType::Dsh => "unsupported",
                 // Codex is intentionally not part of this child-process parity
                 // path (it has its own wrapper runtime).
@@ -251,6 +252,7 @@ fn engine_type_label(engine: EngineType) -> &'static str {
         EngineType::Kimi => "kimi",
         EngineType::Pi => "pi",
         EngineType::Dsh => "dsh",
+        EngineType::Qoder => "qoder",
     }
 }
 
@@ -264,11 +266,16 @@ async fn record_auto_session_metadata_if_present(
     let (Some(session_id), Some(metadata)) = (session_id, metadata) else {
         return;
     };
+    let session_id = if session_id.starts_with(&format!("{engine_prefix}:")) {
+        session_id.to_string()
+    } else {
+        format!("{engine_prefix}:{session_id}")
+    };
     let _ = session_management::record_auto_session_metadata_core(
         &state.workspaces,
         state.storage_path.as_path(),
         workspace_id.to_string(),
-        format!("{engine_prefix}:{session_id}"),
+        session_id,
         metadata,
     )
     .await;
@@ -689,13 +696,15 @@ fn resolve_opencode_bin(config: Option<&EngineConfig>) -> Result<String, String>
         .map(|path| path.to_string_lossy().to_string())
 }
 
-fn build_opencode_command(config: Option<&EngineConfig>) -> Result<Command, String> {
+fn build_opencode_command(
+    config: Option<&EngineConfig>,
+) -> Result<crate::engine::opencode_native_artifact::ContainedOpenCodeCommand, String> {
     let bin = resolve_opencode_bin(config)?;
     let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
     if let Some(home) = config.and_then(|c| c.home_dir.as_ref()) {
         cmd.env("OPENCODE_HOME", home);
     }
-    Ok(cmd)
+    crate::engine::opencode_native_artifact::ContainedOpenCodeCommand::new(cmd)
 }
 
 fn opencode_session_candidate_paths(
@@ -1512,6 +1521,27 @@ pub async fn get_engine_models(
             }
             Ok(fresh_status.models)
         }
+        EngineType::Qoder => {
+            let qoder_distribution_settings =
+                super::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                    &settings,
+                );
+            let launch_profile =
+                super::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                    "model-catalog",
+                    provider_profile_id.as_deref(),
+                    &qoder_distribution_settings,
+                )?;
+            // Qoder catalog is scoped by distribution. Do not fall back to the
+            // engine-wide status cache: that cache describes Global only.
+            let fresh_status = super::status::detect_qoder_distribution_status(
+                launch_profile.distribution,
+                launch_profile.bin_path.as_deref(),
+                launch_profile.home_dir.as_deref().and_then(|path| path.to_str()),
+            )
+            .await;
+            Ok(fresh_status.models)
+        }
         EngineType::Grok => {
             let config = manager.get_engine_config(EngineType::Grok).await;
             let custom_bin = config
@@ -1605,27 +1635,38 @@ fn build_provider_engine_dispatch_receipt(
     model: Option<&str>,
     reasoning_effort: Option<&str>,
 ) -> Value {
-    let canonical_provider_profile_id = provider_profile_id.filter(|profile_id| {
-        !matches!(
-            (engine, *profile_id),
-            (
-                EngineType::Kimi,
-                super::kimi_provider_profile::KIMI_LOCAL_PROVIDER_PROFILE_ID
-            ) | (
-                EngineType::Grok,
-                super::grok_provider_profile::GROK_LOCAL_PROVIDER_PROFILE_ID
-            ) | (
-                EngineType::OpenCode,
-                super::opencode_provider_profile::OPENCODE_LOCAL_PROVIDER_PROFILE_ID
-            ) | (
-                EngineType::Dsh,
-                super::dsh_provider_profile::DSH_LOCAL_PROVIDER_PROFILE_ID
-            ) | (
-                EngineType::Pi,
-                super::pi_provider_profile::PI_LOCAL_PROVIDER_PROFILE_ID
-            )
+    let canonical_provider_profile_id = if engine == EngineType::Qoder {
+        // Qoder Global/CN are fixed runtime distributions. Convert a legacy
+        // empty/local binding to Global so the durable receipt never loses the
+        // boundary that selected the binary, config directory, and PAT.
+        super::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+            provider_profile_id,
         )
-    });
+        .ok()
+        .map(|distribution| distribution.provider_profile_id())
+    } else {
+        provider_profile_id.filter(|profile_id| {
+            !matches!(
+                (engine, *profile_id),
+                (
+                    EngineType::Kimi,
+                    super::kimi_provider_profile::KIMI_LOCAL_PROVIDER_PROFILE_ID
+                ) | (
+                    EngineType::Grok,
+                    super::grok_provider_profile::GROK_LOCAL_PROVIDER_PROFILE_ID
+                ) | (
+                    EngineType::OpenCode,
+                    super::opencode_provider_profile::OPENCODE_LOCAL_PROVIDER_PROFILE_ID
+                ) | (
+                    EngineType::Dsh,
+                    super::dsh_provider_profile::DSH_LOCAL_PROVIDER_PROFILE_ID
+                ) | (
+                    EngineType::Pi,
+                    super::pi_provider_profile::PI_LOCAL_PROVIDER_PROFILE_ID
+                )
+            )
+        })
+    };
     json!({
         "engine": engine.icon(),
         "providerProfileId": canonical_provider_profile_id,
@@ -2536,10 +2577,8 @@ pub async fn engine_send_message(
                         // fusion (onAgentMessageCompleted) runs even after TextDelta.
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -2802,10 +2841,8 @@ pub async fn engine_send_message(
                         // fusion runs after normal TextDelta streaming (Claude-parity).
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -3071,10 +3108,8 @@ pub async fn engine_send_message(
                         // fusion runs after normal TextDelta streaming (Claude-parity).
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -3152,6 +3187,307 @@ pub async fn engine_send_message(
 
             Ok(json!({
                 "engine": "pi",
+                "sessionId": response_session_id,
+                "result": {
+                    "turn": {
+                        "id": turn_id,
+                        "status": "started"
+                    },
+                },
+                "mossxDispatchReceipt": dispatch_receipt,
+                "turn": {
+                    "id": turn_id,
+                    "status": "started"
+                }
+            }))
+        }
+        EngineType::Qoder => {
+            let workspace_path = {
+                let workspaces = state.workspaces.lock().await;
+                workspaces
+                    .get(&workspace_id)
+                    .map(|w| std::path::PathBuf::from(&w.path))
+                    .ok_or_else(|| "Workspace not found".to_string())?
+            };
+            let provider_binding_lookup_session_id = session_id
+                .as_deref()
+                .or(thread_id.as_deref())
+                .map(str::to_string);
+            let effective_provider_profile_id =
+                crate::session_management::resolve_engine_provider_profile_id(
+                    state.storage_path.as_path(),
+                    &workspace_id,
+                    provider_binding_lookup_session_id.as_deref(),
+                    "qoder",
+                    provider_profile_id.as_deref(),
+                )?;
+            let qoder_distribution_settings =
+                super::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                    &settings,
+                );
+            let provider_launch_profile =
+                super::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                    &workspace_id,
+                    effective_provider_profile_id.as_deref(),
+                    &qoder_distribution_settings,
+                )?;
+            let session = manager
+                .get_or_create_qoder_session_for_runtime(
+                    &workspace_id,
+                    &workspace_path,
+                    &provider_launch_profile,
+                )
+                .await;
+
+            let normalized_fork_session_id = super::qoder::normalize_qoder_fork_session_id(
+                fork_session_id.as_deref(),
+                Some(provider_launch_profile.distribution.provider_profile_id()),
+            )?;
+            let resolved_session_id = if normalized_fork_session_id.is_some() {
+                None
+            } else {
+                super::qoder::resolve_qoder_session_id_for_engine_send(
+                    continue_session,
+                    session_id,
+                    session.get_session_id().await,
+                    Some(provider_launch_profile.distribution.provider_profile_id()),
+                )?
+            };
+            let response_session_id = resolved_session_id.clone();
+            let runtime_model = model
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let dispatch_receipt = build_provider_engine_dispatch_receipt(
+                EngineType::Qoder,
+                effective_provider_profile_id.as_deref(),
+                &provider_launch_profile.runtime_key,
+                runtime_model.as_deref(),
+                effort.as_deref(),
+            );
+
+            // Qoder ACP runs headless with bypassPermissions (design §2); the
+            // composer access-mode selector stays disabled for qoder (kimi-parity).
+            let params = super::SendMessageParams {
+                text,
+                model: runtime_model,
+                effort,
+                disable_thinking: false,
+                access_mode,
+                images,
+                continue_session,
+                session_id: resolved_session_id,
+                fork_session_id: normalized_fork_session_id,
+                agent: None,
+                variant: None,
+                collaboration_mode: None,
+                custom_spec_root: normalized_custom_spec_root.clone(),
+            };
+
+            let turn_id = format!("qoder-turn-{}", uuid::Uuid::new_v4());
+            let thread_id = thread_id.unwrap_or_else(|| turn_id.clone());
+            let binding_session_id = response_session_id
+                .as_deref()
+                .or(provider_binding_lookup_session_id.as_deref())
+                .unwrap_or(turn_id.as_str());
+            if let Some(binding) = provider_launch_profile.binding.as_ref() {
+                crate::session_management::record_engine_provider_binding_core(
+                    &state.workspaces,
+                    state.storage_path.as_path(),
+                    workspace_id.clone(),
+                    binding_session_id.to_string(),
+                    "qoder".to_string(),
+                    binding.clone(),
+                )
+                .await?;
+            }
+            let item_id = format!("qoder-item-{}", uuid::Uuid::new_v4());
+
+            let mut receiver = session.subscribe();
+            let app_clone = app.clone();
+            let mut current_thread_id = thread_id.clone();
+            let item_id_clone = item_id.clone();
+            let turn_id_for_forwarder = turn_id.clone();
+            let mut accumulated_agent_text = String::new();
+            let provider_binding_for_forwarder = provider_launch_profile.binding.clone();
+            let provider_binding_storage_path = state.storage_path.clone();
+            let provider_binding_workspace_id = workspace_id.clone();
+            let provider_runtime_key_for_forwarder = provider_launch_profile.runtime_key.clone();
+            let qoder_provider_profile_id_for_forwarder =
+                provider_launch_profile.distribution.provider_profile_id();
+            let mut native_session_id_for_forwarder = response_session_id
+                .clone()
+                .or_else(|| provider_binding_lookup_session_id.clone());
+            tokio::spawn(async move {
+                let mut render_state = GeminiRenderRoutingState::default();
+                loop {
+                    let turn_event = match receiver.recv().await {
+                        Ok(event) => event,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            log::warn!(
+                                "Qoder event forwarder lagged; skipped {} events for turn {}",
+                                skipped,
+                                turn_id_for_forwarder
+                            );
+                            continue;
+                        }
+                    };
+                    if turn_event.turn_id != turn_id_for_forwarder {
+                        continue;
+                    }
+
+                    let event = turn_event.event;
+                    if let (
+                        Some(binding),
+                        EngineEvent::SessionStarted {
+                            session_id,
+                            engine: EngineType::Qoder,
+                            ..
+                        },
+                    ) = (provider_binding_for_forwarder.as_ref(), &event)
+                    {
+                        if !session_id.is_empty() && session_id != "pending" {
+                            crate::session_management::schedule_engine_provider_binding_record(
+                                provider_binding_storage_path.clone(),
+                                provider_binding_workspace_id.clone(),
+                                session_id.clone(),
+                                "qoder".to_string(),
+                                binding.clone(),
+                            );
+                        }
+                    }
+                    let is_terminal = event.is_terminal();
+                    let render_lane = match &event {
+                        EngineEvent::TextDelta { .. } => GeminiRenderLane::Text,
+                        EngineEvent::ReasoningDelta { .. } => GeminiRenderLane::Reasoning,
+                        EngineEvent::ToolStarted { .. }
+                        | EngineEvent::ToolCompleted { .. }
+                        | EngineEvent::ToolInputUpdated { .. }
+                        | EngineEvent::ToolOutputDelta { .. } => GeminiRenderLane::Tool,
+                        _ => GeminiRenderLane::Other,
+                    };
+                    let routed_item_id =
+                        next_gemini_routed_item_id(&mut render_state, render_lane, &item_id_clone);
+
+                    if let EngineEvent::TextDelta { text, .. } = &event {
+                        render_state.saw_text_delta = true;
+                        accumulated_agent_text.push_str(text);
+                    }
+
+                    let mut app_server_events = Vec::new();
+                    if let EngineEvent::TurnCompleted { result, .. } = &event {
+                        let fallback_text =
+                            extract_turn_result_text(result.as_ref()).unwrap_or_default();
+                        let completed_text = if should_prefer_turn_result_text(result.as_ref()) {
+                            fallback_text
+                        } else if accumulated_agent_text.trim().is_empty() {
+                            fallback_text
+                        } else {
+                            accumulated_agent_text.clone()
+                        };
+                        if !completed_text.trim().is_empty() {
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
+                            let synthetic = AppServerEvent {
+                                workspace_id: event.workspace_id().to_string(),
+                                message: json!({
+                                    "method": "item/completed",
+                                    "params": {
+                                        "threadId": &current_thread_id,
+                                        "item": {
+                                            "id": completion_item_id,
+                                            "type": "agentMessage",
+                                            "text": completed_text,
+                                            "status": "completed",
+                                        }
+                                    }
+                                }),
+                            };
+                            app_server_events.push(synthetic);
+                        }
+                    }
+
+                    if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
+                        &event,
+                        &current_thread_id,
+                        &routed_item_id,
+                        Some(&turn_id_for_forwarder),
+                    ) {
+                        app_server_events.push(payload);
+                    }
+                    fan_out_provider_engine_event(
+                        &app_clone,
+                        &provider_runtime_key_for_forwarder,
+                        EngineType::Qoder,
+                        &turn_id_for_forwarder,
+                        native_session_id_for_forwarder.as_deref(),
+                        &event,
+                        app_server_events,
+                    );
+
+                    if let EngineEvent::SessionStarted {
+                        session_id, engine, ..
+                    } = &event
+                    {
+                        if !session_id.is_empty() && session_id != "pending" {
+                            if matches!(engine, EngineType::Qoder) {
+                                match super::qoder_provider_profile::canonical_qoder_native_session_id(
+                                    session_id,
+                                    Some(qoder_provider_profile_id_for_forwarder),
+                                ) {
+                                    Ok(identity) => current_thread_id = identity,
+                                    Err(error) => log::warn!(
+                                        "[qoder] ignored invalid SessionStarted identity for {}: {}",
+                                        qoder_provider_profile_id_for_forwarder,
+                                        error
+                                    ),
+                                }
+                                native_session_id_for_forwarder = Some(session_id.clone());
+                            }
+                        }
+                    }
+
+                    if is_terminal {
+                        break;
+                    }
+                }
+            });
+
+            let session_clone = session.clone();
+            let turn_id_clone = turn_id.clone();
+            tokio::spawn(async move {
+                if let Err(e) = session_clone.send_message(params, &turn_id_clone).await {
+                    log::error!("Qoder send_message failed: {}", e);
+                }
+            });
+            if let (Some(session_id), Some(metadata)) =
+                (response_session_id.as_deref(), auto_session.clone())
+            {
+                match super::qoder_provider_profile::canonical_qoder_native_session_id(
+                    session_id,
+                    Some(provider_launch_profile.distribution.provider_profile_id()),
+                ) {
+                    Ok(metadata_session_id) => {
+                        record_auto_session_metadata_if_present(
+                            &state,
+                            &workspace_id,
+                            Some(metadata_session_id.as_str()),
+                            Some(metadata),
+                            "qoder",
+                        )
+                        .await;
+                    }
+                    Err(error) => log::warn!(
+                        "[qoder] skipped auto-session metadata for invalid identity: {}",
+                        error
+                    ),
+                }
+            }
+
+            Ok(json!({
+                "engine": "qoder",
                 "sessionId": response_session_id,
                 "result": {
                     "turn": {
@@ -3339,10 +3675,8 @@ pub async fn engine_send_message(
                         // fusion runs after normal TextDelta streaming (Claude-parity).
                         // Use text-lane id so the frontend upserts the streamed bubble.
                         if !completed_text.trim().is_empty() {
-                            let completion_item_id = gemini_agent_completion_item_id(
-                                &render_state,
-                                &item_id_clone,
-                            );
+                            let completion_item_id =
+                                gemini_agent_completion_item_id(&render_state, &item_id_clone);
                             let synthetic = AppServerEvent {
                                 workspace_id: event.workspace_id().to_string(),
                                 message: json!({
@@ -3456,6 +3790,7 @@ pub async fn engine_send_message(
                 resume_id,
                 continue_session,
                 dsh_agent_preset.as_deref(),
+                access_mode.as_deref(),
             )
             .await?;
             record_auto_session_metadata_if_present(
@@ -4035,6 +4370,126 @@ pub async fn engine_send_message_sync(
                 "text": response
             }))
         }
+        EngineType::Qoder => {
+            let workspace_path = {
+                let workspaces = state.workspaces.lock().await;
+                workspaces
+                    .get(&workspace_id)
+                    .map(|w| std::path::PathBuf::from(&w.path))
+                    .ok_or_else(|| "Workspace not found".to_string())?
+            };
+
+            let effective_provider_profile_id =
+                crate::session_management::resolve_engine_provider_profile_id(
+                    state.storage_path.as_path(),
+                    &workspace_id,
+                    session_id.as_deref(),
+                    "qoder",
+                    None,
+                )?;
+            let qoder_distribution_settings =
+                super::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                    &settings,
+                );
+            let provider_launch_profile =
+                super::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                    &workspace_id,
+                    effective_provider_profile_id.as_deref(),
+                    &qoder_distribution_settings,
+                )?;
+            let session = manager
+                .get_or_create_qoder_session_for_runtime(
+                    &workspace_id,
+                    &workspace_path,
+                    &provider_launch_profile,
+                )
+                .await;
+            let normalized_fork_session_id = super::qoder::normalize_qoder_fork_session_id(
+                fork_session_id.as_deref(),
+                Some(provider_launch_profile.distribution.provider_profile_id()),
+            )?;
+            let resolved_session_id = if normalized_fork_session_id.is_some() {
+                None
+            } else {
+                super::qoder::resolve_qoder_session_id_for_engine_send(
+                    continue_session,
+                    session_id,
+                    session.get_session_id().await,
+                    Some(provider_launch_profile.distribution.provider_profile_id()),
+                )?
+            };
+            let runtime_model = model
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string());
+
+            let params = super::SendMessageParams {
+                text,
+                model: runtime_model,
+                effort,
+                disable_thinking: false,
+                access_mode,
+                images,
+                continue_session,
+                session_id: resolved_session_id,
+                fork_session_id: normalized_fork_session_id,
+                agent: None,
+                variant: None,
+                collaboration_mode: None,
+                custom_spec_root: normalized_custom_spec_root.clone(),
+            };
+
+            let turn_id = format!("qoder-sync-{}", uuid::Uuid::new_v4());
+            let response = timeout(
+                Duration::from_secs(900),
+                session.send_message(params, &turn_id),
+            )
+            .await
+            .map_err(|_| "Qoder response timed out".to_string())??;
+            let response_session_id = session.get_session_id().await;
+            if let Some(binding) = provider_launch_profile.binding.as_ref() {
+                let binding_session_id = response_session_id.as_deref().unwrap_or(turn_id.as_str());
+                crate::session_management::record_engine_provider_binding_core(
+                    &state.workspaces,
+                    state.storage_path.as_path(),
+                    workspace_id.clone(),
+                    binding_session_id.to_string(),
+                    "qoder".to_string(),
+                    binding.clone(),
+                )
+                .await?;
+            }
+            let metadata_session_id = response_session_id.as_deref().and_then(|session_id| {
+                match super::qoder_provider_profile::canonical_qoder_native_session_id(
+                    session_id,
+                    Some(provider_launch_profile.distribution.provider_profile_id()),
+                ) {
+                    Ok(identity) => Some(identity),
+                    Err(error) => {
+                        log::warn!(
+                            "[qoder] skipped auto-session metadata for invalid identity: {}",
+                            error
+                        );
+                        None
+                    }
+                }
+            });
+            record_auto_session_metadata_if_present(
+                &state,
+                &workspace_id,
+                metadata_session_id.as_deref(),
+                auto_session,
+                "qoder",
+            )
+            .await;
+
+            Ok(json!({
+                "engine": "qoder",
+                "sessionId": response_session_id,
+                "text": response
+            }))
+        }
         EngineType::Grok => {
             let workspace_path = {
                 let workspaces = state.workspaces.lock().await;
@@ -4171,6 +4626,7 @@ pub async fn engine_send_message_sync(
                 resume_id,
                 continue_session,
                 dsh_agent_preset.as_deref(),
+                access_mode.as_deref(),
             )
             .await?;
             let (_snapshot, client) = crate::engine::dsh::ensure_ready(&runtime).await?;
@@ -4242,6 +4698,7 @@ pub async fn engine_interrupt(
         }
         EngineType::Kimi => manager.interrupt_kimi_sessions(&workspace_id, None).await,
         EngineType::Pi => manager.interrupt_pi_sessions(&workspace_id, None).await,
+        EngineType::Qoder => manager.interrupt_qoder_sessions(&workspace_id, None).await,
         EngineType::Grok => manager.interrupt_grok_sessions(&workspace_id, None).await,
         EngineType::Dsh => {
             let settings = read_app_settings_snapshot(&state).await;
@@ -4329,6 +4786,15 @@ pub async fn engine_interrupt_turn(
         EngineType::Pi => {
             manager
                 .interrupt_pi_sessions(&workspace_id, Some(&turn_id))
+                .await
+        }
+        EngineType::Qoder => {
+            manager
+                .interrupt_qoder_session_for_profile(
+                    &workspace_id,
+                    provider_profile_id.as_deref(),
+                    Some(&turn_id),
+                )
                 .await
         }
         EngineType::Grok => {

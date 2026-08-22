@@ -116,7 +116,8 @@ export function isReasoningEffortSupportedForEngine(
   if (activeEngine === "claude" || activeEngine === "grok") {
     return true;
   }
-  if (activeEngine === "codex") {
+  if (activeEngine === "codex" || activeEngine === "dsh" || activeEngine === "qoder") {
+    // dsh / qoder：只有选中模型在 host/ACP catalog 声明了 reasoning efforts 才支持
     return getNormalizedReasoningOptions(reasoningOptions).length > 0;
   }
   return false;
@@ -241,7 +242,7 @@ export function getEffectiveSelectedEffort({
       fallbackToFirst: false,
     });
   }
-  if (activeEngine !== "codex" || !hasActiveThread) {
+  if ((activeEngine !== "codex" && activeEngine !== "dsh" && activeEngine !== "qoder") || !hasActiveThread) {
     return normalizeEffort(selectedEffort, { fallbackToFirst: true });
   }
   if (!activeThreadSelection) {
@@ -269,7 +270,8 @@ export function getEffectiveReasoningSupported(
   return (
     activeEngine === "claude" ||
     activeEngine === "grok" ||
-    (activeEngine === "codex" && codexReasoningSupported)
+    ((activeEngine === "codex" || activeEngine === "dsh") &&
+      codexReasoningSupported)
   );
 }
 
@@ -283,5 +285,6 @@ export function getEffectiveReasoningOptions(
   if (activeEngine === "grok") {
     return GROK_REASONING_OPTIONS;
   }
+  // codex / dsh 都跟随选中模型的 catalog 档位
   return modelReasoningOptions;
 }

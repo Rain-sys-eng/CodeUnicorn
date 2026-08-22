@@ -15,7 +15,8 @@ export function isEngineExecutionEnabled(
     engine === "kimi" ||
     engine === "opencode" ||
     engine === "pi" ||
-    engine === "dsh"
+    engine === "dsh" ||
+    engine === "qoder"
   );
 }
 

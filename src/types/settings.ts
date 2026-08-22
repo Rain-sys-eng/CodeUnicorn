@@ -78,13 +78,41 @@ export type WorkspaceWallpaperFluidMotion =
   | "tornado"
   | "chase";
 
+export type WorkspaceWallpaperLibraryKind = "image" | "video";
+
+export type WorkspaceWallpaperObjectFit =
+  | "cover"
+  | "contain"
+  | "center"
+  | "fill";
+
+export type WorkspaceWallpaperLibraryItem = {
+  id: string;
+  kind: WorkspaceWallpaperLibraryKind;
+  path: string;
+  sourcePath?: string | null;
+  hidden?: boolean;
+};
+
 export type WorkspaceWallpaperSettings = {
   mode: WorkspaceWallpaperMode;
   customImagePath: string | null;
   fluidPreset?: WorkspaceWallpaperFluidPreset;
   fluidMotion?: WorkspaceWallpaperFluidMotion;
-  /** Frost blur in px, 0–20. Default 12. Reuses the old veil slider field. */
+  /** Frost blur in px, 0–20. Default 0. Reuses the old veil slider field. */
   veilOpacity?: number;
+  library?: WorkspaceWallpaperLibraryItem[];
+  selectedLibraryId?: string | null;
+  /** Media-layer blur in px, 0–40. Default 0. */
+  wallpaperBlur?: number;
+  /** Media-layer darken in percent, 0–80. Default 0. */
+  wallpaperDarken?: number;
+  playbackRate?: number;
+  flip?: boolean;
+  objectFit?: WorkspaceWallpaperObjectFit;
+  paused?: boolean;
+  rotationEnabled?: boolean;
+  rotationIntervalMinutes?: number;
 };
 
 export type ComposerEditorSettings = {
@@ -121,6 +149,10 @@ export type AppSettings = {
   claudeBin: string | null;
   kimiBin: string | null;
   piBin: string | null;
+  qoderBin: string | null;
+  qoderConfigDir: string | null;
+  qoderCnBin: string | null;
+  qoderCnConfigDir: string | null;
   grokBin: string | null;
   opencodeBin: string | null;
   dshBin: string | null;

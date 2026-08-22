@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "पूर्ववत करें",
       "revertAllConfirmTitle": "सभी परिवर्तन पूर्ववत करें",
       "revertAllConfirmBody":
-        "इससे {{count}} फ़ाइलों में स्थानीय परिवर्तन छोड़ दिए जाएंगे और अंतिम commit पर पुनर्स्थापित होंगे। इसे पूर्ववत नहीं किया जा सकता।",
+        "इससे {{count}} फ़ाइलों में बिना स्टेज किए स्थानीय परिवर्तन छोड़ दिए जाएंगे और इंडेक्स पर पुनर्स्थापित होंगे (अगर कुछ स्टेज नहीं है तो HEAD पर)। स्टेज किए गए परिवर्तन बने रहेंगे। इसे पूर्ववत नहीं किया जा सकता।",
       "revertAllConfirmAction": "सभी पूर्ववत करें",
       "revertFileConfirmTitle": "फ़ाइल परिवर्तन पूर्ववत करें",
       "revertFileConfirmBody":
-        "इससे «{{path}}» के स्थानीय परिवर्तन छोड़ दिए जाएंगे और अंतिम commit पर पुनर्स्थापित होंगे। इसे पूर्ववत नहीं किया जा सकता।",
+        "इससे «{{path}}» के बिना स्टेज किए स्थानीय परिवर्तन छोड़ दिए जाएंगे और इंडेक्स पर पुनर्स्थापित होंगे (अगर कुछ स्टेज नहीं है तो HEAD पर)। स्टेज किए गए परिवर्तन बने रहेंगे। इसे पूर्ववत नहीं किया जा सकता।",
       "revertFileConfirmAction": "पूर्ववत करें"
     },
     "noThinkingContent": "कोई सोच सामग्री नहीं",
@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "जोड़ना",
     "generatingResponse": "प्रतिक्रिया उत्पन्न हो रही है...",
     "responding": "प्रतिक्रिया में...",
+    "waitingForFirstText": "{{engine}} चल रहा है। पहले टेक्स्ट चंक की प्रतीक्षा हो रही है...",
     "codexWaitingForFirstText": "Codex चल रहा है। पहले टेक्स्ट चंक की प्रतीक्षा हो रही है...",
     "codexSilentSuspected": "कुछ समय से कोई नया Codex आउटपुट नहीं। अभी भी रनटाइम गतिविधि सुनी जा रही है...",
     "nonStreamingHint": "यह मॉडल गैर-स्ट्रीमिंग आउटपुट लौटा सकता है, या नेटवर्क अगम्य हो सकता है। कृपया प्रतीक्षा करें...",
@@ -90,6 +91,7 @@ const messages = {
     "totalDuration": "अवधि",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "इन {{input}} / आउट {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "In {{input}} token / Out {{output}} token",
     "messageActions": "संदेश क्रियाएँ",
     "copyMessage": "संदेश कॉपी करें",

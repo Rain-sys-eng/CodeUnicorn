@@ -470,6 +470,8 @@ pub struct ClaudeSession {
     pending_tools: StdMutex<Vec<PendingClaudeTool>>,
     /// Last emitted text for assistant partial messages, isolated per turn
     last_emitted_text_by_turn: StdMutex<HashMap<String, String>>,
+    /// Last runtime model sidecar emitted for this turn (avoid per-token Raw).
+    emitted_runtime_model_by_turn: StdMutex<HashMap<String, String>>,
     /// Pending AskUserQuestion requests: request_id -> turn_id
     pending_user_inputs: StdMutex<HashMap<String, String>>,
     /// Request ids that already completed settlement (accepted/skip/timeout).
@@ -778,6 +780,7 @@ impl ClaudeSession {
             tool_id_by_block_index: StdMutex::new(HashMap::new()),
             pending_tools: StdMutex::new(Vec::new()),
             last_emitted_text_by_turn: StdMutex::new(HashMap::new()),
+            emitted_runtime_model_by_turn: StdMutex::new(HashMap::new()),
             pending_user_inputs: StdMutex::new(HashMap::new()),
             settled_user_input_request_ids: StdMutex::new(HashSet::new()),
             pending_approval_requests: StdMutex::new(HashMap::new()),
@@ -2675,6 +2678,10 @@ impl ClaudeSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        self.emitted_runtime_model_by_turn
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.user_input_notify_by_turn
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -2993,6 +3000,55 @@ impl ClaudeSession {
                 "raw_error": error_message,
             }),
         })
+    }
+
+    fn sanitize_runtime_model(model: &str) -> Option<String> {
+        let trimmed = model.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let lowered = trimmed.to_ascii_lowercase();
+        if lowered == "<synthetic>" || lowered == "synthetic" {
+            return None;
+        }
+        Some(trimmed.to_string())
+    }
+
+    pub(super) fn maybe_emit_runtime_model(
+        &self,
+        turn_id: &str,
+        model: Option<&str>,
+        source: &str,
+    ) {
+        let Some(model) = model.and_then(Self::sanitize_runtime_model) else {
+            return;
+        };
+        let should_emit = if let Ok(mut map) = self.emitted_runtime_model_by_turn.lock() {
+            match map.get(turn_id) {
+                Some(previous) if previous == &model => false,
+                _ => {
+                    map.insert(turn_id.to_string(), model.clone());
+                    true
+                }
+            }
+        } else {
+            true
+        };
+        if !should_emit {
+            return;
+        }
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::Raw {
+                workspace_id: self.workspace_id.clone(),
+                engine: EngineType::Claude,
+                data: json!({
+                    "type": "runtime_model",
+                    "subtype": source,
+                    "model": model,
+                }),
+            },
+        );
     }
 
     /// Compute the true delta from a cumulative assistant text.

@@ -49,7 +49,8 @@ export type MessagesEngine =
   | "kimi"
   | "opencode"
   | "pi"
-  | "dsh";
+  | "dsh"
+  | "qoder";
 
 export function isSelectionInsideNode(selection: Selection | null, node: HTMLElement | null) {
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !node) {
@@ -165,7 +166,7 @@ export function resolveAgentTaskDisplaySummary(summary: string | null | undefine
 }
 
 export function toConversationEngine(engine: MessagesEngine): ConversationEngine {
-  if (engine === "claude" || engine === "gemini" || engine === "grok" || engine === "kimi" || engine === "opencode" || engine === "pi" || engine === "dsh") {
+  if (engine === "claude" || engine === "gemini" || engine === "grok" || engine === "kimi" || engine === "opencode" || engine === "pi" || engine === "dsh" || engine === "qoder") {
     return engine;
   }
   return "codex";

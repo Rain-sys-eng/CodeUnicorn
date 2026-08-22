@@ -38,6 +38,7 @@ import {
 } from "./threadReducerReasoningGuards";
 import { areEquivalentAssistantMessageTexts } from "../assembly/conversationNormalization";
 import { resolveMergedThreadCreatedAt } from "../utils/threadSummarySort";
+import { mergeRuntimeReceipt } from "../utils/runtimeModelReceipt";
 import {
   addSummaryBoundary,
   findDuplicateReasoningSnapshotIndex,
@@ -637,6 +638,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           ? "kimi"
         : action.threadId.startsWith("pi:")
           ? "pi"
+        : action.threadId.startsWith("qoder:")
+          ? "qoder"
         : action.threadId.startsWith("opencode:")
           ? "opencode"
         : action.threadId.startsWith("dsh:")
@@ -1334,6 +1337,67 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         },
       };
     }
+    case "patchAssistantRuntimeReceipt": {
+      const receipt = action.runtimeReceipt;
+      if (!receipt?.model) {
+        return state;
+      }
+      const list = state.itemsByThread[action.threadId] ?? [];
+      let lastUserIndex = -1;
+      for (let index = list.length - 1; index >= 0; index -= 1) {
+        const item = list[index];
+        if (item?.kind === "message" && item.role === "user") {
+          lastUserIndex = index;
+          break;
+        }
+      }
+      let targetIndex = -1;
+      for (let index = list.length - 1; index > lastUserIndex; index -= 1) {
+        const item = list[index];
+        if (item?.kind !== "message" || item.role !== "assistant") {
+          continue;
+        }
+        if (item.id.startsWith("memory-pick-empty-")) {
+          continue;
+        }
+        if (!item.executionTargetSnapshot && !item.runtimeReceipt) {
+          continue;
+        }
+        targetIndex = index;
+        break;
+      }
+      if (targetIndex < 0) {
+        return state;
+      }
+      const target = list[targetIndex];
+      if (!target || target.kind !== "message") {
+        return state;
+      }
+      const existing = target.runtimeReceipt;
+      const merged = mergeRuntimeReceipt(existing, receipt);
+      if (
+        !merged ||
+        (existing &&
+          existing.model === merged.model &&
+          existing.modelSource === merged.modelSource &&
+          existing.contextWindowTokens === merged.contextWindowTokens &&
+          existing.contextWindowSource === merged.contextWindowSource)
+      ) {
+        return state;
+      }
+      const next = [...list];
+      next[targetIndex] = {
+        ...target,
+        runtimeReceipt: merged,
+      };
+      return {
+        ...state,
+        itemsByThread: {
+          ...state.itemsByThread,
+          [action.threadId]: prepareThreadItems(next),
+        },
+      };
+    }
     case "setThreadName": {
       const list = state.threadsByWorkspace[action.workspaceId] ?? [];
       const next = list.map((thread) =>
@@ -1694,7 +1758,20 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       const isUserMessage = isUserMessageItem(item);
       const isOptimisticUser = isUserMessage && isOptimisticUserMessageId(item.id);
       let generatedImagesToReinsertAfterUser: GeneratedImageItem[] = [];
+      let inheritedProviderRetry:
+        | Pick<
+            Extract<ConversationItem, { kind: "message" }>,
+            "originKind" | "providerRetryAttempt" | "providerRetryAtMs"
+          >
+        | null = null;
       if (isUserMessage && !isOptimisticUser) {
+        inheritedProviderRetry =
+          list.find(
+            (entry): entry is Extract<ConversationItem, { kind: "message" }> =>
+              isUserMessageItem(entry) &&
+              isOptimisticUserMessageId(entry.id) &&
+              entry.originKind === "shared-provider-retry",
+          ) ?? null;
         const optimisticReplacement =
           replaceOptimisticUserAndExtractAnchoredGeneratedImages(list, item);
         list = optimisticReplacement.items;
@@ -1722,6 +1799,18 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         }
       }
       let nextItem = ensureUniqueReviewId(list, item);
+      if (
+        inheritedProviderRetry &&
+        nextItem.kind === "message" &&
+        nextItem.originKind !== "shared-provider-retry"
+      ) {
+        nextItem = {
+          ...nextItem,
+          originKind: "shared-provider-retry",
+          providerRetryAttempt: inheritedProviderRetry.providerRetryAttempt,
+          providerRetryAtMs: inheritedProviderRetry.providerRetryAtMs,
+        };
+      }
       let didMergeEquivalentAssistantSnapshot = false;
       if (
         nextItem.kind === "generatedImage" &&

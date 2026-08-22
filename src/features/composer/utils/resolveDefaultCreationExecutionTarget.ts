@@ -16,6 +16,11 @@ import {
   LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_CN_PROVIDER_PROFILE_ID,
+  QODER_CN_PROVIDER_PROFILE_NAME,
+  QODER_GLOBAL_PROVIDER_PROFILE_ID,
+  QODER_GLOBAL_PROVIDER_PROFILE_NAME,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
 } from "../../threads/constants/codexProviderProfiles";
 
 /**
@@ -51,6 +56,7 @@ export type ResolvedCreationExecutionTarget = Omit<ExecutionTarget, "engine"> & 
 export function isCreateSessionSupportedEngine(
   engine: EngineType | null | undefined,
 ): engine is CreateSessionSupportedEngine {
+  // qoder 已在 SharedSessionSupportedEngine 集合内（enable-qoder-shared-target）。
   return isSharedSessionSupportedEngine(engine) || engine === "dsh";
 }
 
@@ -81,7 +87,9 @@ export function isResolvedCreationExecutionTarget(
   if (!target || !isCreateSessionSupportedEngine(target.engine)) {
     return false;
   }
-  if (target.engine === "dsh") {
+  if (target.engine === "dsh" || target.engine === "qoder") {
+    // DSH 与 Qoder 都使用 live runtime catalog；Qoder 也支持 Shared，
+    // 但没有可安全使用的 static fallback roster。
     return hasResolvedCreationTargetIdentity(target);
   }
   return isResolvedExecutionTarget(target);
@@ -137,11 +145,34 @@ export function resolveDefaultCreationExecutionTarget(input: {
     return null;
   }
 
-  const localProfileId = LOCAL_PROFILE_IDS[engine];
   const rawProviderProfileId = input.providerProfileId?.trim() || null;
+  const effort = input.selectedEffort?.trim() || "";
+  if (engine === "qoder") {
+    // Qoder Global/CN 是运行时分发身份，不是其他 Native engine 的本地 provider
+    // sentinel。创建时必须固化为显式 profile，避免后续恢复时退化为 Generic Local。
+    const providerProfileId =
+      !rawProviderProfileId ||
+      rawProviderProfileId === QODER_LOCAL_PROVIDER_PROFILE_ID
+        ? QODER_GLOBAL_PROVIDER_PROFILE_ID
+        : rawProviderProfileId;
+    const isCn = providerProfileId === QODER_CN_PROVIDER_PROFILE_ID;
+
+    return {
+      engine,
+      providerProfileId,
+      modelCatalogEntryId,
+      model: runtimeModel,
+      reasoning: effort ? { effort } : null,
+      providerProfileNameSnapshot: isCn
+        ? QODER_CN_PROVIDER_PROFILE_NAME
+        : QODER_GLOBAL_PROVIDER_PROFILE_NAME,
+      providerProfileSource: "managed",
+    };
+  }
+
+  const localProfileId = LOCAL_PROFILE_IDS[engine];
   const isLocal =
     !rawProviderProfileId || rawProviderProfileId === localProfileId;
-  const effort = input.selectedEffort?.trim() || "";
 
   return {
     engine,

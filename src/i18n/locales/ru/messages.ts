@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "Отменить",
       "revertAllConfirmTitle": "Отменить все изменения",
       "revertAllConfirmBody":
-        "Локальные изменения в {{count}} файлах будут сброшены до последнего коммита. Это действие нельзя отменить.",
+        "Незастейдженные локальные изменения в {{count}} файлах будут восстановлены к индексу (или к HEAD, если ничего не проиндексировано). Проиндексированные изменения сохранятся. Это действие нельзя отменить.",
       "revertAllConfirmAction": "Отменить всё",
       "revertFileConfirmTitle": "Отменить изменения файла",
       "revertFileConfirmBody":
-        "Локальные изменения в «{{path}}» будут сброшены до последнего коммита. Это действие нельзя отменить.",
+        "Незастейдженные локальные изменения в «{{path}}» будут восстановлены к индексу (или к HEAD, если ничего не проиндексировано). Проиндексированные изменения сохранятся. Это действие нельзя отменить.",
       "revertFileConfirmAction": "Отменить"
     },
     "noThinkingContent": "Нет содержимого размышлений",
@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Сборка",
     "generatingResponse": "Генерация ответа...",
     "responding": "Ответ...",
+    "waitingForFirstText": "{{engine}} работает. Ожидание первого фрагмента текста...",
     "codexWaitingForFirstText": "Codex работает. Ожидание первого фрагмента текста...",
     "codexSilentSuspected": "Некоторое время нет нового вывода Codex. Продолжаем слушать активность среды выполнения...",
     "nonStreamingHint": "Эта модель может возвращать нестриминговый вывод, либо сеть недоступна. Пожалуйста, подождите...",
@@ -90,6 +91,7 @@ const messages = {
     "totalDuration": "Длительность",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "Вход {{input}} / Выход {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "Вход {{input}} token / Выход {{output}} token",
     "messageActions": "Действия с сообщением",
     "copyMessage": "Скопировать сообщение",

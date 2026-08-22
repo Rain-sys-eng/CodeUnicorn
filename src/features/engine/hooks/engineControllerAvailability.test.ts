@@ -14,6 +14,7 @@ describe("engineControllerAvailability", () => {
       "opencode",
       "pi",
       "dsh",
+      "qoder",
     ]);
     expect(buildAvailableEngines([], false)).toEqual([
       expect.objectContaining({
@@ -51,6 +52,11 @@ describe("engineControllerAvailability", () => {
         type: "dsh",
         displayName: "DeepSeek Harness",
         shortName: "DSH",
+      }),
+      expect.objectContaining({
+        type: "qoder",
+        displayName: "Qoder CLI",
+        shortName: "Qoder",
       }),
     ]);
   });

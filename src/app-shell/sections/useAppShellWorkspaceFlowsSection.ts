@@ -533,6 +533,7 @@ export function useAppShellWorkspaceFlowsSection(
           preserveEditor,
           requestedCollapseRightPanel: shouldCollapseRightPanel,
           engineSource: targetThread?.engineSource,
+          threadId,
         },
         {
           exitDiffView,

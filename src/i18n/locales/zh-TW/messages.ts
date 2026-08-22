@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "撤銷",
       "revertAllConfirmTitle": "撤銷全部變更",
       "revertAllConfirmBody":
-        "將撤銷這 {{count}} 個檔案的本地變更，恢復到最近一次提交。此操作無法復原。",
+        "將撤銷這 {{count}} 個檔案尚未暫存的本地變更，還原到暫存區（若無暫存則回到上次提交）。已暫存的內容會保留。此操作無法復原。",
       "revertAllConfirmAction": "確認撤銷全部",
       "revertFileConfirmTitle": "撤銷檔案變更",
       "revertFileConfirmBody":
-        "將撤銷「{{path}}」的本地變更，恢復到最近一次提交。此操作無法復原。",
+        "將撤銷「{{path}}」尚未暫存的本地變更，還原到暫存區（若無暫存則回到上次提交）。已暫存的內容會保留。此操作無法復原。",
       "revertFileConfirmAction": "確認撤銷"
     },
     "noThinkingContent": "沒有思考內容",
@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "組裝",
     "generatingResponse": "正在產生回應…",
     "responding": "回應中...",
+    "waitingForFirstText": "{{engine}} 已啟動，正在等待第一段文字…",
     "codexWaitingForFirstText": "Codex 正在執行。正在等待第一段文字…",
     "codexSilentSuspected": "Codex 已有一段時間沒有新輸出。仍在監聽執行階段活動…",
     "nonStreamingHint": "此模型可能傳回非串流輸出，或網路無法連線。請稍候…",
@@ -90,6 +91,7 @@ const messages = {
     "totalDuration": "本次耗時",
     "durationSeconds": "耗時{{duration}}",
     "tokenUsage": "輸入 {{input}} / 輸出 {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "輸入 {{input}} token / 輸出 {{output}} token",
     "messageActions": "訊息動作",
     "copyMessage": "複製訊息",

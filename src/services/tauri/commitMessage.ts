@@ -4,7 +4,7 @@ import { isEngineExecutionEnabled } from "../../utils/engineExecutionPolicy";
 import { engineSendMessageSync } from "./appServer";
 
 export type CommitMessageLanguage = "zh" | "en";
-export type CommitMessageEngine = Exclude<EngineType, "dsh">;
+export type CommitMessageEngine = Exclude<EngineType, "dsh" | "qoder">;
 export type CommitMessageRepositorySelection = {
   repositoryRoot: string;
   selectedPaths: string[];

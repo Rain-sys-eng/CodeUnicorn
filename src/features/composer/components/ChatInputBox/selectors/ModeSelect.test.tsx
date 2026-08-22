@@ -50,6 +50,48 @@ describe("ModeSelect", () => {
     expect(onChange).toHaveBeenCalledWith("plan");
   });
 
+  it("allows default and auto modes for dsh provider but keeps plan and acceptEdits disabled", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onChange = vi.fn();
+    const { container } = render(
+      <ModeSelect value="default" onChange={onChange} provider="dsh" />,
+    );
+
+    const trigger = container.querySelector(".selector-button");
+    expect(trigger).toBeTruthy();
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
+
+    expect(isDisabled(queryOption("default"))).toBe(false);
+    expect(isDisabled(queryOption("bypassPermissions"))).toBe(false);
+    expect(isDisabled(queryOption("plan"))).toBe(true);
+    expect(isDisabled(queryOption("acceptEdits"))).toBe(true);
+
+    await user.click(queryOption("bypassPermissions") as HTMLElement);
+    expect(onChange).toHaveBeenCalledWith("bypassPermissions");
+  });
+
+  it("disables all access modes for qoder provider", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onChange = vi.fn();
+    const { container } = render(
+      <ModeSelect value="bypassPermissions" onChange={onChange} provider="qoder" />,
+    );
+
+    const trigger = container.querySelector(".selector-button");
+    expect(trigger).toBeTruthy();
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
+
+    expect(isDisabled(queryOption("default"))).toBe(true);
+    expect(isDisabled(queryOption("bypassPermissions"))).toBe(true);
+    expect(isDisabled(queryOption("plan"))).toBe(true);
+    expect(isDisabled(queryOption("acceptEdits"))).toBe(true);
+
+    await user.click(queryOption("bypassPermissions") as HTMLElement);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("allows default and plan modes for claude provider but keeps acceptEdits disabled", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();

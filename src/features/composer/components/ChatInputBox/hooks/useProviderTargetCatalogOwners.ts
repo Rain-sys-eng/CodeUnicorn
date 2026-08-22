@@ -25,6 +25,11 @@ import {
   OPENCODE_LOCAL_PROVIDER_PROFILE_NAME,
   PI_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_NAME,
+  QODER_CN_PROVIDER_PROFILE_ID,
+  QODER_CN_PROVIDER_PROFILE_NAME,
+  QODER_GLOBAL_PROVIDER_PROFILE_ID,
+  QODER_GLOBAL_PROVIDER_PROFILE_NAME,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
   type EngineProviderProfileOption,
 } from "../../../../threads/constants/codexProviderProfiles";
 import type { ModelInfo, ProviderId } from "../types";
@@ -56,7 +61,7 @@ export type ProviderTargetGroup = {
 
 type ProfileCatalog = Partial<
   Record<
-    "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi",
+    "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi" | "qoder",
     EngineProviderProfileOption[]
   >
 >;
@@ -70,6 +75,7 @@ const PROVIDER_PROFILE_ENGINES: readonly ProviderProfileEngine[] = [
   "kimi",
   "opencode",
   "pi",
+  "qoder",
 ];
 
 export function isProviderProfileEngine(
@@ -121,6 +127,18 @@ const DEFAULT_PROFILES: ProfileCatalog = {
       source: "disk",
     },
   ],
+  qoder: [
+    {
+      id: QODER_GLOBAL_PROVIDER_PROFILE_ID,
+      name: QODER_GLOBAL_PROVIDER_PROFILE_NAME,
+      source: "managed",
+    },
+    {
+      id: QODER_CN_PROVIDER_PROFILE_ID,
+      name: QODER_CN_PROVIDER_PROFILE_NAME,
+      source: "managed",
+    },
+  ],
 };
 
 let profileCatalogCache: ProfileCatalog | null = null;
@@ -155,7 +173,7 @@ type AtomicProviderTargetCatalogOptions =
   };
 
 function normalizeProfiles(
-  engine: "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi",
+  engine: "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi" | "qoder",
   providers: Array<{
     id: string;
     name: string;
@@ -238,6 +256,9 @@ async function loadProfileCatalog(): Promise<ProfileCatalog> {
               : DEFAULT_PROFILES.opencode,
           // PI has no multi-provider store; always surface native ~/.pi profile.
           pi: DEFAULT_PROFILES.pi,
+          // Qoder is one engine with two fixed distributions. These bindings
+          // are intentionally static, not vendor CRUD profiles.
+          qoder: DEFAULT_PROFILES.qoder,
         };
         return profileCatalogCache;
       })
@@ -271,6 +292,8 @@ function isLocalProviderProfile(
       return providerProfileId === PI_LOCAL_PROVIDER_PROFILE_ID;
     case "dsh":
       return providerProfileId === DSH_LOCAL_PROVIDER_PROFILE_ID;
+    case "qoder":
+      return providerProfileId === QODER_LOCAL_PROVIDER_PROFILE_ID;
     default:
       return false;
   }
@@ -299,14 +322,21 @@ function initialLoadedModels(
 function toModelInfo(
   model: Awaited<ReturnType<typeof getEngineModels>>[number],
   engine?: EngineType,
+  requestedProviderProfileId?: string,
 ): ModelInfo {
+  const qoderProfileId =
+    engine === "qoder" ? requestedProviderProfileId?.trim() || undefined : undefined;
   const base: ModelInfo = {
     id: model.id,
     model: model.model,
     label: model.displayName || model.id,
     description: model.description,
     source: model.source,
-    providerProfileId: model.providerProfileId ?? undefined,
+    provider: model.provider?.trim() || undefined,
+    // ACP live Qoder catalogs do not universally echo a profile id. The
+    // request binding is authoritative, so stamp it before profile filtering
+    // rather than treating a Global/CN row as a public fallback model.
+    providerProfileId: model.providerProfileId ?? qoderProfileId,
   };
   return enrichModelInfoWithAtomicReasoning(engine ?? null, base);
 }
@@ -495,7 +525,7 @@ function useProviderTargetCatalogOwner({
     ): Promise<ModelInfo[]> => {
       if (
         !enabled ||
-        !["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh"].includes(
+        !["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh", "qoder"].includes(
           engine,
         )
       ) {
@@ -541,7 +571,9 @@ function useProviderTargetCatalogOwner({
               ? { forceRefresh: true }
               : {}),
           })
-            .then((models) => models.map((entry) => toModelInfo(entry, engine)))
+            .then((models) =>
+              models.map((entry) => toModelInfo(entry, engine, providerProfileId)),
+            )
             .finally(() => {
               modelCatalogRequests.delete(requestKey);
             });
@@ -620,7 +652,7 @@ function useProviderTargetCatalogOwner({
           const models = (await getEngineModels(engine, {
             providerProfileId,
             forceRefresh: true,
-          })).map((entry) => toModelInfo(entry, engine));
+          })).map((entry) => toModelInfo(entry, engine, providerProfileId));
           modelCatalogCache.set(key, models);
           if (
             mode === "shared" &&
@@ -749,6 +781,8 @@ function useProviderTargetCatalogOwner({
         ],
       });
     }
+    // Qoder 已进 PROVIDER_PROFILE_ENGINES：shared 与 create-session 都走通用分组，
+    // 但 Global/CN 是固定 distribution binding，不是用户可编辑的 provider CRUD 项。
     return groups;
   }, [
     currentProvider,

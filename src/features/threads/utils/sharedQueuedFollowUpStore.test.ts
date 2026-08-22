@@ -34,6 +34,8 @@ describe("sharedQueuedFollowUpStore", () => {
       sendOptions: { effort: "max" },
       sharedExecutionTarget: TARGET,
       sharedPredecessorAttemptId: "attempt-1",
+      ownerWorkspaceId: "workspace-1",
+      ownerThreadId: "shared:thread-1",
     };
 
     writeSharedQueuedFollowUps("workspace-1", "shared:thread-1", [item]);

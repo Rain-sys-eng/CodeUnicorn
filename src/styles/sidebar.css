@@ -55,7 +55,7 @@
 
 .sidebar-primary-nav-item.is-disabled {
   color: var(--text-faint);
-  opacity: 0.6;
+  opacity: 0.88;
   cursor: default;
 }
 
@@ -2724,10 +2724,6 @@
 .thread-row.active .thread-engine-badge {
   opacity: 1;
   color: var(--text-strong);
-}
-
-.thread-engine-badge.thread-engine-shared {
-  color: #f59e0b;
 }
 
 /* Running state is indicated by the meta-area breathing status dot, not icon color.

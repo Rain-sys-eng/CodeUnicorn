@@ -40,6 +40,7 @@ import {
   listGrokSessions as listGrokSessionsService,
   listKimiSessions as listKimiSessionsService,
   listPiSessions as listPiSessionsService,
+  listQoderSessions as listQoderSessionsService,
   invalidateSessionIndexForWorkspace as invalidateSessionIndexForWorkspaceService,
 } from "../../../services/tauri";
 import { sendSharedSessionTurnRouted } from "../../shared-session/runtime/sendSharedSessionTurn";
@@ -66,6 +67,7 @@ import {
   freezeTurnSnapshot,
   isResolvedExecutionTarget,
 } from "../../shared-session/target/types";
+import { rememberRuntimeReceipt } from "../utils/runtimeModelReceipt";
 import { requestAgentPlan } from "../../multi-agent/runtime/executor";
 import { injectCollabSkillContext } from "../../multi-agent/runtime/skillContextInjection";
 import { injectMainCanvasContext } from "../../multi-agent/runtime/mainCanvasContextInjection";
@@ -79,6 +81,10 @@ import {
   shouldSpawnNativeThreadForEngineMismatch,
 } from "../../composer/hooks/explicitComposerEngineSwitch";
 import { resolveSendProviderProfileId } from "./sessionLifecycleController";
+import {
+  canonicalQoderProviderProfileId,
+  parseQoderSessionIdentity,
+} from "../utils/qoderSessionIdentity";
 import { getComposerEnginePrefForEngine } from "../../composer/hooks/composerEnginePrefsStore";
 import {
   persistableDshAgentPreset,
@@ -260,6 +266,7 @@ import {
   pickLikelyGrokSessionId,
   pickLikelyKimiSessionId,
   pickLikelyPiSessionId,
+  pickLikelyQoderSessionId,
   primeThreadStreamLatencyForSend,
   resolveCollaborationModeIdFromPayload,
   resolveRecoverableCodexFirstPacketTimeout,
@@ -291,6 +298,11 @@ import { useCodexMessageRecovery } from "./useCodexMessageRecovery";
 import { assertEngineExecutionEnabled } from "../../../utils/engineExecutionPolicy";
 import { resolveSelectedAgentForSend } from "../utils/resolveSelectedAgentForSend";
 import { BUILT_IN_AGENT_RESOLUTION_FAILED_EVENT } from "../../agent-catalog/events";
+import {
+  noteSharedProviderRetryTurnSettled,
+  noteSharedProviderRetryUserSend,
+  cancelSharedProviderRetry,
+} from "../../shared-session/provider-retry/noteSharedProviderRetryTurn";
 
 type SendMessageOptions = {
   skillInvocations?: SkillInvocation[];
@@ -321,6 +333,9 @@ type SendMessageOptions = {
   autoSession?: AutoSessionMetadata | null;
   sharedExecutionTarget?: SharedQueuedExecutionTarget;
   squadRequest?: true;
+  originKind?: "shared-provider-retry";
+  providerRetryAttempt?: number;
+  providerRetryAtMs?: number;
 };
 
 export type ThreadMessageDispatchResult =
@@ -350,7 +365,7 @@ type HandleFusionStalledOptions = {
 type RunWithCreateSessionLoading = <T>(
   params: {
     workspace: WorkspaceInfo;
-    engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+    engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
   },
   action: () => Promise<T>,
 ) => Promise<T>;
@@ -391,7 +406,7 @@ type UseThreadMessagingOptions = {
   claudeThinkingVisible?: boolean;
   steerEnabled: boolean;
   customPrompts: CustomPromptOption[];
-  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
   threadStatusById: ThreadState["threadStatusById"];
   itemsByThread: ThreadState["itemsByThread"];
   activeTurnIdByThread: ThreadState["activeTurnIdByThread"];
@@ -408,7 +423,7 @@ type UseThreadMessagingOptions = {
   getThreadEngine: (
     workspaceId: string,
     threadId: string,
-  ) => "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | undefined;
+  ) => "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | undefined;
   getThreadKind?: (
     workspaceId: string,
     threadId: string,
@@ -452,7 +467,7 @@ type UseThreadMessagingOptions = {
     workspaceId: string,
     options?: {
       activate?: boolean;
-      engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+      engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
       folderId?: string | null;
       autoSession?: AutoSessionMetadata | null;
       providerProfileId?: string | null;
@@ -552,6 +567,7 @@ export function useThreadMessaging({
     kimiSessionIdByPendingThreadRef,
     dshSessionIdByPendingThreadRef,
     piSessionIdByPendingThreadRef,
+    qoderSessionIdByPendingThreadRef,
     isClaudePendingThreadAwaitingNativeSession,
     isThreadIdCompatibleWithEngine,
     normalizeEngineSelection,
@@ -1163,7 +1179,26 @@ export function useThreadMessaging({
           browserContextAttachment: options?.browserContextAttachment ?? null,
           intentCanvasContextAttachments:
             options?.intentCanvasContextAttachments,
+          originKind:
+            options?.originKind === "shared-provider-retry"
+              ? "shared-provider-retry"
+              : undefined,
+          providerRetryAttempt:
+            options?.originKind === "shared-provider-retry"
+              ? options.providerRetryAttempt
+              : undefined,
+          providerRetryAtMs:
+            options?.originKind === "shared-provider-retry"
+              ? options.providerRetryAtMs
+              : undefined,
         };
+        if (threadKind === "shared") {
+          noteSharedProviderRetryUserSend({
+            workspaceId: workspace.id,
+            threadId,
+            originKind: options?.originKind ?? null,
+          });
+        }
         dispatch({
           type: "upsertItem",
           workspaceId: workspace.id,
@@ -1818,8 +1853,10 @@ export function useThreadMessaging({
           ? (sanitizedOpenCodeModel ?? "openai/gpt-5.3-codex")
           : resolvedEngine === "dsh"
             ? resolveDshModelForSend({
-                catalogId: selectedModelId,
-                runtimeModel: sanitizedOpenCodeModel,
+                // Picker catalog id first: official kimi/minimax must not lose
+                // to a stale DeepSeek ledger after a same-id PI catalog collision.
+                catalogId: modelFromOptions ?? selectedModelId,
+                runtimeModel: selectedModelId ?? sanitizedOpenCodeModel,
                 fallbackCatalogId: resolveDshSendFallbackCatalogId(
                   threadId,
                   getComposerEnginePrefForEngine("dsh").modelId,
@@ -2306,6 +2343,10 @@ export function useThreadMessaging({
           if (!sharedV2SendEnabled && !supportedStoredSharedTarget) {
             selectNextTarget(workspace.id, threadId, sharedNextTarget);
           }
+          rememberRuntimeReceipt(workspace.id, threadId, {
+            model: sharedNextTarget.model ?? undefined,
+            modelSource: "send.request",
+          });
           response = (await sendSharedSessionTurnRouted({
             workspaceId: workspace.id,
             threadId,
@@ -2336,6 +2377,7 @@ export function useThreadMessaging({
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
             safeMessageActivity();
+            cancelSharedProviderRetry(workspace.id, threadId, "idle");
             return response as SendSharedSessionTurnV2Result;
           }
           const sharedNativeThreadId = asString(
@@ -2637,6 +2679,26 @@ export function useThreadMessaging({
                                       ? (piSessionIdByPendingThreadRef.current.get(
                                           threadId,
                                         ) ?? null)
+                                      : resolvedEngine === "qoder" &&
+                                          threadId.startsWith("qoder:")
+                                        ? (() => {
+                                            const threadProviderProfileId =
+                                              getThreadProviderProfileId?.(
+                                                workspace.id,
+                                                threadId,
+                                              ) ?? null;
+                                            const identity =
+                                              parseQoderSessionIdentity(
+                                                threadId,
+                                                threadProviderProfileId,
+                                              );
+                                            return identity?.rawSessionId ?? null;
+                                          })()
+                                        : resolvedEngine === "qoder" &&
+                                            threadId.startsWith("qoder-pending-")
+                                          ? (qoderSessionIdByPendingThreadRef.current.get(
+                                              threadId,
+                                            ) ?? null)
                                       : resolvedEngine === "opencode" &&
                                           isOpenCodeSession
                                         ? threadId.slice("opencode:".length)
@@ -2645,6 +2707,25 @@ export function useThreadMessaging({
             realSessionId === null && Boolean(customSpecRoot);
 
           if (cliEngine) {
+            const threadProviderProfileId =
+              getThreadProviderProfileId?.(workspace.id, threadId) ?? null;
+            const qoderThreadIdentity =
+              resolvedEngine === "qoder" && threadId.startsWith("qoder:")
+                ? parseQoderSessionIdentity(threadId, threadProviderProfileId)
+                : null;
+            if (
+              resolvedEngine === "qoder" &&
+              threadId.startsWith("qoder:") &&
+              !qoderThreadIdentity
+            ) {
+              const message =
+                "Qoder session identity conflicts with its saved distribution.";
+              markProcessing(threadId, false);
+              setActiveTurnId(threadId, null);
+              pushThreadErrorMessage(workspace.id, threadId, message);
+              safeMessageActivity();
+              return;
+            }
             if (
               resolvedEngine === "claude" &&
               isClaudePendingThreadAwaitingNativeSession(threadId, {
@@ -2713,10 +2794,14 @@ export function useThreadMessaging({
             }
 
             const sendRequestedAt = Date.now();
-            const providerProfileId = resolveSendProviderProfileId({
-              threadProviderProfileId:
-                getThreadProviderProfileId?.(workspace.id, threadId) ?? null,
-            });
+            const providerProfileId =
+              resolvedEngine === "qoder"
+                ? (qoderThreadIdentity?.providerProfileId ??
+                  canonicalQoderProviderProfileId(threadProviderProfileId) ??
+                  resolveSendProviderProfileId({
+                    threadProviderProfileId,
+                  }))
+                : resolveSendProviderProfileId({ threadProviderProfileId });
             response = await engineSendMessageService(workspace.id, {
               text: finalText,
               engine: resolvedEngine,
@@ -3046,6 +3131,59 @@ export function useThreadMessaging({
                 });
               }
             }
+            if (
+              resolvedEngine === "qoder" &&
+              threadId.startsWith("qoder-pending-")
+            ) {
+              const responseIdentity = parseQoderSessionIdentity(
+                extractSessionIdFromEngineSendResponse(response),
+                providerProfileId,
+              );
+              let responseSessionId = responseIdentity?.rawSessionId ?? null;
+              if (!responseSessionId) {
+                const workspacePath = workspace.path?.trim();
+                if (workspacePath) {
+                  try {
+                    const sessions = await listQoderSessionsService(
+                      workspacePath,
+                      6,
+                      providerProfileId,
+                    );
+                    responseSessionId = pickLikelyQoderSessionId(
+                      sessions,
+                      sendRequestedAt - 120_000,
+                    );
+                  } catch {
+                    responseSessionId = null;
+                  }
+                }
+              }
+              if (responseSessionId) {
+                qoderSessionIdByPendingThreadRef.current.set(
+                  threadId,
+                  responseSessionId,
+                );
+                if (
+                  typeof invalidateSessionIndexForWorkspaceService === "function"
+                ) {
+                  void invalidateSessionIndexForWorkspaceService(
+                    workspace.id,
+                  ).catch(() => undefined);
+                }
+                onDebug?.({
+                  id: `${Date.now()}-client-qoder-session-cache`,
+                  timestamp: Date.now(),
+                  source: "client",
+                  label: "thread/session cached",
+                  payload: {
+                    workspaceId: workspace.id,
+                    threadId,
+                    sessionId: responseSessionId,
+                    source: "qoderSessionListFallback",
+                  },
+                });
+              }
+            }
 
             // Extract turn ID - streaming events will handle the rest
             const result = (response?.result ?? response) as Record<
@@ -3358,6 +3496,29 @@ export function useThreadMessaging({
         }
         safeMessageActivity();
         if (threadKind === "shared") {
+          noteSharedProviderRetryTurnSettled({
+            workspaceId: workspace.id,
+            threadId,
+            engine: resolvedEngine,
+            providerProfileId:
+              supportedStoredSharedTarget?.providerProfileId ??
+              getSharedTargetState(workspace.id, threadId).selectedNextTarget
+                ?.providerProfileId ??
+              null,
+            model:
+              supportedStoredSharedTarget?.model ??
+              getSharedTargetState(workspace.id, threadId).selectedNextTarget
+                ?.model ??
+              null,
+            message: rawMessage,
+            outcome: "failed",
+            wasLocalInterrupt: workspaceScopedHas(
+              interruptedThreadsRef.current,
+              workspace.id,
+              threadId,
+            ),
+            originKind: options?.originKind ?? null,
+          });
           return {
             status: "ambiguous-error",
             reason: rawMessage,
@@ -3384,6 +3545,7 @@ export function useThreadMessaging({
       kimiSessionIdByPendingThreadRef,
       dshSessionIdByPendingThreadRef,
       piSessionIdByPendingThreadRef,
+      qoderSessionIdByPendingThreadRef,
       getCustomName,
       getThreadEngine,
       isClaudePendingThreadAwaitingNativeSession,
@@ -3598,6 +3760,7 @@ export function useThreadMessaging({
       onDebug,
       pushThreadErrorMessage,
       getThreadEngine,
+      getThreadProviderProfileId,
       resolveThreadKind,
       resolveThreadEngine,
       resolveComposerSelection,
@@ -3664,6 +3827,9 @@ export function useThreadMessaging({
         return;
       }
       const reason = options?.reason ?? "user-stop";
+      if (activeWorkspace && activeThreadId) {
+        cancelSharedProviderRetry(activeWorkspace.id, activeThreadId, "stopped");
+      }
       const activeThreadKind = resolveThreadKind(
         activeWorkspace.id,
         activeThreadId,
@@ -3868,6 +4034,46 @@ export function useThreadMessaging({
             ? (getSharedTargetState(activeWorkspace.id, activeThreadId)
                 .activeTurnTarget?.providerProfileId ?? null)
             : null;
+        // Qoder Global/CN are two runtimes behind one engine id. Native Qoder
+        // threads must carry their persisted distribution binding when
+        // interrupting; omitting it intentionally resolves the legacy Global
+        // runtime in Rust.
+        const nativeQoderStoredProfileId =
+          activeThreadKind === "native" && resolvedThreadEngine === "qoder"
+            ? (getThreadProviderProfileId?.(
+                activeWorkspace.id,
+                activeThreadId,
+              ) ?? null)
+            : null;
+        const nativeQoderIdentity =
+          activeThreadKind === "native" &&
+          resolvedThreadEngine === "qoder" &&
+          activeThreadId.startsWith("qoder:")
+            ? parseQoderSessionIdentity(
+                activeThreadId,
+                nativeQoderStoredProfileId,
+              )
+            : null;
+        if (
+          activeThreadKind === "native" &&
+          resolvedThreadEngine === "qoder" &&
+          activeThreadId.startsWith("qoder:") &&
+          !nativeQoderIdentity
+        ) {
+          onDebug?.({
+            id: `${Date.now()}-client-qoder-interrupt-identity-rejected`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "turn/interrupt Qoder identity rejected",
+            payload: { workspaceId: activeWorkspace.id, threadId: activeThreadId },
+          });
+          return;
+        }
+        const nativeQoderProviderProfileId =
+          resolvedThreadEngine === "qoder"
+            ? (nativeQoderIdentity?.providerProfileId ??
+              canonicalQoderProviderProfileId(nativeQoderStoredProfileId))
+            : null;
         if (usesSharedV2Control) {
           // Shared V2 已由 durable attempt owner 精确中断；禁止再走 mutable
           // target / workspace-wide fallback 产生第二次 control side effect。
@@ -3886,12 +4092,12 @@ export function useThreadMessaging({
           // execute a precise kill once the backend emits the real turn id.
           if (activeTurnId) {
             try {
-              if (activeThreadKind === "shared") {
+              if (activeThreadKind === "shared" || nativeQoderProviderProfileId) {
                 await engineInterruptTurnService(
                   activeWorkspace.id,
                   activeTurnId,
                   resolvedThreadEngine,
-                  sharedProviderProfileId,
+                  sharedProviderProfileId ?? nativeQoderProviderProfileId,
                 );
               } else {
                 await engineInterruptTurnService(
@@ -3901,11 +4107,16 @@ export function useThreadMessaging({
                 );
               }
             } catch (error) {
-              if (isUnknownEngineInterruptTurnMethodError(error)) {
+              if (
+                isUnknownEngineInterruptTurnMethodError(error) &&
+                resolvedThreadEngine !== "qoder"
+              ) {
                 // Compatibility fallback for stale daemon/runtime that doesn't
                 // implement engine_interrupt_turn yet.
                 await engineInterruptService(activeWorkspace.id);
               } else {
+                // Qoder Global/CN 不能降级到 workspace-wide interrupt：旧 RPC
+                // 无法携带 distribution，可能误中断同 workspace 的另一套 runtime。
                 throw error;
               }
             }
@@ -3950,6 +4161,7 @@ export function useThreadMessaging({
       markProcessing,
       onDebug,
       pendingInterruptsRef,
+      getThreadProviderProfileId,
       resolveThreadEngine,
       resolveThreadKind,
       setActiveTurnId,

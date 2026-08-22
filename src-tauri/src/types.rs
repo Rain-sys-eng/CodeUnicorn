@@ -928,6 +928,16 @@ pub(crate) struct AppSettings {
     pub(crate) pi_bin: Option<String>,
     #[serde(default, rename = "dshBin")]
     pub(crate) dsh_bin: Option<String>,
+    #[serde(default, rename = "qoderBin")]
+    pub(crate) qoder_bin: Option<String>,
+    /// Qoder Global configuration directory. `qoderBin` remains the Global
+    /// binary for backward compatibility.
+    #[serde(default, rename = "qoderConfigDir")]
+    pub(crate) qoder_config_dir: Option<String>,
+    #[serde(default, rename = "qoderCnBin")]
+    pub(crate) qoder_cn_bin: Option<String>,
+    #[serde(default, rename = "qoderCnConfigDir")]
+    pub(crate) qoder_cn_config_dir: Option<String>,
     #[serde(default, rename = "dshHost")]
     pub(crate) dsh_host: Option<String>,
     #[serde(default, rename = "dshPort")]
@@ -1198,10 +1208,7 @@ pub(crate) struct AppSettings {
     pub(crate) canvas_width_mode: String,
     #[serde(default = "default_layout_mode", rename = "layoutMode")]
     pub(crate) layout_mode: String,
-    #[serde(
-        default = "default_workspace_wallpaper",
-        rename = "workspaceWallpaper"
-    )]
+    #[serde(default = "default_workspace_wallpaper", rename = "workspaceWallpaper")]
     pub(crate) workspace_wallpaper: WorkspaceWallpaperSettings,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
@@ -1502,6 +1509,18 @@ fn default_layout_mode() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceWallpaperLibraryItem {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) path: String,
+    #[serde(default)]
+    pub(crate) source_path: Option<String>,
+    #[serde(default)]
+    pub(crate) hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceWallpaperSettings {
     #[serde(default = "default_workspace_wallpaper_mode")]
     pub(crate) mode: String,
@@ -1513,6 +1532,26 @@ pub(crate) struct WorkspaceWallpaperSettings {
     pub(crate) fluid_motion: String,
     #[serde(default = "default_workspace_wallpaper_veil_opacity")]
     pub(crate) veil_opacity: u8,
+    #[serde(default)]
+    pub(crate) library: Vec<WorkspaceWallpaperLibraryItem>,
+    #[serde(default)]
+    pub(crate) selected_library_id: Option<String>,
+    #[serde(default = "default_workspace_wallpaper_blur")]
+    pub(crate) wallpaper_blur: u8,
+    #[serde(default = "default_workspace_wallpaper_darken")]
+    pub(crate) wallpaper_darken: u8,
+    #[serde(default = "default_workspace_wallpaper_playback_rate")]
+    pub(crate) playback_rate: f32,
+    #[serde(default)]
+    pub(crate) flip: bool,
+    #[serde(default = "default_workspace_wallpaper_object_fit")]
+    pub(crate) object_fit: String,
+    #[serde(default)]
+    pub(crate) paused: bool,
+    #[serde(default)]
+    pub(crate) rotation_enabled: bool,
+    #[serde(default = "default_workspace_wallpaper_rotation_interval")]
+    pub(crate) rotation_interval_minutes: u16,
 }
 
 fn default_workspace_wallpaper_mode() -> String {
@@ -1528,7 +1567,27 @@ fn default_workspace_wallpaper_fluid_motion() -> String {
 }
 
 fn default_workspace_wallpaper_veil_opacity() -> u8 {
-    12
+    0
+}
+
+fn default_workspace_wallpaper_blur() -> u8 {
+    0
+}
+
+fn default_workspace_wallpaper_darken() -> u8 {
+    0
+}
+
+fn default_workspace_wallpaper_playback_rate() -> f32 {
+    1.0
+}
+
+fn default_workspace_wallpaper_object_fit() -> String {
+    "cover".to_string()
+}
+
+fn default_workspace_wallpaper_rotation_interval() -> u16 {
+    30
 }
 
 fn default_workspace_wallpaper() -> WorkspaceWallpaperSettings {
@@ -1538,6 +1597,16 @@ fn default_workspace_wallpaper() -> WorkspaceWallpaperSettings {
         fluid_preset: default_workspace_wallpaper_fluid_preset(),
         fluid_motion: default_workspace_wallpaper_fluid_motion(),
         veil_opacity: default_workspace_wallpaper_veil_opacity(),
+        library: Vec::new(),
+        selected_library_id: None,
+        wallpaper_blur: default_workspace_wallpaper_blur(),
+        wallpaper_darken: default_workspace_wallpaper_darken(),
+        playback_rate: default_workspace_wallpaper_playback_rate(),
+        flip: false,
+        object_fit: default_workspace_wallpaper_object_fit(),
+        paused: false,
+        rotation_enabled: false,
+        rotation_interval_minutes: default_workspace_wallpaper_rotation_interval(),
     }
 }
 
@@ -1982,6 +2051,10 @@ impl Default for AppSettings {
             kimi_bin: None,
             pi_bin: None,
             dsh_bin: None,
+            qoder_bin: None,
+            qoder_config_dir: None,
+            qoder_cn_bin: None,
+            qoder_cn_config_dir: None,
             dsh_host: None,
             dsh_port: None,
             dsh_auto_start: None,
@@ -2339,6 +2412,7 @@ mod tests {
             serde_json::from_str(legacy).expect("legacy deserialize");
         assert_eq!(legacy_settings.workspace_wallpaper.fluid_motion, "drift");
         assert_eq!(legacy_settings.workspace_wallpaper.fluid_preset, "ash");
+        assert_eq!(legacy_settings.workspace_wallpaper.veil_opacity, 0);
     }
 
     #[test]

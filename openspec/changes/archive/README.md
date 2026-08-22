@@ -2,13 +2,21 @@
 
 本页为 `mossx` 已归档 OpenSpec proposal 的完整可点击索引。目录名中的日期是 archive date，不代表 proposal 首次创建时间。
 
-- Updated At: `2026-08-18`
-- Indexed proposals: `850+`
+- Updated At: `2026-08-21`
+- Indexed proposals: `851+`
 - Source of truth: `openspec/changes/archive/<archive-date>-<change-id>/proposal.md`
 - Back to current changes: [`../README.md`](../README.md)
 - Back to workspace overview: [`../../project.md`](../../project.md)
 
 ## 2026-08
+
+### 2026-08-22
+
+- [`2026-08-22-fix-shared-owned-native-sidebar-leak`](2026-08-22-fix-shared-owned-native-sidebar-leak/proposal.md) — verified implementation，已同步 `shared-session-thread`、`shared-hide-list-prefilter`；Shared live Target 认主，Shared-owned Native 不得进侧栏；用户手测通过
+
+### 2026-08-21
+
+- [`2026-08-20-add-runtime-model-receipt-to-turn-badge`](2026-08-20-add-runtime-model-receipt-to-turn-badge/proposal.md) — verified implementation，已同步 `turn-target-runtime-receipt`；Shared turn badge 同行高亮 `→ R` runtime 回执；Native CLI 不显示；点回执下滑出处
 
 ### 2026-08-19
 

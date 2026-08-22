@@ -279,5 +279,43 @@ export function parseDshHistoryMessages(messagesData: unknown): ConversationItem
     items.push(projected);
   }
 
+  markDshAssistantFinalMessages(items);
   return items;
+}
+
+/**
+ * DSH history assistant rows have no isFinal flag. Turn file-change aggregation
+ * drops a segment on the next user message unless a final assistant is present,
+ * so mark the last assistant of each turn — same contract as Grok/Kimi history.
+ */
+function markDshAssistantFinalMessages(items: ConversationItem[]) {
+  let lastAssistantIndexInTurn = -1;
+  const finalizeCurrentTurn = () => {
+    if (lastAssistantIndexInTurn < 0) {
+      return;
+    }
+    const lastAssistant = items[lastAssistantIndexInTurn];
+    if (!lastAssistant || lastAssistant.kind !== "message" || lastAssistant.role !== "assistant") {
+      return;
+    }
+    if (lastAssistant.isFinal === true) {
+      return;
+    }
+    items[lastAssistantIndexInTurn] = {
+      ...lastAssistant,
+      isFinal: true,
+    };
+  };
+
+  items.forEach((item, index) => {
+    if (item.kind === "message" && item.role === "user") {
+      finalizeCurrentTurn();
+      lastAssistantIndexInTurn = -1;
+      return;
+    }
+    if (item.kind === "message" && item.role === "assistant") {
+      lastAssistantIndexInTurn = index;
+    }
+  });
+  finalizeCurrentTurn();
 }

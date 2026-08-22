@@ -27,6 +27,7 @@ import {
   mergeReasoningSnapshotTextForThread,
   mergeReasoningTextForThread,
 } from "../hooks/threadReducerTextMerge";
+import { mergeRuntimeReceipt } from "../utils/runtimeModelReceipt";
 
 type MessageConversationItem = Extract<ConversationItem, { kind: "message" }>;
 type AssistantMessageItem = MessageConversationItem & { role: "assistant" };
@@ -421,12 +422,26 @@ function areConversationImageListsEqual(
   return true;
 }
 
+function mergeRuntimeReceiptField(
+  existing: AssistantMessageItem["runtimeReceipt"],
+  incoming: AssistantMessageItem["runtimeReceipt"],
+) {
+  if (!incoming) {
+    return existing;
+  }
+  return mergeRuntimeReceipt(existing, incoming) ?? incoming;
+}
+
 function mergeAssistantSnapshot(
   existing: AssistantMessageItem,
   incoming: AssistantMessageItem,
 ) {
   const executionTargetSnapshot =
     existing.executionTargetSnapshot ?? incoming.executionTargetSnapshot;
+  const runtimeReceipt = mergeRuntimeReceiptField(
+    existing.runtimeReceipt,
+    incoming.runtimeReceipt,
+  );
   // Codex itemUpdated 每次 flush 都投递整段增长中的快照；典型形态是
   // 「existing 全文 + 无边界短追加」。与 reducer delta 快路同一前提：无
   // 句末/换行边界的低风险追加不会产生新的可折叠结构，直接采纳 incoming，
@@ -444,15 +459,18 @@ function mergeAssistantSnapshot(
       ...existing,
       ...incoming,
       executionTargetSnapshot,
+      runtimeReceipt,
     } satisfies AssistantMessageItem;
   }
   const normalizedIncomingText = normalizeAssistantSnapshotText(incoming.text);
   if (!normalizedIncomingText) {
-    return executionTargetSnapshot === existing.executionTargetSnapshot
+    return executionTargetSnapshot === existing.executionTargetSnapshot &&
+      runtimeReceipt === existing.runtimeReceipt
       ? existing
       : {
           ...existing,
           executionTargetSnapshot,
+          runtimeReceipt,
         };
   }
   const nextImages = incoming.images ?? existing.images;
@@ -461,6 +479,7 @@ function mergeAssistantSnapshot(
       ...existing,
       ...incoming,
       executionTargetSnapshot,
+      runtimeReceipt,
       text: normalizedIncomingText,
     } satisfies AssistantMessageItem;
   }
@@ -475,7 +494,8 @@ function mergeAssistantSnapshot(
       incoming.id === existing.id &&
       existing.text === normalizedIncomingText &&
       areConversationImageListsEqual(existing.images, nextImages) &&
-      executionTargetSnapshot === existing.executionTargetSnapshot
+      executionTargetSnapshot === existing.executionTargetSnapshot &&
+      runtimeReceipt === existing.runtimeReceipt
     ) {
       return existing;
     }
@@ -483,6 +503,7 @@ function mergeAssistantSnapshot(
       ...existing,
       ...incoming,
       executionTargetSnapshot,
+      runtimeReceipt,
       text: normalizedIncomingText,
     } satisfies AssistantMessageItem;
   }
@@ -491,7 +512,8 @@ function mergeAssistantSnapshot(
     incoming.id === existing.id &&
     mergedText === existing.text &&
     areConversationImageListsEqual(existing.images, nextImages) &&
-    executionTargetSnapshot === existing.executionTargetSnapshot
+    executionTargetSnapshot === existing.executionTargetSnapshot &&
+    runtimeReceipt === existing.runtimeReceipt
   ) {
     return existing;
   }
@@ -499,6 +521,7 @@ function mergeAssistantSnapshot(
     ...existing,
     ...incoming,
     executionTargetSnapshot,
+    runtimeReceipt,
     text: mergedText,
   } satisfies AssistantMessageItem;
 }
@@ -730,6 +753,9 @@ function appendMessageDelta(
       text: delta,
       turnId: event.item.turnId ?? event.turnId ?? null,
       engineSource: event.item.engineSource ?? event.engine,
+      executionTargetSnapshot: event.item.executionTargetSnapshot,
+      runtimeReceipt:
+        event.item.kind === "message" ? event.item.runtimeReceipt : undefined,
     });
   }
   return replaceItemAtIndex(items, existingIndex, {
@@ -740,6 +766,10 @@ function appendMessageDelta(
     executionTargetSnapshot:
       existing.executionTargetSnapshot ??
       event.item.executionTargetSnapshot,
+    runtimeReceipt: mergeRuntimeReceiptField(
+      existing.runtimeReceipt,
+      event.item.kind === "message" ? event.item.runtimeReceipt : undefined,
+    ),
     text: mergeAgentMessageText(existing.text, delta),
   });
 }
@@ -842,39 +872,33 @@ function completeAssistantMessage(
   items: ConversationItem[],
   event: NormalizedThreadEvent,
 ): ConversationItem[] {
-  if (event.item.kind !== "message") {
+  if (!isAssistantMessageItem(event.item)) {
     return items;
   }
+  const incoming = event.item;
   const identityIndex = items.findIndex(
-    (item) => item.kind === "message" && item.id === event.item.id,
+    (item) => item.kind === "message" && item.id === incoming.id,
   );
   const fallbackIndex =
     identityIndex >= 0
       ? identityIndex
       : findEquivalentAssistantMessageIndex(
           items,
-          event.item.text,
+          incoming.text,
           mergeCompletedAgentText,
         );
   const existing = fallbackIndex >= 0 ? items[fallbackIndex] : undefined;
   if (!isAssistantMessageItem(existing)) {
-    return replaceItemAtIndex(items, -1, event.item);
+    return replaceItemAtIndex(items, -1, incoming);
   }
-  const mergedText = mergeCompletedAgentText(existing.text, event.item.text);
-  const nextImages =
-    event.item.kind === "message" ? event.item.images ?? existing.images : existing.images;
-  if (
-    event.item.id === existing.id &&
-    mergedText === existing.text &&
-    areConversationImageListsEqual(existing.images, nextImages)
-  ) {
+  const merged = mergeAssistantSnapshot(existing, {
+    ...incoming,
+    text: mergeCompletedAgentText(existing.text, incoming.text),
+  });
+  if (merged === existing) {
     return items;
   }
-  return replaceItemAtIndex(items, fallbackIndex, {
-    ...existing,
-    ...event.item,
-    text: mergedText,
-  });
+  return replaceItemAtIndex(items, fallbackIndex, merged);
 }
 
 export function appendEvent(

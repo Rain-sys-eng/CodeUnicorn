@@ -78,8 +78,16 @@ describe("ButtonArea Session Control HUD quota", () => {
 
     openToolDock();
 
-    expect(screen.getByTestId("composer-session-control-hud")).toBeTruthy();
+    const hud = screen.getByTestId("composer-session-control-hud");
+    expect(hud).toBeTruthy();
     expect(screen.getByTestId("composer-session-quota-pane")).toBeTruthy();
+    // DropdownMenuContent defaults to overflow-x-hidden overflow-y-auto, which
+    // would clip the top-row CSS tooltips. The HUD must win on both axes.
+    expect(hud.className).toContain("overflow-visible");
+    expect(hud.className).toContain("overflow-x-visible");
+    expect(hud.className).toContain("overflow-y-visible");
+    expect(hud.className).not.toContain("overflow-x-hidden");
+    expect(hud.className).not.toMatch(/(?:^|\s)overflow-y-auto(?:\s|$)/);
     await waitFor(() => {
       expect(onRefresh).toHaveBeenCalled();
     });

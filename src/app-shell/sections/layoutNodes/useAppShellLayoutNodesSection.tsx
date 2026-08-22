@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { useEventCallback } from "../../../utils/useEventCallback";
+import type { QoderSettingsHighlightTarget } from "../../../features/app/hooks/useSettingsModalState";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../../../features/layout/hooks/useLayoutNodes";
 import { useMainHeaderActionItems } from "../../../features/app/components/MainHeaderActions";
@@ -762,7 +763,7 @@ export function useAppShellLayoutNodesSection(
   );
 
   const handleSelectConversationEngine = useCallback(
-    async (engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh") => {
+    async (engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder") => {
       const thread =
         activeWorkspaceId && activeThreadId
           ? (threadsByWorkspace[activeWorkspaceId] ?? []).find(
@@ -1201,8 +1202,10 @@ export function useAppShellLayoutNodesSection(
   const handleOpenPromptSettings = useEventCallback(() =>
     openSettings("agent-prompt-management", "prompt-library"),
   );
-  const handleOpenCliSettings = useEventCallback(() =>
-    openSettings("providers"),
+  const handleOpenCliSettings = useEventCallback((
+    highlightTarget?: QoderSettingsHighlightTarget,
+  ) =>
+    openSettings("providers", highlightTarget),
   );
   // Manual git panel refresh should dismiss stale commit/push/sync error banners.
   const handleManualGitStatusRefresh = useCallback(() => {
@@ -1366,7 +1369,11 @@ export function useAppShellLayoutNodesSection(
           selectWorkspace,
           setActiveThreadId,
         },
-        { preserveEditor, engineSource: thread?.engineSource },
+        {
+          preserveEditor,
+          engineSource: thread?.engineSource,
+          threadId,
+        },
         {
           closeSettings,
           setSelectedDiffPath,

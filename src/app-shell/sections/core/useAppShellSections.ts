@@ -226,6 +226,7 @@ export function useAppShellSections(input: UseAppShellSectionsInput) {
           preserveEditor,
           requestedCollapseRightPanel: true,
           engineSource: thread?.engineSource,
+          threadId,
         },
         {
           setSelectedDiffPath,
@@ -334,6 +335,7 @@ export function useAppShellSections(input: UseAppShellSectionsInput) {
               kimi: "workspace.engineKimi",
               grok: "workspace.engineGrok",
               pi: "workspace.enginePi",
+              qoder: "workspace.engineQoder",
             }[sharedEngine];
             // 创建：第一 Provider + profile 权威 catalog（local forceRefresh）。
             // 打开既有会话不走此路径，回显 last selectedTarget。

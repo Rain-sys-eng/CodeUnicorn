@@ -534,7 +534,7 @@
 :root[data-theme="light"] .settings-agent-icon-option.is-selected {
   border-color: color-mix(in srgb, var(--text-accent, #2563eb) 78%, #7aa2ff 22%);
   background: color-mix(in srgb, var(--text-accent, #2563eb) 14%, #ffffff 86%);
-  color: color-mix(in srgb, var(--text-accent, #2563eb) 94%, #0f172a 6%);
+  color: color-mix(in srgb, var(--text-accent, #2563eb) 94%, var(--text-strong) 6%);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-accent, #2563eb) 28%, transparent);
 }
 

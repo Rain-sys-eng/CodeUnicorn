@@ -2016,6 +2016,38 @@ fn parse_codex_session_summary_reads_camel_case_subagent_path_title() {
 }
 
 #[test]
+fn parse_codex_session_summary_reads_payload_level_thread_source_subagent() {
+    let root = make_temp_sessions_root();
+    let day_key = "2026-08-20";
+    let workspace_path = Path::new("/tmp/project-alpha");
+    let session_path = write_named_session_file(
+        &root,
+        day_key,
+        "rollout-2026-08-20T10-50-09-01a01d13-7328-7153-99f3-faf8693a30cb",
+        &[
+            r#"{"timestamp":"2026-08-20T02:50:09.337Z","type":"session_meta","payload":{"id":"01a01d13-7328-7153-99f3-faf8693a30cb","parent_thread_id":"01a01b3c-db39-7362-9505-3e3535f4b878","thread_source":"subagent","agent_nickname":"Socrates","cwd":"/tmp/project-alpha","originator":"codex-tui"}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-08-20T02:50:10.000Z","type":"event_msg","payload":{"type":"user_message","message":"审计这条不变量。"}}"#
+                .to_string(),
+        ],
+    );
+
+    let summary = parse_codex_session_summary(session_path.as_path(), Some(workspace_path))
+        .expect("parse summary")
+        .expect("summary exists");
+
+    assert_eq!(
+        summary.session_id,
+        "01a01d13-7328-7153-99f3-faf8693a30cb"
+    );
+    assert_eq!(
+        summary.parent_session_id.as_deref(),
+        Some("01a01b3c-db39-7362-9505-3e3535f4b878")
+    );
+    assert_eq!(summary.summary.as_deref(), Some("Socrates"));
+}
+
+#[test]
 fn parse_codex_session_summary_falls_back_to_filename_when_session_meta_id_missing() {
     let root = make_temp_sessions_root();
     let day_key = "2026-01-19";
@@ -2200,6 +2232,37 @@ fn parse_codex_session_summary_skips_agents_md_bootstrap_title() {
         summary.summary.as_deref(),
         Some("为什么我一点，展示的是标注页面？编辑功能呢？")
     );
+}
+
+#[test]
+fn parse_codex_session_summary_skips_environment_context_then_keeps_mossx() {
+    let root = make_temp_sessions_root();
+    let day_key = "2026-08-07";
+    let workspace_path = Path::new("S:\\AIWorker\\zen_proxy");
+    let session_path = write_named_session_file(
+        &root,
+        day_key,
+        "rollout-2026-08-07T13-18-00-019fdaa8-262e-7981-8572-ce0884b61784",
+        &[
+            r#"{"timestamp":"2026-08-07T05:18:00.000Z","type":"session_meta","payload":{"id":"019fdaa8-262e-7981-8572-ce0884b61784","cwd":"S:\\AIWorker\\zen_proxy","source":"vscode","originator":"codex-tui"}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-08-07T05:18:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\n  <cwd>S:\\AIWorker\\zen_proxy</cwd>\n</environment_context>"}]}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-08-07T05:18:15.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"MOSSX_CONTEXT_PACKAGE:sha256:eb6589d935390f007135fd0d0826a8ecd0f533feac376e82518036c88affe030:sha256:dead\nMOSSX_SHARED_CONTEXT_V1\nsession:89d8becf-c13a-4cad-94e8-2815d4cb179a\nbinding:codex:default\n\nCurrent user request:\n继续"}]}}"#
+                .to_string(),
+        ],
+    );
+
+    let summary = parse_codex_session_summary(session_path.as_path(), Some(workspace_path))
+        .expect("parse summary")
+        .expect("summary exists");
+    assert_eq!(summary.session_id, "019fdaa8-262e-7981-8572-ce0884b61784");
+    let title = summary.summary.as_deref().unwrap_or("");
+    assert!(
+        title.starts_with("MOSSX_CONTEXT_PACKAGE"),
+        "env context must not become title: {title}"
+    );
+    assert!(!title.contains("environment_context"));
 }
 
 #[test]

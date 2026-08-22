@@ -98,9 +98,7 @@ export function SidebarWorkspaceMenuOverlay({
         .flatMap((group) => group.actions)
         .find(
           (action) =>
-            action.id === openSubmenuId &&
-            Boolean(action.children?.length) &&
-            !action.unavailable,
+            action.id === openSubmenuId && Boolean(action.children?.length),
         ) ?? null,
     [menu.groups, openSubmenuId],
   );
@@ -112,7 +110,7 @@ export function SidebarWorkspaceMenuOverlay({
   }, []);
 
   const openSubmenu = useCallback((action: WorkspaceMenuAction, trigger: HTMLElement) => {
-    if (!action.children?.length || action.unavailable) {
+    if (!action.children?.length) {
       closeSubmenu();
       return;
     }
@@ -130,11 +128,12 @@ export function SidebarWorkspaceMenuOverlay({
 
   const handleAction = useCallback(
     (action: WorkspaceMenuAction, trigger: HTMLElement) => {
-      if (action.unavailable) {
-        return;
-      }
-      if (action.submenuOnly && action.children?.length) {
+      if (action.children?.length) {
         openSubmenu(action, trigger);
+        if (action.unavailable || action.submenuOnly) {
+          return;
+        }
+      } else if (action.unavailable) {
         return;
       }
       closeSubmenu();
@@ -231,7 +230,9 @@ export function SidebarWorkspaceMenuOverlay({
                         }${action.deprecated ? " is-deprecated" : ""}${
                           action.unavailable ? " is-unavailable" : ""
                         }`}
-                        disabled={action.unavailable}
+                        disabled={
+                          action.unavailable && !action.children?.length
+                        }
                         aria-haspopup={
                           action.children?.length ? "menu" : undefined
                         }
@@ -241,7 +242,7 @@ export function SidebarWorkspaceMenuOverlay({
                             : undefined
                         }
                         onMouseEnter={(event) => {
-                          if (action.children?.length && !action.unavailable) {
+                          if (action.children?.length) {
                             openSubmenu(action, event.currentTarget);
                             return;
                           }
@@ -252,8 +253,7 @@ export function SidebarWorkspaceMenuOverlay({
                           // hover remains the pointer path.
                           if (
                             event.key === "ArrowRight" &&
-                            action.children?.length &&
-                            !action.unavailable
+                            action.children?.length
                           ) {
                             event.preventDefault();
                             openSubmenu(action, event.currentTarget);

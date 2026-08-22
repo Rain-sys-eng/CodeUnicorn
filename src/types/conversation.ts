@@ -120,6 +120,22 @@ export type MessagePresentationMetadata = {
   contexts: ConversationPresentationContext[];
 };
 
+export type RuntimeModelReceiptSource =
+  | "send.request"
+  | "assistant.message.model"
+  | "system.init.model"
+  | "turn.completed";
+
+export type RuntimeModelReceiptWindowSource = "live" | "init" | "unknown";
+
+/** stream / JSONL 回写的真实模型与窗口；不得覆盖 executionTargetSnapshot.model。 */
+export type RuntimeModelReceipt = {
+  model: string;
+  modelSource: RuntimeModelReceiptSource;
+  contextWindowTokens?: number | null;
+  contextWindowSource?: RuntimeModelReceiptWindowSource | null;
+};
+
 export type ConversationItem =
   | {
       id: string;
@@ -139,6 +155,7 @@ export type ConversationItem =
         runtimeCapabilityFingerprint?: string | null;
         providerAvailable?: boolean;
       };
+      runtimeReceipt?: RuntimeModelReceipt;
       isFinal?: boolean;
       finalCompletedAt?: number;
       finalDurationMs?: number;
@@ -157,6 +174,9 @@ export type ConversationItem =
       browserContextAttachment?: BrowserContextSendAttachment | null;
       intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
       presentationMetadata?: MessagePresentationMetadata;
+      originKind?: "shared-provider-retry";
+      providerRetryAttempt?: number;
+      providerRetryAtMs?: number;
     }
   | {
       id: string;
@@ -256,7 +276,8 @@ export type ThreadSummary = {
     | "kimi"
     | "opencode"
     | "pi"
-    | "dsh";
+    | "dsh"
+    | "qoder";
   selectedEngine?:
     | "codex"
     | "claude"
@@ -265,7 +286,8 @@ export type ThreadSummary = {
     | "kimi"
     | "opencode"
     | "pi"
-    | "dsh";
+    | "dsh"
+    | "qoder";
   source?: string;
   provider?: string;
   sourceLabel?: string;
@@ -554,6 +576,9 @@ export type MessageSendOptions = {
   squadRequest?: true;
   /** DSH create-time Agent Preset; ignored by other engines. */
   dshAgentPreset?: string | null;
+  originKind?: "shared-provider-retry";
+  providerRetryAttempt?: number;
+  providerRetryAtMs?: number;
 };
 
 export type SelectedAgentOption = {

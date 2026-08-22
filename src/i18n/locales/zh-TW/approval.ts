@@ -22,6 +22,8 @@ const approval = {
     "noteLabel": "備註",
     "none": "無",
     "noExtraDetails": "沒有其他細節。",
+    "showDebugDetails": "顯示請求詳情",
+    "hideDebugDetails": "隱藏請求詳情",
     "decline": "拒絕",
     "close": "關閉",
     "approveTurnBatch": "核准此批次中的全部（{{count}}）",

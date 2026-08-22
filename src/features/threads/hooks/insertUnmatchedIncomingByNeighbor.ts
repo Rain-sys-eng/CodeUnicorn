@@ -116,6 +116,6 @@ function isInProgressCommandExecution(item: ConversationItem): boolean {
   );
 }
 
-function isUnmatchedExploreOrInProgressCommand(item: ConversationItem): boolean {
+export function isUnmatchedExploreOrInProgressCommand(item: ConversationItem): boolean {
   return item.kind === "explore" || isInProgressCommandExecution(item);
 }

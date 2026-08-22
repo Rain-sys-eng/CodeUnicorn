@@ -113,6 +113,81 @@ pub async fn select_model(
     client.call("session.selectModel", payload).await
 }
 
+pub const DSH_PERMISSION_PRESET_WORKSPACE_WRITE: &str = "workspace-write";
+pub const DSH_PERMISSION_PRESET_DANGER_FULL_ACCESS: &str = "danger-full-access";
+
+/// Live `/permission` injects into the current agent inbox. Skip it while a
+/// continued session still has an open turn, otherwise in-flight tools can
+/// flip from `ask` to `never` (or the reverse) mid-approval.
+pub fn should_set_permission_preset(continue_session: bool, has_open_turn: bool) -> bool {
+    !continue_session || !has_open_turn
+}
+
+/// Map mossx composer access mode onto a shipped DSH permission preset.
+///
+/// Auto mode must select `danger-full-access` (unconfined sandbox +
+/// `approval: never`). DSH `never` rejects sandbox escalations instead of
+/// granting them, so leaving the session on `workspace-write + ask` — or
+/// flipping only the approval knob — still pops the upgrade card.
+pub fn permission_preset_for_access_mode(access_mode: Option<&str>) -> &'static str {
+    match access_mode.map(str::trim).filter(|value| !value.is_empty()) {
+        Some("full-access") => DSH_PERMISSION_PRESET_DANGER_FULL_ACCESS,
+        _ => DSH_PERMISSION_PRESET_WORKSPACE_WRITE,
+    }
+}
+
+pub fn permission_command_line(preset: &str) -> String {
+    format!("/permission {preset}")
+}
+
+/// DSH `0.1.1-rc.2` Typert Gateway matches `commands/execute` args by
+/// exact key set (`agentId`, `line`, `images`). Missing `images` is
+/// `arguments-invalid` even for `/permission`, which has no attachments.
+pub fn execute_command_payload(session_id: &str, line: &str) -> Value {
+    json!({
+        "args": {
+            "agentId": session_id,
+            "line": line,
+            "images": [],
+        }
+    })
+}
+
+fn command_execution_error(value: &Value) -> Option<String> {
+    let result = value.get("result").unwrap_or(value);
+    match result.get("kind").and_then(Value::as_str) {
+        Some("success") => None,
+        Some("error") => Some(
+            result
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("command failed")
+                .to_string(),
+        ),
+        _ => Some("command.execute returned no success result".to_string()),
+    }
+}
+
+pub async fn set_permission_preset(
+    client: &DshHostClient,
+    session_id: &str,
+    access_mode: Option<&str>,
+) -> Result<Value, String> {
+    let preset = permission_preset_for_access_mode(access_mode);
+    let line = permission_command_line(preset);
+    let value = client
+        .call("commands/execute", execute_command_payload(session_id, &line))
+        .await?;
+    if let Some(error) = command_execution_error(&value) {
+        return Err(format!(
+            "dsh permission preset `{preset}` failed: {error}"
+        ));
+    }
+    Ok(value)
+}
+
 pub async fn prompt(
     client: &DshHostClient,
     session_id: &str,
@@ -483,6 +558,74 @@ mod tests {
         assert_eq!(payload["workspaceId"], "ws-1");
         assert_eq!(payload["sessionId"], "sess-1");
         assert_eq!(payload["agentPreset"], "minimal");
+    }
+
+    #[test]
+    fn maps_full_access_to_danger_full_access_preset() {
+        assert_eq!(
+            permission_preset_for_access_mode(Some("full-access")),
+            DSH_PERMISSION_PRESET_DANGER_FULL_ACCESS
+        );
+        assert_eq!(
+            permission_preset_for_access_mode(Some("  full-access  ")),
+            DSH_PERMISSION_PRESET_DANGER_FULL_ACCESS
+        );
+    }
+
+    #[test]
+    fn skips_permission_switch_only_for_busy_continue_turns() {
+        assert!(should_set_permission_preset(false, false));
+        assert!(should_set_permission_preset(false, true));
+        assert!(should_set_permission_preset(true, false));
+        assert!(!should_set_permission_preset(true, true));
+    }
+
+    #[test]
+    fn maps_non_auto_access_to_workspace_write_preset() {
+        assert_eq!(
+            permission_preset_for_access_mode(None),
+            DSH_PERMISSION_PRESET_WORKSPACE_WRITE
+        );
+        assert_eq!(
+            permission_preset_for_access_mode(Some("default")),
+            DSH_PERMISSION_PRESET_WORKSPACE_WRITE
+        );
+        assert_eq!(
+            permission_preset_for_access_mode(Some("current")),
+            DSH_PERMISSION_PRESET_WORKSPACE_WRITE
+        );
+        assert_eq!(
+            permission_preset_for_access_mode(Some("read-only")),
+            DSH_PERMISSION_PRESET_WORKSPACE_WRITE
+        );
+        assert_eq!(
+            permission_preset_for_access_mode(Some("")),
+            DSH_PERMISSION_PRESET_WORKSPACE_WRITE
+        );
+    }
+
+    #[test]
+    fn execute_command_payload_uses_typert_args_envelope() {
+        let payload = execute_command_payload(
+            "session-1",
+            "/permission danger-full-access",
+        );
+        let args = payload.get("args").expect("typert args envelope");
+        assert_eq!(args["agentId"], "session-1");
+        assert_eq!(args["line"], "/permission danger-full-access");
+        assert_eq!(args["images"], json!([]));
+        let mut keys: Vec<&str> = args
+            .as_object()
+            .expect("args object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, vec!["agentId", "images", "line"]);
+        assert_eq!(
+            permission_command_line(DSH_PERMISSION_PRESET_WORKSPACE_WRITE),
+            "/permission workspace-write"
+        );
     }
 
     #[test]

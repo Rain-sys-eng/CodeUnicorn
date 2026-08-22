@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { isMultiAgentTargetSupported } from "./ComposerToggle";
 
 describe("isMultiAgentTargetSupported", () => {
-  it.each(["claude", "codex", "kimi", "grok", "opencode", "pi"] as const)(
+  it.each(["claude", "codex", "kimi", "grok", "opencode", "pi", "qoder"] as const)(
     "accepts Shared-supported engine %s as collab host/stage",
     (engine) => {
       expect(isMultiAgentTargetSupported(engine)).toBe(true);

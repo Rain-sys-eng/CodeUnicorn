@@ -12,6 +12,10 @@ import { buildProviderExecutionTarget } from "../selectors/ModelSelect";
 import { seedCliEngineVisibility } from "../../../hooks/cliEngineVisibilityStore";
 import { isResolvedExecutionTarget } from "../../../../shared-session/target/types";
 import {
+  QODER_CN_PROVIDER_PROFILE_ID,
+  QODER_GLOBAL_PROVIDER_PROFILE_ID,
+} from "../../../../threads/constants/codexProviderProfiles";
+import {
   discoverCodexModels,
   getClaudeProviders,
   getCodexProviders,
@@ -89,7 +93,7 @@ describe("Provider target catalog owners", () => {
     discoverCodexModelsMock.mockResolvedValue({ data: [] });
   });
 
-  it.each(["claude", "codex", "grok", "kimi", "opencode", "pi"])(
+  it.each(["claude", "codex", "grok", "kimi", "opencode", "pi", "qoder"])(
     "recognizes %s as a Provider Profile engine",
     (engine) => {
       expect(isProviderProfileEngine(engine)).toBe(true);
@@ -102,6 +106,12 @@ describe("Provider target catalog owners", () => {
 
   it("keeps DSH outside the Provider Profile picker", () => {
     expect(isProviderProfileEngine("dsh")).toBe(false);
+  });
+
+  it("includes Qoder in the Provider Profile picker with fixed Global/CN bindings", () => {
+    // Qoder 的两个运行时分发复用 Provider Profile picker 的 scoped catalog 能力，
+    // 但不是供应商 CRUD 产生的普通 profile。
+    expect(isProviderProfileEngine("qoder")).toBe(true);
   });
 
   it("loads profiles once and models only for the opened binding", async () => {
@@ -129,10 +139,11 @@ describe("Provider target catalog owners", () => {
       "kimi",
       "opencode",
       "pi",
+      "qoder",
     ]);
     expect(
       result.current.groups.filter((group) => group.enabled),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     expect(
       result.current.groups.flatMap((group) => group.profiles).every(
         (profile) => profile.enabled !== false,
@@ -226,6 +237,7 @@ describe("Provider target catalog owners", () => {
       "kimi",
       "opencode",
       "pi",
+      "qoder",
     ]);
     expect(
       result.current.groups.some((group) => group.providerId === "dsh"),
@@ -255,10 +267,12 @@ describe("Provider target catalog owners", () => {
       "kimi",
       "opencode",
       "pi",
+      "qoder",
       "dsh",
     ]);
     expect(result.current.groups.every((group) => group.enabled)).toBe(true);
     expect(isProviderProfileEngine("dsh")).toBe(false);
+    expect(isProviderProfileEngine("qoder")).toBe(true);
     expect(
       result.current.groups.find((group) => group.providerId === "dsh")?.profiles,
     ).toEqual([
@@ -269,14 +283,108 @@ describe("Provider target catalog owners", () => {
     ]);
   });
 
+  it("exposes Qoder on Home create-session via the shared Provider Profile group", async () => {
+    const { result } = renderHook(() =>
+      useAtomicProviderTargetCatalog({
+        enabled: true,
+        mode: "create-session",
+        currentProvider: "opencode",
+        currentProviderProfileId: "opencode-e",
+        resolveProviderLabel: (provider) => provider,
+        kimiDisabledReason: "native only",
+      }),
+    );
+
+    await act(async () => {
+      await result.current.ensureProfiles();
+    });
+
+    expect(
+      result.current.groups.find((group) => group.providerId === "qoder")?.profiles,
+    ).toEqual([
+      expect.objectContaining({
+        id: QODER_GLOBAL_PROVIDER_PROFILE_ID,
+        source: "managed",
+      }),
+      expect.objectContaining({
+        id: QODER_CN_PROVIDER_PROFILE_ID,
+        source: "managed",
+      }),
+    ]);
+    expect(isProviderProfileEngine("qoder")).toBe(true);
+  });
+
+  it("loads Qoder Global and CN catalogs under separate scoped cache keys", async () => {
+    getEngineModelsMock
+      .mockResolvedValueOnce([
+        {
+          id: "global-model",
+          model: "global-model",
+          displayName: "Global model",
+          description: "",
+          isDefault: true,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "cn-model",
+          model: "cn-model",
+          displayName: "CN model",
+          description: "",
+          isDefault: true,
+        },
+      ]);
+    const { result } = renderHook(() =>
+      useAtomicProviderTargetCatalog({
+        enabled: true,
+        mode: "create-session",
+        currentProvider: "qoder",
+        currentProviderProfileId: QODER_GLOBAL_PROVIDER_PROFILE_ID,
+        resolveProviderLabel: (provider) => provider,
+        kimiDisabledReason: "native only",
+      }),
+    );
+
+    await act(async () => {
+      await result.current.ensureProfiles();
+      await result.current.ensureModels("qoder", QODER_GLOBAL_PROVIDER_PROFILE_ID);
+      await result.current.ensureModels("qoder", QODER_CN_PROVIDER_PROFILE_ID);
+    });
+
+    expect(getEngineModelsMock).toHaveBeenNthCalledWith(1, "qoder", {
+      providerProfileId: QODER_GLOBAL_PROVIDER_PROFILE_ID,
+    });
+    expect(getEngineModelsMock).toHaveBeenNthCalledWith(2, "qoder", {
+      providerProfileId: QODER_CN_PROVIDER_PROFILE_ID,
+    });
+    const qoderProfiles = result.current.groups.find(
+      (group) => group.providerId === "qoder",
+    )?.profiles;
+    expect(qoderProfiles?.find((profile) => profile.id === QODER_GLOBAL_PROVIDER_PROFILE_ID)?.models)
+      .toEqual([
+        expect.objectContaining({
+          id: "global-model",
+          providerProfileId: QODER_GLOBAL_PROVIDER_PROFILE_ID,
+        }),
+      ]);
+    expect(qoderProfiles?.find((profile) => profile.id === QODER_CN_PROVIDER_PROFILE_ID)?.models)
+      .toEqual([
+        expect.objectContaining({
+          id: "cn-model",
+          providerProfileId: QODER_CN_PROVIDER_PROFILE_ID,
+        }),
+      ]);
+  });
+
   it("loads DSH models from the host catalog without a provider profile", async () => {
     getEngineModelsMock.mockResolvedValueOnce([
       {
         id: "deepseek/deepseek-v4-pro",
         model: "deepseek-v4-pro",
-        displayName: "DeepSeek V4 Pro",
+        displayName: "DeepSeek / DeepSeek V4 Pro",
         description: "",
         isDefault: true,
+        provider: "deepseek",
       },
     ]);
     const { result } = renderHook(() =>
@@ -305,6 +413,8 @@ describe("Provider target catalog owners", () => {
       expect.objectContaining({
         id: "deepseek/deepseek-v4-pro",
         model: "deepseek-v4-pro",
+        provider: "deepseek",
+        label: "DeepSeek / DeepSeek V4 Pro",
       }),
     ]);
   });
@@ -1067,6 +1177,32 @@ describe("Provider target catalog owners", () => {
         "kimi",
         "opencode",
         "pi",
+        "qoder",
+      ]);
+    });
+
+    it("hides user-disabled Qoder from Home create-session groups", () => {
+      seedCliEngineVisibility(["qoder"]);
+
+      const { result } = renderHook(() =>
+        useAtomicProviderTargetCatalog({
+          enabled: true,
+          mode: "create-session",
+          currentProvider: "claude",
+          currentProviderProfileId: null,
+          resolveProviderLabel: (provider) => provider,
+          kimiDisabledReason: "source only",
+        }),
+      );
+
+      expect(result.current.groups.map((group) => group.providerId)).toEqual([
+        "claude",
+        "codex",
+        "grok",
+        "kimi",
+        "opencode",
+        "pi",
+        "dsh",
       ]);
     });
 
@@ -1089,6 +1225,7 @@ describe("Provider target catalog owners", () => {
         "codex",
         "kimi",
         "pi",
+        "qoder",
       ]);
     });
 
@@ -1113,6 +1250,7 @@ describe("Provider target catalog owners", () => {
         "kimi",
         "opencode",
         "pi",
+        "qoder",
       ]);
     });
 
@@ -1128,7 +1266,7 @@ describe("Provider target catalog owners", () => {
         }),
       );
 
-      expect(result.current.groups).toHaveLength(6);
+      expect(result.current.groups).toHaveLength(7);
 
       act(() => {
         seedCliEngineVisibility(["opencode"]);
@@ -1140,6 +1278,7 @@ describe("Provider target catalog owners", () => {
         "grok",
         "kimi",
         "pi",
+        "qoder",
       ]);
     });
   });

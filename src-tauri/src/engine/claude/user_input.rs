@@ -136,6 +136,9 @@ impl ClaudeSession {
         if let Ok(mut map) = self.last_emitted_text_by_turn.lock() {
             map.remove(turn_id);
         }
+        if let Ok(mut map) = self.emitted_runtime_model_by_turn.lock() {
+            map.remove(turn_id);
+        }
         if let Ok(mut summaries) = self.synthetic_approval_summaries_by_turn.lock() {
             summaries.remove(turn_id);
         }

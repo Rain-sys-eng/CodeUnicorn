@@ -239,13 +239,27 @@ export function useComposerController({
   );
 
   const handleDeleteQueued = useCallback(
-    (id: string) => {
+    async (id: string, options?: { confirmedPendingAck?: boolean }) => {
       if (!activeThreadId) {
-        return;
+        return false;
       }
-      removeQueuedMessage(activeThreadId, id);
+      const removed = await removeQueuedMessage(activeThreadId, id, options);
+      if (
+        !removed &&
+        options?.confirmedPendingAck &&
+        activeQueue.some(
+          (item) =>
+            item.id === id && item.sharedDispatchState === "pending-ack",
+        )
+      ) {
+        pushErrorToast({
+          title: t("sharedSend.recoverySkipFailedTitle"),
+          message: t("sharedSend.recoveryErrorGenericSkip"),
+        });
+      }
+      return removed;
     },
-    [activeThreadId, removeQueuedMessage],
+    [activeQueue, activeThreadId, removeQueuedMessage, t],
   );
 
   const handleFuseQueued = useCallback(

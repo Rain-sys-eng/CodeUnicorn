@@ -254,6 +254,8 @@ function renderPanel(
     codexReloadStatus?: "idle" | "reloading" | "applied" | "failed";
     codexReloadMessage?: string | null;
     onUpdateAppSettings?: (next: AppSettings) => Promise<void>;
+    initialCli?: "qoder";
+    initialQoderDistribution?: "global" | "cn";
   } = {},
 ) {
   const handleReloadCodexRuntimeConfig =
@@ -273,6 +275,8 @@ function renderPanel(
       codexReloadMessage={options.codexReloadMessage ?? null}
       handleReloadCodexRuntimeConfig={handleReloadCodexRuntimeConfig}
       onUpdateAppSettings={onUpdateAppSettings}
+      initialCli={options.initialCli}
+      initialQoderDistribution={options.initialQoderDistribution}
     />,
   );
 
@@ -421,9 +425,9 @@ describe("VendorSettingsPanel", () => {
       "OpenCode CLI",
       "PI CLI",
       "DeepSeek Harness",
+      "Qoder CLI",
       "Gemini CLI",
       "GLM CLI",
-      "Trae CLI",
     ]);
     expect(navLabels).toEqual(
       expect.arrayContaining(["瑞幸 CLI", "DevEco CLI", "Cursor CLI", "iFlow CLI"]),
@@ -489,9 +493,7 @@ describe("VendorSettingsPanel", () => {
       "Cursor CLI",
       "瑞幸 CLI",
       "DevEco CLI",
-      "PI CLI",
       "iFlow CLI",
-      "Qoder CLI",
       "Qwen CLI",
       "CodeBuddy CLI",
       "Copilot CLI",
@@ -586,6 +588,108 @@ describe("VendorSettingsPanel", () => {
     expect(
       screen.getByRole("button", { name: /自定义路径|Custom path|Configure/i }),
     ).toBeTruthy();
+  });
+
+  it("renders Qoder Global as the default tab under one Qoder CLI tab", async () => {
+    renderPanel();
+
+    await waitFor(() => {
+      expect(readGlobalCodexConfigTomlMock).toHaveBeenCalled();
+      expect(readGlobalCodexAuthJsonMock).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Qoder CLI/ }));
+
+    const brandHeader = screen
+      .getByRole("heading", { name: "Qoder CLI" })
+      .closest(".vendor-brand-header") as HTMLElement;
+    expect(brandHeader).toBeTruthy();
+    const docsLink = within(brandHeader).getByRole("link", {
+      name: "Official docs",
+    });
+    expect(docsLink.getAttribute("href")).toBe(
+      "https://docs.qoder.com/en/cli/using-cli",
+    );
+    expect(screen.queryByText("正在适配此CLI，即将开放")).toBeNull();
+    expect(screen.queryByTestId("provider-list-stub")).toBeNull();
+    expect(screen.queryByTestId("kimi-provider-list-stub")).toBeNull();
+    expect(
+      screen.getByRole("tab", { name: "Qoder Global" }).getAttribute(
+        "aria-selected",
+      ),
+    ).toBe("true");
+    expect(
+      screen.getByRole("tab", { name: "Qoder CN" }).getAttribute(
+        "aria-selected",
+      ),
+    ).toBe("false");
+    expect(screen.getByText(/QODER_CONFIG_DIR/)).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", {
+        name: /自定义路径|Custom path|Configure/i,
+      }),
+    ).toHaveLength(1);
+    expect(screen.getByPlaceholderText("~/.qoder")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("~/.qoder-cn")).toBeNull();
+  });
+
+  it("opens the Qoder CN tab from a Qoder settings deep link", async () => {
+    renderPanel({ initialCli: "qoder", initialQoderDistribution: "cn" });
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Qoder CLI" })).toBeTruthy();
+    });
+    expect(
+      screen.getByRole("tab", { name: "Qoder CN" }).getAttribute(
+        "aria-selected",
+      ),
+    ).toBe("true");
+    expect(screen.getByPlaceholderText("~/.qoder-cn")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("~/.qoder")).toBeNull();
+  });
+
+  it("saves Qoder Global/CN config roots independently", async () => {
+    const { onUpdateAppSettings } = renderPanel({
+      appSettings: {
+        qoderConfigDir: "/existing/global",
+        qoderCnConfigDir: "/existing/cn",
+      },
+    });
+
+    await waitFor(() => {
+      expect(readGlobalCodexConfigTomlMock).toHaveBeenCalled();
+      expect(readGlobalCodexAuthJsonMock).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Qoder CLI/ }));
+
+    const globalInput = screen.getByDisplayValue("/existing/global");
+    fireEvent.change(globalInput, { target: { value: "/next/global" } });
+    fireEvent.submit(globalInput.closest("form")!);
+    await waitFor(() =>
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          qoderConfigDir: "/next/global",
+          qoderCnConfigDir: "/existing/cn",
+        }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Qoder CN" }));
+    expect(
+      screen.getByRole("tab", { name: "Qoder CN" }).getAttribute(
+        "aria-selected",
+      ),
+    ).toBe("true");
+    const cnInput = screen.getByDisplayValue("/existing/cn");
+    fireEvent.change(cnInput, { target: { value: "/next/cn" } });
+    fireEvent.submit(cnInput.closest("form")!);
+    await waitFor(() =>
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          qoderConfigDir: "/existing/global",
+          qoderCnConfigDir: "/next/cn",
+        }),
+      ),
+    );
   });
 
   it("renders the Grok CLI tab with official config row and provider list", async () => {
@@ -1320,7 +1424,7 @@ describe("VendorSettingsPanel", () => {
   it("shows the empty hint when every supported CLI is disabled", async () => {
     renderPanel({
       appSettings: {
-        disabledCliEngines: ["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh"],
+        disabledCliEngines: ["claude", "codex", "kimi", "grok", "opencode", "pi", "dsh", "qoder"],
       },
     });
 

@@ -204,6 +204,7 @@ pub async fn send_user_turn(
     resume_id: Option<&str>,
     continue_session: bool,
     agent_preset: Option<&str>,
+    access_mode: Option<&str>,
 ) -> Result<DshSendOutcome, String> {
     if let Some(handle) = app.as_ref() {
         events::set_app_handle(handle.clone()).await;
@@ -287,6 +288,18 @@ pub async fn send_user_turn(
             );
         };
         image_admission::ensure_image_admission(&client, &provider, &model_id).await?;
+    }
+
+    // Permission preset is a live session switch, independent of Agent
+    // Preset. Create still pins the host default (usually workspace-write
+    // + ask); auto mode must overwrite it before the first tool call.
+    // Skip the switch while a turn is still open: /permission injects into
+    // the live agent inbox and can flip ask/never under in-flight tools.
+    if session::should_set_permission_preset(
+        continue_session,
+        events::session_has_open_turn(&native_session_id).await,
+    ) {
+        session::set_permission_preset(&client, &native_session_id, access_mode).await?;
     }
 
     // Subscribe immediately before prompt so this turn's `turn/end` cannot
@@ -679,6 +692,35 @@ pub fn flatten_llm_models_with_describe(
             if marked_default {
                 info = info.as_default();
             }
+            let reasoning = model.get("reasoning");
+            let supported_reasoning_efforts: Vec<String> = reasoning
+                .and_then(|value| value.get("efforts"))
+                .and_then(Value::as_array)
+                .map(|efforts| {
+                    let mut seen = std::collections::HashSet::new();
+                    efforts
+                        .iter()
+                        .filter_map(|entry| {
+                            entry
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|value| !value.is_empty())
+                                .map(str::to_string)
+                        })
+                        .filter(|value| seen.insert(value.clone()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let default_reasoning_effort = reasoning
+                .and_then(|value| value.get("defaultEffort"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            if !supported_reasoning_efforts.is_empty() || default_reasoning_effort.is_some() {
+                info = info.with_reasoning(supported_reasoning_efforts, default_reasoning_effort);
+            }
             models.push(info);
         }
     }
@@ -793,6 +835,44 @@ mod tests {
         assert_eq!(models[0].provider.as_deref(), Some("deepseek-official"));
         assert!(models[0].default);
         assert!(!models[1].default);
+    }
+
+    #[test]
+    fn flattens_host_reasoning_efforts() {
+        let catalog = json!({
+            "groups": [{
+                "id": "deepseek-official",
+                "name": "DeepSeek",
+                "models": [{
+                    "id": "deepseek-v4-flash",
+                    "name": "DeepSeek-V4-Flash",
+                    "reasoning": {
+                        "efforts": [
+                            { "id": "off", "name": "Off" },
+                            { "id": "low", "name": "Low" },
+                            { "id": "high", "name": "High" },
+                            { "id": "max", "name": "Max" }
+                        ],
+                        "defaultEffort": "high"
+                    }
+                }, {
+                    "id": "deepseek-v4-pro",
+                    "name": "DeepSeek-V4-Pro"
+                }]
+            }]
+        });
+        let models = flatten_llm_models(&catalog);
+        assert_eq!(models.len(), 2);
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["off", "low", "high", "max"]
+        );
+        assert_eq!(
+            models[0].default_reasoning_effort.as_deref(),
+            Some("high")
+        );
+        assert!(models[1].supported_reasoning_efforts.is_empty());
+        assert!(models[1].default_reasoning_effort.is_none());
     }
 
     #[test]

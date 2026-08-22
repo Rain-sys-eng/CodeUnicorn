@@ -10,7 +10,10 @@ import type {
   TurnExecutionSnapshot,
 } from "../target/types";
 import { isResolvedExecutionTarget } from "../target/types";
-import { normalizeSharedSessionEngine } from "../utils/sharedSessionEngines";
+import {
+  assertSharedSessionWriteEngine,
+  normalizeSharedSessionEngine,
+} from "../utils/sharedSessionEngines";
 
 export async function startSharedSession(
   workspaceId: string,
@@ -52,10 +55,11 @@ export async function sendSharedSessionMessage(
     } | null;
   },
 ) {
+  const sharedEngine = assertSharedSessionWriteEngine(engine);
   return invoke<SharedSessionRuntimeDelivery | null | undefined>("send_shared_session_message", {
     workspaceId,
     threadId,
-    engine,
+    engine: sharedEngine,
     text,
     model: options?.model ?? null,
     effort: options?.effort ?? null,
@@ -148,7 +152,7 @@ export async function setSharedSessionSelectedEngine(
   return invoke<Record<string, unknown> | null>("set_shared_session_selected_engine", {
     workspaceId,
     threadId,
-    selectedEngine: normalizeSharedSessionEngine(selectedEngine),
+    selectedEngine: assertSharedSessionWriteEngine(selectedEngine),
     providerProfileId: providerProfileId ?? null,
     modelCatalogEntryId: target?.modelCatalogEntryId ?? null,
     model: target?.model ?? null,

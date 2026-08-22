@@ -7,10 +7,15 @@ import type { ModelInfo, ProviderId } from '../types';
 import {
   resolveAtomicReasoningEffort,
 } from '../../../../models/atomicModelReasoning';
-import { formatDshModelDisplayLabel } from './dshModelDisplayLabel';
+import {
+  formatDshModelDisplayLabel,
+  groupDshModelsByVendor,
+  isSlashCatalogEngine,
+} from './dshModelDisplayLabel';
 import type { ProviderModelGroup } from '../modelOptions';
 import type { ProviderTargetGroup } from '../hooks/useProviderTargetCatalogOwners';
 import type { ExecutionTarget } from '../../../../shared-session/target/types';
+import type { QoderSettingsHighlightTarget } from '../../../../app/hooks/useSettingsModalState';
 import { PROVIDER_CONTINUATION_UI_ROLLBACK_EVENT } from "../../../../threads/services/providerContinuationRequests";
 import {
   CLAUDE_LOCAL_PROVIDER_PROFILE_ID,
@@ -20,6 +25,9 @@ import {
   KIMI_LOCAL_PROVIDER_PROFILE_ID,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_CN_PROVIDER_PROFILE_ID,
+  QODER_GLOBAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
 } from '../../../../threads/constants/codexProviderProfiles';
 import { EngineIcon } from '../../../../engine/components/EngineIcon';
 import { ProviderBrandIconImg } from '../../../../vendors/components/ProviderBrandIconImg';
@@ -62,14 +70,18 @@ interface ModelSelectProps {
   currentProvider?: string;  // Current provider type
   providerLabel?: string;
   triggerVariant?: 'default' | 'readiness';
+  /** Raise the portaled menu above a stacking overlay (prompt enhancer dialog). */
+  menuLayer?: 'default' | 'overlay';
   modelGroups?: ProviderModelGroup[];
   onProviderModelChange?: (providerId: ProviderId, modelId: string) => void;
   /** Navigate to model management; optional providerId = the engine submenu opened */
   onAddModel?: (providerId?: string) => void;
   onRefreshConfig?: () => Promise<void> | void; // Refresh current provider config
   isRefreshingConfig?: boolean;
-  /** Jump to CLI / provider settings management page */
-  onOpenCliSettings?: () => void;
+  /** Jump to CLI / provider settings management page. */
+  onOpenCliSettings?: (
+    highlightTarget?: QoderSettingsHighlightTarget,
+  ) => void;
   // 共享会话(atomic)目标选择:与 legacy 相同的「引擎子菜单 → 平铺模型」
   // 交互,数据来自 target catalog,选中产出完整 ExecutionTarget。
   targetGroups?: ProviderTargetGroup[];
@@ -125,6 +137,7 @@ const LOCAL_PROVIDER_PROFILE_IDS: Partial<Record<ProviderId, string>> = {
   opencode: OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   pi: PI_LOCAL_PROVIDER_PROFILE_ID,
   dsh: DSH_LOCAL_PROVIDER_PROFILE_ID,
+  qoder: QODER_LOCAL_PROVIDER_PROFILE_ID,
 };
 
 export function normalizeExecutionProviderProfileId(
@@ -132,6 +145,14 @@ export function normalizeExecutionProviderProfileId(
   providerProfileId: string | null | undefined,
 ): string | null {
   const normalizedProviderProfileId = providerProfileId?.trim();
+  // Qoder Global/CN are fixed distribution identities, not ordinary local
+  // provider profiles. Preserve them through target selection and dispatch.
+  if (providerId === "qoder") {
+    return !normalizedProviderProfileId ||
+      normalizedProviderProfileId === QODER_LOCAL_PROVIDER_PROFILE_ID
+      ? null
+      : normalizedProviderProfileId;
+  }
   return !normalizedProviderProfileId ||
     LOCAL_PROVIDER_PROFILE_IDS[providerId] === normalizedProviderProfileId
     ? null
@@ -156,7 +177,12 @@ export function resolveActiveProviderProfileId(
           executionTarget.providerProfileId,
         )
       : null;
-  return targetProfileId ?? LOCAL_PROVIDER_PROFILE_IDS[providerId] ?? null;
+  if (targetProfileId) {
+    return targetProfileId;
+  }
+  return providerId === "qoder"
+    ? QODER_GLOBAL_PROVIDER_PROFILE_ID
+    : LOCAL_PROVIDER_PROFILE_IDS[providerId] ?? null;
 }
 
 /**
@@ -325,6 +351,24 @@ export function resolveAtomicSelectedModelDisplay(
 }
 
 /**
+ * Atomic 空选：有引擎、无 model identity。
+ * 这是模板编辑器的合法未配齐态，不是 Composer 冷启 loading。
+ */
+export function isAtomicEmptyModelSelection(
+  executionTarget: ExecutionTarget | null | undefined,
+  selectedModelValue: string,
+): boolean {
+  if (!executionTarget?.engine) {
+    return false;
+  }
+  return (
+    !executionTarget.modelCatalogEntryId?.trim() &&
+    !executionTarget.model?.trim() &&
+    !selectedModelValue.trim()
+  );
+}
+
+/**
  * Resolve the model id used for brand-icon matching.
  * Claude：与列表文案同源（{@link resolveClaudeCatalogModelLabel}）——
  * catalog runtime 优先，禁止陈旧 localStorage mapping 把「k3」行画成 DeepSeek 鲸。
@@ -397,6 +441,34 @@ type PickerModelGroup = {
   /** Atomic 目标组的全部渠道,用于子菜单底栏渠道选择弹窗 */
   profiles: PickerProfileOption[];
 };
+
+type PickerModelRow =
+  | { kind: 'heading'; key: string; sectionKey: string; label: string }
+  | { kind: 'model'; key: string; model: ModelInfo };
+
+function pickerRowsForGroup(group: PickerModelGroup): PickerModelRow[] {
+  if (!isSlashCatalogEngine(group.providerId)) {
+    return group.models.map((model) => ({
+      kind: 'model' as const,
+      key: `${group.providerId}:${model.id}`,
+      model,
+    }));
+  }
+
+  return groupDshModelsByVendor(group.models).flatMap((section) => [
+    {
+      kind: 'heading' as const,
+      key: `${group.providerId}-vendor:${section.key}`,
+      sectionKey: section.key,
+      label: section.label,
+    },
+    ...section.models.map((model) => ({
+      kind: 'model' as const,
+      key: `${group.providerId}:${section.key}:${model.id}`,
+      model,
+    })),
+  ]);
+}
 
 /**
  * Each CLI's native brand mark (when it has a lobehub SVG). Used to detect
@@ -488,6 +560,8 @@ const ModelIcon = ({
       return <EngineIcon engine="opencode" size={size} style={imgStyle} />;
     case 'pi':
       return <EngineIcon engine="pi" size={size} style={imgStyle} />;
+    case 'qoder':
+      return <EngineIcon engine="qoder" size={size} style={imgStyle} />;
     case 'claude':
     default:
       return <EngineIcon engine="claude" size={size} style={imgStyle} />;
@@ -504,6 +578,7 @@ export const ModelSelect = memo(({
   models = [],
   currentProvider = 'claude',
   triggerVariant = 'default',
+  menuLayer = 'default',
   modelGroups,
   onProviderModelChange,
   onAddModel,
@@ -726,7 +801,7 @@ export const ModelSelect = memo(({
       }
     }
 
-    if (providerId === 'dsh') {
+    if (isSlashCatalogEngine(providerId)) {
       return formatDshModelDisplayLabel(model, { closed: options?.closed === true });
     }
 
@@ -764,10 +839,22 @@ export const ModelSelect = memo(({
       ? executionTarget.engine
       : currentProvider;
   const modelResolved = Boolean(currentModel);
-  // 未解析到已选模型时：固定占位 loading，禁止用「选择模型」空缺再闪成真名（冷启/切会话 UX）
+  const isEmptyAtomicSelection =
+    hasTargetGroups &&
+    isAtomicEmptyModelSelection(executionTarget, selectedModelValue);
+  const triggerReady = modelResolved || isEmptyAtomicSelection;
+  const emptyAtomicLabel = isEmptyAtomicSelection
+    ? pickerGroups.find((group) => group.providerId === executionTarget?.engine)
+        ?.providerLabel ||
+      t("models.selectModel", { defaultValue: "选择模型" })
+    : "";
+  // 冷启 / 切会话：executionTarget 尚未到位 → 固定 loading，禁止闪「选择模型」。
+  // 模板空选：engine-only target → 显示 CLI 名，允许打开菜单配齐。
   const currentModelLabel = modelResolved
     ? getModelLabel(currentModel!, selectedModelProvider, { closed: true })
-    : t('models.loading', { defaultValue: '加载中' });
+    : isEmptyAtomicSelection
+      ? emptyAtomicLabel
+      : t("models.loading", { defaultValue: "加载中" });
   const hasConfigActions = Boolean(onAddModel || onRefreshConfig);
 
   const isGroupCurrent = (group: PickerModelGroup): boolean =>
@@ -852,10 +939,18 @@ export const ModelSelect = memo(({
     [onAddModel],
   );
 
+  const qoderSettingsHighlightTarget: QoderSettingsHighlightTarget | undefined =
+    (hasTargetGroups ? executionTarget?.engine : currentProvider) === "qoder"
+      ? resolveActiveProviderProfileId("qoder", executionTarget) ===
+        QODER_CN_PROVIDER_PROFILE_ID
+        ? "qoder-cn"
+        : "qoder-global"
+      : undefined;
+
   const handleOpenCliSettings = useCallback(() => {
-    onOpenCliSettings?.();
+    onOpenCliSettings?.(qoderSettingsHighlightTarget);
     setIsOpen(false);
-  }, [onOpenCliSettings]);
+  }, [onOpenCliSettings, qoderSettingsHighlightTarget]);
 
   // Refresh keeps the menu open so the spinner / error stay visible.
   const handleRefreshConfig = useCallback(() => {
@@ -1085,24 +1180,28 @@ export const ModelSelect = memo(({
     <button
       className={triggerVariant === 'readiness' ? 'composer-readiness-target composer-readiness-target-button' : 'selector-button'}
       title={
-        modelResolved
-          ? t('chat.currentModel', { model: currentModelLabel })
-          : t('models.loading', { defaultValue: '加载中' })
+        triggerReady
+          ? isEmptyAtomicSelection
+            ? t("models.selectModel", { defaultValue: "选择模型" })
+            : t("chat.currentModel", { model: currentModelLabel })
+          : t("models.loading", { defaultValue: "加载中" })
       }
       aria-label={
-        modelResolved
-          ? t('chat.currentModel', { model: currentModelLabel })
-          : t('models.loading', { defaultValue: '加载中' })
+        triggerReady
+          ? isEmptyAtomicSelection
+            ? t("models.selectModel", { defaultValue: "选择模型" })
+            : t("chat.currentModel", { model: currentModelLabel })
+          : t("models.loading", { defaultValue: "加载中" })
       }
-      aria-busy={!modelResolved}
-      data-model-loading={modelResolved ? undefined : 'true'}
-      // 加载中不展开菜单；宽度跟内容走，避免与 ModeSelect 之间被撑空
-      disabled={!modelResolved}
+      aria-busy={!triggerReady}
+      data-model-loading={triggerReady ? undefined : "true"}
+      // 真 loading 不展开菜单；空选必须可点，否则模板永远卡在「加载中」
+      disabled={!triggerReady}
     >
       {triggerVariant === 'readiness' ? (
         <>
           <span className="composer-readiness-icon" aria-hidden="true">
-            {modelResolved ? (
+            {modelResolved || isEmptyAtomicSelection ? (
               <ModelIcon
                 provider={selectedModelProvider}
                 model={currentModel}
@@ -1125,7 +1224,7 @@ export const ModelSelect = memo(({
         </>
       ) : (
         <>
-          {modelResolved ? (
+          {modelResolved || isEmptyAtomicSelection ? (
             <ModelIcon
               provider={selectedModelProvider}
               model={currentModel}
@@ -1143,7 +1242,7 @@ export const ModelSelect = memo(({
             />
           )}
           <span className="selector-button-text">{currentModelLabel}</span>
-          {modelResolved ? (
+          {triggerReady ? (
             <span className={`codicon codicon-chevron-${isOpen ? 'up' : 'down'}`} style={{ fontSize: '10px', marginLeft: '2px' }} />
           ) : null}
         </>
@@ -1158,7 +1257,7 @@ export const ModelSelect = memo(({
         align="start"
         side="top"
         sideOffset={4}
-        className="max-h-[380px] w-64 overflow-y-auto"
+        className={menuLayer === 'overlay' ? 'prompt-enhancer-model-menu max-h-[380px] w-64 overflow-y-auto' : 'max-h-[380px] w-64 overflow-y-auto'}
       >
         {hasPickerGroups ? (
           <>
@@ -1197,7 +1296,7 @@ export const ModelSelect = memo(({
                     <DropdownMenuSubContent
                       sideOffset={8}
                       alignOffset={-4}
-                      className="max-h-[380px] w-72 overflow-y-auto"
+                      className={menuLayer === 'overlay' ? 'prompt-enhancer-model-menu max-h-[380px] w-72 overflow-y-auto' : 'max-h-[380px] w-72 overflow-y-auto'}
                     >
                       <DropdownMenuLabel className="flex items-center gap-1.5 text-muted-foreground">
                         <span className="min-w-0 flex-1 truncate">
@@ -1292,12 +1391,25 @@ export const ModelSelect = memo(({
                             </div>
                           </DropdownMenuItem>
                         )}
-                      {group.models.map((model) => {
+                      {pickerRowsForGroup(group).map((entry) => {
+                        if (entry.kind === 'heading') {
+                          return (
+                            <DropdownMenuLabel
+                              key={entry.key}
+                              data-dsh-vendor-group={entry.sectionKey}
+                              data-vendor-group={entry.sectionKey}
+                              className="px-2 py-1 text-xs font-medium text-muted-foreground"
+                            >
+                              {entry.label}
+                            </DropdownMenuLabel>
+                          );
+                        }
+                        const { model } = entry;
                         const isSelected = isGroupModelSelected(group, model);
                         const description = getModelDescription(model);
                         return (
                           <DropdownMenuItem
-                            key={`${group.providerId}:${model.id}`}
+                            key={entry.key}
                             data-model-id={model.id}
                             data-selected={isSelected ? 'true' : undefined}
                             onSelect={(event) => {

@@ -693,6 +693,11 @@
   color: var(--text-stronger);
 }
 
+.working-timer-separator,
+.working-timer-tokens {
+  color: var(--text-muted);
+}
+
 .working-text {
   color: var(--text-muted);
 }

@@ -17,6 +17,7 @@ const workspace: WorkspaceInfo = {
 const t = (key: string, options?: Record<string, unknown>) => {
   if (key === "workspace.engineCodex") return "Codex";
   if (key === "workspace.enginePi") return "PI CLI";
+  if (key === "workspace.engineQoder") return "Qoder CLI";
   if (key === "workspace.loadingProgressCreateSessionMessage") {
     return `Creating ${String(options?.engine)} in ${String(options?.workspace)}`;
   }
@@ -69,6 +70,30 @@ describe("useCreateSessionLoading", () => {
     expect(controller.showLoadingProgressDialog).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Creating PI CLI in Workspace One",
+      }),
+    );
+  });
+
+  it("labels Qoder session creation as Qoder CLI instead of Claude Code", async () => {
+    const controller = {
+      showLoadingProgressDialog: vi.fn(() => "loading-qoder"),
+      hideLoadingProgressDialog: vi.fn(),
+    };
+    const { result } = renderHook(() =>
+      useCreateSessionLoading({
+        ...controller,
+        t,
+        createSessionTimeoutMs: 100,
+      }),
+    );
+
+    await expect(
+      result.current({ workspace, engine: "qoder" }, async () => "qoder-pending-1"),
+    ).resolves.toBe("qoder-pending-1");
+
+    expect(controller.showLoadingProgressDialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Creating Qoder CLI in Workspace One",
       }),
     );
   });

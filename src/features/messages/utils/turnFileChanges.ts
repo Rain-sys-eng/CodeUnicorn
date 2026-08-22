@@ -88,12 +88,17 @@ function parseEditToolChanges(item: ToolItem): TurnFileChange[] {
   const status = resolveToolStatus(item.status, hasOutput);
 
   if (item.toolType === "fileChange" && item.changes?.length) {
-    return item.changes
+    const fromChanges = item.changes
       .filter((change) => Boolean(change.path))
       .map((change) => {
         const stats = computeDiffFromUnifiedPatch(change.diff ?? "");
         return { path: change.path, ...stats, status };
       });
+    if (fromChanges.some((file) => file.additions > 0 || file.deletions > 0)) {
+      return fromChanges;
+    }
+    // Path-only fileChange (DSH write/edit JSON args, empty unified diff):
+    // fall through to detail JSON so content / old_string can still score.
   }
 
   const args = parseToolArgs(item.detail);

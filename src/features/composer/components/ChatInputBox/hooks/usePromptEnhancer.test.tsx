@@ -9,15 +9,20 @@ import {
   buildPromptEnhancerInstruction,
   classifyPromptEnhancerError,
   clearPromptEnhancerCacheForTests,
+  normalizeEnhancedPromptResponse,
   resolveEnhancerLocale,
+  resolveEnhancerModelForSend,
+  resolveVisibleEnhancerEngines,
   usePromptEnhancer,
 } from './usePromptEnhancer';
+import { seedCliEngineVisibility } from '../../../hooks/cliEngineVisibilityStore';
+import type { ProviderModelGroup } from '../modelOptions';
 
 vi.mock('../../../../../services/tauri', () => ({
   engineSendMessageSync: vi.fn(),
 }));
 
-const defaultModelGroups = [
+const defaultModelGroups: ProviderModelGroup[] = [
   {
     providerId: 'claude' as const,
     providerLabel: 'Claude Code',
@@ -55,6 +60,8 @@ function renderPromptEnhancer(options?: {
   selectedModel?: string;
   draft?: string;
   workspaceId?: string | null;
+  modelGroups?: typeof defaultModelGroups;
+  targetModelGroups?: typeof defaultModelGroups;
 }) {
   const editableRef = { current: null };
   const setHasContent = vi.fn();
@@ -67,7 +74,8 @@ function renderPromptEnhancer(options?: {
       getTextContent: () => options?.draft ?? '报告管理页面加载数据时，标题的获取逻辑是什么',
       currentProvider: options?.currentProvider ?? 'claude',
       selectedModel: options?.selectedModel ?? 'claude-sonnet-4-5',
-      modelGroups: defaultModelGroups,
+      modelGroups: options?.modelGroups ?? defaultModelGroups,
+      targetModelGroups: options?.targetModelGroups,
       setHasContent,
       handleInput,
     }),
@@ -79,6 +87,9 @@ function renderPromptEnhancer(options?: {
 afterEach(() => {
   vi.clearAllMocks();
   clearPromptEnhancerCacheForTests();
+  act(() => {
+    seedCliEngineVisibility([]);
+  });
 });
 
 describe('usePromptEnhancer', () => {
@@ -143,7 +154,7 @@ describe('usePromptEnhancer', () => {
     expect(sendSync.mock.calls[0]?.[1].model).toBe('claude-sonnet-4-5');
   });
 
-  it('keeps OpenCode unavailable and defaults legacy OpenCode context to Claude', () => {
+  it('defaults to the current composer engine when that CLI is enabled', () => {
     const { result } = renderPromptEnhancer({
       currentProvider: 'opencode',
       selectedModel: '',
@@ -153,15 +164,213 @@ describe('usePromptEnhancer', () => {
       result.current.handleEnhancePrompt();
     });
 
-    expect(PROMPT_ENHANCER_ENGINE_OPTIONS).toEqual(['claude', 'codex']);
+    expect(PROMPT_ENHANCER_ENGINE_OPTIONS).toEqual([
+      'claude',
+      'codex',
+      'grok',
+      'kimi',
+      'opencode',
+      'pi',
+      'dsh',
+      'qoder',
+    ]);
+    expect(result.current.selectedEnhancerEngine).toBe('opencode');
+    expect(result.current.visibleEnhancerEngines).toContain('opencode');
+    expect(result.current.enhancerModelGroups.map((group) => group.providerId)).toEqual(
+      result.current.visibleEnhancerEngines,
+    );
+    expect(result.current.enhancerModelGroups.some((group) => group.providerId === 'gemini')).toBe(false);
+  });
+
+  it('hides vendor-disabled engines and does not select them', () => {
+    act(() => {
+      seedCliEngineVisibility(['opencode', 'kimi']);
+    });
+    const { result } = renderPromptEnhancer({
+      currentProvider: 'opencode',
+      selectedModel: '',
+    });
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+
+    expect(result.current.visibleEnhancerEngines).not.toContain('opencode');
     expect(result.current.selectedEnhancerEngine).toBe('claude');
-    expect(result.current.selectedEnhancerModel).toBe('claude-sonnet-4-5');
 
     act(() => {
       result.current.handleEnhancerEngineChange('opencode');
     });
-
     expect(result.current.selectedEnhancerEngine).toBe('claude');
+  });
+
+  it('does not start enhancement when no executable CLI is enabled', async () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    act(() => {
+      seedCliEngineVisibility(['claude', 'codex', 'grok', 'kimi', 'opencode', 'pi', 'dsh', 'qoder']);
+    });
+    const { result } = renderPromptEnhancer();
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+    expect(result.current.visibleEnhancerEngines).toEqual([]);
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+    expect(result.current.isEnhancing).toBe(false);
+    expect(sendSync).not.toHaveBeenCalled();
+  });
+
+  it('sends a DSH catalog id and refuses a leftover Grok runtime name', async () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    sendSync.mockResolvedValue({
+      engine: 'dsh',
+      text: '请说明登录重复提交的最小修复。',
+    });
+    const dshGroups = [
+      ...defaultModelGroups,
+      {
+        providerId: 'dsh' as const,
+        providerLabel: 'dsh',
+        enabled: true,
+        models: [
+          { id: 'gork-zhu/grok-4.6', label: 'gork-zhu / grok-4.6', model: 'grok-4.6' },
+        ],
+      },
+    ];
+    const { result } = renderPromptEnhancer({
+      currentProvider: 'dsh',
+      selectedModel: 'grok-4.6',
+      modelGroups: dshGroups,
+    });
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+    expect(result.current.selectedEnhancerEngine).toBe('dsh');
+    expect(result.current.selectedEnhancerModel).toBe('gork-zhu/grok-4.6');
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+    await waitFor(() => {
+      expect(result.current.canUseEnhancedPrompt).toBe(true);
+    });
+    expect(sendSync.mock.calls[0]?.[1].engine).toBe('dsh');
+    expect(sendSync.mock.calls[0]?.[1].model).toBe('gork-zhu/grok-4.6');
+
+    act(() => {
+      result.current.handleEnhancerProviderModelChange('dsh', 'grok-4.6');
+    });
+    expect(result.current.selectedEnhancerModel).toBe('gork-zhu/grok-4.6');
+    act(() => {
+      result.current.handleEnhancerIntensityChange('struct');
+    });
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+    await waitFor(() => {
+      expect(sendSync).toHaveBeenCalledTimes(2);
+    });
+    expect(sendSync.mock.calls[1]?.[1].model).toBe('gork-zhu/grok-4.6');
+  });
+
+  it('resolves a DSH catalog id from atomic target groups when legacy groups omit DSH', async () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    sendSync.mockResolvedValue({
+      engine: 'dsh',
+      text: '请说明登录重复提交的最小修复。',
+    });
+    const { result } = renderPromptEnhancer({
+      currentProvider: 'dsh',
+      selectedModel: 'grok-4.6',
+      targetModelGroups: [
+        {
+          providerId: 'dsh' as const,
+          providerLabel: 'dsh',
+          enabled: true,
+          models: [
+            { id: 'gork-zhu/grok-4.6', label: 'gork-zhu / grok-4.6', model: 'grok-4.6' },
+          ],
+        },
+      ],
+    });
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+    expect(result.current.selectedEnhancerModel).toBe('gork-zhu/grok-4.6');
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+    await waitFor(() => {
+      expect(result.current.canUseEnhancedPrompt).toBe(true);
+    });
+    expect(sendSync.mock.calls[0]?.[1].model).toBe('gork-zhu/grok-4.6');
+  });
+
+  it('backfills a DSH catalog id after atomic models arrive', async () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    sendSync.mockResolvedValue({
+      engine: 'dsh',
+      text: '请说明登录重复提交的最小修复。',
+    });
+    let targetModelGroups: typeof defaultModelGroups | undefined;
+    const { result, rerender } = renderHook(() =>
+      usePromptEnhancer({
+        workspaceId: 'ws-1',
+        editableRef: { current: null },
+        getTextContent: () => '报告管理页面加载数据时，标题的获取逻辑是什么',
+        currentProvider: 'dsh',
+        selectedModel: 'grok-4.6',
+        modelGroups: defaultModelGroups,
+        targetModelGroups,
+        setHasContent: vi.fn(),
+        handleInput: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+    expect(result.current.selectedEnhancerModel).toBe('');
+
+    targetModelGroups = [
+      {
+        providerId: 'dsh' as const,
+        providerLabel: 'dsh',
+        enabled: true,
+        models: [
+          { id: 'gork-zhu/grok-4.6', label: 'gork-zhu / grok-4.6', model: 'grok-4.6' },
+        ],
+      },
+    ];
+    rerender();
+    await waitFor(() => {
+      expect(result.current.selectedEnhancerModel).toBe('gork-zhu/grok-4.6');
+    });
+  });
+
+  it('does not send a bare DSH runtime leftover when the catalog is empty', async () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    const { result } = renderPromptEnhancer({
+      currentProvider: 'dsh',
+      selectedModel: 'grok-4.6',
+      modelGroups: defaultModelGroups,
+    });
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+
+    expect(sendSync).not.toHaveBeenCalled();
+    expect(result.current.canUseEnhancedPrompt).toBe(false);
+    expect(result.current.enhancedPrompt).toContain('DSH needs a provider/model catalog id');
   });
 
   it('falls back to Codex when Claude enhancement exits before returning text', async () => {
@@ -421,6 +630,36 @@ describe('usePromptEnhancer', () => {
     expect(sendSync).toHaveBeenCalledTimes(1);
   });
 
+  it('does not reuse cached enhancements across intensity', async () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    sendSync
+      .mockResolvedValueOnce({ engine: 'claude', text: 'light rewrite' })
+      .mockResolvedValueOnce({ engine: 'claude', text: 'structured rewrite' });
+    const { result } = renderPromptEnhancer();
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+    await waitFor(() => {
+      expect(result.current.enhancedPrompt).toBe('light rewrite');
+    });
+    act(() => {
+      result.current.handleEnhancerIntensityChange('struct');
+    });
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+    await waitFor(() => {
+      expect(result.current.enhancedPrompt).toBe('structured rewrite');
+    });
+    expect(sendSync).toHaveBeenCalledTimes(2);
+    expect(String(sendSync.mock.calls[0]?.[1].text)).toContain('Intensity: light polish');
+    expect(String(sendSync.mock.calls[1]?.[1].text)).toContain('Intensity: structured');
+  });
+
   it('does not reuse cached enhancements across workspaces', async () => {
     const sendSync = vi.mocked(engineSendMessageSync);
     sendSync.mockImplementation(async (workspaceId) => ({
@@ -664,19 +903,116 @@ describe('resolveEnhancerLocale', () => {
 
 describe('buildPromptEnhancerInstruction', () => {
   it('builds the Chinese instruction for the zh locale', () => {
-    const instruction = buildPromptEnhancerInstruction('原始草稿', 'claude', 'zh');
+    const instruction = buildPromptEnhancerInstruction('原始草稿', 'claude', 'zh', 'light');
     expect(instruction).toContain('你是一名提示词改写助手。');
-    expect(instruction).toContain('最多输出 6 行短句');
+    expect(instruction).toContain('不要复述草稿');
+    expect(instruction).toContain('强度：轻润色');
     expect(instruction).toContain('用户草稿：\n原始草稿');
+    expect(instruction).not.toContain('最多输出 6 行短句');
   });
 
-  it('builds the English instruction and omits Claude-only constraints for Codex', () => {
-    const claudeInstruction = buildPromptEnhancerInstruction('draft text', 'claude', 'en');
-    expect(claudeInstruction).toContain('You are a prompt rewriting assistant.');
-    expect(claudeInstruction).toContain('Output at most 6 short lines');
-    expect(claudeInstruction).toContain('User draft:\ndraft text');
+  it('changes rewrite strategy with intensity and forbids template restatement', () => {
+    const structured = buildPromptEnhancerInstruction('draft text', 'codex', 'en', 'struct');
+    expect(structured).toContain('Intensity: structured');
+    expect(structured).toContain('Do not restate the same sentence under Goal / Context / Acceptance headings');
+    expect(structured).toContain('User draft:\ndraft text');
+    expect(structured).not.toContain('Output at most 6 short lines');
+  });
+});
 
-    const codexInstruction = buildPromptEnhancerInstruction('draft text', 'codex', 'en');
-    expect(codexInstruction).not.toContain('Output at most 6 short lines');
+describe('normalizeEnhancedPromptResponse', () => {
+  it('collapses an exact duplicated rewrite block', () => {
+    const duplicated = [
+      '请检查登录重复提交。',
+      '给出最小修复。',
+      '',
+      '请检查登录重复提交。',
+      '给出最小修复。',
+    ].join('\n');
+    const normalized = normalizeEnhancedPromptResponse(duplicated);
+    expect(normalized.match(/请检查登录重复提交/g)).toHaveLength(1);
+  });
+
+  it('collapses consecutive duplicated lines without a blank separator', () => {
+    const duplicated = [
+      '请检查登录重复提交。',
+      '请检查登录重复提交。',
+      '给出最小修复。',
+    ].join('\n');
+    expect(normalizeEnhancedPromptResponse(duplicated)).toBe(
+      '请检查登录重复提交。给出最小修复。',
+    );
+  });
+});
+
+describe('resolveEnhancerModelForSend', () => {
+  const dshGroups = [
+    {
+      providerId: 'dsh' as const,
+      providerLabel: 'dsh',
+      enabled: true,
+      models: [
+        { id: 'gork-zhu/grok-4.6', label: 'gork-zhu / grok-4.6', model: 'grok-4.6' },
+        { id: 'kimi-coding/k3', label: 'kimi-coding / k3', model: 'k3' },
+      ],
+    },
+    {
+      providerId: 'claude' as const,
+      providerLabel: 'claude',
+      enabled: true,
+      models: [{ id: 'claude-sonnet-4-5', label: 'Sonnet 4.5', model: 'claude-sonnet-4-5' }],
+    },
+    {
+      providerId: 'opencode' as const,
+      providerLabel: 'opencode',
+      enabled: true,
+      models: [{ id: 'openai/gpt-5.3-codex', label: 'GPT-5.3 Codex', model: 'gpt-5.3-codex' }],
+    },
+  ];
+
+  it('sends the DSH provider/model catalog id instead of the runtime short name', () => {
+    expect(resolveEnhancerModelForSend(dshGroups, 'dsh', 'gork-zhu/grok-4.6')).toBe('gork-zhu/grok-4.6');
+    expect(resolveEnhancerModelForSend(dshGroups, 'dsh', 'grok-4.6')).toBe('gork-zhu/grok-4.6');
+  });
+
+  it('refuses a bare DSH runtime name when no catalog row exists', () => {
+    expect(resolveEnhancerModelForSend([], 'dsh', 'grok-4.6')).toBeNull();
+  });
+
+  it('keeps slash catalog ids for OpenCode/PI and runtime ids for Claude', () => {
+    expect(resolveEnhancerModelForSend(dshGroups, 'opencode', 'openai/gpt-5.3-codex')).toBe(
+      'openai/gpt-5.3-codex',
+    );
+    expect(
+      resolveEnhancerModelForSend(
+        [
+          {
+            providerId: 'pi',
+            providerLabel: 'pi',
+            enabled: true,
+            models: [{ id: 'openai/gpt-5', label: 'gpt-5', model: 'gpt-5' }],
+          },
+        ],
+        'pi',
+        'gpt-5',
+      ),
+    ).toBe('openai/gpt-5');
+    expect(resolveEnhancerModelForSend(dshGroups, 'claude', 'claude-sonnet-4-5')).toBe(
+      'claude-sonnet-4-5',
+    );
+  });
+});
+
+describe('resolveVisibleEnhancerEngines', () => {
+  it('omits vendor-disabled engines and Gemini', () => {
+    expect(resolveVisibleEnhancerEngines(new Set(['kimi', 'gemini']))).toEqual([
+      'claude',
+      'codex',
+      'grok',
+      'opencode',
+      'pi',
+      'dsh',
+      'qoder',
+    ]);
   });
 });

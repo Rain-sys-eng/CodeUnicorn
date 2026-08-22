@@ -162,6 +162,31 @@ describe("parseClaudeHistoryMessages", () => {
     );
   });
 
+  it("does not stamp native runtime receipt from JSONL assistant model", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "user-1",
+        role: "user",
+        text: "hi",
+      },
+      {
+        kind: "message",
+        id: "assistant-1",
+        role: "assistant",
+        text: "hello",
+        message: { model: "deepseek-v4-pro-0813[1m]" },
+      },
+    ]);
+    const assistant = items.find((item) => item.id === "assistant-1");
+    expect(assistant).toMatchObject({
+      role: "assistant",
+      text: "hello",
+    });
+    expect(assistant).not.toHaveProperty("executionTargetSnapshot");
+    expect(assistant).not.toHaveProperty("runtimeReceipt");
+  });
+
   it("hides a transcript that only contains leaked stream-json payload echo", () => {
     const leakedPayload = JSON.stringify({
       message: {

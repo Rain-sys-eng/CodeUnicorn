@@ -53,6 +53,15 @@ Probe authority is `host.describe`. Ownership is `spawned` or `adopted`.
 - **AND** SHALL NOT overwrite a non-empty `constructor.mjs`
 - **AND** if the child still exits with `plugin tree` / `constructor.mjs` default-export, the error SHALL name this Windows npm 损坏并提示重装 `@deepseek-ai/dsh`
 
+#### Scenario: Spawn error prefers inner plugin-tree cause over cordis:include
+
+- **WHEN** spawned `dsh web` exits before `host.describe` succeeds
+- **AND** child output wraps the failure as `failed to apply loader entry include (cordis:include)`
+- **AND** an inner line names a real loader entry (`failed to import loader entry …` / `Mismatched native Koffi` / `duplicate loader entry`)
+- **THEN** the surfaced error SHALL prefer that inner line over the `cordis:include` wrapper
+- **AND** if the inner cause is `Mismatched native Koffi modules`, the error SHALL hint that npm 升级常留下旧的 `@koromix/koffi-<platform>`，并提示重装 `@deepseek-ai/dsh`
+- **AND** this hint SHALL NOT name a Windows-only package such as `koffi-win32-x64`（Mac / Linux 走 `koffi-darwin-*` / `koffi-linux-*`）
+
 #### Scenario: macOS spawn keeps the shebang binary
 
 - **WHEN** mossx resolves `dsh` on macOS / Linux

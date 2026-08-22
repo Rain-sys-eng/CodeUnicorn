@@ -247,6 +247,8 @@ enum DiskEmptyVerdict {
 fn is_prune_engine(engine: &str) -> bool {
     matches!(
         engine,
+        // qoder history is ACP-based with no vendor disk sessions root
+        // (add-qoder-engine design: skip prune/fingerprint wiring).
         "claude" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "dsh"
     )
 }

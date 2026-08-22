@@ -164,5 +164,23 @@ pub fn spec_capability_state(engine_type: EngineType, capability: &str) -> &'sta
             "rpc.server" => "unsupported",
             _ => "unknown",
         },
+        EngineType::Qoder => match capability {
+            "streaming.text" => "supported",
+            "streaming.reasoning" => "supported",
+            "streaming.tool-output" => "supported",
+            "tool.use" => "supported",
+            "tool.mcp" => "supported",
+            "reasoning.effort" => "supported",
+            "collaboration.mode" => "unsupported",
+            "session.continuation" => "unsupported",
+            "image.input" => "supported",
+            "input.mid-turn" => "supported",
+            "session.resume" => "supported",
+            "session.fork" => "supported",
+            "session.switch" => "unsupported",
+            "session.tree" => "unknown",
+            "rpc.server" => "unsupported",
+            _ => "unknown",
+        },
     }
 }

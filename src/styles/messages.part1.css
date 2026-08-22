@@ -64,17 +64,142 @@
 
 .message-turn-target-badge {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   margin-bottom: 6px;
   color: var(--text-muted);
   font-size: 10px;
   line-height: 1.2;
 }
 
-.message-turn-target-badge > span:not(:last-child)::after {
+.message-turn-target-badge-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.message-turn-target-badge-line > span:not(:last-child):not(.message-turn-runtime-receipt):not(:has(+ .message-turn-runtime-receipt))::after {
   margin-left: 4px;
   content: "·";
+}
+
+.message-turn-runtime-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: min(320px, 100%);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-quiet, inherit);
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.message-turn-runtime-receipt-arrow {
+  flex: 0 0 auto;
+  color: var(--text-strong, currentColor);
+  font-weight: 600;
+}
+
+.message-turn-runtime-receipt-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border: 1px solid color-mix(in srgb, var(--text-quiet) 72%, transparent);
+  border-radius: 999px;
+  color: var(--text-quiet, currentColor);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.message-turn-runtime-receipt.is-open,
+.message-turn-runtime-receipt:hover,
+.message-turn-runtime-receipt:focus-visible {
+  color: var(--text-strong, inherit);
+}
+
+.message-turn-runtime-receipt.is-open .message-turn-runtime-receipt-arrow,
+.message-turn-runtime-receipt:hover .message-turn-runtime-receipt-arrow,
+.message-turn-runtime-receipt:focus-visible .message-turn-runtime-receipt-arrow {
+  color: var(--text-strong, inherit);
+}
+
+.message-turn-runtime-receipt.is-open .message-turn-runtime-receipt-mark,
+.message-turn-runtime-receipt:hover .message-turn-runtime-receipt-mark,
+.message-turn-runtime-receipt:focus-visible .message-turn-runtime-receipt-mark {
+  border-color: currentColor;
+  color: currentColor;
+}
+
+.message-turn-target-badge-line > .message-turn-runtime-receipt::after {
+  content: none;
+}
+
+.message-turn-runtime-receipt-model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--code-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.message-turn-runtime-receipt-window {
+  flex: 0 0 auto;
+  color: var(--text-subtle, var(--text-muted));
+}
+
+.message-turn-runtime-receipt-panel {
+  display: grid;
+  gap: 8px;
+  width: min(420px, 100%);
+  padding: 8px 0 2px;
+  border-top: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.18));
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.message-turn-runtime-receipt-panel > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.message-turn-runtime-receipt-panel > div > span {
+  padding-top: 1px;
+  color: var(--text-faint, var(--text-muted));
+}
+
+.message-turn-runtime-receipt-panel > div > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.message-turn-runtime-receipt-panel code {
+  overflow-wrap: anywhere;
+  font-family: var(--code-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, monospace);
+  font-size: 10px;
+  color: var(--text-primary, inherit);
+}
+
+.message-turn-runtime-receipt-panel small {
+  color: var(--text-subtle, var(--text-muted));
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .message-turn-target-badge.is-unavailable {

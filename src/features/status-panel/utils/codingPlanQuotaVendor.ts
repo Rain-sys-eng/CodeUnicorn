@@ -46,6 +46,11 @@ export function resolveCodingPlanQuotaVendorId(input: {
   const engine = input.engine?.trim().toLowerCase() ?? "";
   const profile = input.providerProfileId?.trim() || null;
 
+  if (engine === "qoder") {
+    // Native-only: no coding-plan vendor / HTTP quota route.
+    return null;
+  }
+
   if (engine !== "dsh" && engine !== "pi") {
     return profile;
   }

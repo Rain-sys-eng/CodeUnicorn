@@ -3,7 +3,7 @@
 /**
  * Supported AI coding CLI engine types
  */
-export type EngineType = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+export type EngineType = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
 
 /**
  * Feature capabilities for each engine
@@ -40,6 +40,13 @@ export type EngineModelInfo = {
   lastVerifiedAt?: string | null;
   lifecycle?: string | null;
   providerProfileId?: string | null;
+  /**
+   * Adapter-owned reasoning effort ids exposed by the engine host catalog
+   * (e.g. DSH llm.models reasoning.efforts: off/low/high/max).
+   */
+  supportedReasoningEfforts?: string[];
+  /** Model default reasoning effort, when the host declares one. */
+  defaultReasoningEffort?: string | null;
   isDefault: boolean;
 };
 

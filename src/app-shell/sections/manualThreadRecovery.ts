@@ -1,6 +1,6 @@
 import { isEngineExecutionEnabled } from "../../utils/engineExecutionPolicy";
 
-type ManualRecoveryEngine = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+type ManualRecoveryEngine = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
 type ManualRecoveryWorkspace = {
   id: string;
   connected: boolean;
@@ -85,6 +85,9 @@ function inferManualRecoveryEngine(
   }
   if (normalizedThreadId.startsWith("dsh:") || normalizedThreadId.startsWith("dsh-pending-")) {
     return "dsh";
+  }
+  if (normalizedThreadId.startsWith("qoder:") || normalizedThreadId.startsWith("qoder-pending-")) {
+    return "qoder";
   }
   return "codex";
 }

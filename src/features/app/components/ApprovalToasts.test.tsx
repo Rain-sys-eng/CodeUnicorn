@@ -222,6 +222,62 @@ describe("ApprovalToasts", () => {
     expect(screen.getByText("Write")).toBeTruthy();
   });
 
+  it("keeps DSH request identifiers collapsed until the user expands them", () => {
+    render(
+      <ApprovalToasts
+        approvals={[
+          {
+            workspace_id: "ws-1",
+            request_id: "req-dsh-1",
+            method: "item/commandExecution/requestApproval",
+            params: {
+              toolName: "bash",
+              message:
+                "escalate sandbox to danger-full-access: Write a one-line probe file outside the workspace so the ask-mode approval popup can be demonstrated.",
+              approvalId: "6d2363ce-65a9-4248-be84-437547f479a8",
+              callId: "call-8dc2bd6e-6e50-457a-8ad4-0deb9f2efa27-5:code:2",
+              reason:
+                "escalate sandbox to danger-full-access: Write a one-line probe file outside the workspace so the ask-mode approval popup can be demonstrated.",
+              sessionId: "session-de20d28d-12c3-4488-a427-7ad06b59310f",
+              type: "approval/requested",
+              rpcId: "rpc-approval-1",
+              method: "events.mux",
+            },
+          },
+        ]}
+        workspaces={[]}
+        onDecision={vi.fn()}
+        variant="inline"
+      />,
+    );
+
+    expect(
+      screen.getByText(/escalate sandbox to danger-full-access/),
+    ).toBeTruthy();
+    expect(screen.queryByText("6d2363ce-65a9-4248-be84-437547f479a8")).toBeNull();
+    expect(
+      screen.queryByText("session-de20d28d-12c3-4488-a427-7ad06b59310f"),
+    ).toBeNull();
+    expect(screen.queryByText("approval/requested")).toBeNull();
+    expect(screen.queryByText("call-8dc2bd6e-6e50-457a-8ad4-0deb9f2efa27-5:code:2")).toBeNull();
+    expect(screen.queryByText("rpc-approval-1")).toBeNull();
+    expect(screen.queryByText("events.mux")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /approval.showDebugDetails|Show request details/i }),
+    );
+    expect(screen.getByText("6d2363ce-65a9-4248-be84-437547f479a8")).toBeTruthy();
+    expect(
+      screen.getByText("session-de20d28d-12c3-4488-a427-7ad06b59310f"),
+    ).toBeTruthy();
+    expect(screen.getByText("approval/requested")).toBeTruthy();
+    expect(
+      screen.getByText("call-8dc2bd6e-6e50-457a-8ad4-0deb9f2efa27-5:code:2"),
+    ).toBeTruthy();
+    expect(screen.getByText("rpc-approval-1")).toBeTruthy();
+    expect(screen.getByText("events.mux")).toBeTruthy();
+  });
+
   it("offers a close button that dismisses the current approval card locally", () => {
     const onDecision = vi.fn();
 

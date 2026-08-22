@@ -356,6 +356,38 @@ describe("messages live window", () => {
     expect(streaming.omittedBeforeWorkingSetCount).toBeGreaterThan(0);
   });
 
+  it("drops exploring leftovers when the canvas has no user turn", () => {
+    const leftoverExplore: ConversationItem = {
+      id: "foreign-explore",
+      kind: "explore",
+      status: "exploring",
+      entries: [{ kind: "list", label: "remnants" }],
+    };
+    const secondLeftover: ConversationItem = {
+      id: "foreign-explore-2",
+      kind: "explore",
+      status: "exploring",
+      entries: [{ kind: "list", label: "remnants" }],
+    };
+    const items: ConversationItem[] = [leftoverExplore, secondLeftover];
+
+    expect(
+      suppressOrphanExploringItemsBeforeLatestUserTurn(items).map((item) => item.id),
+    ).toEqual([]);
+  });
+
+  it("keeps explored cards on an empty canvas that never had a user turn", () => {
+    const explored: ConversationItem = {
+      id: "kept-explored",
+      kind: "explore",
+      status: "explored",
+      entries: [{ kind: "read", label: "routes.ts" }],
+    };
+
+    const items: ConversationItem[] = [explored];
+    expect(suppressOrphanExploringItemsBeforeLatestUserTurn(items)).toBe(items);
+  });
+
   it("drops orphan exploring cards that sit above the latest user turn", () => {
     const leftoverExplore: ConversationItem = {
       id: "foreign-explore",

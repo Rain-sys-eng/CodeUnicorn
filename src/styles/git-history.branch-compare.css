@@ -5,8 +5,8 @@
   border-color: color-mix(in srgb, #f59e0b 30%, color-mix(in srgb, var(--border-default) 86%, transparent));
   background: linear-gradient(
     160deg,
-    color-mix(in srgb, #f59e0b 8%, var(--surface-popover, #0d0f14)),
-    color-mix(in srgb, var(--surface-popover, #0d0f14) 94%, #0b1020)
+    color-mix(in srgb, #f59e0b 8%, var(--surface-popover, #0d0d0d)),
+    var(--surface-popover, var(--surface-messages))
   );
 }
 
@@ -17,7 +17,7 @@
   background: linear-gradient(
     90deg,
     color-mix(in srgb, #f59e0b 14%, transparent),
-    color-mix(in srgb, #0f172a 28%, transparent)
+    color-mix(in srgb, var(--surface-messages) 28%, transparent)
   );
 }
 
@@ -39,7 +39,7 @@
   gap: 10px;
   padding: 10px;
   border-right: 1px solid color-mix(in srgb, #f59e0b 14%, var(--border-default));
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 34%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #1a1a1a) 34%, transparent);
 }
 
 .git-history-branch-compare-list-card {
@@ -48,7 +48,7 @@
   min-height: 0;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--branch-compare-accent) 28%, var(--border-default));
-  background: color-mix(in srgb, var(--surface-card-muted, #111725) 74%, transparent);
+  background: color-mix(in srgb, var(--surface-card-muted) 74%, transparent);
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--branch-compare-accent) 22%, transparent) inset,
     0 8px 16px color-mix(in srgb, #000 18%, transparent);
@@ -78,7 +78,7 @@
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--branch-compare-accent) 16%, transparent),
-    color-mix(in srgb, var(--surface-control, #1a2230) 64%, transparent)
+    color-mix(in srgb, var(--surface-control, #1a1a1a) 64%, transparent)
   );
 }
 
@@ -190,7 +190,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--surface-popover, #0d0f14) 92%, transparent);
+  background: color-mix(in srgb, var(--surface-popover, #0d0d0d) 92%, transparent);
 }
 
 .git-history-branch-compare-detail-body {

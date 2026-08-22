@@ -48,6 +48,8 @@ export function isCodexOwnershipFallbackCandidate(
     normalizedId.startsWith("kimi-pending-") ||
     normalizedId.startsWith("pi:") ||
     normalizedId.startsWith("pi-pending-") ||
+    normalizedId.startsWith("qoder:") ||
+    normalizedId.startsWith("qoder-pending-") ||
     normalizedId.startsWith("opencode:") ||
     normalizedId.startsWith("opencode-pending-") ||
     normalizedId.startsWith("dsh:") ||

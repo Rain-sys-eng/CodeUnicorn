@@ -16,6 +16,8 @@ protocol hide MUST 收录这些协议拥有的 **文件 sessionId**（以及 `cl
 
 empty-prune MUST NOT 把完整协议 token 标题的会话当空草稿删盘。
 
+Codex Windows 首条 user 常为 `<environment_context>`。标题 / 协议判定 MUST 跳过该信封，把后续 `MOSSX_CONTEXT_PACKAGE` / `MOSSX_SHARED_CONTEXT` 视为协议 owner。Index MUST 保留该协议标题行（不得当 helper omit），protocol hide MUST 收录 **文件 canonical uuid**，MUST NOT 只收录哨兵 `codex:default`。
+
 #### Scenario: history-friendly title does not index a protocol owner
 
 - **WHEN** Claude jsonl 首条真实 user 以 `MOSSX_SHARED_CONTEXT_V1` 开头

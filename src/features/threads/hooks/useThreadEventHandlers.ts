@@ -103,6 +103,7 @@ export function useThreadEventHandlers({
   resolvePendingThreadForSession,
   resolvePendingThreadForTurn,
   getActiveTurnIdForThread,
+  getThreadProviderProfileId,
   hasEstablishedThreadItems,
   renamePendingMemoryCaptureKey,
   onAgentMessageCompletedExternal,
@@ -731,7 +732,7 @@ export function useThreadEventHandlers({
 
   const shouldSkipCodexTurnEvent = useCallback(
     (input: {
-      engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+      engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
       workspaceId: string;
       threadId: string;
       turnId: string;
@@ -1334,6 +1335,7 @@ export function useThreadEventHandlers({
     onTurnCompleted,
     onTurnPlanUpdated,
     onThreadTokenUsageUpdated: onThreadTokenUsageUpdatedBase,
+    onAssistantRuntimeReceipt,
     onAccountRateLimitsUpdated,
     onTurnError,
     onTurnStalled,
@@ -1363,6 +1365,7 @@ export function useThreadEventHandlers({
     resolvePendingThreadForSession,
     resolvePendingThreadForTurn,
     getActiveTurnIdForThread,
+    getThreadProviderProfileId,
     hasEstablishedThreadItems,
     renamePendingMemoryCaptureKey,
     onDebug,
@@ -2661,6 +2664,7 @@ export function useThreadEventHandlers({
       onProcessingHeartbeat,
       onTurnPlanUpdated,
       onThreadTokenUsageUpdated: onThreadTokenUsageUpdatedTracked,
+      onAssistantRuntimeReceipt,
       onAccountRateLimitsUpdated,
       onTurnError: onTurnErrorTracked,
       onTurnStalled: onTurnStalledTracked,
@@ -2696,6 +2700,7 @@ export function useThreadEventHandlers({
       onProcessingHeartbeat,
       onTurnPlanUpdated,
       onThreadTokenUsageUpdatedTracked,
+      onAssistantRuntimeReceipt,
       onAccountRateLimitsUpdated,
       onTurnErrorTracked,
       onTurnStalledTracked,

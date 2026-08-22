@@ -196,7 +196,7 @@
 
 /* shadcn typography inline code: bg-muted（thinking 紧凑版，不加粗） */
 .reasoning-markdown :where(:not(pre) > code) {
-  background: var(--muted);
+  background: var(--message-inline-code-bg, var(--muted));
   border-radius: 0.25rem;
   padding: 0.15rem 0.3rem;
   font-weight: 400;
@@ -363,7 +363,7 @@
 /* shadcn typography inline code: rounded bg-muted，字重与正文一致（不加粗） */
 :is(.message, .thinking-block) .markdown :not(pre) > code {
   color: var(--text-stronger);
-  background: var(--muted);
+  background: var(--message-inline-code-bg);
   border: none;
   padding: 0.2rem 0.3rem;
   border-radius: 0.25rem;
@@ -391,6 +391,7 @@
 
 :root {
   /* shadcn bg-muted — soft grey card surface, header shares it (seamless). */
+  --message-inline-code-bg: var(--muted);
   --message-codeblock-bg: var(--muted);
   --message-codeblock-header-bg: var(--message-codeblock-bg);
   /* A faint hairline under the header, matching shadcn's subtle divider. */
@@ -412,6 +413,7 @@
 
 :root[data-theme="light"] {
   /* shadcn bg-muted (#f4f4f5) — the soft grey card surface from the docs. */
+  --message-inline-code-bg: var(--muted);
   --message-codeblock-bg: var(--muted);
   --message-codeblock-header-bg: var(--message-codeblock-bg);
   --message-code-token-comment: rgba(87, 96, 110, 0.86);

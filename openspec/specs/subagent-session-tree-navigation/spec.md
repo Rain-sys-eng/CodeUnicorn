@@ -45,6 +45,15 @@ Defines the subagent-session-tree-navigation behavior contract, covering Subagen
 - **AND** child `parentSessionId` MUST 解析为当前 visible parent row id
 - **AND** Sidebar MUST NOT 因 canonical/visible id 不相等把 child 提升为 root
 
+#### Scenario: bounded Codex pages keep parent roots instead of promoting philosopher pups
+
+- **GIVEN** Codex native child sessions 使用 `thread_source=subagent` / `agent_nickname`（如 Socrates、Beauvoir）
+- **AND** child `updatedAt` 新于 parent
+- **WHEN** Session Index / unified Codex list 按 `updated_at DESC` 做 bounded first page
+- **THEN** 系统 MUST 优先保留 visible parent root，并继续把 in-page children 挂在 parent 下
+- **AND** Sidebar MUST NOT 因 parent 被截断而把这些 child 提升为 top-level roots
+- **AND** 父会话不在当前 page 的 orphan Codex child MUST 从 Sidebar roots 隐藏，而不是升成独立会话
+
 #### Scenario: live Codex child does not flash as a top-level session
 
 - **GIVEN** parent session 已在当前 Sidebar projection 中可见

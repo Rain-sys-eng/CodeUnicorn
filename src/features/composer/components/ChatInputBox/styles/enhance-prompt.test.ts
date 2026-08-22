@@ -19,4 +19,13 @@ describe("prompt enhancer light-theme actions", () => {
       /:root\[data-theme="light"\] \.prompt-enhancer-btn\.primary:disabled\s*\{[^}]*background:\s*#dbeafe[^}]*color:\s*#5b7db1[^}]*opacity:\s*1/s,
     );
   });
+
+  it("raises portaled ModelSelect menus above the enhancer overlay", () => {
+    expect(enhancePromptCss).toMatch(
+      /\.prompt-enhancer-overlay\s*\{[^}]*z-index:\s*2000/s,
+    );
+    expect(enhancePromptCss).toMatch(
+      /\.prompt-enhancer-model-menu\s*\{[^}]*z-index:\s*2100/s,
+    );
+  });
 });

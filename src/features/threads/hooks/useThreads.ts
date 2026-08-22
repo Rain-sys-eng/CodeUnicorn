@@ -179,7 +179,7 @@ type UseThreadsOptions = {
   steerEnabled?: boolean;
   customPrompts?: CustomPromptOption[];
   onMessageActivity?: () => void;
-  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+  activeEngine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
   useNormalizedRealtimeAdapters?: boolean;
   useUnifiedHistoryLoader?: boolean;
   sessionAttributionMode?: WorkspaceSessionAttributionMode;
@@ -200,7 +200,7 @@ type UseThreadsOptions = {
   runWithCreateSessionLoading?: <T>(
     params: {
       workspace: WorkspaceInfo;
-      engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+      engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
     },
     action: () => Promise<T>,
   ) => Promise<T>;
@@ -740,7 +740,7 @@ export function useThreads({
   );
 
   const getThreadEngine = useCallback(
-    (workspaceId: string, threadId: string): "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | undefined => {
+    (workspaceId: string, threadId: string): "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | undefined => {
       const threads = state.threadsByWorkspace[workspaceId] ?? [];
       const thread = threads.find((t) => t.id === threadId);
       return thread?.engineSource;
@@ -783,7 +783,7 @@ export function useThreads({
   const resolvePendingThreadForSession = useCallback(
     (
       workspaceId: string,
-      engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh",
+      engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
     ): string | null => {
       const resolved = resolvePendingThreadIdForSession({
         workspaceId,
@@ -834,7 +834,7 @@ export function useThreads({
   const resolvePendingThreadForTurn = useCallback(
     (
       workspaceId: string,
-      engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh",
+      engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
       turnId: string | null | undefined,
     ): string | null =>
       resolvePendingThreadIdForTurn({
@@ -2922,6 +2922,7 @@ export function useThreads({
     resolvePendingThreadForTurn,
     getActiveTurnIdForThread: (threadId: string) =>
       state.activeTurnIdByThread[threadId] ?? null,
+    getThreadProviderProfileId,
     hasEstablishedThreadItems: (threadId: string) =>
       (state.itemsByThread[threadId]?.length ?? 0) > 0,
     renamePendingMemoryCaptureKey,
@@ -3009,7 +3010,8 @@ export function useThreads({
               thread.engineSource === "kimi" ||
               thread.engineSource === "opencode" ||
               thread.engineSource === "pi" ||
-              thread.engineSource === "dsh"
+              thread.engineSource === "dsh" ||
+              thread.engineSource === "qoder"
                 ? thread.engineSource
                 : undefined,
             selectedEngine:
@@ -3020,7 +3022,8 @@ export function useThreads({
               thread.selectedEngine === "kimi" ||
               thread.selectedEngine === "opencode" ||
               thread.selectedEngine === "pi" ||
-              thread.selectedEngine === "dsh"
+              thread.selectedEngine === "dsh" ||
+              thread.selectedEngine === "qoder"
                 ? thread.selectedEngine
                 : undefined,
             threadKind:
@@ -3054,7 +3057,7 @@ export function useThreads({
           message: string;
           willRetry: boolean;
           suppressMessage?: boolean;
-          engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | null;
+          engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | null;
           executionTargetSnapshot?: TurnExecutionSnapshot;
         },
       ) => {
@@ -3071,7 +3074,7 @@ export function useThreads({
           source: string;
           startedAtMs: number | null;
           timeoutMs: number | null;
-          engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | null;
+          engine?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | null;
         },
       ) => {
         handlers.onTurnStalled?.(workspaceId, threadId, turnId, payload);

@@ -9,6 +9,7 @@ import {
   loadKimiSession as loadKimiSessionService,
   loadDshSession as loadDshSessionService,
   loadPiSession as loadPiSessionService,
+  loadQoderSession as loadQoderSessionService,
   resumeThread as resumeThreadService,
 } from "../../../services/tauri";
 import {
@@ -28,11 +29,15 @@ import { parseGrokHistoryMessages } from "../loaders/grokHistoryParser";
 import { parseKimiHistoryMessages } from "../loaders/kimiHistoryParser";
 import {
   DSH_UI_HISTORY_WINDOW,
+  extractDshHistoryCurrentModel,
   extractDshHistoryTodos,
   extractDshHistoryTokenUsage,
 } from "../loaders/dshHistoryLoader";
+import { seedDshComposerSelectionFromHost } from "../../../app-shell-parts/selectedComposerSession";
 import { parseDshHistoryMessages } from "../loaders/dshHistoryParser";
 import { parsePiHistoryMessages } from "../loaders/piHistoryParser";
+import { parseQoderHistoryMessages } from "../loaders/qoderHistoryParser";
+import { parseQoderSessionIdentity } from "../utils/qoderSessionIdentity";
 import {
   hydrateHistory,
   mergeHistoryProjectionItems,
@@ -501,6 +506,14 @@ export function useThreadActionsResumeThreadForWorkspace(
             workspacePath:
               workspacePathsByIdRef.current[workspaceId] ??
               resolveWorkspacePath?.(workspaceId) ??
+              null,
+            providerProfileId:
+              latestThreadsByWorkspaceRef.current[workspaceId]?.find(
+                (thread) => thread.id === targetThreadId,
+              )?.providerProfileId ??
+              threadsByWorkspaceRef.current[workspaceId]?.find(
+                (thread) => thread.id === targetThreadId,
+              )?.providerProfileId ??
               null,
             preferLocalCodexHistory: options?.preferLocalCodexHistory === true,
             onHistoryProgress: setThreadHistoryLoadingProgress
@@ -1681,6 +1694,17 @@ export function useThreadActionsResumeThreadForWorkspace(
             if (!isCurrentResumeRequest()) {
               return threadId;
             }
+            const restoredCurrentModel = extractDshHistoryCurrentModel(
+              staged?.result ?? null,
+            );
+            if (restoredCurrentModel) {
+              seedDshComposerSelectionFromHost({
+                workspaceId,
+                threadId,
+                catalogId: restoredCurrentModel.catalogId,
+                effort: restoredCurrentModel.effort,
+              });
+            }
             const restoredTokenUsage = extractDshHistoryTokenUsage(
               staged?.result ?? null,
             );
@@ -1762,6 +1786,71 @@ export function useThreadActionsResumeThreadForWorkspace(
             });
           } catch {
             // Failed to load PI session history — not fatal
+          }
+        }
+        loadedThreadsRef.current[threadId] = true;
+        return threadId;
+      }
+      if (threadId.startsWith("qoder:")) {
+        dispatch({
+          type: "ensureThread",
+          workspaceId,
+          threadId,
+          engine: "qoder",
+        });
+        if (workspacePath && !loadedThreadsRef.current[threadId]) {
+          const storedQoderProviderProfileId =
+            latestThreadsByWorkspaceRef.current[workspaceId]?.find(
+              (thread) => thread.id === threadId,
+            )?.providerProfileId ??
+            threadsByWorkspaceRef.current[workspaceId]?.find(
+              (thread) => thread.id === threadId,
+            )?.providerProfileId ??
+            null;
+          const qoderIdentity = parseQoderSessionIdentity(
+            threadId,
+            storedQoderProviderProfileId,
+          );
+          if (!qoderIdentity) {
+            // Embedded profile 与 stored owner 冲突时不回落到 Global，避免同 raw
+            // id 的 Global/CN 历史被错误读取。
+            loadedThreadsRef.current[threadId] = true;
+            return threadId;
+          }
+          try {
+            await runNativeHistoryOpenStages({
+              report: (progress) => {
+                if (!isCurrentResumeRequest()) {
+                  return;
+                }
+                setThreadHistoryLoadingProgress?.(threadId, progress);
+              },
+              shouldContinue: isCurrentResumeRequest,
+              load: () =>
+                loadQoderSessionService(
+                  workspacePath,
+                  qoderIdentity.rawSessionId,
+                  qoderIdentity.providerProfileId,
+                ),
+              extractMessages: (payload) =>
+                (payload as { messages?: unknown }).messages ?? payload,
+              parse: parseQoderHistoryMessages,
+              hydrate: async (items) => {
+                if (items.length > 0) {
+                  await applyHydratedItems(threadId, items);
+                }
+              },
+            });
+            if (!isCurrentResumeRequest()) {
+              return threadId;
+            }
+            dispatch({
+              type: "setThreadHistoryRestoredAt",
+              threadId,
+              timestamp: Date.now(),
+            });
+          } catch {
+            // Failed to load Qoder session history — not fatal
           }
         }
         loadedThreadsRef.current[threadId] = true;

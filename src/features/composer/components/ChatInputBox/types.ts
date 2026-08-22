@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { CODEX_MODEL_CATALOG } from "../../../models/codexModelCatalog";
 import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 import type { ExecutionTarget } from '../../../shared-session/target/types';
+import type { QoderSettingsHighlightTarget } from '../../../app/hooks/useSettingsModalState';
 
 // ============================================================
 // Core Entity Types
@@ -329,6 +330,12 @@ export interface ModelInfo {
   label: string;
   description?: string;
   source?: string;
+  /**
+   * Vendor id used to section slash-catalog CLIs.
+   * DSH: host catalog `llm.models` group.id.
+   * PI: `pi --list-models` provider column.
+   */
+  provider?: string;
   providerProfileId?: string;
   /**
    * Atomic / Shared 模型↔思考联动：Codex catalog 或 custom 播种。
@@ -358,7 +365,7 @@ export interface ProviderInfo {
   enabled: boolean;
 }
 
-export type ProviderId = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+export type ProviderId = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
 export type ProviderModelCatalogs = Partial<Record<ProviderId, ModelInfo[]>>;
 /** Atomic 双栏 catalog 语义：Shared 持久化 vs 首页/会话 create-session 投影。 */
 export type ProviderTargetPickerMode = 'shared' | 'create-session';
@@ -377,6 +384,7 @@ export const AVAILABLE_PROVIDERS: ProviderInfo[] = [
   { id: 'opencode', label: 'OpenCode', icon: 'codicon-terminal', enabled: true },
   { id: 'pi', label: 'PI CLI', icon: 'codicon-terminal', enabled: true },
   { id: 'dsh', label: 'DeepSeek Harness', icon: 'codicon-terminal', enabled: true },
+  { id: 'qoder', label: 'Qoder CLI', icon: 'codicon-terminal', enabled: true },
 ];
 
 /**
@@ -384,7 +392,7 @@ export const AVAILABLE_PROVIDERS: ProviderInfo[] = [
  * Controls the depth of reasoning for engines that expose a runtime effort option.
  * Valid values: low, medium, high, xhigh, max, ultra
  */
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Reasoning level information
@@ -400,6 +408,12 @@ export interface ReasoningInfo {
  * Available reasoning levels for Codex
  */
 export const REASONING_LEVELS: ReasoningInfo[] = [
+  {
+    id: 'off',
+    label: 'Off',
+    icon: 'codicon-circle-outline',
+    description: 'Thinking disabled',
+  },
   {
     id: 'low',
     label: 'Low',
@@ -692,8 +706,10 @@ export interface ChatInputBoxProps {
   onOpenPromptSettings?: () => void;
   /** Open model settings (navigate to provider management to add models) */
   onOpenModelSettings?: (providerId?: string) => void;
-  /** Open CLI / provider settings management page */
-  onOpenCliSettings?: () => void;
+  /** Open CLI / provider settings management page. */
+  onOpenCliSettings?: (
+    highlightTarget?: QoderSettingsHighlightTarget,
+  ) => void;
   /** Open a selected @ file reference via the host file surface */
   onOpenFileReference?: (path: string) => void;
   /** Refresh current provider model/config snapshot */
@@ -739,7 +755,10 @@ export interface ChatInputBoxProps {
   /** Open the Skills section in Settings (forwarded by the curated-skill chip in the readiness bar). */
   onOpenSkillsSettings?: () => void;
   /** Remove message from queue callback */
-  onRemoveFromQueue?: (id: string) => void;
+  onRemoveFromQueue?: (
+    id: string,
+    options?: { confirmedPendingAck?: boolean },
+  ) => void | Promise<boolean | void>;
   /** Fuse a queued message into the active turn */
   onFuseFromQueue?: (id: string) => void;
   /** Whether queued fuse is available for the active thread */

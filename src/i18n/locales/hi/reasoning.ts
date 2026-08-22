@@ -9,6 +9,10 @@ const reasoning = {
     "claudeDefault": "डिफ़ॉल्ट",
     "grokDefault": "डिफ़ॉल्ट",
     "defaultDescription": "इंजन के डिफ़ॉल्ट तर्क व्यवहार का उपयोग करें",
+    "off": {
+      "label": "बंद (Off)",
+      "description": "सोच अक्षम"
+    },
     "low": {
       "label": "कम",
       "description": "बुनियादी तर्क के साथ त्वरित प्रतिक्रियाएँ"

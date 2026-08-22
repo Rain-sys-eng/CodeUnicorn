@@ -29,9 +29,10 @@ pub(crate) mod cli_image_input;
 pub(crate) mod codex_adapter;
 pub(crate) mod codex_prompt_service;
 pub mod commands;
+pub mod dsh;
+pub(crate) mod dsh_provider_profile;
 pub(crate) mod error_mapper;
 pub mod events;
-pub mod session_directory_grant;
 pub mod gemini;
 pub mod gemini_history;
 pub(crate) mod gemini_proxy_guard;
@@ -41,17 +42,21 @@ pub(crate) mod grok_provider_profile;
 pub mod kimi;
 pub mod kimi_history;
 pub(crate) mod kimi_provider_profile;
+pub mod manager;
+pub mod opencode;
+pub(crate) mod opencode_native_artifact;
+pub(crate) mod opencode_provider_profile;
 pub mod pi;
 pub mod pi_auth;
 pub(crate) mod pi_history;
 pub(crate) mod pi_provider_profile;
-pub mod dsh;
-pub(crate) mod dsh_provider_profile;
-pub mod manager;
-pub mod opencode;
-pub(crate) mod opencode_provider_profile;
+pub mod qoder;
+pub(crate) mod qoder_auth;
+pub mod qoder_history;
+pub(crate) mod qoder_provider_profile;
 pub(crate) mod remote_bridge;
 pub mod rewind_commands;
+pub mod session_directory_grant;
 pub mod session_history_commands;
 pub mod status;
 pub mod task_output;
@@ -59,11 +64,10 @@ pub mod task_output;
 // Re-exports for convenience
 pub use commands::*;
 pub use manager::EngineManager;
+pub use pi_auth::{pi_auth_delete_credential, pi_auth_list_providers, pi_auth_set_api_key};
+pub use qoder_auth::{qoder_auth_delete_pat, qoder_auth_set_pat, qoder_auth_status};
 pub use rewind_commands::*;
 pub use session_history_commands::*;
-pub use pi_auth::{
-    pi_auth_delete_credential, pi_auth_list_providers, pi_auth_set_api_key,
-};
 pub use status::resolve_engine_type;
 pub use task_output::*;
 
@@ -87,6 +91,8 @@ pub enum EngineType {
     Pi,
     /// DeepSeek Harness (dsh web host)
     Dsh,
+    /// Qoder CLI (ACP over stdio)
+    Qoder,
 }
 
 impl Default for EngineType {
@@ -107,6 +113,7 @@ impl EngineType {
             EngineType::Kimi => "Kimi CLI",
             EngineType::Pi => "PI CLI",
             EngineType::Dsh => "DeepSeek Harness",
+            EngineType::Qoder => "Qoder CLI",
         }
     }
 
@@ -121,6 +128,7 @@ impl EngineType {
             EngineType::Kimi => "kimi",
             EngineType::Pi => "pi",
             EngineType::Dsh => "dsh",
+            EngineType::Qoder => "qoder",
         }
     }
 }
@@ -137,7 +145,8 @@ pub(crate) fn engine_enabled_in_settings(
         | EngineType::Grok
         | EngineType::Kimi
         | EngineType::Pi
-        | EngineType::Dsh => true,
+        | EngineType::Dsh
+        | EngineType::Qoder => true,
     }
 }
 
@@ -150,7 +159,8 @@ pub(crate) fn engine_disabled_diagnostic(engine_type: EngineType) -> Option<&'st
         | EngineType::Grok
         | EngineType::Kimi
         | EngineType::Pi
-        | EngineType::Dsh => None,
+        | EngineType::Dsh
+        | EngineType::Qoder => None,
     }
 }
 
@@ -164,6 +174,7 @@ pub(crate) fn disabled_engine_status(engine_type: EngineType) -> EngineStatus {
         EngineType::Kimi => EngineFeatures::kimi(),
         EngineType::Pi => EngineFeatures::pi(),
         EngineType::Dsh => EngineFeatures::dsh(),
+        EngineType::Qoder => EngineFeatures::qoder(),
     };
     EngineStatus {
         engine_type,
@@ -247,6 +258,13 @@ pub struct ModelInfo {
     /// Discovery/configuration source for diagnostics.
     #[serde(default = "default_model_source")]
     pub source: String,
+    /// Adapter-owned reasoning effort ids exposed by the host catalog
+    /// (e.g. DSH llm.models reasoning.efforts: off/low/high/max).
+    #[serde(default)]
+    pub supported_reasoning_efforts: Vec<String>,
+    /// Model default reasoning effort, when the host declares one.
+    #[serde(default)]
+    pub default_reasoning_effort: Option<String>,
 }
 
 fn default_model_source() -> String {
@@ -270,6 +288,8 @@ impl ModelInfo {
             last_verified_at: None,
             lifecycle: None,
             source: default_model_source(),
+            supported_reasoning_efforts: Vec::new(),
+            default_reasoning_effort: None,
         }
     }
 
@@ -315,6 +335,16 @@ impl ModelInfo {
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    pub fn with_reasoning(
+        mut self,
+        supported_reasoning_efforts: Vec<String>,
+        default_reasoning_effort: Option<String>,
+    ) -> Self {
+        self.supported_reasoning_efforts = supported_reasoning_efforts;
+        self.default_reasoning_effort = default_reasoning_effort;
         self
     }
 
@@ -460,6 +490,20 @@ impl EngineFeatures {
             tools_control: true,
             streaming: true,
             mcp: false,
+        }
+    }
+
+    /// Features for Qoder CLI (ACP: reasoning_effort configOption, image blocks,
+    /// session resume/fork, MCP http/sse — per mossx-qoder-capability-spike).
+    pub fn qoder() -> Self {
+        Self {
+            reasoning_effort: true,
+            collaboration_mode: false,
+            image_input: true,
+            session_resume: true,
+            tools_control: true,
+            streaming: true,
+            mcp: true,
         }
     }
 }

@@ -2,6 +2,7 @@
 @import "./composer.rewind-modal.css";
 @import "./composer.part2.css";
 @import "./shared-send-status.css";
+@import "./shared-provider-retry.css";
 @import "./composer-run-status.css";
 @import "./browser-agent-excerpt.css";
 

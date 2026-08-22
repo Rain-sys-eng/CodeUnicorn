@@ -27,6 +27,23 @@ describe("codingPlanQuotaVendor", () => {
     ).toBe("vision-http");
   });
 
+  it("does not treat Qoder Native as a coding-plan vendor", () => {
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "qoder",
+        providerProfileId: "__local_qoder__",
+        selectedModel: "qoder/qwen3-coder",
+      }),
+    ).toBeNull();
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "qoder",
+        providerProfileId: null,
+        selectedModel: null,
+      }),
+    ).toBeNull();
+  });
+
   it("does not treat a bare model name as a vendor", () => {
     expect(
       resolveCodingPlanQuotaVendorId({
@@ -45,6 +62,20 @@ describe("codingPlanQuotaVendor", () => {
         selectedModel: "deepseek-official/deepseek-v4-flash",
       }),
     ).toBe("deepseek-official");
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "dsh",
+        providerProfileId: "__dsh_host_catalog__",
+        selectedModel: "minimax-cn/MiniMax-M2.7",
+      }),
+    ).toBe("minimax-cn");
+    expect(
+      resolveCodingPlanQuotaVendorId({
+        engine: "dsh",
+        providerProfileId: "__dsh_host_catalog__",
+        selectedModel: "kimi-coding/k3",
+      }),
+    ).toBe("kimi-coding");
   });
 
   it("does not fall back to another dsh vendor when model is missing", () => {

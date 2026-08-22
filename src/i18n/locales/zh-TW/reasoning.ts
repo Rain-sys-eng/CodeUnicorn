@@ -9,6 +9,10 @@ const reasoning = {
     "claudeDefault": "預設 (Default)",
     "grokDefault": "預設 (Default)",
     "defaultDescription": "使用引擎預設的推理行為",
+    "off": {
+      "label": "關閉 (Off)",
+      "description": "關閉思考，快速回應"
+    },
     "low": {
       "label": "低 (Low)",
       "description": "以基本推理快速回應"

@@ -259,7 +259,10 @@ impl ToolItemKind {
     }
 }
 
-fn first_non_empty_object_string<'a>(map: &'a serde_json::Map<String, Value>, keys: &[&str]) -> Option<&'a str> {
+fn first_non_empty_object_string<'a>(
+    map: &'a serde_json::Map<String, Value>,
+    keys: &[&str],
+) -> Option<&'a str> {
     keys.iter().find_map(|key| {
         map.get(*key)
             .and_then(Value::as_str)
@@ -272,9 +275,9 @@ fn parse_tool_input_object(input: Option<&Value>) -> Option<serde_json::Map<Stri
     let value = input?;
     match value {
         Value::Object(map) => Some(map.clone()),
-        Value::String(raw) => serde_json::from_str::<Value>(raw).ok().and_then(|parsed| {
-            parsed.as_object().cloned()
-        }),
+        Value::String(raw) => serde_json::from_str::<Value>(raw)
+            .ok()
+            .and_then(|parsed| parsed.as_object().cloned()),
         _ => None,
     }
 }
@@ -283,11 +286,8 @@ fn input_looks_like_command(input: Option<&Value>) -> bool {
     let Some(map) = parse_tool_input_object(input) else {
         return false;
     };
-    first_non_empty_object_string(
-        &map,
-        &["command", "cmd", "script", "shell_command", "bash"],
-    )
-    .is_some()
+    first_non_empty_object_string(&map, &["command", "cmd", "script", "shell_command", "bash"])
+        .is_some()
 }
 
 fn compact_tool_name(tool_name: &str) -> String {
@@ -494,6 +494,7 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                     EngineType::Kimi => "kimi",
                     EngineType::Pi => "pi",
                     EngineType::Dsh => "dsh",
+                    EngineType::Qoder => "qoder",
                 },
             }
         }),
@@ -1003,15 +1004,37 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                         }
                     }
                 } else {
+                    let mut params = match data {
+                        Value::Object(map) => map.clone(),
+                        _ => {
+                            let mut map = serde_json::Map::new();
+                            map.insert("data".to_string(), data.clone());
+                            map
+                        }
+                    };
+                    params
+                        .entry("threadId".to_string())
+                        .or_insert_with(|| Value::String(thread_id.to_string()));
                     json!({
                         "method": format!("{}/raw", engine.icon()),
-                        "params": data,
+                        "params": Value::Object(params),
                     })
                 }
             } else {
+                let mut params = match data {
+                    Value::Object(map) => map.clone(),
+                    _ => {
+                        let mut map = serde_json::Map::new();
+                        map.insert("data".to_string(), data.clone());
+                        map
+                    }
+                };
+                params
+                    .entry("threadId".to_string())
+                    .or_insert_with(|| Value::String(thread_id.to_string()));
                 json!({
                     "method": format!("{}/raw", engine.icon()),
-                    "params": data,
+                    "params": Value::Object(params),
                 })
             }
         }
@@ -1361,6 +1384,34 @@ mod tests {
         assert_eq!(
             mapped.message["params"]["turnId"],
             Value::String("turn-123".to_string())
+        );
+    }
+
+    #[test]
+    fn claude_runtime_model_raw_event_keeps_raw_method_and_injects_thread_id() {
+        let event = EngineEvent::Raw {
+            workspace_id: "ws-model".to_string(),
+            engine: EngineType::Claude,
+            data: json!({
+                "type": "runtime_model",
+                "subtype": "assistant.message.model",
+                "model": "deepseek-v4-pro-0813[1m]",
+            }),
+        };
+
+        let mapped = engine_event_to_app_server_event(&event, "claude:session-1", "item-1")
+            .expect("mapped event");
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("claude/raw".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["threadId"],
+            Value::String("claude:session-1".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["model"],
+            Value::String("deepseek-v4-pro-0813[1m]".to_string())
         );
     }
 
@@ -1740,8 +1791,7 @@ mod tests {
                 "{tool_name}"
             );
             assert_eq!(
-                mapped.message["params"]["item"]["arguments"]["todos"],
-                todos,
+                mapped.message["params"]["item"]["arguments"]["todos"], todos,
                 "{tool_name}"
             );
         }

@@ -21,10 +21,13 @@ import {
   exportDiagnosticsBundle,
   getDaemonStatus,
   getWorkspaceSessionProjectionSummary,
+  downloadWorkspaceWallpaper,
   getEmailSenderSettings,
   getWebServerStatus,
   listWorkspaceSessionFolders,
   listWorkspaceSessions,
+  readWorkspaceWallpaperPreview,
+  searchWorkspaceWallpaperMarket,
   unarchiveWorkspaceSessions,
 } from "../../../services/tauri";
 import {
@@ -36,6 +39,10 @@ import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
 } from "../../../utils/fonts";
+import {
+  getWorkspaceWallpaperSnapshot,
+  resetWorkspaceWallpaperStoreForTests,
+} from "../../theme/utils/workspaceWallpaperStore";
 import { SettingsView } from "./SettingsView";
 
 vi.mock("@tauri-apps/api/app", () => ({
@@ -79,7 +86,16 @@ vi.mock("../../curated-skills/hooks/useCuratedSkills", () => ({
 }));
 
 vi.mock("../../vendors/components/VendorSettingsPanel", () => ({
-  VendorSettingsPanel: () => <div data-testid="vendor-settings-panel" />,
+  VendorSettingsPanel: (props: {
+    initialCli?: string;
+    initialQoderDistribution?: string;
+  }) => (
+    <div
+      data-testid="vendor-settings-panel"
+      data-initial-cli={props.initialCli}
+      data-initial-qoder-distribution={props.initialQoderDistribution}
+    />
+  ),
 }));
 
 vi.mock("../../../services/tauri", async () => {
@@ -98,6 +114,11 @@ vi.mock("../../../services/tauri", async () => {
     getWebServerStatus: vi.fn(),
     getDaemonStatus: vi.fn(),
     getEmailSenderSettings: vi.fn(),
+    importWorkspaceWallpaper: vi.fn(),
+    removeWorkspaceWallpaper: vi.fn(),
+    readWorkspaceWallpaperPreview: vi.fn(),
+    searchWorkspaceWallpaperMarket: vi.fn(),
+    downloadWorkspaceWallpaper: vi.fn(),
   };
 });
 
@@ -132,6 +153,15 @@ beforeEach(() => {
     nextCursor: null,
     partialSource: null,
   });
+  vi.mocked(searchWorkspaceWallpaperMarket).mockResolvedValue({
+    page: 1,
+    lastPage: 1,
+    items: [],
+  });
+  vi.mocked(downloadWorkspaceWallpaper).mockReset();
+  vi.mocked(readWorkspaceWallpaperPreview).mockResolvedValue(
+    "data:image/png;base64,AAA",
+  );
   vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
     workspaceId: "ws-1",
     folders: [],
@@ -177,6 +207,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  resetWorkspaceWallpaperStoreForTests();
   delete (window as any).queryLocalFonts;
 });
 
@@ -200,6 +231,10 @@ const baseSettings: AppSettings = {
   claudeBin: null,
   kimiBin: null,
   piBin: null,
+  qoderBin: null,
+  qoderConfigDir: null,
+  qoderCnBin: null,
+  qoderCnConfigDir: null,
   grokBin: null,
   opencodeBin: null,
   dshBin: null,
@@ -278,7 +313,7 @@ const baseSettings: AppSettings = {
     customImagePath: null,
     fluidPreset: "mist",
     fluidMotion: "drift",
-    veilOpacity: 12,
+    veilOpacity: 0,
   },
   userMsgColor: "",
   usageShowRemaining: false,
@@ -381,6 +416,9 @@ const renderDisplaySection = (
       typeof SettingsView
     >["onWindowOpacityChange"];
     initialSection?: ComponentProps<typeof SettingsView>["initialSection"] | null;
+    initialHighlightTarget?: ComponentProps<
+      typeof SettingsView
+    >["initialHighlightTarget"];
   } = {},
 ) => {
   cleanup();
@@ -424,6 +462,7 @@ const renderDisplaySection = (
       options.initialSection === null
         ? undefined
         : (options.initialSection ?? "basic"),
+    initialHighlightTarget: options.initialHighlightTarget,
   };
 
   const view = render(<SettingsView {...props} />);
@@ -593,6 +632,18 @@ describe("SettingsView projects display", () => {
 });
 
 describe("SettingsView Display", () => {
+  it("routes a Qoder CN deep link to the Qoder vendor card", async () => {
+    renderDisplaySection({
+      initialSection: "providers",
+      initialHighlightTarget: "qoder-cn",
+    });
+    await flushSettingsViewEffects();
+
+    const panel = screen.getByTestId("vendor-settings-panel");
+    expect(panel.getAttribute("data-initial-cli")).toBe("qoder");
+    expect(panel.getAttribute("data-initial-qoder-distribution")).toBe("cn");
+  });
+
   it("uses the in-content page head for the active settings section title and description", async () => {
     renderDisplaySection({ initialSection: null });
     await flushSettingsViewEffects();
@@ -1603,13 +1654,13 @@ describe("SettingsView Display", () => {
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceWallpaper: {
+        workspaceWallpaper: expect.objectContaining({
           mode: "none",
           customImagePath: null,
           fluidPreset: "mist",
           fluidMotion: "drift",
-          veilOpacity: 12,
-        },
+          veilOpacity: 0,
+        }),
       }),
     );
 
@@ -1626,77 +1677,15 @@ describe("SettingsView Display", () => {
     });
     await flushSettingsViewEffects();
 
-    expect(screen.getByRole("button", { name: "Choose image" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Choose wallpaper" })).toBeTruthy();
     expect(
       screen.getByText(
-        "No image selected yet. The default backdrop is used for now.",
+        "No wallpaper selected yet. The default backdrop is used for now.",
       ),
     ).toBeTruthy();
   });
 
-  it("updates the fluid wallpaper palette from appearance settings", async () => {
-    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
-    renderDisplaySection({
-      onUpdateAppSettings,
-      appSettings: {
-        workspaceWallpaper: {
-          mode: "fluid",
-          customImagePath: null,
-          fluidPreset: "mist",
-        },
-      },
-    });
-    await flushSettingsViewEffects();
-
-    expect(screen.getByRole("radio", { name: "Ash" })).toBeTruthy();
-    expect(screen.getByRole("radiogroup", { name: "Fluid motion" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Chase" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: "Orchid" }));
-
-    expect(onUpdateAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspaceWallpaper: {
-          mode: "fluid",
-          customImagePath: null,
-          fluidPreset: "orchid",
-          fluidMotion: "drift",
-          veilOpacity: 12,
-        },
-      }),
-    );
-  });
-
-  it("updates the fluid wallpaper motion without changing the palette", async () => {
-    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
-    renderDisplaySection({
-      onUpdateAppSettings,
-      appSettings: {
-        workspaceWallpaper: {
-          mode: "fluid",
-          customImagePath: null,
-          fluidPreset: "ash",
-          fluidMotion: "drift",
-        },
-      },
-    });
-    await flushSettingsViewEffects();
-
-    fireEvent.click(screen.getByRole("radio", { name: "Tornado" }));
-
-    expect(onUpdateAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspaceWallpaper: {
-          mode: "fluid",
-          customImagePath: null,
-          fluidPreset: "ash",
-          fluidMotion: "tornado",
-          veilOpacity: 12,
-        },
-      }),
-    );
-  });
-
-  it("hides fluid motion chips when wallpaper is not fluid", async () => {
+  it("hides the fluid wallpaper entry from appearance settings", async () => {
     renderDisplaySection({
       appSettings: {
         workspaceWallpaper: {
@@ -1709,55 +1698,198 @@ describe("SettingsView Display", () => {
     });
     await flushSettingsViewEffects();
 
+    expect(screen.queryByRole("radio", { name: "Fluid" })).toBeNull();
     expect(screen.queryByRole("radio", { name: "Tai Chi" })).toBeNull();
     expect(screen.queryByRole("radiogroup", { name: "Fluid motion" })).toBeNull();
+    expect(screen.queryByLabelText("Frosted glass")).toBeNull();
+    expect(screen.getByRole("radio", { name: "None" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Custom background" })).toBeTruthy();
   });
 
-  it("updates the wallpaper veil opacity from appearance settings", async () => {
+  it("previews wallpaper blur immediately and persists after idle", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({
       onUpdateAppSettings,
       appSettings: {
         workspaceWallpaper: {
-          mode: "fluid",
+          mode: "custom",
           customImagePath: null,
-          fluidPreset: "mist",
-          veilOpacity: 12,
+          wallpaperBlur: 0,
+          wallpaperDarken: 0,
         },
       },
     });
     await flushSettingsViewEffects();
 
-    const slider = screen.getByLabelText("Frosted glass");
+    const slider = screen.getByLabelText("Wallpaper blur");
     fireEvent.change(slider, {
-      target: { value: "18" },
+      target: { value: "9" },
     });
 
-    // Dragging only moves the local draft; the settings write happens on release.
+    expect(getWorkspaceWallpaperSnapshot().wallpaperBlur).toBe(9);
     expect(onUpdateAppSettings).not.toHaveBeenCalled();
 
-    fireEvent.pointerUp(slider);
+    await act(async () => {
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 1100);
+      });
+    });
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceWallpaper: {
-          mode: "fluid",
-          customImagePath: null,
-          fluidPreset: "mist",
-          fluidMotion: "drift",
-          veilOpacity: 18,
-        },
+        workspaceWallpaper: expect.objectContaining({
+          mode: "custom",
+          wallpaperBlur: 9,
+        }),
       }),
     );
   });
 
-  it("shows the workspace wallpaper controls including fluid", async () => {
+  it("persists wallpaper darken on slider release without waiting for idle", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({
+      onUpdateAppSettings,
+      appSettings: {
+        workspaceWallpaper: {
+          mode: "custom",
+          customImagePath: null,
+          wallpaperBlur: 0,
+          wallpaperDarken: 0,
+        },
+      },
+    });
+    await flushSettingsViewEffects();
+
+    const slider = screen.getByLabelText("Darken");
+    fireEvent.change(slider, {
+      target: { value: "18" },
+    });
+    fireEvent.pointerUp(slider);
+
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceWallpaper: expect.objectContaining({
+          mode: "custom",
+          wallpaperDarken: 18,
+        }),
+      }),
+    );
+  });
+
+  it("opens the wallpaper library picker from custom appearance settings", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({
+      onUpdateAppSettings,
+      appSettings: {
+        workspaceWallpaper: {
+          mode: "custom",
+          customImagePath: null,
+          library: [
+            {
+              id: "pic-1",
+              kind: "image",
+              path: "/tmp/one.png",
+              sourcePath: "/Users/me/one.png",
+            },
+            {
+              id: "vid-1",
+              kind: "video",
+              path: "/tmp/loop.mp4",
+              sourcePath: "/Users/me/loop.mp4",
+            },
+          ],
+          selectedLibraryId: "pic-1",
+        },
+      },
+    });
+    await flushSettingsViewEffects();
+
+    expect(screen.getByText("Current wallpaper")).toBeTruthy();
+    expect(screen.queryByText("one.png")).toBeNull();
+    expect(screen.queryByText("pic-1")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose wallpaper" }));
+    expect(screen.getByTestId("settings-workspace-wallpaper-picker")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "loop.mp4" }));
+
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceWallpaper: expect.objectContaining({
+          mode: "custom",
+          selectedLibraryId: "vid-1",
+        }),
+      }),
+    );
+  });
+
+  it("downloads a wallpaper from the market tab and applies it", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(searchWorkspaceWallpaperMarket).mockResolvedValue({
+      page: 1,
+      lastPage: 1,
+      items: [
+        {
+          id: "abc123",
+          thumbUrl: "https://th.wallhaven.cc/small/ab/abc123.jpg",
+          fullUrl: "https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg",
+          sourceUrl: "https://wallhaven.cc/w/abc123",
+          resolution: "3840x2160",
+          category: "anime",
+        },
+      ],
+    });
+    vi.mocked(downloadWorkspaceWallpaper).mockResolvedValue({
+      id: "downloaded-1",
+      kind: "image",
+      path: "/tmp/wallhaven-abc123.jpg",
+      sourcePath: "https://wallhaven.cc/w/abc123",
+    });
+    renderDisplaySection({
+      onUpdateAppSettings,
+      appSettings: {
+        workspaceWallpaper: {
+          mode: "custom",
+          customImagePath: null,
+          library: [],
+          selectedLibraryId: null,
+        },
+      },
+    });
+    await flushSettingsViewEffects();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose wallpaper" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Market" }));
+    const download = await screen.findByRole("button", {
+      name: "Download abc123 · 3840x2160",
+    });
+    fireEvent.click(download);
+
+    await waitFor(() => {
+      expect(downloadWorkspaceWallpaper).toHaveBeenCalledWith({
+        url: "https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg",
+        sourceUrl: "https://wallhaven.cc/w/abc123",
+        suggestedName: "abc123",
+      });
+    });
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceWallpaper: expect.objectContaining({
+          mode: "custom",
+          selectedLibraryId: "downloaded-1",
+        }),
+      }),
+    );
+  });
+
+  it("shows the workspace wallpaper controls without fluid", async () => {
     renderDisplaySection();
     await flushSettingsViewEffects();
 
     expect(screen.getByTestId("settings-workspace-wallpaper")).not.toBeNull();
     expect(screen.getByText("Page background")).not.toBeNull();
-    expect(screen.getByRole("radio", { name: "Fluid" })).not.toBeNull();
+    expect(screen.queryByRole("radio", { name: "Fluid" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "None" })).not.toBeNull();
+    expect(screen.getByRole("radio", { name: "Custom background" })).not.toBeNull();
   });
 
   it("hides remaining limits and message anchors while showing window transparency controls", async () => {

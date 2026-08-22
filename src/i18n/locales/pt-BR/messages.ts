@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "Desfazer",
       "revertAllConfirmTitle": "Desfazer todas as alterações",
       "revertAllConfirmBody":
-        "Isso descartará as alterações locais em {{count}} arquivos e os restaurará para o último commit. Isso não pode ser desfeito.",
+        "Isso descartará as alterações locais não indexadas em {{count}} arquivos e as restaurará para o índice (ou HEAD se nada estiver indexado). As alterações já indexadas serão mantidas. Isso não pode ser desfeito.",
       "revertAllConfirmAction": "Desfazer tudo",
       "revertFileConfirmTitle": "Desfazer alterações do arquivo",
       "revertFileConfirmBody":
-        "Isso descartará as alterações locais de “{{path}}” e o restaurará para o último commit. Isso não pode ser desfeito.",
+        "Isso descartará as alterações locais não indexadas de “{{path}}” e o restaurará para o índice (ou HEAD se nada estiver indexado). As alterações já indexadas serão mantidas. Isso não pode ser desfeito.",
       "revertFileConfirmAction": "Desfazer"
     },
     "noThinkingContent": "Sem conteúdo de raciocínio",
@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Montar",
     "generatingResponse": "Gerando resposta...",
     "responding": "Respondendo...",
+    "waitingForFirstText": "{{engine}} está em execução. Aguardando o primeiro trecho de texto...",
     "codexWaitingForFirstText": "O Codex está em execução. Aguardando o primeiro trecho de texto...",
     "codexSilentSuspected": "Sem nova saída do Codex há algum tempo. Ainda escutando por atividade de execução...",
     "nonStreamingHint": "Este modelo pode retornar saída não incremental, ou a rede pode estar inacessível. Aguarde...",
@@ -90,6 +91,7 @@ const messages = {
     "totalDuration": "Duração",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "Entrada {{input}} / Saída {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "Entrada {{input}} token / Saída {{output}} token",
     "messageActions": "Ações da mensagem",
     "copyMessage": "Copiar mensagem",

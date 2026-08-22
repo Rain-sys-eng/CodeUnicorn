@@ -23,11 +23,11 @@ const messages = {
       revertFileAction: "Undo",
       revertAllConfirmTitle: "Undo all changes",
       revertAllConfirmBody:
-        "This will discard local changes in {{count}} files and restore them to the last commit. This cannot be undone.",
+        "This will discard unstaged local changes in {{count}} files and restore them to the index (or HEAD if nothing is staged). Staged changes are kept. This cannot be undone.",
       revertAllConfirmAction: "Undo all",
       revertFileConfirmTitle: "Undo file changes",
       revertFileConfirmBody:
-        "This will discard local changes in “{{path}}” and restore it to the last commit. This cannot be undone.",
+        "This will discard unstaged local changes in “{{path}}” and restore it to the index (or HEAD if nothing is staged). Staged changes are kept. This cannot be undone.",
       revertFileConfirmAction: "Undo",
     },
     noThinkingContent: "No thinking content",
@@ -89,6 +89,7 @@ const messages = {
     restoringHistoryPhaseHydrate: "Assemble",
     generatingResponse: "Generating response...",
     responding: "Responding...",
+    waitingForFirstText: "{{engine}} is running. Waiting for the first text chunk...",
     codexWaitingForFirstText:
       "Codex is running. Waiting for the first text chunk...",
     codexSilentSuspected:
@@ -114,6 +115,7 @@ const messages = {
     totalDuration: "Duration",
     durationSeconds: "took {{duration}}",
     tokenUsage: "In {{input}} / Out {{output}}",
+    liveTokenUsage: "{{tokens}} tokens",
     tokenUsageTooltip: "In {{input}} token / Out {{output}} token",
     messageActions: "Message actions",
     copyMessage: "Copy message",

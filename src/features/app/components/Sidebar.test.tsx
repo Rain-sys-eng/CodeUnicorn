@@ -72,6 +72,24 @@ describe("Sidebar", () => {
     });
   });
 
+  it("reloads provider catalogs when settings invalidate the catalog", async () => {
+    render(<Sidebar {...baseProps} />);
+
+    await waitFor(() => {
+      expect(getClaudeProviders).toHaveBeenCalledTimes(1);
+    });
+
+    window.dispatchEvent(
+      new CustomEvent("ccgui:provider-target-catalog-invalidated"),
+    );
+
+    await waitFor(() => {
+      expect(getClaudeProviders).toHaveBeenCalledTimes(2);
+      expect(getCodexProviders).toHaveBeenCalledTimes(2);
+      expect(getKimiProviders).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("surfaces provider catalog load failures instead of silently clearing selection", async () => {
     vi.mocked(getKimiProviders).mockRejectedValueOnce(
       new Error("provider catalog unavailable"),

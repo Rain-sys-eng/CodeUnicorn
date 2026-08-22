@@ -28,7 +28,10 @@ export function ChatInputBoxHeader({
   attachments: Attachment[];
   onRemoveAttachment: (id: string) => void;
   messageQueue?: QueuedMessage[];
-  onRemoveFromQueue?: (id: string) => void;
+  onRemoveFromQueue?: (
+    id: string,
+    options?: { confirmedPendingAck?: boolean },
+  ) => void | Promise<boolean | void>;
   onFuseFromQueue?: (id: string) => void;
   canFuseFromQueue?: boolean;
   fuseDisabledReasonKey?: string | null;
@@ -98,7 +101,7 @@ export function ChatInputBoxHeader({
       {messageQueue && messageQueue.length > 0 && (
         <MessageQueue
           queue={messageQueue}
-          onRemove={onRemoveFromQueue ?? (() => {})}
+          onRemove={onRemoveFromQueue ?? (async () => false)}
           onFuse={onFuseFromQueue}
           canFuse={canFuseFromQueue}
           fuseDisabledReasonKey={fuseDisabledReasonKey}

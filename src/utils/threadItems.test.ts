@@ -1524,6 +1524,123 @@ go lang`,
     }
   });
 
+  it("infers DSH write fileChange diffs from a raw JSON arguments string", () => {
+    const item = buildConversationItem({
+      type: "fileChange",
+      id: "dsh-write-json-string",
+      title: "write",
+      tool: "write",
+      status: "completed",
+      arguments:
+        '{"file_path":"src/KiwiController.java","content":"class KiwiController {}\\n"}',
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.toolType).toBe("fileChange");
+      expect(item.title).toBe("write");
+      expect(item.detail).toBe("M src/KiwiController.java");
+      expect(item.changes?.[0]?.path).toBe("src/KiwiController.java");
+      expect(item.changes?.[0]?.diff).toContain("+class KiwiController {}");
+    }
+  });
+
+  it("keeps todo_write JSON-string arguments out of fileChange", () => {
+    const item = buildConversationItem({
+      type: "fileChange",
+      id: "todo-json-string",
+      title: "todo_write",
+      tool: "todo_write",
+      status: "completed",
+      arguments: JSON.stringify({
+        todos: [{ content: "step", status: "pending" }],
+      }),
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.toolType).toBe("mcpToolCall");
+      expect(JSON.parse(item.detail)).toEqual({
+        todos: [{ content: "step", status: "pending" }],
+      });
+      expect(item.changes).toBeUndefined();
+    }
+  });
+
+  it("lets a completed fileChange with real diffs replace started synthetic diffs", () => {
+    const started = buildConversationItem({
+      type: "fileChange",
+      id: "merge-richer-diff",
+      title: "write",
+      status: "started",
+      arguments: JSON.stringify({
+        file_path: "src/a.ts",
+        content: "first-draft\n",
+      }),
+    });
+    const completed = buildConversationItem({
+      type: "fileChange",
+      id: "merge-richer-diff",
+      title: "write",
+      status: "completed",
+      changes: [
+        {
+          path: "src/a.ts",
+          kind: "modified",
+          diff: [
+            "diff --git a/src/a.ts b/src/a.ts",
+            "--- a/src/a.ts",
+            "+++ b/src/a.ts",
+            "@@ -1,1 +1,1 @@",
+            "-first-draft",
+            "+final-draft",
+          ].join("\n"),
+        },
+      ],
+    });
+    if (!started || started.kind !== "tool" || !completed || completed.kind !== "tool") {
+      throw new Error("expected tool items");
+    }
+    const merged = upsertItem([started], completed);
+    const item = merged[0];
+    if (item?.kind === "tool") {
+      expect(item.status).toBe("completed");
+      expect(item.changes?.[0]?.diff).toContain("+final-draft");
+      expect(item.changes?.[0]?.diff).not.toContain("+first-draft");
+    }
+  });
+
+  it("keeps started DSH write diffs when a nameless completed fileChange has no arguments", () => {
+    const started = buildConversationItem({
+      type: "fileChange",
+      id: "dsh-write-merge",
+      title: "write",
+      tool: "write",
+      status: "started",
+      arguments: JSON.stringify({
+        file_path: "src/KiwiService.java",
+        content: "class KiwiService {}\n",
+      }),
+    });
+    const completed = buildConversationItem({
+      type: "fileChange",
+      id: "dsh-write-merge",
+      status: "completed",
+      output: "<path>src/KiwiService.java</path>\n<content>\nCreated file\n</content>",
+    });
+    expect(started).not.toBeNull();
+    expect(completed).not.toBeNull();
+    if (!started || started.kind !== "tool" || !completed || completed.kind !== "tool") {
+      return;
+    }
+    const merged = upsertItem([started], completed);
+    expect(merged).toHaveLength(1);
+    const item = merged[0];
+    if (item?.kind === "tool") {
+      expect(item.detail).toBe("M src/KiwiService.java");
+      expect(item.changes?.[0]?.diff).toContain("+class KiwiService {}");
+      expect(item.status).toBe("completed");
+    }
+  });
+
   it("builds added file diffs from content-only payloads", () => {
     const item = buildConversationItem({
       type: "fileChange",

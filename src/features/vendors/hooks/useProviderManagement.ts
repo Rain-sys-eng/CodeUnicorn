@@ -26,6 +26,7 @@ import { applyOptimisticActiveProvider } from "../applyOptimisticActiveProvider"
 import { VENDOR_ACTIVE_PROVIDER_CHANGED_EVENT } from "../vendorActiveProviderEvents";
 import { notifyProviderTargetCatalogChanged } from "../../composer/components/ChatInputBox/hooks/useProviderTargetCatalogOwners";
 import { normalizeProviderProfileId } from "../customModelProviderBinding";
+import { forgetDeletedLastProviderProfile } from "../lastProviderProfileMemory";
 
 /** List/config load options. `silent` skips list-level loading UI (switch / external events). */
 export type ProviderLoadOptions = {
@@ -512,6 +513,7 @@ export function useProviderManagement() {
 
     try {
       await deleteClaudeProvider(provider.id);
+      forgetDeletedLastProviderProfile("claude", provider.id);
       await Promise.all([loadProviders(), loadCurrentConfig()]);
       setProviderError(null);
       notifyProviderTargetCatalogChanged();

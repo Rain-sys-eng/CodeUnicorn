@@ -36,6 +36,7 @@ const SUPPORTED: EngineType[] = [
   "grok",
   "opencode",
   "pi",
+  "qoder",
 ];
 
 export function isMultiAgentTargetSupported(

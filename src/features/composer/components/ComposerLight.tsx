@@ -167,9 +167,14 @@ export function ComposerLight({
             selectedModelId ||
             ""
           : t("models.loading", { defaultValue: "加载中" }),
-        modeLabel: t(`modes.${selectedPermissionMode}.label`, {
-          defaultValue: selectedPermissionMode,
-        }),
+        modeLabel: t(
+          selectedEngine === "dsh"
+            ? `dshModes.${selectedPermissionMode}.label`
+            : `modes.${selectedPermissionMode}.label`,
+          {
+            defaultValue: selectedPermissionMode,
+          },
+        ),
         modeImpactLabel: t(`composer.readinessModeImpact.${accessMode}`, {
           defaultValue: accessMode,
         }),

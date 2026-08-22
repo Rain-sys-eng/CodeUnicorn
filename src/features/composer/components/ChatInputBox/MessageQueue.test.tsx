@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageQueue } from './MessageQueue';
 
@@ -236,5 +236,45 @@ describe('MessageQueue', () => {
     expect(
       screen.getByRole('button', { name: 'chat.fuseFromQueue' }).hasAttribute('disabled'),
     ).toBe(true);
+  });
+
+  it('requires confirmation before abandoning a pending Shared ACK', async () => {
+    const onRemove = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    render(
+      <MessageQueue
+        queue={[
+          {
+            id: 'queued-pending-ack',
+            content: 'already sent follow-up',
+            queuedAt: Date.now(),
+            isPendingAck: true,
+          },
+        ]}
+        onRemove={onRemove}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.deleteQueuedMessage' }));
+
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.getByText('sharedSend.recoverySkipConfirmTitle')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('sharedSend.recoverySkipConfirmAction'));
+      await Promise.resolve();
+    });
+
+    expect(onRemove).toHaveBeenCalledWith('queued-pending-ack', {
+      confirmedPendingAck: true,
+    });
+    expect(screen.getByText('sharedSend.recoverySkipConfirmTitle')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('sharedSend.recoverySkipConfirmAction'));
+      await Promise.resolve();
+    });
+
+    expect(onRemove).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('sharedSend.recoverySkipConfirmTitle')).toBeNull();
   });
 });

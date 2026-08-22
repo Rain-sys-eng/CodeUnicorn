@@ -168,6 +168,7 @@ mod session_index;
 mod session_management;
 mod settings;
 mod shared;
+mod shared_binding_visibility;
 pub mod shared_context;
 pub mod shared_event_log;
 pub mod shared_projection;
@@ -189,6 +190,7 @@ mod types;
 mod utils;
 mod vendors;
 mod web_service;
+mod workspace_wallpaper;
 mod window;
 #[cfg(any(test, target_os = "windows"))]
 mod windows_f5_reload_guard;

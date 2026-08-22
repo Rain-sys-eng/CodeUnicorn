@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "Annuler",
       "revertAllConfirmTitle": "Annuler toutes les modifications",
       "revertAllConfirmBody":
-        "Les modifications locales de {{count}} fichiers seront abandonnées et restaurées au dernier commit. Cette action est irréversible.",
+        "Les modifications locales non indexées de {{count}} fichiers seront abandonnées et restaurées vers l'index (ou HEAD s'il n'y a rien d'indexé). Les modifications déjà indexées seront conservées. Cette action est irréversible.",
       "revertAllConfirmAction": "Tout annuler",
       "revertFileConfirmTitle": "Annuler les modifications du fichier",
       "revertFileConfirmBody":
-        "Les modifications locales de « {{path}} » seront abandonnées et restaurées au dernier commit. Cette action est irréversible.",
+        "Les modifications locales non indexées de « {{path}} » seront abandonnées et restaurées vers l'index (ou HEAD s'il n'y a rien d'indexé). Les modifications déjà indexées seront conservées. Cette action est irréversible.",
       "revertFileConfirmAction": "Annuler"
     },
     "noThinkingContent": "Aucun contenu de réflexion",
@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Assemblage",
     "generatingResponse": "Génération de la réponse...",
     "responding": "Réponse en cours...",
+    "waitingForFirstText": "{{engine}} est en cours d'exécution. En attente du premier bloc de texte...",
     "codexWaitingForFirstText": "Codex est en cours d'exécution. En attente du premier bloc de texte...",
     "codexSilentSuspected": "Aucune nouvelle sortie de Codex depuis un moment. Toujours à l'écoute de l'activité d'exécution...",
     "nonStreamingHint": "Ce modèle peut renvoyer une sortie non diffusée en continu, ou le réseau peut être injoignable. Veuillez patienter...",
@@ -90,6 +91,7 @@ const messages = {
     "totalDuration": "Durée",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "Entrée {{input}} / Sortie {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "Entrée {{input}} token / Sortie {{output}} token",
     "messageActions": "Actions du message",
     "copyMessage": "Copier le message",

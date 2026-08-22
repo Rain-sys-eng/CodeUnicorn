@@ -117,4 +117,41 @@ describe("useProviderModelCatalogSync", () => {
     expect(refreshEngineModels).not.toHaveBeenCalled();
     expect(activateMock).not.toHaveBeenCalled();
   });
+
+  it("does not fetch catalogs when returning from Codex to a DSH thread", () => {
+    const refreshEngineModels = vi.fn().mockResolvedValue(undefined);
+    const addDebugEntry = vi.fn();
+    type HookProps = {
+      activeEngine: EngineType;
+      activeThreadEngineSource: EngineType;
+      activeThreadId: string;
+    };
+    const view = renderHook(
+      ({ activeEngine, activeThreadEngineSource, activeThreadId }: HookProps) =>
+        useProviderModelCatalogSync({
+          activeEngine,
+          activeThreadEngineSource,
+          activeThreadId,
+          activeWorkspaceId: "ws-1",
+          providerProfileId: null,
+          addDebugEntry,
+          refreshEngineModels,
+        }),
+      {
+        initialProps: {
+          activeEngine: "codex",
+          activeThreadEngineSource: "codex",
+          activeThreadId: "codex:session-1",
+        },
+      },
+    );
+
+    view.rerender({
+      activeEngine: "dsh",
+      activeThreadEngineSource: "dsh",
+      activeThreadId: "dsh:session-1",
+    });
+    expect(refreshEngineModels).not.toHaveBeenCalled();
+    expect(activateMock).not.toHaveBeenCalled();
+  });
 });

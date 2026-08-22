@@ -471,7 +471,8 @@ export const MessagesCore = memo(function MessagesCore({
         activeEngine === "gemini" ||
         activeEngine === "grok" ||
         activeEngine === "kimi" ||
-        activeEngine === "dsh"),
+        activeEngine === "dsh" ||
+        activeEngine === "qoder"),
     items: renderSourceItems,
   });
   const {
@@ -504,7 +505,41 @@ export const MessagesCore = memo(function MessagesCore({
     labels: {
       approvalResumingAfterApproval: t("approval.resumingAfterApproval"),
       codexSilentSuspected: t("messages.codexSilentSuspected"),
-      codexWaitingForFirstText: t("messages.codexWaitingForFirstText"),
+      waitingForFirstText: t("messages.waitingForFirstText", {
+        engine: t(
+          activeEngine === "claude"
+            ? "workspace.engineClaudeCode"
+            : activeEngine === "codex"
+              ? "workspace.engineCodex"
+              : activeEngine === "gemini"
+                ? "workspace.engineGemini"
+                : activeEngine === "grok"
+                  ? "workspace.engineGrok"
+                  : activeEngine === "kimi"
+                    ? "workspace.engineKimi"
+                    : activeEngine === "opencode"
+                      ? "workspace.engineOpenCode"
+                      : activeEngine === "pi"
+                        ? "workspace.enginePi"
+                        : activeEngine === "dsh"
+                          ? "workspace.engineDsh"
+                          : activeEngine === "qoder"
+                            ? "workspace.engineQoder"
+                            : "workspace.engineCodex",
+          {
+            defaultValue:
+              activeEngine === "qoder"
+                ? "Qoder CLI"
+                : activeEngine === "dsh"
+                  ? "DeepSeek Harness"
+                  : activeEngine === "opencode"
+                    ? "OpenCode"
+                    : activeEngine === "codex"
+                      ? "Codex"
+                      : activeEngine,
+          },
+        ),
+      }),
       contextCompacting: t("chat.contextDualViewCompacting"),
     },
     nativeRuntimeRecoveryEnabled,
@@ -1050,17 +1085,16 @@ export const MessagesCore = memo(function MessagesCore({
     ],
   );
   const timelineSourceItems = useMemo(() => {
-    if (activeEngine === "codex" && isThinking) {
-      return suppressCompletedExploreItemsBetweenLatestUserTurns(visibleItems, {
-        enableCollaborationBadge,
-      });
-    }
-    if (activeEngine === "grok") {
-      return suppressOrphanExploringItemsBeforeLatestUserTurn(visibleItems, {
-        enableCollaborationBadge,
-      });
-    }
-    return visibleItems;
+    const itemsWithoutCompletedExploreBetweenTurns =
+      activeEngine === "codex" && isThinking
+        ? suppressCompletedExploreItemsBetweenLatestUserTurns(visibleItems, {
+            enableCollaborationBadge,
+          })
+        : visibleItems;
+    return suppressOrphanExploringItemsBeforeLatestUserTurn(
+      itemsWithoutCompletedExploreBetweenTurns,
+      { enableCollaborationBadge },
+    );
   }, [activeEngine, enableCollaborationBadge, isThinking, visibleItems]);
   const { timelineItems, phases: processPhases } = useMemo(
     () =>
@@ -1582,7 +1616,7 @@ export const MessagesCore = memo(function MessagesCore({
 
   useEffect(() => {
     if (
-      (activeEngine !== "claude" && activeEngine !== "codex" && activeEngine !== "gemini" && activeEngine !== "grok" && activeEngine !== "kimi" && activeEngine !== "dsh") ||
+      (activeEngine !== "claude" && activeEngine !== "codex" && activeEngine !== "gemini" && activeEngine !== "grok" && activeEngine !== "kimi" && activeEngine !== "dsh" && activeEngine !== "qoder") ||
       (!isThinking && !isAssistantFinalizing) ||
       !threadId
     ) {
@@ -1720,7 +1754,8 @@ export const MessagesCore = memo(function MessagesCore({
   const shouldRenderUserInputNode =
     (activeEngine === "codex" ||
       activeEngine === "claude" ||
-      activeEngine === "dsh") &&
+      activeEngine === "dsh" ||
+      activeEngine === "qoder") &&
     Boolean(legacyOnUserInputSubmit);
   const visibleApprovals = useMemo(() => {
     return getVisibleApprovalsForThread(approvals, workspaceId, threadId);
@@ -1770,7 +1805,7 @@ export const MessagesCore = memo(function MessagesCore({
     ],
   );
   const timelineHeartbeatPulse =
-    (presentationProfile?.heartbeatWaitingHint ?? (activeEngine === "opencode" || activeEngine === "dsh"))
+    (presentationProfile?.heartbeatWaitingHint ?? (activeEngine === "opencode" || activeEngine === "dsh" || activeEngine === "qoder"))
       ? heartbeatPulse
       : 0;
   const { handlePendingJumpTargetReady, requestScrollToAnchor } =

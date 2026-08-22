@@ -1,3 +1,5 @@
+import { sharedSessionV2TurnState } from "../services/sharedSessions";
+
 export type RecoveryOwner =
   | { kind: "attempt"; attemptId: string; bindingKey: string }
   | { kind: "binding"; bindingKey: string }
@@ -11,6 +13,37 @@ export function recoveryOwnerCacheKey(
   threadId: string,
 ): string {
   return `${workspaceId}\u0000${threadId}`;
+}
+
+/**
+ * 以 durable turn state 解析 recovery owner；任何不唯一的结果都 fail closed。
+ * Shared StatusBar 与 queue pending-ack abandon 共用，避免从当前 UI target 推断 owner。
+ */
+export async function resolveSharedRecoveryOwner(
+  workspaceId: string,
+  threadId: string,
+): Promise<RecoveryOwner> {
+  const turnState = await sharedSessionV2TurnState(workspaceId, threadId);
+  const inFlight = turnState.inFlightAttempts ?? [];
+  if (inFlight.length > 1) {
+    return { kind: "ambiguous" };
+  }
+  const attempt = inFlight[0];
+  if (attempt) {
+    const attemptId = attempt.attemptId?.trim();
+    const bindingKey = attempt.bindingKey?.trim();
+    return attemptId && bindingKey
+      ? { kind: "attempt", attemptId, bindingKey }
+      : { kind: "ambiguous" };
+  }
+  const recoveryBindings = (turnState.bindings ?? []).filter(
+    (binding) => binding.provisioningState === "recovery-required",
+  );
+  if (recoveryBindings.length > 1) {
+    return { kind: "ambiguous" };
+  }
+  const bindingKey = recoveryBindings[0]?.bindingKey?.trim();
+  return bindingKey ? { kind: "binding", bindingKey } : { kind: "clear" };
 }
 
 export function prefetchRecoveryOwner(

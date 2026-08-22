@@ -34,6 +34,13 @@ On Windows desktop, the custom main-window titlebar close control (X) MUST ask t
 - **AND** the client MUST log a warning for diagnostics
 - **AND** the confirmation UI MUST become interactive again so the user can cancel or retry
 
+#### Scenario: Confirm action remains readable on light and system-light themes
+
+- **WHEN** the custom close confirmation dialog is open
+- **AND** the appearance is explicit light or OS-follow light
+- **THEN** the confirm action (`menu.closeWindowConfirmOk`) MUST keep a light foreground on the invert-fill primary button
+- **AND** the label MUST remain distinguishable from the black/dark pill background (no black-on-black)
+
 #### Scenario: Non-Windows chrome is not wired to this confirm path
 
 - **WHEN** the client runs on macOS or Linux desktop chrome

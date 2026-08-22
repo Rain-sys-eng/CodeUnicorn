@@ -6,6 +6,7 @@ import { grokRealtimeAdapter } from "./grokRealtimeAdapter";
 import { dshRealtimeAdapter } from "./dshRealtimeAdapter";
 import { kimiRealtimeAdapter } from "./kimiRealtimeAdapter";
 import { opencodeRealtimeAdapter } from "./opencodeRealtimeAdapter";
+import { qoderRealtimeAdapter } from "./qoderRealtimeAdapter";
 import { getRealtimeAdapterByEngine } from "./realtimeAdapterRegistry";
 import type { ConversationEngine } from "../contracts/conversationCurtainContracts";
 
@@ -19,6 +20,8 @@ describe("realtime adapters", () => {
       "kimi",
       "opencode",
       "dsh",
+      "pi",
+      "qoder",
     ];
 
     for (const engine of engines) {
@@ -754,5 +757,60 @@ describe("realtime adapters", () => {
       input_tokens: 3,
       output_tokens: 7,
     });
+  });
+
+  it("maps qoder text:delta alias to assistant delta", () => {
+    const event = qoderRealtimeAdapter.mapEvent({
+      workspaceId: "ws-qoder",
+      message: {
+        method: "text:delta",
+        params: {
+          threadId: "qoder:session-1",
+          itemId: "agent-1",
+          delta: "working",
+        },
+      },
+    });
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("qoder");
+    expect(event?.operation).toBe("appendAgentMessageDelta");
+    expect(event?.item.kind).toBe("message");
+  });
+
+  it("maps qoder reasoning text delta to normalized reasoning delta event", () => {
+    const event = qoderRealtimeAdapter.mapEvent({
+      workspaceId: "ws-qoder",
+      message: {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "qoder:session-1",
+          itemId: "reasoning-1",
+          delta: "thinking",
+        },
+      },
+    });
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("qoder");
+    expect(event?.operation).toBe("appendReasoningContentDelta");
+    expect(event?.item.kind).toBe("reasoning");
+  });
+
+  it("maps qoder events on Shared thread ids (Shared target badge route)", () => {
+    // enable-qoder-shared-target：qoder 进 Shared 集合后，shared:<id> 事件必须穿过
+    // normalized 路由，否则 target badge / runtime receipt 无法附着（回归：首条
+    // Shared Qoder turn 缺发送标识）。
+    const event = qoderRealtimeAdapter.mapEvent({
+      workspaceId: "ws-qoder",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "shared:session-1",
+          item: { id: "agent-1", type: "agentMessage", text: "done", status: "completed" },
+        },
+      },
+    });
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("qoder");
+    expect(event?.item.kind).toBe("message");
   });
 });

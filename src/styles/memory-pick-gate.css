@@ -65,6 +65,34 @@ html[data-theme="light"] .memory-pick-gate,
   --mpg-muted-opacity: 0.48;
 }
 
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .memory-pick-gate,
+  :root:not([data-theme]) .memory-pick-gate-slot .memory-pick-gate {
+    --mpg-ink: var(--text-primary, #18181b);
+    --mpg-muted: var(--text-muted, rgba(24, 24, 27, 0.72));
+    --mpg-faint: var(--text-faint, rgba(24, 24, 27, 0.5));
+    --mpg-accent: var(--text-primary, #18181b);
+    --mpg-accent-strong: var(--text-primary, #09090b);
+    --mpg-accent-soft: color-mix(in srgb, #18181b 6%, #fff);
+    --mpg-accent-row: color-mix(in srgb, #18181b 5%, #fff);
+    --mpg-border: var(--border-subtle, rgba(24, 24, 27, 0.1));
+    --mpg-border-strong: var(--border-strong, rgba(24, 24, 27, 0.16));
+    --mpg-elev: color-mix(in srgb, #18181b 6%, #fff);
+    --mpg-hover: color-mix(in srgb, #18181b 5%, #fff);
+    --mpg-card: var(--surface-popover, #ffffff);
+    --mpg-panel: color-mix(in srgb, #18181b 4%, #fff);
+    --mpg-overlay: color-mix(in srgb, #18181b 42%, transparent);
+    --mpg-danger: var(--text-primary, #18181b);
+    --mpg-always: var(--text-primary, #18181b);
+    --mpg-always-ink: var(--text-primary, #09090b);
+    --mpg-always-soft: color-mix(in srgb, #18181b 6%, #fff);
+    --mpg-always-badge-bg: color-mix(in srgb, #18181b 8%, #fff);
+    --mpg-warn: var(--text-primary, #18181b);
+    --mpg-warn-soft: color-mix(in srgb, #18181b 6%, #fff);
+    --mpg-muted-opacity: 0.48;
+  }
+}
+
 /*
  * 与 .messages-full 同宽同中（750px），勿复用 min-height:100%
  */

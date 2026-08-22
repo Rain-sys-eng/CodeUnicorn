@@ -1,9 +1,14 @@
-import { useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EngineType } from '../../../../types';
 import { EngineIcon } from '../../../engine/components/EngineIcon';
-import type { ModelInfo } from './types';
-import { PROMPT_ENHANCER_ENGINE_OPTIONS } from './hooks/usePromptEnhancer';
+import type { ModelInfo, ProviderId } from './types';
+import type { ProviderModelGroup } from './modelOptions';
+import { ModelSelect } from './selectors/ModelSelect';
+import {
+  PROMPT_ENHANCER_INTENSITY_OPTIONS,
+  type PromptEnhancerIntensity,
+} from './hooks/usePromptEnhancer';
 
 interface PromptEnhancerDialogProps {
   isOpen: boolean;
@@ -11,7 +16,10 @@ interface PromptEnhancerDialogProps {
   loadingEngine: EngineType;
   selectedEngine: EngineType;
   selectedModel: string;
+  selectedIntensity: PromptEnhancerIntensity;
   modelOptions: ModelInfo[];
+  modelGroups: ProviderModelGroup[];
+  visibleEngines: EngineType[];
   timeoutSeconds: number;
   timeoutLimits: {
     minSeconds: number;
@@ -22,137 +30,201 @@ interface PromptEnhancerDialogProps {
   canUseEnhanced: boolean;
   onEngineChange: (engine: EngineType) => void;
   onModelChange: (modelId: string) => void;
+  onProviderModelChange: (providerId: ProviderId, modelId: string) => void;
+  onIntensityChange: (intensity: PromptEnhancerIntensity) => void;
   onTimeoutChange: (timeoutSeconds: number) => void;
+  onOriginalPromptChange: (prompt: string) => void;
   onRunEnhancement: () => void;
   onUseEnhanced: () => void;
   onKeepOriginal: () => void;
   onClose: () => void;
 }
 
-/**
- * PromptEnhancerDialog - Prompt enhancement dialog
- * Displays original and enhanced prompts, letting the user choose which version to use
- */
+function tokenizeForDiff(value: string): string[] {
+  return value.split(/(\s+)/);
+}
+
+function renderEnhancedDiff(original: string, enhanced: string) {
+  const originalTokens = new Set(tokenizeForDiff(original).filter((token) => token.trim().length > 0));
+  return tokenizeForDiff(enhanced).map((token, index) => {
+    if (!token.trim()) {
+      return token;
+    }
+    const isNew = !originalTokens.has(token);
+    return (
+      <span key={token + '-' + index} className={isNew ? 'prompt-diff-add' : undefined}>
+        {token}
+      </span>
+    );
+  });
+}
+
 export const PromptEnhancerDialog = ({
   isOpen,
   isLoading,
   loadingEngine,
   selectedEngine,
   selectedModel,
+  selectedIntensity,
   modelOptions,
+  modelGroups,
+  visibleEngines,
   timeoutSeconds,
   timeoutLimits,
   originalPrompt,
   enhancedPrompt,
   canUseEnhanced,
-  onEngineChange,
-  onModelChange,
+  onProviderModelChange,
+  onIntensityChange,
   onTimeoutChange,
+  onOriginalPromptChange,
   onRunEnhancement,
   onUseEnhanced,
   onKeepOriginal,
   onClose,
 }: PromptEnhancerDialogProps) => {
   const { t } = useTranslation();
+  const hasEnabledEngine = visibleEngines.length > 0;
 
-  const getEngineLabel = (engine: EngineType) => {
-    switch (engine) {
-      case 'claude':
-        return 'Claude Code';
-      case 'codex':
-        return 'Codex';
-      case 'gemini':
-        return 'Gemini';
-      case 'opencode':
-        return 'OpenCode';
-      case 'dsh':
-        return 'DSH';
+  const intensityHint = useMemo(() => {
+    switch (selectedIntensity) {
+      case 'struct':
+        return t('promptEnhancer.intensityStructHint', {
+          defaultValue: 'Add sections only when they introduce new constraints',
+        });
+      case 'exec':
+        return t('promptEnhancer.intensityExecHint', {
+          defaultValue: 'Add actions and verification without inventing facts',
+        });
+      case 'light':
       default:
-        return 'AI';
+        return t('promptEnhancer.intensityLightHint', {
+          defaultValue: 'Polish wording; do not expand a short draft',
+        });
     }
-  };
+  }, [selectedIntensity, t]);
 
-  const loadingLabel = getEngineLabel(loadingEngine);
-
-  // Handle keyboard events
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
       onClose();
-    } else if (e.key === 'Enter' && !isLoading && canUseEnhanced) {
-      e.preventDefault();
-      onUseEnhanced();
+      return;
     }
-  }, [canUseEnhanced, onClose, onUseEnhanced, isLoading]);
+    if (event.key !== 'Enter' || event.altKey || isLoading) {
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && canUseEnhanced) {
+      event.preventDefault();
+      onUseEnhanced();
+      return;
+    }
+    if (event.metaKey || event.ctrlKey) {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable)) {
+      return;
+    }
+    if (canUseEnhanced) {
+      event.preventDefault();
+      onUseEnhanced();
+      return;
+    }
+    if (originalPrompt.trim() && hasEnabledEngine) {
+      event.preventDefault();
+      onRunEnhancement();
+    }
+  }, [canUseEnhanced, hasEnabledEngine, isLoading, onClose, onRunEnhancement, onUseEnhanced, originalPrompt]);
 
   useEffect(() => {
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
+    if (!isOpen) {
+      return;
     }
-  }, [isOpen, handleKeyDown]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown, isOpen]);
 
   if (!isOpen) {
     return null;
   }
 
-  // Close on overlay click
-  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
+  const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget && !isLoading) {
       onClose();
     }
   };
 
   return (
     <div className="prompt-enhancer-overlay" onClick={handleOverlayClick}>
-      <div className="prompt-enhancer-dialog" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
+      <div className="prompt-enhancer-dialog prompt-enhancer-dialog--wide" onClick={(event) => event.stopPropagation()}>
         <div className="prompt-enhancer-header">
           <div className="prompt-enhancer-title">
             <span className="codicon codicon-sparkle" />
             <h3>{t('promptEnhancer.title')}</h3>
+            <span className="prompt-enhancer-subtitle">
+              {t('promptEnhancer.subtitle', { defaultValue: 'Side-by-side review' })}
+            </span>
           </div>
-          <button className="prompt-enhancer-close" onClick={onClose}>
+          <button
+            className="prompt-enhancer-close"
+            onClick={onClose}
+            aria-label={t('common.close', { defaultValue: 'Close' })}
+          >
             <span className="codicon codicon-close" />
           </button>
         </div>
 
-        {/* Content area */}
         <div className="prompt-enhancer-content">
-          <div className="prompt-enhancer-config" aria-label={t('promptEnhancer.runSettings')}>
-            <label className="prompt-enhancer-field">
-              <span>{t('promptEnhancer.provider')}</span>
-              <select
-                className="prompt-enhancer-select"
-                value={selectedEngine}
-                onChange={(event) => onEngineChange(event.target.value as EngineType)}
-                disabled={isLoading}
-              >
-                {PROMPT_ENHANCER_ENGINE_OPTIONS.map((engine) => (
-                  <option key={engine} value={engine}>
-                    {getEngineLabel(engine)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="prompt-enhancer-field">
-              <span>{t('promptEnhancer.model')}</span>
-              <select
-                className="prompt-enhancer-select"
-                value={selectedModel}
-                onChange={(event) => onModelChange(event.target.value)}
-                disabled={isLoading || modelOptions.length === 0}
-              >
-                {modelOptions.length === 0 ? (
-                  <option value="">{t('promptEnhancer.noModel')}</option>
-                ) : (
-                  modelOptions.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label || model.id}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
+          <div className="prompt-enhancer-toolbar" aria-label={t('promptEnhancer.runSettings')}>
+            {hasEnabledEngine ? (
+              <div className={isLoading ? 'prompt-enhancer-picker is-disabled' : 'prompt-enhancer-picker'}>
+                <ModelSelect
+                  value={selectedModel}
+                  onChange={() => {}}
+                  currentProvider={selectedEngine}
+                  models={modelOptions}
+                  modelGroups={modelGroups}
+                  onProviderModelChange={onProviderModelChange}
+                  menuLayer="overlay"
+                />
+              </div>
+            ) : (
+              <div className="prompt-enhancer-empty-engines">
+                {t('promptEnhancer.noEnabledEngine', {
+                  defaultValue: 'No enabled CLI. Enable an engine in vendor settings first.',
+                })}
+              </div>
+            )}
+
+            <div className="prompt-enhancer-modes" role="radiogroup" aria-label={t('promptEnhancer.intensityLabel')}>
+              {PROMPT_ENHANCER_INTENSITY_OPTIONS.map((intensity) => (
+                <button
+                  key={intensity}
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedIntensity === intensity}
+                  className={selectedIntensity === intensity ? 'prompt-enhancer-mode on' : 'prompt-enhancer-mode'}
+                  onClick={() => onIntensityChange(intensity)}
+                  disabled={isLoading}
+                >
+                  {t('promptEnhancer.intensity.' + intensity)}
+                </button>
+              ))}
+            </div>
+
+            <button
+              className="prompt-enhancer-btn primary prompt-enhancer-run-btn"
+              onClick={onRunEnhancement}
+              disabled={isLoading || !originalPrompt.trim() || !hasEnabledEngine}
+            >
+              <span className={isLoading ? 'codicon codicon-loading' : 'codicon codicon-play'} />
+              {t('promptEnhancer.runEnhancement')}
+            </button>
+          </div>
+
+          <p className="prompt-enhancer-intensity-hint">{intensityHint}</p>
+
+          <details className="prompt-enhancer-advanced">
+            <summary>{t('promptEnhancer.advancedTimeout')}</summary>
             <label className="prompt-enhancer-field">
               <span>{t('promptEnhancer.timeoutSeconds')}</span>
               <input
@@ -166,51 +238,51 @@ export const PromptEnhancerDialog = ({
                 disabled={isLoading}
               />
             </label>
-            <button
-              className="prompt-enhancer-btn primary prompt-enhancer-run-btn"
-              onClick={onRunEnhancement}
-              disabled={isLoading || !originalPrompt.trim()}
-            >
-              <span className="codicon codicon-play" />
-              {t('promptEnhancer.runEnhancement')}
-            </button>
-          </div>
+          </details>
 
-          {/* Original prompt */}
-          <div className="prompt-section">
-            <div className="prompt-section-header">
-              <span className="codicon codicon-edit" />
-              <span>{t('promptEnhancer.originalPrompt')}</span>
-            </div>
-            <div className="prompt-text original-prompt">
-              {originalPrompt}
-            </div>
-          </div>
+          <div className="prompt-enhancer-split">
+            <section className="prompt-section">
+              <div className="prompt-section-header">
+                <span className="codicon codicon-edit" />
+                <span>{t('promptEnhancer.originalPrompt')}</span>
+                <span className="prompt-section-meta">{t('promptEnhancer.originalEditable')}</span>
+              </div>
+              <textarea
+                className="prompt-text original-prompt"
+                value={originalPrompt}
+                onChange={(event) => onOriginalPromptChange(event.target.value)}
+                disabled={isLoading}
+              />
+            </section>
 
-          {/* Enhanced prompt */}
-          <div className="prompt-section">
-            <div className="prompt-section-header">
-              <span className="codicon codicon-sparkle" />
-              <span>{t('promptEnhancer.enhancedPrompt')}</span>
-            </div>
-            <div className="prompt-text enhanced-prompt">
-              {isLoading ? (
-                <div className="prompt-loading">
-                  <EngineIcon
-                    engine={loadingEngine}
-                    size={16}
-                    className="prompt-loading-engine-icon"
-                  />
-                  <span>{`${loadingLabel} · ${t('promptEnhancer.enhancing')}`}</span>
-                </div>
-              ) : (
-                enhancedPrompt || t('promptEnhancer.readyToEnhance')
-              )}
-            </div>
+            <section className="prompt-section">
+              <div className="prompt-section-header">
+                <span className="codicon codicon-sparkle" />
+                <span>{t('promptEnhancer.enhancedPrompt')}</span>
+                <span className="prompt-section-meta">
+                  {canUseEnhanced ? t('promptEnhancer.diffLegend') : t('promptEnhancer.waitingEnhance')}
+                </span>
+              </div>
+              <div className="prompt-text enhanced-prompt">
+                {isLoading ? (
+                  <div className="prompt-loading">
+                    <EngineIcon
+                      engine={loadingEngine}
+                      size={16}
+                      className="prompt-loading-engine-icon"
+                    />
+                    <span>{t('promptEnhancer.enhancingWithEngine', { engine: loadingEngine })}</span>
+                  </div>
+                ) : canUseEnhanced ? (
+                  renderEnhancedDiff(originalPrompt, enhancedPrompt)
+                ) : (
+                  enhancedPrompt || t('promptEnhancer.readyToEnhance')
+                )}
+              </div>
+            </section>
           </div>
         </div>
 
-        {/* Footer buttons */}
         <div className="prompt-enhancer-footer">
           <button
             className="prompt-enhancer-btn secondary"

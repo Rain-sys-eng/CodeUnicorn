@@ -17,6 +17,7 @@ type UseCodingPlanQuotaOptions = {
  * - 官方 Codex → source=codex/official_cli，前端接 account/rateLimits
  * - Codex/Claude 配了 MiniMax/Kimi 等 → source=coding_plan（供应商 API）
  * - Kimi 官方 → 优先 CLI oauth 凭据 + usages API（对齐 /status）
+ * - Qoder Native → source=unsupported（无 RPC/HTTP 额度面，不刮 TUI /usage）
  * - 官方 Claude → source=none（无 plan 块）
  */
 export function useCodingPlanQuota({

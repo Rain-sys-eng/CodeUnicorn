@@ -40,9 +40,15 @@
     cursor: not-allowed;
   }
 
+  /*
+   * Invert-fill CTA. Do not pair `--text-primary` with `--bg-primary`:
+   * system-light historically flipped text to dark while leaving
+   * `--bg-primary` on the dark-theme value, which made close-confirm
+   * (and other AlertDialog) primary labels vanish into a black pill.
+   */
   .primary {
     background: var(--text-primary);
-    color: var(--bg-primary);
+    color: var(--primary-foreground, #ffffff);
     box-shadow: none;
   }
 

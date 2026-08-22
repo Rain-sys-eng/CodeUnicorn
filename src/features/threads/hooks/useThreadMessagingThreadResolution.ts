@@ -10,7 +10,7 @@ import { loadClaudeSession as loadClaudeSessionService } from "../../../services
 import { parseClaudeHistoryMessagesWithShadowRecovery } from "../loaders/claudeHistoryLoader";
 import type { ThreadAction } from "./useThreadsReducer";
 
-type ThreadEngine = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+type ThreadEngine = "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
 
 type RunWithCreateSessionLoading = <T>(
   params: {
@@ -103,6 +103,9 @@ export function useThreadMessagingThreadResolution({
   const piSessionIdByPendingThreadRef = useRef<Map<string, string>>(
     new Map(),
   );
+  const qoderSessionIdByPendingThreadRef = useRef<Map<string, string>>(
+    new Map(),
+  );
 
   const normalizeEngineSelection = useCallback(
     (engine: ThreadEngine | undefined): ThreadEngine =>
@@ -112,7 +115,8 @@ export function useThreadMessagingThreadResolution({
       engine === "grok" ||
       engine === "kimi" ||
       engine === "pi" ||
-      engine === "dsh"
+      engine === "dsh" ||
+      engine === "qoder"
         ? engine
         : "codex",
     [],
@@ -147,6 +151,9 @@ export function useThreadMessagingThreadResolution({
       }
       if (threadId.startsWith("pi:") || threadId.startsWith("pi-pending-")) {
         return "pi";
+      }
+      if (threadId.startsWith("qoder:") || threadId.startsWith("qoder-pending-")) {
+        return "qoder";
       }
       if (
         threadId.startsWith("opencode:") ||
@@ -197,6 +204,9 @@ export function useThreadMessagingThreadResolution({
       if (engine === "pi") {
         return threadId.startsWith("pi:") || threadId.startsWith("pi-pending-");
       }
+      if (engine === "qoder") {
+        return threadId.startsWith("qoder:") || threadId.startsWith("qoder-pending-");
+      }
       if (engine === "opencode") {
         return (
           threadId.startsWith("opencode:") ||
@@ -221,6 +231,8 @@ export function useThreadMessagingThreadResolution({
         !threadId.startsWith("kimi-pending-") &&
         !threadId.startsWith("pi:") &&
         !threadId.startsWith("pi-pending-") &&
+        !threadId.startsWith("qoder:") &&
+        !threadId.startsWith("qoder-pending-") &&
         !threadId.startsWith("opencode:") &&
         !threadId.startsWith("opencode-pending-") &&
         !threadId.startsWith("dsh:") &&
@@ -357,6 +369,7 @@ export function useThreadMessagingThreadResolution({
     kimiSessionIdByPendingThreadRef,
     dshSessionIdByPendingThreadRef,
     piSessionIdByPendingThreadRef,
+    qoderSessionIdByPendingThreadRef,
     isClaudePendingThreadAwaitingNativeSession,
     isThreadIdCompatibleWithEngine,
     normalizeEngineSelection,

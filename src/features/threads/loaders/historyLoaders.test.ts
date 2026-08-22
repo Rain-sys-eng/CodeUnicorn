@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../../../services/events", () => ({
   subscribeDshHistoryLoadProgress: vi.fn(() => () => {}),
 }));
+vi.mock("../../../app-shell-parts/selectedComposerSession", () => ({
+  seedDshComposerSelectionFromHost: vi.fn(),
+}));
 import { buildWorkspaceSessionActivity } from "../../session-activity/adapters/buildWorkspaceSessionActivity";
 import { createCodexHistoryLoader } from "./codexHistoryLoader";
 import { parseCodexSessionHistory } from "./codexSessionHistory";
@@ -12,6 +15,7 @@ import { createGrokHistoryLoader } from "./grokHistoryLoader";
 import { createDshHistoryLoader } from "./dshHistoryLoader";
 import { createKimiHistoryLoader } from "./kimiHistoryLoader";
 import { createPiHistoryLoader } from "./piHistoryLoader";
+import { createQoderHistoryLoader } from "./qoderHistoryLoader";
 
 describe("history loaders", () => {
   it("loads codex history into normalized snapshot", async () => {
@@ -866,6 +870,58 @@ describe("history loaders", () => {
     expect(snapshot.items).toHaveLength(1);
   });
 
+  it("seeds a DSH composer ledger from host currentModel", async () => {
+    const { seedDshComposerSelectionFromHost } = await import(
+      "../../../app-shell-parts/selectedComposerSession"
+    );
+    const seedSpy = vi.mocked(seedDshComposerSelectionFromHost);
+    seedSpy.mockClear();
+    const loader = createDshHistoryLoader({
+      workspaceId: "ws-dsh",
+      workspacePath: "/tmp/workspace",
+      loadDshSession: vi.fn().mockResolvedValue({
+        messages: [{ id: "u1", role: "user", text: "hi", kind: "message" }],
+        currentModel: {
+          provider: "gork-zhu",
+          model: "grok-4.6",
+          reasoningEffort: "low",
+        },
+      }),
+    });
+
+    await loader.load("dsh:session-1");
+    expect(seedSpy).toHaveBeenCalledWith({
+      workspaceId: "ws-dsh",
+      threadId: "dsh:session-1",
+      catalogId: "gork-zhu/grok-4.6",
+      effort: "low",
+    });
+  });
+
+  it("does not seed reserved mossx DSH providers from history", async () => {
+    const { seedDshComposerSelectionFromHost } = await import(
+      "../../../app-shell-parts/selectedComposerSession"
+    );
+    const seedSpy = vi.mocked(seedDshComposerSelectionFromHost);
+    seedSpy.mockClear();
+    const { extractDshHistoryCurrentModel } = await import("./dshHistoryLoader");
+    expect(
+      extractDshHistoryCurrentModel({
+        currentModel: { provider: "ccgui", model: "grok-4.5" },
+      }),
+    ).toBeNull();
+    const loader = createDshHistoryLoader({
+      workspaceId: "ws-dsh",
+      workspacePath: "/tmp/workspace",
+      loadDshSession: vi.fn().mockResolvedValue({
+        messages: [],
+        currentModel: { provider: "ccgui", model: "grok-4.5" },
+      }),
+    });
+    await loader.load("dsh:session-1");
+    expect(seedSpy).not.toHaveBeenCalled();
+  });
+
   it("hydrates dsh token usage and sessionStats from history", async () => {
     const loader = createDshHistoryLoader({
       workspaceId: "ws-dsh",
@@ -1086,6 +1142,85 @@ describe("history loaders", () => {
     expect(loadPiSession).not.toHaveBeenCalled();
     expect(snapshot.engine).toBe("pi");
     expect(snapshot.threadId).toBe("pi:session-1");
+    expect(snapshot.items).toHaveLength(0);
+  });
+
+  it("loads qoder history into normalized snapshot", async () => {
+    const loadQoderSession = vi.fn().mockResolvedValue({
+      messages: [
+        {
+          id: "qoder-user-1",
+          kind: "message",
+          role: "user",
+          text: "1+1",
+        },
+        {
+          id: "qoder-assistant-1",
+          kind: "message",
+          role: "assistant",
+          text: "2",
+        },
+      ],
+    });
+    const loader = createQoderHistoryLoader({
+      workspaceId: "ws-qoder",
+      workspacePath: "/tmp/workspace",
+      loadQoderSession,
+    });
+
+    const snapshot = await loader.load("qoder:019ffb7b-dedc-7b36-8d2f-f85f35501036");
+    expect(loadQoderSession).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "019ffb7b-dedc-7b36-8d2f-f85f35501036",
+      "__qoder_global__",
+    );
+    expect(snapshot.engine).toBe("qoder");
+    expect(snapshot.threadId).toBe("qoder:019ffb7b-dedc-7b36-8d2f-f85f35501036");
+    expect(snapshot.meta.historyHasMore).toBe(false);
+    expect(snapshot.meta.historyNextCursor).toBeNull();
+    expect(snapshot.items).toEqual([
+      expect.objectContaining({
+        kind: "message",
+        role: "user",
+        text: "1+1",
+      }),
+      expect.objectContaining({
+        kind: "message",
+        role: "assistant",
+        text: "2",
+      }),
+    ]);
+  });
+
+  it("loads a canonical Qoder CN id through its raw ACP id and CN distribution", async () => {
+    const loadQoderSession = vi.fn().mockResolvedValue({ messages: [] });
+    const loader = createQoderHistoryLoader({
+      workspaceId: "ws-qoder",
+      workspacePath: "/tmp/workspace",
+      loadQoderSession,
+    });
+
+    await loader.load("qoder:__qoder_cn__:same-raw-session");
+
+    expect(loadQoderSession).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "same-raw-session",
+      "__qoder_cn__",
+    );
+  });
+
+  it("returns an empty qoder snapshot when workspace path is missing", async () => {
+    const loadQoderSession = vi.fn();
+    const loader = createQoderHistoryLoader({
+      workspaceId: "ws-qoder",
+      workspacePath: null,
+      loadQoderSession,
+    });
+
+    const snapshot = await loader.load("qoder:session-1");
+    expect(loadQoderSession).not.toHaveBeenCalled();
+    expect(snapshot.engine).toBe("qoder");
+    expect(snapshot.threadId).toBe("qoder:session-1");
     expect(snapshot.items).toHaveLength(0);
   });
 

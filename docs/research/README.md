@@ -16,6 +16,8 @@ status: active
 - [New CLI onboarding guide](./mossx-new-cli-onboarding-guide.md) — Current onboarding guide。
 - [DSH engine onboarding execution](./mossx-dsh-engine-onboarding-execution.md) — Draft execution plan：把 DeepSeek Harness 接成第 7 个 Native Engine（不内嵌 Web UI）。实现前先开 OpenSpec change；不是 current contract。
 - [DSH capability spike](./mossx-dsh-capability-spike.md) — Phase S 实测（`dsh 0.1.0-rc.6` Host RPC / WS mux）；Adapter contract 证据，不是产品 spec。
+- [Qoder capability spike](./mossx-qoder-capability-spike.md) — Phase S 实测（`qodercli 1.1.27` ACP over stdio）；Adapter contract 证据，不是产品 spec。
+- [Qoder engine deferred record](./mossx-qoder-engine-deferred.md) — L1 接入后置项（Shared / L3 / 黄金 turn / elicitation）；不是漏接清单。
 
 ## Historical exploratory research
 
@@ -68,3 +70,5 @@ Producer：`npm run perf:realtime:report`。当前脚本固定写入 `docs/resea
 - [S2 Claude replay harness evidence index](./spikes/harness/s2-claude-replay-ack/evidence/README.md) — replay acknowledgement probe evidence 入口。
 - [S3 Kimi ACP harness](./spikes/harness/s3-kimi-acp/README.md) — 可复现实验命令与 probe 入口。
 - [S3 Kimi ACP harness evidence index](./spikes/harness/s3-kimi-acp/evidence/README.md) — ACP probe evidence 入口。
+- [Qoder ACP harness](./spikes/harness/qoder-acp/README.md) — 可复现实验命令与 probe 入口（qodercli 1.1.27）。
+- [Qoder ACP harness evidence index](./spikes/harness/qoder-acp/evidence/README.md) — ACP probe evidence 入口。

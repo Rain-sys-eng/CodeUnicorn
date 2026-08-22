@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useEventCallback } from "../../../utils/useEventCallback";
+import type { QoderSettingsHighlightTarget } from "../../app/hooks/useSettingsModalState";
 import { shouldUpgradeComposerFromLight } from "../utils/composerGateUpgrade";
 import { getStartupGateReadyReason } from "../../startup-orchestration/utils/startupGateReady";
 import type {
@@ -51,6 +52,11 @@ import { persistSharedSessionSelectedTarget } from "../../shared-session/service
 import { shouldSuppressSharedTargetPersistToast } from "../../shared-session/target/sharedTargetPersistErrors";
 import { resolveComposerAtomicSelectedModelId } from "../utils/resolveComposerAtomicSelectedModelId";
 import { resolveDefaultCreationExecutionTarget } from "../utils/resolveDefaultCreationExecutionTarget";
+import { deriveDshSessionStatsLine } from "../utils/dshSessionStats";
+import {
+  resolveDshAtomicCatalogIdForSend,
+  resolveDshNativeRuntimeModel,
+} from "../utils/dshNativeModelSelection";
 import { isSharedSessionThreadId } from "../../shared-session/utils/sharedSessionIdentity";
 import { dispatchSharedSendEvent } from "../../shared-session/runtime/sharedSendStateStore";
 import { requestProviderContinuationDialog } from "../../threads/services/providerContinuationRequests";
@@ -200,6 +206,7 @@ import {
   isMultiAgentTargetSupported,
   MultiAgentComposerToggle,
 } from "../../multi-agent/components/ComposerToggle";
+import { SharedProviderRetryToggle } from "../../shared-session/provider-retry/SharedProviderRetryToggle";
 
 
 type RewindExecutionOptions = {
@@ -302,7 +309,9 @@ export type ComposerProps = {
   onOpenAgentSettings?: () => void;
   onOpenPromptSettings?: () => void;
   onOpenModelSettings?: (providerId?: string) => void;
-  onOpenCliSettings?: () => void;
+  onOpenCliSettings?: (
+    highlightTarget?: QoderSettingsHighlightTarget,
+  ) => void;
   onRefreshModelConfig?: (providerId?: string) => Promise<void> | void;
   isModelConfigRefreshing?: boolean;
   onForkQuickStart?: () => void;
@@ -838,14 +847,20 @@ function ComposerImpl({
     const catalogRuntime = catalogEntry?.model?.trim() || null;
     const atomicRuntime = nativeAtomicSelection?.model?.trim() || null;
     const runtimeModel =
-      catalogRuntime ||
-      (atomicRuntime &&
-      atomicRuntime !== modelCatalogEntryId &&
-      !/^k3$/i.test(atomicRuntime) &&
-      !/^kimi-/i.test(atomicRuntime)
-        ? atomicRuntime
-        : null) ||
-      null;
+      selectedEngine === "dsh"
+        ? resolveDshNativeRuntimeModel({
+            catalogEntryId: modelCatalogEntryId,
+            catalogRuntime,
+            overlayRuntime: atomicRuntime,
+          })
+        : catalogRuntime ||
+          (atomicRuntime &&
+          atomicRuntime !== modelCatalogEntryId &&
+          !/^k3$/i.test(atomicRuntime) &&
+          !/^kimi-/i.test(atomicRuntime)
+            ? atomicRuntime
+            : null) ||
+          null;
     return {
       engine: selectedEngine,
       providerProfileId: profileId,
@@ -2658,6 +2673,13 @@ function ComposerImpl({
               effort: effectiveCreationTarget.reasoning?.effort ?? null,
             }
           : null;
+      const dshSendCatalogId = resolveDshAtomicCatalogIdForSend(
+        selectedAtomicTarget ?? {
+          engine: selectedEngine,
+          modelCatalogEntryId: selectedModelId,
+          model: null,
+        },
+      );
       const sendOptions: MessageSendOptions | undefined =
         skillInvocations.length > 0 ||
         selectedMemoryIds.length > 0 ||
@@ -2669,7 +2691,10 @@ function ComposerImpl({
         (selectedAtomicTarget?.engine ?? selectedEngine) === "dsh"
           ? {
               ...((selectedAtomicTarget?.engine ?? selectedEngine) === "dsh"
-                ? { dshAgentPreset: resolvedDshAgentPreset }
+                ? {
+                    dshAgentPreset: resolvedDshAgentPreset,
+                    ...(dshSendCatalogId ? { model: dshSendCatalogId } : {}),
+                  }
                 : {}),
               ...(skillInvocations.length > 0 ? { skillInvocations } : {}),
               ...(shouldPassMemoryReference
@@ -2918,11 +2943,32 @@ function ComposerImpl({
       selectedEngine === "dsh"
         ? finiteNonNegative(contextUsage.contextUsedTokens)
         : resolveClaudeWindowUsedTokens(contextUsage);
+    const latestRuntimeReceipt = isSharedSessionThreadId(activeThreadId)
+      ? [...items]
+          .reverse()
+          .find(
+            (
+              item,
+            ): item is Extract<ConversationItem, { kind: "message" }> & {
+              role: "assistant";
+              runtimeReceipt: NonNullable<
+                Extract<ConversationItem, { kind: "message" }>["runtimeReceipt"]
+              >;
+            } =>
+              item.kind === "message" &&
+              item.role === "assistant" &&
+              Boolean(item.runtimeReceipt),
+          )?.runtimeReceipt
+      : undefined;
     // CLI 没上报窗口总量时按模型估算兜底，让占用百分比可以计算。
+    // 该 turn 已有 runtime receipt 时，优先用 live 窗口或 receipt.model，避免 picker 别名把 1M 网关估成 200K。
     const contextWindow =
       finitePositive(contextUsage.modelContextWindow) ??
+      finitePositive(latestRuntimeReceipt?.contextWindowTokens) ??
       (selectedEngine === "claude" && usedTokens !== null
-        ? estimateClaudeContextWindow(selectedModelId)
+        ? estimateClaudeContextWindow(
+            latestRuntimeReceipt?.model ?? selectedModelId,
+          )
         : null);
     const totalTokens = finiteNonNegative(contextUsage.total.totalTokens);
     const inputTokens = finiteNonNegative(contextUsage.total.inputTokens);
@@ -2962,7 +3008,7 @@ function ComposerImpl({
       toolUsages: contextUsage.contextToolUsages ?? null,
       toolUsagesTruncated: contextUsage.contextToolUsagesTruncated ?? null,
     };
-  }, [contextUsage, selectedEngine, selectedModelId]);
+  }, [activeThreadId, contextUsage, items, selectedEngine, selectedModelId]);
 
   const legacyContextUsage = useMemo(() => {
     if (!contextUsage) {
@@ -2973,10 +3019,30 @@ function ComposerImpl({
         selectedEngine === "dsh"
           ? finiteNonNegative(contextUsage.contextUsedTokens)
           : resolveClaudeWindowUsedTokens(contextUsage);
+      const latestRuntimeReceipt = isSharedSessionThreadId(activeThreadId)
+        ? [...items]
+            .reverse()
+            .find(
+              (
+                item,
+              ): item is Extract<ConversationItem, { kind: "message" }> & {
+                role: "assistant";
+                runtimeReceipt: NonNullable<
+                  Extract<ConversationItem, { kind: "message" }>["runtimeReceipt"]
+                >;
+              } =>
+                item.kind === "message" &&
+                item.role === "assistant" &&
+                Boolean(item.runtimeReceipt),
+            )?.runtimeReceipt
+        : undefined;
       const contextWindow =
         finitePositive(contextUsage.modelContextWindow) ??
+        finitePositive(latestRuntimeReceipt?.contextWindowTokens) ??
         (selectedEngine === "claude"
-          ? estimateClaudeContextWindow(selectedModelId)
+          ? estimateClaudeContextWindow(
+              latestRuntimeReceipt?.model ?? selectedModelId,
+            )
           : null);
       return usedTokens !== null && contextWindow !== null
         ? { used: usedTokens, total: contextWindow }
@@ -2986,7 +3052,7 @@ function ComposerImpl({
       used: contextUsage.total.totalTokens,
       total: contextUsage.modelContextWindow ?? 0,
     };
-  }, [contextUsage, selectedEngine, selectedModelId]);
+  }, [activeThreadId, contextUsage, items, selectedEngine, selectedModelId]);
 
   const dualContextUsage = useMemo(
     () =>
@@ -3064,6 +3130,15 @@ function ComposerImpl({
   // 所有 provider 的上下文占用入口统一渲染在输入框下方分支行右侧；
   // Codex 继续使用 dual-view ContextBar，保留 tooltip 与 compaction controls。
   const showFooterUsageIndicator = footerUsageIndicatorEnabled;
+  const composerFooterEngine = selectedAtomicTarget?.engine ?? selectedEngine;
+  const showDshSessionStatsLine =
+    composerFooterEngine === "dsh" &&
+    deriveDshSessionStatsLine(contextUsage) != null;
+  const showComposerBranchRow =
+    Boolean(branchControl?.branchName) ||
+    showFooterUsageIndicator ||
+    isSharedSessionResolved ||
+    showDshSessionStatsLine;
   const footerUsagePercentage =
     resolvedLegacyContextUsage && resolvedLegacyContextUsage.total > 0
       ? Math.round(
@@ -3092,7 +3167,9 @@ function ComposerImpl({
         modeLabel:
           selectedEngine === "codex" && _selectedCollaborationModeId === "plan"
             ? t("codexModes.plan.label")
-            : t(`modes.${selectedPermissionMode}.label`),
+            : selectedEngine === "dsh"
+              ? t(`dshModes.${selectedPermissionMode}.label`)
+              : t(`modes.${selectedPermissionMode}.label`),
         modeImpactLabel: t(
           `composer.readinessModeImpact.${composerReadinessAccessMode}`,
         ),
@@ -3725,15 +3802,12 @@ function ComposerImpl({
               completionEmailDisabled={completionEmailDisabled}
               onToggleCompletionEmail={onToggleCompletionEmail}
             />
-            {branchControl?.branchName ||
-            showFooterUsageIndicator ||
-            isSharedSessionResolved ||
-            selectedEngine === "dsh" ? (
+            {showComposerBranchRow ? (
               <div className="composer-branch-row">
                 {branchControl?.branchName ? (
                   <ComposerBranchBadge {...branchControl} />
                 ) : null}
-                {selectedEngine === "dsh" ? (
+                {showDshSessionStatsLine ? (
                   <DshSessionStatsLine usage={contextUsage} />
                 ) : null}
                 {showFooterUsageIndicator || isSharedSessionResolved ? (
@@ -3755,6 +3829,12 @@ function ComposerImpl({
                             setAgentArmed((armed) => !armed);
                           }}
                           onArm={() => setAgentArmed(true)}
+                        />
+                        <SharedProviderRetryToggle
+                          workspaceId={activeWorkspaceId}
+                          threadId={activeThreadId}
+                          engine={selectedAtomicTarget?.engine ?? selectedEngine}
+                          disabled={collabRunActive}
                         />
                       </div>
                     ) : null}

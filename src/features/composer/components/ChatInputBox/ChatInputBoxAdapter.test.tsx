@@ -1012,6 +1012,22 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.reasoningOptions).toEqual(['high', 'ultra', 'max']);
   });
 
+  it('keeps the DSH off effort while dropping unknown values', async () => {
+    renderAdapter({
+      selectedEffort: 'off',
+      reasoningOptions: ['off', 'low', 'high', 'max', 'turbo'],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      reasoningEffort?: string | null;
+      reasoningOptions?: string[];
+    };
+    expect(latest.reasoningEffort).toBe('off');
+    expect(latest.reasoningOptions).toEqual(['off', 'low', 'high', 'max']);
+  });
+
   it('preserves explicit empty reasoning options instead of falling back to every level', async () => {
     renderAdapter({
       selectedEngine: 'codex',
@@ -2082,7 +2098,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.selectedModel).toBe('');
   });
 
-  it('enables the five supported provider options inside shared sessions', async () => {
+  it('enables the seven supported provider options inside shared sessions', async () => {
     renderAdapter({
       isSharedSession: true,
       engines: [
@@ -2093,6 +2109,8 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
         { type: 'kimi', installed: true, version: '1.0.0' },
         { type: 'grok', installed: true, version: '1.0.0' },
         { type: 'dsh', installed: true, version: '1.0.0' },
+        { type: 'qoder', installed: true, version: '1.0.0' },
+        { type: 'pi', installed: true, version: '1.0.0' },
       ],
     });
 
@@ -2100,6 +2118,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
 
     const latest = mockState.latestProps as {
       providerAvailability?: Record<string, boolean>;
+      providerStatusLabels?: Record<string, string | null>;
     };
 
     expect(latest.providerAvailability).toMatchObject({
@@ -2110,7 +2129,10 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       kimi: true,
       grok: true,
       dsh: false,
+      qoder: true,
+      pi: true,
     });
+    expect(latest.providerStatusLabels?.qoder).toBeNull();
   });
 
   it('keeps gemini and opencode provider options enabled outside shared sessions', async () => {

@@ -22,6 +22,8 @@ const approval = {
     "noteLabel": "Observação",
     "none": "Nenhum",
     "noExtraDetails": "Sem detalhes adicionais.",
+    "showDebugDetails": "Mostrar detalhes da solicitação",
+    "hideDebugDetails": "Ocultar detalhes da solicitação",
     "decline": "Recusar",
     "close": "Fechar",
     "approveTurnBatch": "Aprovar tudo neste lote ({{count}})",

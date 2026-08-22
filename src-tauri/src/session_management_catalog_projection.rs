@@ -116,6 +116,25 @@ fn expand_hidden_session_id_aliases(session_id: &str) -> Vec<String> {
     if trimmed.is_empty() {
         return Vec::new();
     }
+    if trimmed.starts_with("qoder:") {
+        return match engine::qoder_provider_profile::parse_qoder_native_session_identity(
+            trimmed,
+            None,
+        ) {
+            Ok(identity) if !identity.is_legacy => vec![identity.canonical_id()],
+            Ok(identity) => {
+                let mut keys = vec![
+                    identity.canonical_id(),
+                    format!("qoder:{}", identity.raw_session_id),
+                    identity.raw_session_id,
+                ];
+                keys.sort();
+                keys.dedup();
+                keys
+            }
+            Err(_) => vec![trimmed.to_string()],
+        };
+    }
     let mut keys = vec![trimmed.to_string()];
     let parts = trimmed.split(':').collect::<Vec<_>>();
     if let Some(last) = parts.last().copied().filter(|value| !value.is_empty()) {
@@ -341,6 +360,9 @@ async fn build_workspace_scope_catalog_data(
     let workspace_scope = catalog_workspace_scope(workspaces, workspace_id).await?;
     let workspaces_snapshot = workspaces.lock().await.clone();
     let metadata_by_workspace_id = read_catalog_metadata_for_scope(storage_path, &workspace_scope)?;
+    let shared_event_log_path = storage_path
+        .parent()
+        .map(|parent| parent.join("shared-event-log-v2.sqlite3"));
     let mut partial_sources = Vec::new();
     let mut source_statuses = Vec::new();
     let mut entries = Vec::new();
@@ -373,6 +395,9 @@ async fn build_workspace_scope_catalog_data(
         .await;
     let pi_config = engine_manager
         .get_engine_config(engine::EngineType::Pi)
+        .await;
+    let qoder_config = engine_manager
+        .get_engine_config(engine::EngineType::Qoder)
         .await;
     let claude_config = engine_manager
         .get_engine_config(engine::EngineType::Claude)
@@ -1013,6 +1038,137 @@ async fn build_workspace_scope_catalog_data(
             }
         }
 
+        // Keep Global and CN history sources independent. The manager holds a
+        // synchronized snapshot of distribution settings so this catalog path
+        // never infers CN from the Global EngineConfig.
+        let qoder_list_results = if qoder_config.is_some() {
+            let settings = engine_manager.qoder_distribution_settings().await;
+            let global_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                &owner_workspace_id,
+                Some(engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
+                &settings,
+            );
+            let cn_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                &owner_workspace_id,
+                Some(engine::qoder_provider_profile::QODER_CN_PROVIDER_PROFILE_ID),
+                &settings,
+            );
+            match (global_profile, cn_profile) {
+                (Ok(global_profile), Ok(cn_profile)) => {
+                    let (global, cn) = tokio::join!(
+                        engine::qoder_history::list_qoder_sessions_for_launch_profile(
+                            &owner_workspace_path,
+                            Some(scan_mode.limit()),
+                            &global_profile,
+                        ),
+                        engine::qoder_history::list_qoder_sessions_for_launch_profile(
+                            &owner_workspace_path,
+                            Some(scan_mode.limit()),
+                            &cn_profile,
+                        ),
+                    );
+                    vec![global, cn]
+                }
+                (Err(error), _) | (_, Err(error)) => vec![Err(error)],
+            }
+        } else {
+            vec![Ok(Vec::new())]
+        };
+        let mut qoder_session_count = 0usize;
+        let mut qoder_failed = false;
+        for qoder_list_result in qoder_list_results {
+            match qoder_list_result {
+                Ok(qoder_sessions) => {
+                    qoder_session_count += qoder_sessions.len();
+                    entries.extend(qoder_sessions.into_iter().filter_map(|session| {
+                        let session_id = match engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                            &session.session_id,
+                            session.provider_profile_id.as_deref(),
+                        ) {
+                            Ok(session_id) => session_id,
+                            Err(error) => {
+                                log::warn!(
+                                    "[session_management.list_workspace_sessions] ignored invalid Qoder session identity `{}`: {}",
+                                    session.session_id,
+                                    error
+                                );
+                                return None;
+                            }
+                        };
+                        let entry = WorkspaceSessionCatalogEntry {
+                            archived_at: archived_at_for_session(
+                                &owner_metadata,
+                                &owner_workspace_id,
+                                &session_id,
+                            ),
+                            session_id,
+                            stable_session_key: None,
+                            canonical_session_id: Some(session.session_id.clone()),
+                            parent_session_id: None,
+                            workspace_id: owner_workspace_id.clone(),
+                            workspace_label: Some(workspace.name.clone()),
+                            engine: "qoder".to_string(),
+                            title: session.first_message,
+                            native_title: None,
+                            updated_at: session.updated_at.max(0),
+                            thread_kind: "native".to_string(),
+                            source: None,
+                            source_label: session.provider_profile_name.clone(),
+                            provider_profile_id: session.provider_profile_id,
+                            provider_profile_source: Some("managed".to_string()),
+                            provider_profile_name: session.provider_profile_name,
+                            provider_availability: Some("available".to_string()),
+                            source_completeness: None,
+                            source_status_reason: None,
+                            size_bytes: session.file_size_bytes,
+                            cwd: None,
+                            attribution_status: Some(
+                                SessionCatalogAttributionStatus::StrictMatch
+                                    .as_str()
+                                    .to_string(),
+                            ),
+                            attribution_reason: None,
+                            attribution_confidence: None,
+                            matched_workspace_id: Some(owner_workspace_id.clone()),
+                            matched_workspace_label: Some(workspace.name.clone()),
+                            folder_id: None,
+                            auto_session: None,
+                            exists_on_disk: false,
+                            inconsistency_code: None,
+                            delete_mode: None,
+                            physical_path: None,
+                            children_count: None,
+                            continuation: ProviderContinuationProjection::default(),
+                        };
+                        Some(finalize_existing_catalog_entry(entry, &metadata_by_workspace_id))
+                    }));
+                }
+                Err(error) => {
+                    qoder_failed = true;
+                    log::warn!(
+                        "[session_management.list_workspace_sessions] qoder history unavailable for workspace {}: {}",
+                        owner_workspace_id,
+                        error
+                    );
+                }
+            }
+        }
+        if qoder_failed {
+            partial_sources.push(SESSION_CATALOG_PARTIAL_QODER.to_string());
+            source_statuses.push(build_degraded_source_status(
+                "qoder",
+                SESSION_CATALOG_PARTIAL_QODER,
+            ));
+        } else {
+            source_statuses.push(build_success_source_status(
+                "qoder",
+                qoder_session_count,
+                scan_mode,
+                WorkspaceSessionSourceCompleteness::AuthoritativeEmpty,
+                None,
+            ));
+        }
+
         match engine::commands::opencode_session_list_core(
             workspaces,
             engine_manager,
@@ -1103,7 +1259,11 @@ async fn build_workspace_scope_catalog_data(
             }
         }
 
-        match crate::shared_sessions::list_workspace_shared_sessions(&owner_workspace_id, None) {
+        match crate::shared_sessions::list_workspace_shared_sessions(
+            &owner_workspace_id,
+            None,
+            shared_event_log_path.as_deref(),
+        ) {
             Ok(shared_sessions) => {
                 let shared_completeness = if shared_sessions.is_empty() {
                     WorkspaceSessionSourceCompleteness::AuthoritativeEmpty

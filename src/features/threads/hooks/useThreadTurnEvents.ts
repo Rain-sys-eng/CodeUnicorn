@@ -31,6 +31,12 @@ import {
 import { previewThreadName } from "../../../utils/threadItems";
 import { resolveThreadStabilityDiagnostic } from "../utils/stabilityDiagnostics";
 import type { TurnExecutionSnapshot } from "../../shared-session/target/types";
+import { renameRuntimeReceipt } from "../utils/runtimeModelReceipt";
+import { noteSharedProviderRetryTurnSettled } from "../../shared-session/provider-retry/noteSharedProviderRetryTurn";
+import { getSharedTargetState } from "../../shared-session/target/targetStore";
+import { isSharedSessionThreadId } from "../../shared-session/utils/sharedSessionIdentity";
+import { isSharedOwnedNativeThreadId } from "../../shared-session/runtime/sharedSessionBridge";
+import type { EngineType } from "../../../types";
 import {
   hasCodexBackgroundHelperPreview,
   hasCommitMessageHelperPreview,
@@ -48,12 +54,59 @@ import {
   isPendingSessionForEngine,
 } from "../contracts/engineRuntimeIdentity";
 import type { ThreadAction } from "./useThreadsReducer";
+import {
+  canonicalQoderProviderProfileId,
+  canonicalQoderThreadId,
+  parseQoderSessionIdentity,
+} from "../utils/qoderSessionIdentity";
 
 /**
  * Infer engine type from thread ID.
  * Claude/Gemini/Kimi/OpenCode threads use "<engine>:" or "<engine>-pending-" prefixes.
  */
 const inferEngineFromThreadId = inferEngineFromLegacyThreadId;
+
+function resolveQoderProviderProfileIdForThread(
+  getThreadProviderProfileId: UseThreadTurnEventsOptions["getThreadProviderProfileId"],
+  workspaceId: string,
+  threadId: string,
+): string | null {
+  const storedProfileId =
+    getThreadProviderProfileId?.(workspaceId, threadId) ?? null;
+  if (threadId.startsWith("qoder:")) {
+    return parseQoderSessionIdentity(threadId, storedProfileId)?.providerProfileId ?? null;
+  }
+  return canonicalQoderProviderProfileId(storedProfileId);
+}
+
+function noteSharedRetryFromTurn(
+  workspaceId: string,
+  threadId: string,
+  input: {
+    outcome: "completed" | "failed" | "cancelled";
+    message?: string | null;
+    wasLocalInterrupt?: boolean;
+    snapshot?: TurnExecutionSnapshot | null;
+    attemptId?: string | null;
+  },
+): void {
+  if (!isSharedSessionThreadId(threadId)) {
+    return;
+  }
+  const stored = getSharedTargetState(workspaceId, threadId);
+  const snapshot = input.snapshot ?? stored.activeTurnTarget ?? stored.selectedNextTarget;
+  noteSharedProviderRetryTurnSettled({
+    workspaceId,
+    threadId,
+    engine: (snapshot?.engine ?? inferEngineFromThreadId(threadId)) as EngineType,
+    providerProfileId: snapshot?.providerProfileId ?? null,
+    model: snapshot?.model ?? null,
+    attemptId: input.attemptId ?? null,
+    outcome: input.outcome,
+    message: input.message ?? null,
+    wasLocalInterrupt: input.wasLocalInterrupt ?? false,
+  });
+}
 
 /**
  * Terminal 路径（完成/失败/稳定性诊断）在 markProcessing(false) 前必须把
@@ -162,7 +215,7 @@ function extractThreadProviderMetadata(thread: Record<string, unknown>) {
   };
 }
 
-type PendingNativeEngine = "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+type PendingNativeEngine = "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
 
 function uniquePendingEngine(
   pendingByEngine: Record<PendingNativeEngine, string | null>,
@@ -224,14 +277,18 @@ type UseThreadTurnEventsOptions = {
   ) => Promise<void>;
   resolvePendingThreadForSession?: (
     workspaceId: string,
-    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh",
+    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
   ) => string | null;
   resolvePendingThreadForTurn?: (
     workspaceId: string,
-    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh",
+    engine: "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
     turnId: string | null | undefined,
   ) => string | null;
   getActiveTurnIdForThread?: (threadId: string) => string | null;
+  getThreadProviderProfileId?: (
+    workspaceId: string,
+    threadId: string,
+  ) => string | null | undefined;
   hasEstablishedThreadItems?: (threadId: string) => boolean;
   renamePendingMemoryCaptureKey: (
     oldThreadId: string,
@@ -262,6 +319,7 @@ export function useThreadTurnEvents({
   resolvePendingThreadForSession,
   resolvePendingThreadForTurn,
   getActiveTurnIdForThread,
+  getThreadProviderProfileId,
   hasEstablishedThreadItems,
   renamePendingMemoryCaptureKey,
   onDebug,
@@ -353,6 +411,8 @@ export function useThreadTurnEvents({
           ? "claude"
         : threadId.startsWith("dsh:")
           ? "dsh"
+        : threadId.startsWith("qoder:")
+          ? "qoder"
           : null;
       if (!engine) {
         return null;
@@ -420,6 +480,9 @@ export function useThreadTurnEvents({
       if (isThreadHidden(workspaceId, threadId)) {
         return;
       }
+      if (isSharedOwnedNativeThreadId(workspaceId, threadId)) {
+        return;
+      }
       const customName = getCustomName(workspaceId, threadId);
       const canApplyLiveName =
         !customName && !isAutoTitlePending(workspaceId, threadId);
@@ -485,12 +548,31 @@ export function useThreadTurnEvents({
       if (workspaceScopedHas(pendingInterruptsRef.current, workspaceId, threadId)) {
         workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, threadId);
         const engine = inferEngineFromThreadId(threadId);
+        const qoderProviderProfileId =
+          engine === "qoder"
+            ? resolveQoderProviderProfileIdForThread(
+                getThreadProviderProfileId,
+                workspaceId,
+                threadId,
+              )
+            : null;
         if (engine === "codex" && turnId) {
           void interruptTurnService(workspaceId, threadId, turnId).catch(() => {});
         } else if (turnId) {
-          void engineInterruptTurnService(workspaceId, turnId, engine).catch(() => {
-            // Fallback for older runtimes missing turn-scoped interrupt.
-            void engineInterruptService(workspaceId).catch(() => {});
+          const interrupt = qoderProviderProfileId
+            ? engineInterruptTurnService(
+                workspaceId,
+                turnId,
+                engine,
+                qoderProviderProfileId,
+              )
+            : engineInterruptTurnService(workspaceId, turnId, engine);
+          void interrupt.catch(() => {
+            // Qoder 的旧 workspace-wide interrupt 不携带 distribution，不能
+            // 作为 Qoder Global/CN 的兼容降级路径。
+            if (engine !== "qoder") {
+              void engineInterruptService(workspaceId).catch(() => {});
+            }
           });
         }
         return;
@@ -500,7 +582,13 @@ export function useThreadTurnEvents({
         setActiveTurnId(threadId, turnId);
       }
     },
-    [dispatch, markProcessing, pendingInterruptsRef, setActiveTurnId],
+    [
+      dispatch,
+      getThreadProviderProfileId,
+      markProcessing,
+      pendingInterruptsRef,
+      setActiveTurnId,
+    ],
   );
 
   const onTurnCompleted = useCallback(
@@ -596,6 +684,10 @@ export function useThreadTurnEvents({
         currentActiveTurnId: activeTurnId,
         targetThreadCount: targetSnapshots.length,
       });
+      noteSharedRetryFromTurn(workspaceId, threadId, {
+        outcome: "completed",
+        attemptId: turnId || null,
+      });
       return true;
     },
     [
@@ -624,6 +716,23 @@ export function useThreadTurnEvents({
         payload.plan,
       );
       dispatch({ type: "setThreadPlan", threadId, plan: normalized });
+    },
+    [dispatch],
+  );
+
+  const onAssistantRuntimeReceipt = useCallback(
+    (
+      _workspaceId: string,
+      threadId: string,
+      runtimeReceipt: NonNullable<
+        Extract<import("../../../types").ConversationItem, { kind: "message" }>["runtimeReceipt"]
+      >,
+    ) => {
+      dispatch({
+        type: "patchAssistantRuntimeReceipt",
+        threadId,
+        runtimeReceipt,
+      });
     },
     [dispatch],
   );
@@ -811,16 +920,24 @@ export function useThreadTurnEvents({
         const message = payload.message
           ? t("threads.turnFailedWithMessage", { message: payload.message })
           : t("threads.turnFailed");
-        if (payload.executionTargetSnapshot) {
+        const errorSnapshot = payload.executionTargetSnapshot ?? undefined;
+        if (errorSnapshot) {
           pushThreadErrorMessage(
             workspaceId,
             threadId,
             message,
-            payload.executionTargetSnapshot,
+            errorSnapshot,
           );
         } else {
           pushThreadErrorMessage(workspaceId, threadId, message);
         }
+        noteSharedRetryFromTurn(workspaceId, threadId, {
+          outcome: wasInterrupted ? "cancelled" : "failed",
+          message: payload.message,
+          wasLocalInterrupt: wasInterrupted,
+          snapshot: errorSnapshot,
+          attemptId: turnId || null,
+        });
         pushThreadFailureRuntimeNotice({
           workspaceId,
           threadId,
@@ -949,6 +1066,11 @@ export function useThreadTurnEvents({
           )
         : t(isFusionStalled ? "threads.fusionTurnStalled" : "threads.turnStalled");
       pushThreadErrorMessage(workspaceId, threadId, message);
+      noteSharedRetryFromTurn(workspaceId, threadId, {
+        outcome: "failed",
+        message: payload.message,
+        attemptId: turnId || null,
+      });
       pushThreadFailureRuntimeNotice({
         workspaceId,
         threadId,
@@ -1171,7 +1293,7 @@ export function useThreadTurnEvents({
       workspaceId: string,
       threadId: string,
       sessionId: string,
-      engineHint?: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+      engineHint?: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
       turnId?: string | null,
     ) => {
       const explicitEnginePrefix = threadId.startsWith("claude:")
@@ -1190,6 +1312,9 @@ export function useThreadTurnEvents({
         : threadId.startsWith("pi:")
           || threadId.startsWith("pi-pending-")
           ? "pi"
+        : threadId.startsWith("qoder:")
+          || threadId.startsWith("qoder-pending-")
+          ? "qoder"
         : threadId.startsWith("opencode:")
           || threadId.startsWith("opencode-pending-")
           ? "opencode"
@@ -1198,7 +1323,7 @@ export function useThreadTurnEvents({
           ? "dsh"
           : null;
       const hintedEngine =
-        engineHint === "claude" || engineHint === "gemini" || engineHint === "grok" || engineHint === "kimi" || engineHint === "pi" || engineHint === "opencode" || engineHint === "dsh"
+        engineHint === "claude" || engineHint === "gemini" || engineHint === "grok" || engineHint === "kimi" || engineHint === "pi" || engineHint === "qoder" || engineHint === "opencode" || engineHint === "dsh"
           ? engineHint
           : null;
       const pendingByEngine: Record<PendingNativeEngine, string | null> = {
@@ -1208,6 +1333,7 @@ export function useThreadTurnEvents({
         kimi: resolvePendingThreadForSession?.(workspaceId, "kimi") ?? null,
         claude: resolvePendingThreadForSession?.(workspaceId, "claude") ?? null,
         pi: resolvePendingThreadForSession?.(workspaceId, "pi") ?? null,
+        qoder: resolvePendingThreadForSession?.(workspaceId, "qoder") ?? null,
         dsh: resolvePendingThreadForSession?.(workspaceId, "dsh") ?? null,
       };
       const pendingOpenCode = pendingByEngine.opencode;
@@ -1215,6 +1341,7 @@ export function useThreadTurnEvents({
       const pendingGrok = pendingByEngine.grok;
       const pendingKimi = pendingByEngine.kimi;
       const pendingPi = pendingByEngine.pi;
+      const pendingQoder = pendingByEngine.qoder;
       const pendingClaude = pendingByEngine.claude;
       const pendingDsh = pendingByEngine.dsh;
       logSessionTrace("event", {
@@ -1229,6 +1356,7 @@ export function useThreadTurnEvents({
         pendingGrok,
         pendingKimi,
         pendingPi,
+        pendingQoder,
         pendingClaude,
         pendingDsh,
       });
@@ -1254,7 +1382,58 @@ export function useThreadTurnEvents({
         return;
       }
 
-      const newThreadId = `${enginePrefix}:${sessionId}`;
+      const qoderEventIdentity =
+        enginePrefix === "qoder" && threadId.startsWith("qoder:")
+          ? parseQoderSessionIdentity(
+              threadId,
+              getThreadProviderProfileId?.(workspaceId, threadId) ?? null,
+            )
+          : null;
+      if (enginePrefix === "qoder" && threadId.startsWith("qoder:") && !qoderEventIdentity) {
+        logSessionTrace("skip:conflicting-qoder-runtime-owner", {
+          workspaceId,
+          threadId,
+          sessionId,
+          enginePrefix,
+        });
+        return;
+      }
+      const qoderProviderProfileId =
+        enginePrefix === "qoder"
+          ? (qoderEventIdentity?.providerProfileId ??
+            resolveQoderProviderProfileIdForThread(
+              getThreadProviderProfileId,
+              workspaceId,
+              threadId,
+            ) ??
+            resolveQoderProviderProfileIdForThread(
+              getThreadProviderProfileId,
+              workspaceId,
+              pendingByEngine.qoder ?? "",
+            ))
+          : null;
+      const newThreadId =
+        enginePrefix === "qoder"
+          ? canonicalQoderThreadId(sessionId, qoderProviderProfileId)
+          : `${enginePrefix}:${sessionId}`;
+      if (!newThreadId) {
+        logSessionTrace("skip:invalid-qoder-session-identity", {
+          workspaceId,
+          threadId,
+          sessionId,
+          enginePrefix,
+        });
+        return;
+      }
+      const qoderEventSessionIdentity =
+        enginePrefix === "qoder"
+          ? parseQoderSessionIdentity(sessionId, qoderProviderProfileId)
+          : null;
+      const isQoderLegacyIdentityUpgrade =
+        enginePrefix === "qoder" &&
+        qoderEventIdentity?.isLegacy === true &&
+        qoderEventSessionIdentity?.rawSessionId ===
+          qoderEventIdentity.rawSessionId;
       const turnBoundPendingThreadId =
         resolvePendingThreadForTurn?.(workspaceId, enginePrefix, turnId) ?? null;
 
@@ -1271,6 +1450,8 @@ export function useThreadTurnEvents({
         || threadId.startsWith("kimi-pending-")
         || threadId.startsWith("pi:")
         || threadId.startsWith("pi-pending-")
+        || threadId.startsWith("qoder:")
+        || threadId.startsWith("qoder-pending-")
         || threadId.startsWith("opencode:")
         || threadId.startsWith("opencode-pending-")
         || threadId.startsWith("dsh:")
@@ -1281,6 +1462,7 @@ export function useThreadTurnEvents({
         || (enginePrefix !== "grok" && (threadId.startsWith("grok:") || threadId.startsWith("grok-pending-")))
         || (enginePrefix !== "kimi" && (threadId.startsWith("kimi:") || threadId.startsWith("kimi-pending-")))
         || (enginePrefix !== "pi" && (threadId.startsWith("pi:") || threadId.startsWith("pi-pending-")))
+        || (enginePrefix !== "qoder" && (threadId.startsWith("qoder:") || threadId.startsWith("qoder-pending-")))
         || (enginePrefix !== "opencode" && (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")))
         || (enginePrefix !== "dsh" && (threadId.startsWith("dsh:") || threadId.startsWith("dsh-pending-")))
       );
@@ -1288,6 +1470,7 @@ export function useThreadTurnEvents({
       if (
         threadId.startsWith(sameEngineFinalizedPrefix)
         && threadId !== newThreadId
+        && !isQoderLegacyIdentityUpgrade
       ) {
         logSessionTrace("skip:finalized-mismatch", {
           workspaceId,
@@ -1343,6 +1526,10 @@ export function useThreadTurnEvents({
           return;
         }
       } else if (isPendingThreadForEngine(enginePrefix, threadId)) {
+        sourceThreadId = threadId;
+      } else if (isQoderLegacyIdentityUpgrade) {
+        // 旧版 `qoder:<raw>` 已是 finalized id，但还没有 distribution。
+        // 同一 raw ACP id 的 SessionStarted 仅升级 identity，不能当成换会话拒绝。
         sourceThreadId = threadId;
       } else if (!hasAnyEnginePrefix && !hasForeignEnginePrefix) {
         const pendingThreadId = pendingByEngine[enginePrefix];
@@ -1414,12 +1601,31 @@ export function useThreadTurnEvents({
         const activeTurnId = getActiveTurnIdForThread?.(newThreadId) ?? null;
         if (activeTurnId) {
           workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, newThreadId);
-          void engineInterruptTurnService(
-            workspaceId,
-            activeTurnId,
-            enginePrefix,
-          ).catch(() => {
-            void engineInterruptService(workspaceId).catch(() => {});
+          const qoderProviderProfileId =
+            enginePrefix === "qoder"
+              ? (resolveQoderProviderProfileIdForThread(
+                  getThreadProviderProfileId,
+                  workspaceId,
+                  sourceThreadId,
+                ) ??
+                resolveQoderProviderProfileIdForThread(
+                  getThreadProviderProfileId,
+                  workspaceId,
+                  newThreadId,
+                ))
+              : null;
+          const interrupt = qoderProviderProfileId
+            ? engineInterruptTurnService(
+                workspaceId,
+                activeTurnId,
+                enginePrefix,
+                qoderProviderProfileId,
+              )
+            : engineInterruptTurnService(workspaceId, activeTurnId, enginePrefix);
+          void interrupt.catch(() => {
+            if (enginePrefix !== "qoder") {
+              void engineInterruptService(workspaceId).catch(() => {});
+            }
           });
         }
       }
@@ -1434,6 +1640,12 @@ export function useThreadTurnEvents({
       // 才能继续读到累计文本。
       renameLiveAssistantTextThread(sourceThreadId, newThreadId);
       renameLiveItemDeltaThread(sourceThreadId, newThreadId);
+      if (
+        sourceThreadId.startsWith("shared:") ||
+        newThreadId.startsWith("shared:")
+      ) {
+        renameRuntimeReceipt(workspaceId, sourceThreadId, newThreadId);
+      }
       renameCustomNameKey(workspaceId, sourceThreadId, newThreadId);
       renameAutoTitlePendingKey(workspaceId, sourceThreadId, newThreadId);
       renamePendingMemoryCaptureKey(sourceThreadId, newThreadId);
@@ -1450,6 +1662,7 @@ export function useThreadTurnEvents({
       resolvePendingThreadForTurn,
       migrateThreadInterruptGuards,
       getActiveTurnIdForThread,
+      getThreadProviderProfileId,
       hasEstablishedThreadItems,
       pendingInterruptsRef,
       activeThreadId,
@@ -1462,6 +1675,7 @@ export function useThreadTurnEvents({
     onTurnCompleted,
     onTurnPlanUpdated,
     onThreadTokenUsageUpdated,
+    onAssistantRuntimeReceipt,
     onAccountRateLimitsUpdated,
     onTurnError,
     onTurnStalled,

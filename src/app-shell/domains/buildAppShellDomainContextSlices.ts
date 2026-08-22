@@ -832,6 +832,7 @@ export type WorkspaceNavigationDomainFields = {
   grokDoctor: unknown;
   opencodeDoctor: unknown;
   piDoctor: unknown;
+  qoderDoctor: unknown;
   editorHighlightTarget: unknown;
   editorNavigationTarget: unknown;
   editorSplitCompanion: unknown;
@@ -918,6 +919,7 @@ export function buildWorkspaceNavigationDomainContextSlice(
     grokDoctor: input.grokDoctor,
     opencodeDoctor: input.opencodeDoctor,
     piDoctor: input.piDoctor,
+    qoderDoctor: input.qoderDoctor,
     editorHighlightTarget: input.editorHighlightTarget,
     editorNavigationTarget: input.editorNavigationTarget,
     editorSplitCompanion: input.editorSplitCompanion,

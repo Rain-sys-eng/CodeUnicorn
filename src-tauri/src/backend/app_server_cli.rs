@@ -241,6 +241,9 @@ fn build_windows_extra_search_paths(
         // Hermes ships dsh as a Node-global bin, same layout as macOS ~/.hermes/node/bin.
         paths.push(user_profile.join(".hermes\\node"));
         paths.push(user_profile.join(".hermes\\node\\bin"));
+        // Official Qoder CLI Windows layout: %USERPROFILE%\.qoder\bin\qodercli\qodercli.exe.
+        // Installer writes User PATH, but GUI/dev processes often keep a stale PATH.
+        paths.push(user_profile.join(".qoder\\bin\\qodercli"));
         // Cargo bin
         paths.push(user_profile.join(".cargo\\bin"));
         // Bun
@@ -364,6 +367,7 @@ fn get_extra_search_paths() -> Vec<PathBuf> {
             paths.push(home.join(".cargo/bin"));
             paths.push(home.join(".bun/bin"));
             paths.push(home.join(".volta/bin"));
+            paths.push(home.join(".qoder/bin/qodercli"));
             // nvm
             let nvm_root = home.join(".nvm/versions/node");
             if let Ok(entries) = std::fs::read_dir(nvm_root) {
@@ -374,6 +378,16 @@ fn get_extra_search_paths() -> Vec<PathBuf> {
                     }
                 }
             }
+        }
+    }
+
+    if let Ok(qoder_home) = env::var("QODER_HOME") {
+        let trimmed = qoder_home.trim();
+        if !trimmed.is_empty() {
+            push_unique_path(
+                &mut paths,
+                PathBuf::from(trimmed).join("bin").join("qodercli"),
+            );
         }
     }
 
@@ -1570,15 +1584,41 @@ pub(crate) async fn check_cli_binary(
     bin: &str,
     path_env: Option<String>,
 ) -> Result<Option<String>, String> {
+    check_cli_binary_with_opencode_containment(bin, path_env, false).await
+}
+
+/// OpenCode can embed a Bun runtime that writes native artifacts while even a
+/// lightweight version/help probe is running. Keep that policy explicit so
+/// generic CLI probes for other engines remain unchanged.
+pub(crate) async fn check_opencode_cli_binary(
+    bin: &str,
+    path_env: Option<String>,
+) -> Result<Option<String>, String> {
+    check_cli_binary_with_opencode_containment(bin, path_env, true).await
+}
+
+async fn check_cli_binary_with_opencode_containment(
+    bin: &str,
+    path_env: Option<String>,
+    use_opencode_containment: bool,
+) -> Result<Option<String>, String> {
     async fn run_cli_version_check_once(
         launch_context: &CodexLaunchContext,
         hide_console: bool,
+        use_opencode_containment: bool,
     ) -> Result<Option<String>, String> {
         let mut command =
             build_command_for_binary_with_console(&launch_context.resolved_bin, hide_console);
         if let Some(path) = &launch_context.path_env {
             command.env("PATH", path);
         }
+        let _native_artifact_lease = use_opencode_containment
+            .then(|| {
+                crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                    &mut command,
+                )
+            })
+            .transpose()?;
         command.arg("--version");
         command.stdout(std::process::Stdio::piped());
         command.stderr(std::process::Stdio::piped());
@@ -1623,12 +1663,20 @@ pub(crate) async fn check_cli_binary(
     async fn run_cli_help_check_once(
         launch_context: &CodexLaunchContext,
         hide_console: bool,
+        use_opencode_containment: bool,
     ) -> Result<(), String> {
         let mut command =
             build_command_for_binary_with_console(&launch_context.resolved_bin, hide_console);
         if let Some(path) = &launch_context.path_env {
             command.env("PATH", path);
         }
+        let _native_artifact_lease = use_opencode_containment
+            .then(|| {
+                crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                    &mut command,
+                )
+            })
+            .transpose()?;
         command.arg("--help");
         command.stdout(std::process::Stdio::null());
         command.stderr(std::process::Stdio::null());
@@ -1653,14 +1701,17 @@ pub(crate) async fn check_cli_binary(
         }
     }
 
-    async fn run_cli_help_check(launch_context: &CodexLaunchContext) -> Result<(), String> {
-        match run_cli_help_check_once(launch_context, true).await {
+    async fn run_cli_help_check(
+        launch_context: &CodexLaunchContext,
+        use_opencode_containment: bool,
+    ) -> Result<(), String> {
+        match run_cli_help_check_once(launch_context, true, use_opencode_containment).await {
             Ok(()) => Ok(()),
             Err(primary_error) => {
                 if !can_retry_wrapper_launch(launch_context) {
                     return Err(primary_error);
                 }
-                run_cli_help_check_once(launch_context, false)
+                run_cli_help_check_once(launch_context, false, use_opencode_containment)
                     .await
                     .map_err(|retry_error| {
                         format!(
@@ -1674,11 +1725,11 @@ pub(crate) async fn check_cli_binary(
     let mut launch_context = resolve_codex_launch_context(Some(bin));
     launch_context.path_env = path_env;
 
-    match run_cli_version_check_once(&launch_context, true).await {
+    match run_cli_version_check_once(&launch_context, true, use_opencode_containment).await {
         Ok(version) => Ok(version),
         Err(primary_error) => {
             let version_retry_result = if can_retry_wrapper_launch(&launch_context) {
-                run_cli_version_check_once(&launch_context, false)
+                run_cli_version_check_once(&launch_context, false, use_opencode_containment)
                     .await
                     .map_err(|retry_error| {
                         format!(
@@ -1691,10 +1742,12 @@ pub(crate) async fn check_cli_binary(
 
             match version_retry_result {
                 Ok(version) => Ok(version),
-                Err(version_error) => match run_cli_help_check(&launch_context).await {
-                    Ok(()) => Ok(None),
-                    Err(_) => Err(version_error),
-                },
+                Err(version_error) => {
+                    match run_cli_help_check(&launch_context, use_opencode_containment).await {
+                        Ok(()) => Ok(None),
+                        Err(_) => Err(version_error),
+                    }
+                }
             }
         }
     }
@@ -2794,6 +2847,7 @@ mod tests {
             "C:\\Users\\Administrator\\.local\\bin",
             "C:\\Users\\Administrator\\.hermes\\node",
             "C:\\Users\\Administrator\\.hermes\\node\\bin",
+            "C:\\Users\\Administrator\\.qoder\\bin\\qodercli",
             "C:\\Users\\Administrator\\.local\\share\\mise\\shims",
             "C:\\Users\\Administrator\\scoop\\shims",
             "C:\\Users\\Administrator\\scoop\\apps\\nodejs\\current",

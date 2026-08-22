@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "取り消し",
       "revertAllConfirmTitle": "すべての変更を取り消し",
       "revertAllConfirmBody":
-        "{{count}} 個のファイルのローカル変更を破棄し、最新のコミットに戻します。この操作は元に戻せません。",
+        "{{count}} 個のファイルの未ステージのローカル変更を破棄し、インデックス（ステージがなければ HEAD）に戻します。ステージ済みの変更は残ります。この操作は元に戻せません。",
       "revertAllConfirmAction": "すべて取り消す",
       "revertFileConfirmTitle": "ファイル変更を取り消し",
       "revertFileConfirmBody":
-        "「{{path}}」のローカル変更を破棄し、最新のコミットに戻します。この操作は元に戻せません。",
+        "「{{path}}」の未ステージのローカル変更を破棄し、インデックス（ステージがなければ HEAD）に戻します。ステージ済みの変更は残ります。この操作は元に戻せません。",
       "revertFileConfirmAction": "取り消す"
     },
     "noThinkingContent": "思考内容がありません",
@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "組み立て",
     "generatingResponse": "応答を生成中...",
     "responding": "応答中...",
+    "waitingForFirstText": "{{engine}} を実行中です。最初のテキストチャンクを待機しています...",
     "codexWaitingForFirstText": "Codex を実行中です。最初のテキストチャンクを待機しています...",
     "codexSilentSuspected": "しばらく Codex の新しい出力がありません。ランタイムのアクティビティを引き続き待機しています...",
     "nonStreamingHint": "このモデルは非ストリーミング出力を返す場合や、ネットワークに到達できない場合があります。お待ちください...",
@@ -90,6 +91,7 @@ const messages = {
     "totalDuration": "所要時間",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "入力 {{input}} / 出力 {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "入力 {{input}} token / 出力 {{output}} token",
     "messageActions": "メッセージ操作",
     "copyMessage": "メッセージをコピー",

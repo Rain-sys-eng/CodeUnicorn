@@ -16,6 +16,9 @@ describe("sidebar codex icon tone", () => {
     expect(sidebarComponent).not.toContain('engine="codex" size={14} style={{ color: "#10a37f" }}');
     expect(sidebarStyles).toContain(".thread-engine-badge.thread-engine-codex");
     expect(sidebarStyles).toContain("color: var(--text-strong);");
+    expect(sidebarStyles).not.toMatch(
+      /\.thread-engine-badge\.thread-engine-shared\s*\{[^}]*#f59e0b/,
+    );
   });
 
   it("does not recolor engine icons while a session is processing", () => {

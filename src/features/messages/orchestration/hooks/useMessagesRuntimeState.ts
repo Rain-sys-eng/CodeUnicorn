@@ -24,7 +24,7 @@ import type { TimelineLiveModel } from "../models/messagesTimelineModels";
 type RuntimeLabels = {
   approvalResumingAfterApproval: string;
   codexSilentSuspected: string;
-  codexWaitingForFirstText: string;
+  waitingForFirstText: string;
   contextCompacting: string;
 };
 
@@ -399,14 +399,19 @@ export function useMessagesRuntimeState({
     activeEngine === "codex" && codexSilentSuspectedAt !== null
       ? labels.codexSilentSuspected
       : null;
-  const codexWaitingForFirstTextLabel =
-    activeEngine === "codex" && isThinking && waitingForFirstChunk
-      ? labels.codexWaitingForFirstText
+  // First-text waiting is for engines whose onboarding identity used to collapse
+  // to Codex copy (Codex itself, plus Native-only DSH/Qoder). Do not steal the
+  // default "响应中" / tool-activity working label from Gemini, Claude, etc.
+  const waitingForFirstTextLabel =
+    isThinking &&
+    waitingForFirstChunk &&
+    (activeEngine === "codex" || activeEngine === "qoder" || activeEngine === "dsh")
+      ? labels.waitingForFirstText
       : null;
   const primaryWorkingLabel = isContextCompacting
     ? labels.contextCompacting
     : codexSilentSuspectedLabel ??
-      codexWaitingForFirstTextLabel ??
+      waitingForFirstTextLabel ??
       approvalResumeWorkingLabel;
   const enableClaudeRenderSafeMode =
     (isWindowsDesktop || isMacDesktop) && activeEngine === "claude" && isThinking;

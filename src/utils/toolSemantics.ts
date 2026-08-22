@@ -382,9 +382,14 @@ export const EDIT_PATH_KEYS = [
   "filename",
   "file",
 ];
-export const EDIT_OLD_KEYS = ["old_string", "oldString"];
-export const EDIT_NEW_KEYS = ["new_string", "newString"];
-export const EDIT_CONTENT_KEYS = ["content", "new_content", "newContent"];
+export const EDIT_OLD_KEYS = ["old_string", "oldString", "old_str", "oldText"];
+export const EDIT_NEW_KEYS = ["new_string", "newString", "new_str", "newText"];
+export const EDIT_CONTENT_KEYS = [
+  "content",
+  "file_text",
+  "new_content",
+  "newContent",
+];
 
 export function pickStringField(
   source: Record<string, unknown> | null,

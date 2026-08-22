@@ -530,6 +530,7 @@
 - [tool-output-tail-gate](./tool-output-tail-gate/spec.md)
 - [tooltip-icon-button-startup-stability](./tooltip-icon-button-startup-stability/spec.md)
 - [topbar-render-isolation](./topbar-render-isolation/spec.md)
+- [turn-target-runtime-receipt](./turn-target-runtime-receipt/spec.md)
 
 ## U
 

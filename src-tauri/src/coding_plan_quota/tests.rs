@@ -198,6 +198,26 @@ fn kimi_cli_token_refresh_skew() {
 }
 
 #[test]
+fn qoder_engine_has_no_coding_plan_credential_resolver() {
+    let err = resolve_engine_base_url_and_key("qoder", Some("__local_qoder__")).unwrap_err();
+    assert!(err.contains("no coding-plan quota API"));
+    assert!(!err.contains("Native CLI /usage quota"));
+}
+
+#[tokio::test]
+async fn qoder_engine_quota_is_unsupported_without_scraping_tui() {
+    let snapshot = get_coding_plan_quota_for_session("qoder", Some("__local_qoder__")).await;
+    assert_eq!(snapshot.source, "unsupported");
+    assert!(!snapshot.success);
+    assert!(snapshot.windows.is_empty());
+    assert!(snapshot
+        .error
+        .as_deref()
+        .unwrap_or("")
+        .contains("没有可查询的账户额度接口"));
+}
+
+#[test]
 fn kimi_engine_route_is_not_confused_with_claude_http_kimi() {
     // Claude + Kimi HTTP base 仍应走 CodingPlanApi（不进 engine=kimi CLI 短路）
     let route = resolve_quota_route(
@@ -631,6 +651,116 @@ llm-pi-ai:
 }
 
 #[test]
+fn dsh_official_vendor_without_base_url_uses_known_host_and_own_key() {
+    let home = write_temp_dir("dsh-official-no-base");
+    std::fs::write(
+        home.join("settings.yaml"),
+        r#"
+llm-pi-ai:
+  providers:
+    gork-zhu:
+      baseURL: https://fufei.mossx.ai/v1
+      apiKeyEnv: GORK_ZHU_API_KEY
+    kimi-coding:
+      apiKeyEnv: KIMI_CODING_API_KEY
+      models:
+        - id: k3
+    minimax-cn:
+      apiKeyEnv: MINIMAX_CN_API_KEY
+      models:
+        - id: MiniMax-M2.7
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".credentials.yaml"),
+        "GORK_ZHU_API_KEY: sk-custom\nKIMI_CODING_API_KEY: sk-kimi\nMINIMAX_CN_API_KEY: sk-minimax\n",
+    )
+    .unwrap();
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("minimax-cn/MiniMax-M2.7"),
+        &empty_env,
+    )
+    .expect("official minimax");
+    assert_eq!(base, "https://api.minimaxi.com");
+    assert_eq!(key, "sk-minimax");
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("kimi-coding/k3"),
+        &empty_env,
+    )
+    .expect("official kimi");
+    assert_eq!(base, "https://api.kimi.com/coding");
+    assert_eq!(key, "sk-kimi");
+
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("gork-zhu"), &empty_env)
+            .expect("custom vendor still uses its own base");
+    assert_eq!(base, "https://fufei.mossx.ai/v1");
+    assert_eq!(key, "sk-custom");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn dsh_later_official_vendor_without_allowlist_row_still_resolves() {
+    let home = write_temp_dir("dsh-official-later");
+    std::fs::write(
+        home.join("settings.yaml"),
+        r#"
+llm-pi-ai:
+  providers:
+    openai:
+      apiKeyEnv: OPENAI_API_KEY
+"#,
+    )
+    .unwrap();
+    std::fs::write(home.join(".credentials.yaml"), "OPENAI_API_KEY: sk-openai\n").unwrap();
+
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("openai/gpt-5"), &empty_env)
+            .expect("later official openai");
+    assert_eq!(base, "https://api.openai.com/v1");
+    assert_eq!(key, "sk-openai");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn dsh_unknown_vendor_without_base_url_does_not_invent_a_host() {
+    let home = write_temp_dir("dsh-unknown-vendor");
+    std::fs::write(
+        home.join("settings.yaml"),
+        r#"
+llm-pi-ai:
+  providers:
+    future-official:
+      apiKeyEnv: FUTURE_OFFICIAL_API_KEY
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".credentials.yaml"),
+        "FUTURE_OFFICIAL_API_KEY: sk-future\n",
+    )
+    .unwrap();
+
+    let err = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("future-official/model-x"),
+        &empty_env,
+    )
+    .expect_err("unknown host must not be invented");
+    assert!(err.contains("future-official"), "{err}");
+    assert!(err.contains("missing"), "{err}");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn dsh_env_overrides_credentials_yaml() {
     let home = write_temp_dir("dsh-env");
     std::fs::write(
@@ -649,6 +779,132 @@ fn dsh_env_overrides_credentials_yaml() {
     assert_eq!(base, "https://api.deepseek.com/v1");
     assert_eq!(key, "sk-env");
     let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn dsh_v1_refs_credentials_reads_nested_keys() {
+    let home = write_temp_dir("dsh-v1-refs");
+    std::fs::write(
+        home.join("settings.yaml"),
+        r#"
+llm-pi-ai:
+  providers:
+    gork-zhu:
+      baseURL: https://fufei.mossx.ai/v1
+      apiKeyEnv: GORK_ZHU_API_KEY
+    kimi-coding:
+      apiKeyEnv: KIMI_CODING_API_KEY
+    minimax-cn:
+      apiKeyEnv: MINIMAX_CN_API_KEY
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".credentials.yaml"),
+        r#"
+version: 1
+refs:
+  DEEPSEEK_API_KEY: sk-dsh-official
+  KIMI_CODING_API_KEY: sk-kimi
+  MINIMAX_CN_API_KEY: sk-minimax
+  GORK_ZHU_API_KEY: sk-custom
+"#,
+    )
+    .unwrap();
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("deepseek-official"),
+        &empty_env,
+    )
+    .expect("v1 official deepseek");
+    assert_eq!(base, "https://api.deepseek.com");
+    assert_eq!(key, "sk-dsh-official");
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("kimi-coding/k3"),
+        &empty_env,
+    )
+    .expect("v1 kimi");
+    assert_eq!(base, "https://api.kimi.com/coding");
+    assert_eq!(key, "sk-kimi");
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("minimax-cn/MiniMax-M2.7"),
+        &empty_env,
+    )
+    .expect("v1 minimax");
+    assert_eq!(base, "https://api.minimaxi.com");
+    assert_eq!(key, "sk-minimax");
+
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("gork-zhu"), &empty_env)
+            .expect("v1 custom vendor");
+    assert_eq!(base, "https://fufei.mossx.ai/v1");
+    assert_eq!(key, "sk-custom");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn dsh_v1_refs_win_over_leftover_top_level_and_lose_to_env() {
+    let home = write_temp_dir("dsh-v1-refs-precedence");
+    std::fs::write(
+        home.join(".credentials.yaml"),
+        r#"
+version: 1
+DEEPSEEK_API_KEY: sk-top-level
+refs:
+  DEEPSEEK_API_KEY: sk-refs
+"#,
+    )
+    .unwrap();
+
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(
+        &home,
+        Some("deepseek-official"),
+        &empty_env,
+    )
+    .expect("refs beat leftover top-level");
+    assert_eq!(base, "https://api.deepseek.com");
+    assert_eq!(key, "sk-refs");
+
+    let env = |name: &str| match name {
+        "DEEPSEEK_API_KEY" => Some("sk-env".to_string()),
+        _ => None,
+    };
+    let (_, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("deepseek-official"), &env)
+            .expect("env beats refs");
+    assert_eq!(key, "sk-env");
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn classify_quota_none_source_maps_chinese_empty_key() {
+    assert_eq!(
+        classify_quota_none_source(&relay_user_error("empty_key")),
+        "empty_credentials"
+    );
+    assert_eq!(
+        classify_quota_none_source(&relay_user_error("empty_base")),
+        "empty_credentials"
+    );
+    assert_eq!(
+        classify_quota_none_source(&relay_user_error("missing_creds")),
+        "empty_credentials"
+    );
+    assert_eq!(
+        classify_quota_none_source("dsh coding-plan vendor missing"),
+        "empty_credentials"
+    );
+    assert_eq!(
+        classify_quota_none_source("engine foo has no coding-plan credential resolver"),
+        "empty"
+    );
 }
 
 #[test]

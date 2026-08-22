@@ -28,6 +28,9 @@ const providers = {
     },
     "pi": {
       "label": "PI CLI"
+    },
+    "qoder": {
+      "label": "Qoder CLI"
     }
   }
 };

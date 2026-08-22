@@ -11,6 +11,7 @@ import {
 import { applyOptimisticActiveProvider } from "../applyOptimisticActiveProvider";
 import { VENDOR_ACTIVE_PROVIDER_CHANGED_EVENT } from "../vendorActiveProviderEvents";
 import { notifyProviderTargetCatalogChanged } from "../../composer/components/ChatInputBox/hooks/useProviderTargetCatalogOwners";
+import { forgetDeletedLastProviderProfile } from "../lastProviderProfileMemory";
 
 /** List load options. `silent` skips list-level loading UI (switch / external events). */
 export type KimiProviderLoadOptions = {
@@ -201,6 +202,7 @@ export function useKimiProviderManagement() {
 
     try {
       const result = await deleteKimiProvider(provider.id);
+      forgetDeletedLastProviderProfile("kimi", provider.id);
       await loadKimiProviders();
       notifyProviderTargetCatalogChanged();
       setKimiProviderError(

@@ -42,6 +42,7 @@ import type { CustomCommandOption, CustomPromptOption } from '../../../../types'
 import type { EngineType } from '../../../../types';
 import type { RateLimitSnapshot } from '../../../../types';
 import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
+import type { QoderSettingsHighlightTarget } from '../../../app/hooks/useSettingsModalState';
 import { formatEngineVersionLabel } from '../../../engine/utils/engineLabels';
 import { projectMemoryFacade } from '../../../project-memory/services/projectMemoryFacade';
 import { noteCardsFacade } from '../../../note-cards/services/noteCardsFacade';
@@ -90,6 +91,7 @@ type AdapterModelOption = {
   model?: string;
   description?: string;
   source?: string;
+  provider?: string | null;
 };
 
 function normalizeAdapterModelOptions(
@@ -109,6 +111,7 @@ function normalizeAdapterModelOptions(
         modelOption.description ||
         (runtimeModel && runtimeModel !== label ? runtimeModel : undefined),
       source: modelOption.source,
+      provider: modelOption.provider?.trim() || undefined,
     };
   });
 }
@@ -562,7 +565,9 @@ export interface ChatInputBoxAdapterProps {
   onOpenAgentSettings?: () => void;
   onOpenPromptSettings?: () => void;
   onOpenModelSettings?: (providerId?: string) => void;
-  onOpenCliSettings?: () => void;
+  onOpenCliSettings?: (
+    highlightTarget?: QoderSettingsHighlightTarget,
+  ) => void;
   onOpenFileReference?: (path: string) => void;
   onRefreshModelConfig?: (providerId?: string) => Promise<void> | void;
   isModelConfigRefreshing?: boolean;
@@ -725,7 +730,7 @@ function attachmentToGeminiImageInput(attachment: Attachment): string | null {
 
 function attachmentsToImageInputs(
   attachments: Attachment[] | undefined,
-  provider: 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh' = 'claude',
+  provider: 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh' | 'qoder' = 'claude',
 ): string[] | undefined {
   if (!attachments || attachments.length === 0) {
     return undefined;
@@ -745,7 +750,7 @@ function attachmentsToImageInputs(
 /**
  * Maps Composer engine types to ChatInputBox provider IDs
  */
-type ChatInputProvider = 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh';
+type ChatInputProvider = 'claude' | 'codex' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi' | 'dsh' | 'qoder';
 
 function engineToProvider(engine?: EngineType): ChatInputProvider {
   switch (engine) {
@@ -763,6 +768,8 @@ function engineToProvider(engine?: EngineType): ChatInputProvider {
       return 'pi';
     case 'dsh':
       return 'dsh';
+    case 'qoder':
+      return 'qoder';
     case 'claude':
     default:
       return 'claude';
@@ -775,6 +782,8 @@ function normalizeReasoningEffort(effort?: string | null): ReasoningEffort | nul
   }
   const normalizedEffort = effort.trim();
   switch (normalizedEffort) {
+    case 'off':
+      return 'off';
     case 'low':
       return 'low';
     case 'medium':
@@ -1856,6 +1865,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         kimi: isEngineEnabled('kimi'),
         pi: isEngineEnabled('pi'),
         dsh: isEngineEnabled('dsh'),
+        qoder: isEngineEnabled('qoder'),
       } as const;
     }, [engines, isSharedSession]);
 
@@ -1885,6 +1895,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         kimi: resolveStatusLabel('kimi'),
         pi: resolveStatusLabel('pi'),
         dsh: isSharedSession ? sharedUnsupported : resolveStatusLabel('dsh'),
+        qoder: resolveStatusLabel('qoder'),
       } as const;
     }, [engines, isSharedSession, t]);
 
@@ -1902,6 +1913,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         opencode: 'OpenCode',
         pi: 'PI CLI',
         dsh: 'DeepSeek Harness',
+        qoder: 'Qoder CLI',
       };
 
       const byEngine = new Map(engines.map((entry) => [entry.type, entry]));
@@ -1929,6 +1941,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         kimi: resolveVersion('kimi'),
         pi: resolveVersion('pi'),
         dsh: resolveVersion('dsh'),
+        qoder: resolveVersion('qoder'),
       } as const;
     }, [engines]);
 

@@ -118,6 +118,8 @@ function ComposerHarness({
   contextDualViewEnabled = false,
   isProcessing = false,
   isContextCompacting = false,
+  createSessionTargetPicker = false,
+  footerUsageIndicatorEnabled = true,
   codexCompactionLifecycleState = "idle",
   codexCompactionSource = null,
   codexCompactionCompletedAt = null,
@@ -130,6 +132,8 @@ function ComposerHarness({
   contextDualViewEnabled?: boolean;
   isProcessing?: boolean;
   isContextCompacting?: boolean;
+  createSessionTargetPicker?: boolean;
+  footerUsageIndicatorEnabled?: boolean;
   codexCompactionLifecycleState?: "idle" | "compacting" | "completed";
   codexCompactionSource?: "auto" | "manual" | null;
   codexCompactionCompletedAt?: number | null;
@@ -151,6 +155,8 @@ function ComposerHarness({
       collaborationModesEnabled={true}
       selectedCollaborationModeId={null}
       onSelectCollaborationMode={() => {}}
+      createSessionTargetPicker={createSessionTargetPicker}
+      footerUsageIndicatorEnabled={footerUsageIndicatorEnabled}
       selectedEngine={selectedEngine}
       models={[]}
       selectedModelId={null}
@@ -180,6 +186,58 @@ function ComposerHarness({
 }
 
 describe("Composer dual context usage model", () => {
+  it("does not reserve an empty homepage branch row when DSH has no session stats", () => {
+    const { container } = render(
+      <ComposerHarness
+        selectedEngine="dsh"
+        createSessionTargetPicker
+        footerUsageIndicatorEnabled={false}
+      />,
+    );
+
+    expect(container.querySelector(".composer-branch-row")).toBeNull();
+    expect(container.querySelector(".composer-dsh-stats-line")).toBeNull();
+  });
+
+  it("keeps the DSH stats line once session telemetry is available", () => {
+    const { container } = render(
+      <ComposerHarness
+        selectedEngine="dsh"
+        footerUsageIndicatorEnabled={false}
+        contextUsage={{
+          total: {
+            totalTokens: 100,
+            inputTokens: 4,
+            cachedInputTokens: 96,
+            outputTokens: 20,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 100,
+            inputTokens: 4,
+            cachedInputTokens: 96,
+            outputTokens: 20,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: null,
+          sessionStats: {
+            turns: 1,
+            steps: 1,
+            llmMs: 9500,
+            toolMs: 0,
+            ttftMs: 8500,
+            ttftSteps: 1,
+            decodeMs: 1000,
+            decodeTokens: 72,
+          },
+        }}
+      />,
+    );
+
+    expect(container.querySelector(".composer-branch-row")).toBeTruthy();
+    expect(container.querySelector(".composer-dsh-stats-line")).toBeTruthy();
+  });
+
   it("disables dual view on non-codex engines", () => {
     render(
       <ComposerHarness

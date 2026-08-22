@@ -9,6 +9,10 @@ const reasoning = {
     "claudeDefault": "기본값",
     "grokDefault": "기본값",
     "defaultDescription": "엔진 기본 추론 동작 사용",
+    "off": {
+      "label": "끄기 (Off)",
+      "description": "추론 비활성화"
+    },
     "low": {
       "label": "낮음",
       "description": "기본 추론으로 빠른 응답"

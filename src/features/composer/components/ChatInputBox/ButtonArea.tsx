@@ -77,6 +77,7 @@ const ENGINE_TYPES: ReadonlySet<string> = new Set([
   'opencode',
   'dsh',
   'pi',
+  'qoder',
 ]);
 
 function asEngineType(provider: string | undefined): EngineType | null {
@@ -398,7 +399,7 @@ export const ButtonArea = ({
               sideOffset={menuMetrics?.sideOffset ?? 12}
               alignOffset={menuMetrics?.alignOffset ?? 0}
               avoidCollisions={false}
-              className="composer-tool-menu composer-session-control-hud"
+              className="composer-tool-menu composer-session-control-hud overflow-visible overflow-x-visible overflow-y-visible"
               data-testid="composer-session-control-hud"
               aria-label={toolDockToggleLabel}
               style={
@@ -572,20 +573,30 @@ export const ButtonArea = ({
           ) : null}
           {(currentProvider === 'codex' ||
             currentProvider === 'claude' ||
-            currentProvider === 'grok') && (
+            currentProvider === 'grok' ||
+            // dsh：仅当选中模型在 host catalog 声明了 reasoning efforts
+            // （deepseek 模型 off/low/high/max）时才显示思考强度；
+            // 切到无档位模型时隐藏，保持与官方 DSH 交互一致。
+            (currentProvider === 'dsh' && (reasoningOptions?.length ?? 0) > 0) ||
+            (currentProvider === 'qoder' && (reasoningOptions?.length ?? 0) > 0)) && (
             <ReasoningSelect
               value={reasoningEffort}
               onChange={onReasoningChange ?? NOOP_REASONING}
               options={reasoningOptions}
               showDefaultOption={
-                currentProvider === 'claude' || currentProvider === 'grok'
+                currentProvider === 'claude' ||
+                currentProvider === 'grok' ||
+                currentProvider === 'dsh' ||
+                currentProvider === 'qoder'
               }
               defaultLabel={
                 currentProvider === 'claude'
                   ? t('reasoning.claudeDefault', { defaultValue: 'Default' })
                   : currentProvider === 'grok'
                     ? t('reasoning.grokDefault', { defaultValue: 'Default' })
-                    : undefined
+                    : currentProvider === 'dsh' || currentProvider === 'qoder'
+                      ? t('reasoning.default', { defaultValue: 'Default' })
+                      : undefined
               }
             />
           )}

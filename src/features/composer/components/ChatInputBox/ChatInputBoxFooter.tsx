@@ -21,6 +21,8 @@ import type {
   StreamActivityPhase,
   TriggerQuery,
 } from './types.js';
+import type { ProviderModelGroup } from './modelOptions';
+import type { PromptEnhancerIntensity } from './hooks/usePromptEnhancer';
 import type { TooltipState } from './hooks/useTooltip.js';
 import { ButtonArea } from './ButtonArea.js';
 import { CompletionDropdown, Dropdown } from './Dropdown/index.js';
@@ -361,7 +363,10 @@ export function ChatInputBoxFooter({
     loadingEngine: EngineType;
     selectedEngine: EngineType;
     selectedModel: string;
+    selectedIntensity: PromptEnhancerIntensity;
     modelOptions: ModelInfo[];
+    modelGroups: ProviderModelGroup[];
+    visibleEngines: EngineType[];
     timeoutSeconds: number;
     timeoutLimits: {
       minSeconds: number;
@@ -372,7 +377,10 @@ export function ChatInputBoxFooter({
     canUseEnhanced: boolean;
     onEngineChange: (engine: EngineType) => void;
     onModelChange: (modelId: string) => void;
+    onProviderModelChange: (providerId: ProviderId, modelId: string) => void;
+    onIntensityChange: (intensity: PromptEnhancerIntensity) => void;
     onTimeoutChange: (timeoutSeconds: number) => void;
+    onOriginalPromptChange: (prompt: string) => void;
     onRunEnhancement: () => void;
     onUseEnhanced: () => void;
     onKeepOriginal: () => void;
@@ -1046,7 +1054,10 @@ export function ChatInputBoxFooter({
         loadingEngine={promptEnhancer.loadingEngine}
         selectedEngine={promptEnhancer.selectedEngine}
         selectedModel={promptEnhancer.selectedModel}
+        selectedIntensity={promptEnhancer.selectedIntensity}
         modelOptions={promptEnhancer.modelOptions}
+        modelGroups={promptEnhancer.modelGroups}
+        visibleEngines={promptEnhancer.visibleEngines}
         timeoutSeconds={promptEnhancer.timeoutSeconds}
         timeoutLimits={promptEnhancer.timeoutLimits}
         originalPrompt={promptEnhancer.originalPrompt}
@@ -1054,7 +1065,10 @@ export function ChatInputBoxFooter({
         canUseEnhanced={promptEnhancer.canUseEnhanced}
         onEngineChange={promptEnhancer.onEngineChange}
         onModelChange={promptEnhancer.onModelChange}
+        onProviderModelChange={promptEnhancer.onProviderModelChange}
+        onIntensityChange={promptEnhancer.onIntensityChange}
         onTimeoutChange={promptEnhancer.onTimeoutChange}
+        onOriginalPromptChange={promptEnhancer.onOriginalPromptChange}
         onRunEnhancement={promptEnhancer.onRunEnhancement}
         onUseEnhanced={promptEnhancer.onUseEnhanced}
         onKeepOriginal={promptEnhancer.onKeepOriginal}

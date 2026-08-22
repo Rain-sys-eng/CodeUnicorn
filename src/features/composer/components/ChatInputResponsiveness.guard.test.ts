@@ -65,6 +65,6 @@ describe("chat input responsiveness guard", () => {
     expect(source).toContain("COMPOSER_CANVAS_ONLY_PROPS");
     expect(source).toContain("\"threadItemsByThread\"");
     expect(source).toContain("\"threadStatusById\"");
-    expect(source).toContain("export const Composer = memo(ComposerImpl, areComposerPropsEqual)");
+    expect(source).toContain("export const Composer = memo(ComposerGate, areComposerPropsEqual)");
   });
 });

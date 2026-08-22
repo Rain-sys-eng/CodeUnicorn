@@ -1280,12 +1280,13 @@ pub(crate) async fn add_workspace(
     }
 
     // Detect which engine to use based on settings and installed CLIs
-    let (app_default_engine, claude_bin_setting, codex_bin_setting) = {
+    let (app_default_engine, claude_bin_setting, codex_bin_setting, qoder_bin_setting) = {
         let settings = state.app_settings.lock().await;
         (
             settings.default_engine.clone(),
             settings.claude_bin.clone(),
             settings.codex_bin.clone(),
+            settings.qoder_bin.clone(),
         )
     };
 
@@ -1299,6 +1300,7 @@ pub(crate) async fn add_workspace(
         None,
         None,
         None,
+        qoder_bin_setting.as_deref(),
     )
     .await;
 
@@ -1341,6 +1343,9 @@ pub(crate) async fn add_workspace(
         EngineType::Pi => {
             add_workspace_for_cli_engine(EngineType::Pi, path, codex_bin, &state).await
         }
+        EngineType::Qoder => {
+            add_workspace_for_cli_engine(EngineType::Qoder, path, codex_bin, &state).await
+        }
         EngineType::Dsh => {
             add_workspace_for_cli_engine(EngineType::Dsh, path, codex_bin, &state).await
         }
@@ -1348,7 +1353,7 @@ pub(crate) async fn add_workspace(
 }
 
 /// Add workspace for a CLI-based engine (no persistent session needed).
-/// Supports Claude, Gemini, OpenCode, Kimi, Grok, Pi and Dsh engines.
+/// Supports Claude, Gemini, OpenCode, Kimi, Grok, Pi, Qoder and Dsh engines.
 async fn add_workspace_for_cli_engine(
     engine_type: EngineType,
     path: String,
@@ -1357,7 +1362,7 @@ async fn add_workspace_for_cli_engine(
 ) -> Result<WorkspaceInfo, String> {
     use crate::engine::status::{
         detect_claude_status, detect_grok_status, detect_kimi_status, detect_opencode_status,
-        detect_pi_status,
+        detect_pi_status, detect_qoder_status,
     };
     use std::path::PathBuf;
 
@@ -1372,6 +1377,7 @@ async fn add_workspace_for_cli_engine(
         EngineType::Kimi => "kimi",
         EngineType::Grok => "grok",
         EngineType::Pi => "pi",
+        EngineType::Qoder => "qoder",
         EngineType::Dsh => "dsh",
         _ => return Err(format!("Unsupported CLI engine: {:?}", engine_type)),
     };
@@ -1424,6 +1430,13 @@ async fn add_workspace_for_cli_engine(
                 settings.pi_bin.clone()
             };
             detect_pi_status(pi_bin.as_deref()).await.installed
+        }
+        EngineType::Qoder => {
+            let qoder_bin = {
+                let settings = state.app_settings.lock().await;
+                settings.qoder_bin.clone()
+            };
+            detect_qoder_status(qoder_bin.as_deref()).await.installed
         }
         // Host can start later; do not refuse the workspace if dsh is not installed yet.
         EngineType::Dsh => true,
@@ -2369,7 +2382,10 @@ fn expand_user_path(path: &str) -> Result<std::path::PathBuf, String> {
         return dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string());
     }
 
-    if let Some(rest) = trimmed.strip_prefix("~/").or_else(|| trimmed.strip_prefix("~\\")) {
+    if let Some(rest) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
         let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
         return Ok(home.join(rest));
     }
@@ -2394,18 +2410,11 @@ fn resolve_containing_folder(path: &str) -> Result<std::path::PathBuf, String> {
     };
 
     if folder.exists() {
-        return dunce::canonicalize(&folder).map_err(|error| {
-            format!(
-                "Failed to resolve folder `{}`: {error}",
-                folder.display()
-            )
-        });
+        return dunce::canonicalize(&folder)
+            .map_err(|error| format!("Failed to resolve folder `{}`: {error}", folder.display()));
     }
 
-    Err(format!(
-        "Folder does not exist: {}",
-        folder.display()
-    ))
+    Err(format!("Folder does not exist: {}", folder.display()))
 }
 
 fn open_directory_in_file_manager(folder: &std::path::Path) -> Result<(), String> {
@@ -2456,9 +2465,8 @@ pub(crate) async fn reveal_in_file_manager(path: String) -> Result<(), String> {
     }
 
     let expanded = expand_user_path(trimmed)?;
-    let canonical = dunce::canonicalize(&expanded).map_err(|error| {
-        format!("Failed to resolve path `{trimmed}`: {error}")
-    })?;
+    let canonical = dunce::canonicalize(&expanded)
+        .map_err(|error| format!("Failed to resolve path `{trimmed}`: {error}"))?;
 
     #[cfg(windows)]
     {
@@ -3139,11 +3147,7 @@ pub(crate) async fn probe_open_app_target(
     command: Option<String>,
 ) -> Result<OpenAppTargetProbeResult, String> {
     tokio::task::spawn_blocking(move || {
-        probe_open_app_target_sync(
-            &kind,
-            app_name.as_deref(),
-            command.as_deref(),
-        )
+        probe_open_app_target_sync(&kind, app_name.as_deref(), command.as_deref())
     })
     .await
     .map_err(|err| err.to_string())

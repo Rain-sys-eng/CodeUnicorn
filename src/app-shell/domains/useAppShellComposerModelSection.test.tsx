@@ -255,6 +255,82 @@ describe("useAppShellComposerModelSection handleSelectModel", () => {
     );
   });
 
+  it("does not persist Codex repair onto a Claude thread during the switch window", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    renderSection({
+      activeEngine: "codex",
+      activeThreadId: "claude:session-1",
+      persistComposerSelectionForThread,
+      models: [makeModel("gpt-5.5", { isDefault: true })],
+      selectedComposerSelection: {
+        modelId: "claude-sonnet-4-6",
+        effort: null,
+      },
+    });
+    expect(persistComposerSelectionForThread).not.toHaveBeenCalled();
+  });
+
+  it("does not persist Codex repair onto a DSH thread during the switch window", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    const { result } = renderSection({
+      activeEngine: "codex",
+      activeThreadId: "dsh:session-1",
+      activeWorkspaceId: "workspace-1",
+      persistComposerSelectionForThread,
+      models: [makeModel("gpt-5.5", { isDefault: true })],
+      engineModelsAsOptions: [],
+      selectedComposerSelection: {
+        modelId: "gork-zhu/grok-4.6",
+        effort: null,
+      },
+    });
+
+    expect(result.current.effectiveSelectedModelId).toBe("gork-zhu/grok-4.6");
+    expect(persistComposerSelectionForThread).not.toHaveBeenCalled();
+  });
+
+  it("still runs Codex repair on an unprefixed local thread without rewriting unknown ids", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    const { result } = renderSection({
+      activeEngine: "codex",
+      activeThreadId: "thread-local-codex",
+      persistComposerSelectionForThread,
+      models: [makeModel("gpt-5.5", { isDefault: true })],
+      selectedComposerSelection: {
+        modelId: "custom-codex-spark",
+        effort: "high",
+      },
+    });
+    // Codex allowUnknown keeps freeform ids; repair may still persist effort
+    // onto the unprefixed thread. The DSH skip must not swallow this path.
+    expect(result.current.effectiveSelectedModelId).toBe("custom-codex-spark");
+    expect(persistComposerSelectionForThread).toHaveBeenCalledWith(
+      null,
+      "thread-local-codex",
+      {
+        modelId: "custom-codex-spark",
+        effort: null,
+      },
+    );
+  });
+
+  it("keeps a DSH ledger id when the leftover catalog is another engine", () => {
+    const persistComposerSelectionForThread = vi.fn();
+    const { result } = renderSection({
+      activeEngine: "dsh",
+      activeThreadId: "dsh:session-1",
+      persistComposerSelectionForThread,
+      engineModelsAsOptions: [makeModel("gpt-5.5", { isDefault: true })],
+      selectedComposerSelection: {
+        modelId: "gork-zhu/grok-4.6",
+        effort: null,
+      },
+    });
+
+    expect(result.current.effectiveSelectedModelId).toBe("gork-zhu/grok-4.6");
+    expect(persistComposerSelectionForThread).not.toHaveBeenCalled();
+  });
+
   it("keeps a provider-only Codex selection without model repair", () => {
     const persistComposerSelectionForThread = vi.fn();
     const { result } = renderSection({
@@ -793,6 +869,178 @@ describe("useAppShellComposerModelSection handleSelectModel", () => {
     expect(result.current.engineSelectedModelIdByType.dsh).toBe(
       "ggggg/grok-4.6",
     );
+  });
+
+  it("writes an official DSH kimi catalog onto a DSH thread even when PI owns the same id", () => {
+    const persistComposerEnginePref = vi.fn();
+    const handleSelectComposerSelection = vi.fn();
+    const composerSelectionResolverRef: { current: unknown } = {
+      current: {
+        id: "deepseek-official/deepseek-v4-flash",
+        model: "deepseek-v4-flash",
+        source: "test",
+        providerProfileId: null,
+        effort: null,
+        collaborationMode: null,
+      },
+    };
+    const { result } = renderSection({
+      activeEngine: "dsh",
+      activeThreadId: "dsh:session-1",
+      persistComposerEnginePref,
+      handleSelectComposerSelection,
+      composerSelectionResolverRef,
+      engineModelsAsOptions: [
+        makeModel("deepseek-official/deepseek-v4-flash", {
+          model: "deepseek-v4-flash",
+          isDefault: true,
+        }),
+        makeModel("kimi-coding/k3", { model: "k3" }),
+      ],
+      engineModelCatalogsAsOptions: {
+        dsh: [
+          makeModel("deepseek-official/deepseek-v4-flash", {
+            model: "deepseek-v4-flash",
+            isDefault: true,
+          }),
+          makeModel("kimi-coding/k3", { model: "k3" }),
+        ],
+        pi: [makeModel("kimi-coding/k3", { model: "kimi-coding/k3" })],
+        claude: claudeModels,
+        kimi: kimiModels,
+      },
+      selectedComposerSelection: {
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: null,
+      },
+    });
+
+    act(() => {
+      result.current.handleSelectModel("kimi-coding/k3");
+    });
+
+    expect(persistComposerEnginePref).toHaveBeenCalledWith("dsh", {
+      modelId: "kimi-coding/k3",
+    });
+    expect(handleSelectComposerSelection).toHaveBeenCalledWith({
+      modelId: "kimi-coding/k3",
+      effort: null,
+    });
+    expect(result.current.engineSelectedModelIdByType.dsh).toBe(
+      "kimi-coding/k3",
+    );
+    expect(composerSelectionResolverRef.current).toMatchObject({
+      id: "kimi-coding/k3",
+      model: "k3",
+    });
+  });
+
+  it("keeps an official DSH minimax pick on the DSH ledger when host catalog is empty", () => {
+    const persistComposerEnginePref = vi.fn();
+    const handleSelectComposerSelection = vi.fn();
+    const composerSelectionResolverRef: { current: unknown } = {
+      current: {
+        id: "gork-zhu/grok-4.6",
+        model: "grok-4.6",
+        source: "test",
+        providerProfileId: null,
+        effort: null,
+        collaborationMode: null,
+      },
+    };
+    const { result } = renderSection({
+      activeEngine: "dsh",
+      activeThreadId: "dsh:session-1",
+      persistComposerEnginePref,
+      handleSelectComposerSelection,
+      composerSelectionResolverRef,
+      engineModelsAsOptions: [],
+      engineModelCatalogsAsOptions: {
+        pi: [makeModel("minimax-cn/MiniMax-M2.7")],
+        claude: claudeModels,
+        kimi: kimiModels,
+      },
+      selectedComposerSelection: {
+        modelId: "gork-zhu/grok-4.6",
+        effort: null,
+      },
+    });
+
+    act(() => {
+      result.current.handleSelectModel("minimax-cn/MiniMax-M2.7");
+    });
+
+    expect(persistComposerEnginePref).toHaveBeenCalledWith("dsh", {
+      modelId: "minimax-cn/MiniMax-M2.7",
+    });
+    expect(handleSelectComposerSelection).toHaveBeenCalledWith({
+      modelId: "minimax-cn/MiniMax-M2.7",
+      effort: null,
+    });
+    expect(composerSelectionResolverRef.current).toMatchObject({
+      id: "minimax-cn/MiniMax-M2.7",
+    });
+  });
+
+  it("writes a later official OpenAI host route onto a DSH thread without an allowlist", () => {
+    const persistComposerEnginePref = vi.fn();
+    const handleSelectComposerSelection = vi.fn();
+    const composerSelectionResolverRef: { current: unknown } = {
+      current: {
+        id: "deepseek-official/deepseek-v4-flash",
+        model: "deepseek-v4-flash",
+        source: "test",
+        providerProfileId: null,
+        effort: null,
+        collaborationMode: null,
+      },
+    };
+    const { result } = renderSection({
+      activeEngine: "dsh",
+      activeThreadId: "dsh:session-1",
+      persistComposerEnginePref,
+      handleSelectComposerSelection,
+      composerSelectionResolverRef,
+      engineModelsAsOptions: [
+        makeModel("deepseek-official/deepseek-v4-flash", {
+          model: "deepseek-v4-flash",
+          isDefault: true,
+        }),
+        makeModel("openai/gpt-5", { model: "gpt-5" }),
+      ],
+      engineModelCatalogsAsOptions: {
+        dsh: [
+          makeModel("deepseek-official/deepseek-v4-flash", {
+            model: "deepseek-v4-flash",
+            isDefault: true,
+          }),
+          makeModel("openai/gpt-5", { model: "gpt-5" }),
+        ],
+        pi: [makeModel("openai/gpt-5", { model: "openai/gpt-5" })],
+        claude: claudeModels,
+        kimi: kimiModels,
+      },
+      selectedComposerSelection: {
+        modelId: "deepseek-official/deepseek-v4-flash",
+        effort: null,
+      },
+    });
+
+    act(() => {
+      result.current.handleSelectModel("openai/gpt-5");
+    });
+
+    expect(persistComposerEnginePref).toHaveBeenCalledWith("dsh", {
+      modelId: "openai/gpt-5",
+    });
+    expect(handleSelectComposerSelection).toHaveBeenCalledWith({
+      modelId: "openai/gpt-5",
+      effort: null,
+    });
+    expect(composerSelectionResolverRef.current).toMatchObject({
+      id: "openai/gpt-5",
+      model: "gpt-5",
+    });
   });
 
   it("does not write a foreign ccgui catalog onto a pending DSH thread", () => {

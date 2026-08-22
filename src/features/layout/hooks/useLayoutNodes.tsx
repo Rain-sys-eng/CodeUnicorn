@@ -130,8 +130,11 @@ import {
 import { buildShellRuntimeSummary } from "./layoutShellSummary";
 import { buildConversationCanvasNode } from "./conversationCanvasNode";
 import { CollabTimelineWaiting } from "../../multi-agent/components/CollabTimelineWaiting";
-import { useLayoutTopbarSessionTabs } from "./useLayoutTopbarSessionTabs";
+import { useCollabUiState } from "../../multi-agent/store/collabUiStore";
+import { SharedProviderRetryHint } from "../../shared-session/provider-retry/SharedProviderRetryHint";
+import { useSharedProviderRetry } from "../../shared-session/provider-retry/useSharedProviderRetry";
 import { resolveIsSharedSession } from "../../shared-session/utils/sharedSessionIdentity";
+import { useLayoutTopbarSessionTabs } from "./useLayoutTopbarSessionTabs";
 import {
   buildCompactEmptyNode,
   buildCompactGitBackNode,
@@ -190,7 +193,16 @@ const EMPTY_PROJECT_MAP_IMPACT_INPUT: ProjectMapImpactInput = {
 function toConversationEngine(
   engine: EngineType | undefined,
 ): ConversationEngine {
-  if (engine === "claude" || engine === "gemini" || engine === "grok" || engine === "kimi" || engine === "opencode" || engine === "dsh" || engine === "pi") {
+  if (
+    engine === "claude" ||
+    engine === "gemini" ||
+    engine === "grok" ||
+    engine === "kimi" ||
+    engine === "opencode" ||
+    engine === "dsh" ||
+    engine === "qoder" ||
+    engine === "pi"
+  ) {
     return engine;
   }
   return "codex";
@@ -245,6 +257,12 @@ function inferConversationEngineFromThreadId(
     normalizedThreadId.startsWith("dsh-pending-")
   ) {
     return "dsh";
+  }
+  if (
+    normalizedThreadId.startsWith("qoder:") ||
+    normalizedThreadId.startsWith("qoder-pending-")
+  ) {
+    return "qoder";
   }
   if (
     normalizedThreadId.startsWith("codex:") ||
@@ -1311,10 +1329,16 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
         isProviderContinuation:
           activeThreadSummary?.originKind === "provider-continuation",
         timelineTrailingNode: (
-          <CollabTimelineWaiting
-            workspaceId={options.activeWorkspaceId}
-            threadId={options.activeThreadId ?? null}
-          />
+          <>
+            <CollabTimelineWaiting
+              workspaceId={options.activeWorkspaceId}
+              threadId={options.activeThreadId ?? null}
+            />
+            <SharedProviderRetryHint
+              workspaceId={options.activeWorkspaceId}
+              threadId={options.activeThreadId ?? null}
+            />
+          </>
         ),
         continuationContextNode:
           activeThreadSummary?.originKind === "provider-continuation" ? (
@@ -1482,6 +1506,41 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
     isSharedSession,
   );
   const sharedSendState = isSharedSession ? sharedSendEntry.state : "idle";
+  const collabUi = useCollabUiState(
+    options.activeWorkspaceId,
+    options.activeThreadId,
+  );
+  const collabRunActive = Boolean(
+    collabUi && collabUi.phase !== "idle" && collabUi.phase !== "done",
+  );
+  const sendSharedProviderRetryResume = useEventCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      text: string,
+      meta: { attempt: number; atMs: number },
+    ) => {
+      if (workspaceId !== options.activeWorkspaceId || threadId !== options.activeThreadId) {
+        return;
+      }
+      return options.onSend(text, [], {
+        originKind: "shared-provider-retry",
+        providerRetryAttempt: meta.attempt,
+        providerRetryAtMs: meta.atMs,
+      });
+    },
+  );
+  useSharedProviderRetry({
+    workspaceId: options.activeWorkspaceId,
+    threadId: options.activeThreadId,
+    engine:
+      activeThreadSummary?.selectedEngine ??
+      activeThreadSummary?.engineSource ??
+      conversationEngine ??
+      null,
+    collabRunActive,
+    sendResume: sendSharedProviderRetryResume,
+  });
   const gitStatusError = options.gitStatus.error;
   const gitStatusFiles = options.gitStatus.files;
   // deriveRewindWorkspaceGitState 每次 render 返回新对象；它是 renderComposerNode
@@ -2992,6 +3051,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           ownerSurface="main-split-browser-dock"
           displayMode="embedded"
           className="browser-agent-center-panel-dock"
+          onClosePanel={options.onCloseBrowserDock}
         />
       </Suspense>
     ) : null;

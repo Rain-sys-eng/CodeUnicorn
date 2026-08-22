@@ -19,6 +19,7 @@ const HIDDEN_APPROVAL_PARAM_KEYS = new Set([
   "turn_id",
   "toolName",
   "tool_name",
+  "tool",
   "itemId",
   "item_id",
   "input",
@@ -36,6 +37,21 @@ const HIDDEN_APPROVAL_BODY_KEYS = new Set([
   "patch",
   "unified_diff",
   "unifiedDiff",
+]);
+
+const COLLAPSED_APPROVAL_DEBUG_KEYS = new Set([
+  "approvalId",
+  "approval_id",
+  "callId",
+  "call_id",
+  "reason",
+  "sessionId",
+  "session_id",
+  "type",
+  "rpcId",
+  "rpc_id",
+  "method",
+  "payload",
 ]);
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -66,6 +82,10 @@ function shouldHideApprovalParamEntry(key: string, value: unknown): boolean {
     return true;
   }
   return false;
+}
+
+function isCollapsedApprovalDebugKey(key: string): boolean {
+  return COLLAPSED_APPROVAL_DEBUG_KEYS.has(key);
 }
 
 function getToolLabel(method: string, t: (key: string) => string): string {
@@ -191,6 +211,7 @@ export function ApprovalToasts({
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace.name])),
     [workspaces],
   );
+  const [debugDetailsExpanded, setDebugDetailsExpanded] = useState(false);
 
   const primaryRequest = approvals[approvals.length - 1];
   const primaryIsDirectoryGrant = primaryRequest
@@ -204,6 +225,10 @@ export function ApprovalToasts({
     }
     setDirectoryGrantScope(getDirectoryGrantDefaultScope(primaryRequest.params ?? {}));
   }, [primaryRequest]);
+
+  useEffect(() => {
+    setDebugDetailsExpanded(false);
+  }, [primaryRequest?.request_id]);
 
   const batchEligibleApprovals = useMemo(
     () =>
@@ -282,6 +307,21 @@ export function ApprovalToasts({
     return { text: JSON.stringify(value, null, 2), isCode: true };
   };
 
+  const renderParamEntries = (entries: [string, unknown][]) =>
+    entries.map(([key, value]) => {
+      const rendered = renderParamValue(value);
+      return (
+        <div key={key} className="approval-toast-detail">
+          <div className="approval-toast-detail-label">{formatLabel(key)}</div>
+          {rendered.isCode ? (
+            <pre className="approval-toast-detail-code">{rendered.text}</pre>
+          ) : (
+            <div className="approval-toast-detail-value">{rendered.text}</div>
+          )}
+        </div>
+      );
+    });
+
   return (
     <div
       className={`approval-toasts${variant === "inline" ? " approval-toasts-inline" : ""}`}
@@ -299,16 +339,33 @@ export function ApprovalToasts({
         const approvalMessage = getApprovalMessage(params);
         const approvalToolName = getApprovalToolName(params);
         const directorySensitive = isDirectoryGrant && isDirectoryGrantSensitive(params);
-        const entries = isDirectoryGrant
+        const visibleEntries = isDirectoryGrant
           ? []
           : Object.entries(params).filter(([key, value]) => {
               if (shouldHideApprovalParamEntry(key, value)) {
+                return false;
+              }
+              if (isCollapsedApprovalDebugKey(key)) {
                 return false;
               }
               if (approvalPath && value === approvalPath) {
                 return false;
               }
               if (commandInfo && (key === "command" || key === "cmd")) {
+                return false;
+              }
+              return value !== undefined && value !== null && value !== "";
+            });
+        const debugEntries = isDirectoryGrant
+          ? []
+          : Object.entries(params).filter(([key, value]) => {
+              if (!isCollapsedApprovalDebugKey(key)) {
+                return false;
+              }
+              if (shouldHideApprovalParamEntry(key, value)) {
+                return false;
+              }
+              if (approvalMessage && key === "reason" && value === approvalMessage) {
                 return false;
               }
               return value !== undefined && value !== null && value !== "";
@@ -448,29 +505,36 @@ export function ApprovalToasts({
                   <div className="approval-toast-detail-value">{approvalMessage}</div>
                 </div>
               ) : null}
-              {entries.length ? (
-                entries.map(([key, value]) => {
-                  const rendered = renderParamValue(value);
-                  return (
-                    <div key={key} className="approval-toast-detail">
-                      <div className="approval-toast-detail-label">
-                        {formatLabel(key)}
-                      </div>
-                      {rendered.isCode ? (
-                        <pre className="approval-toast-detail-code">
-                          {rendered.text}
-                        </pre>
-                      ) : (
-                        <div className="approval-toast-detail-value">
-                          {rendered.text}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              ) : !approvalPath && !commandInfo && !approvalMessage && !isDirectoryGrant ? (
+              {visibleEntries.length ? (
+                renderParamEntries(visibleEntries)
+              ) : !approvalPath &&
+                !commandInfo &&
+                !approvalMessage &&
+                !isDirectoryGrant &&
+                debugEntries.length === 0 ? (
                 <div className="approval-toast-detail approval-toast-detail-empty">
                   {t("approval.noExtraDetails")}
+                </div>
+              ) : null}
+              {debugEntries.length ? (
+                <div className="approval-toast-debug">
+                  <button
+                    type="button"
+                    className="ghost approval-toast-debug-toggle"
+                    aria-expanded={debugDetailsExpanded}
+                    onClick={() => setDebugDetailsExpanded((open) => !open)}
+                  >
+                    <span
+                      className={`codicon ${debugDetailsExpanded ? "codicon-chevron-down" : "codicon-chevron-right"}`}
+                      aria-hidden
+                    />
+                    <span>
+                      {debugDetailsExpanded
+                        ? t("approval.hideDebugDetails")
+                        : t("approval.showDebugDetails")}
+                    </span>
+                  </button>
+                  {debugDetailsExpanded ? renderParamEntries(debugEntries) : null}
                 </div>
               ) : null}
             </div>

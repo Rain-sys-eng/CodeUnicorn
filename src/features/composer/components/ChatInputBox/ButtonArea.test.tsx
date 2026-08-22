@@ -113,7 +113,7 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(screen.getByTestId("reasoning-select")).toBeTruthy();
     expect(screen.getByTestId("reasoning-value").textContent).toBe("");
     expect(screen.getByTestId("reasoning-options").textContent).toBe("low,medium,high,xhigh,max");
-    expect(screen.getByTestId("reasoning-default").textContent).toBe("默认");
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("Default");
   });
 
   it("renders Grok reasoning selector with default option and fixed allowlist", () => {
@@ -136,7 +136,7 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(screen.getByTestId("reasoning-select")).toBeTruthy();
     expect(screen.getByTestId("reasoning-value").textContent).toBe("");
     expect(screen.getByTestId("reasoning-options").textContent).toBe("low,medium,high");
-    expect(screen.getByTestId("reasoning-default").textContent).toBe("默认");
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("Default");
   });
 
   it("does not render reasoning selector for Gemini", () => {
@@ -187,6 +187,42 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
     expect(screen.queryByTestId("dsh-agent-preset-select")).toBeNull();
+  });
+
+  it("renders the DSH thinking-strength selector only when the model exposes reasoning efforts", () => {
+    const { rerender } = render(
+      <ButtonArea
+        currentProvider="dsh"
+        models={[]}
+        selectedModel=""
+        reasoningEffort="high"
+        reasoningOptions={["off", "low", "high", "max"]}
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
+    expect(screen.getByTestId("reasoning-value").textContent).toBe("high");
+    expect(screen.getByTestId("reasoning-options").textContent).toBe("off,low,high,max");
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("Default");
+
+    rerender(
+      <ButtonArea
+        currentProvider="dsh"
+        models={[]}
+        selectedModel=""
+        reasoningEffort={null}
+        reasoningOptions={[]}
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+    expect(screen.queryByTestId("reasoning-select")).toBeNull();
   });
 
   it("keeps the existing Codex reasoning selector without a default reset option", () => {

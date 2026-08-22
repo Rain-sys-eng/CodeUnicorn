@@ -816,6 +816,48 @@ describe("threadReducer", () => {
     });
   });
 
+  it("keeps shared provider retry mark metadata when replacing the optimistic user", () => {
+    const base: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "thread-1": [
+          {
+            id: "optimistic-user-1",
+            kind: "message",
+            role: "user",
+            text: "继续。上一轮因供应商暂时失败中断",
+            originKind: "shared-provider-retry",
+            providerRetryAttempt: 2,
+            providerRetryAtMs: 1_774_329_600_000,
+          },
+        ],
+      },
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 1 }],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "继续。上一轮因供应商暂时失败中断",
+      },
+      hasCustomName: false,
+    });
+
+    expect(next.itemsByThread["thread-1"]?.[0]).toMatchObject({
+      id: "user-1",
+      originKind: "shared-provider-retry",
+      providerRetryAttempt: 2,
+      providerRetryAtMs: 1_774_329_600_000,
+    });
+  });
+
   it("reconciles optimistic user bubble when backend payload wraps user input marker", () => {
     const base: ThreadState = {
       ...initialState,
@@ -3027,5 +3069,114 @@ describe("threadReducer", () => {
 
     expect(hydrated.threadsByWorkspace["ws-empty"]).toEqual([snapshotThread]);
     expect(hydrated.threadsByWorkspace["ws-live"]).toEqual([liveThread]);
+  });
+
+  it("patches runtime receipt onto the current-turn snapshot assistant only", () => {
+    const seeded: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "shared:1": [
+          {
+            id: "u1",
+            kind: "message",
+            role: "user",
+            text: "first",
+          },
+          {
+            id: "a1",
+            kind: "message",
+            role: "assistant",
+            text: "previous",
+            executionTargetSnapshot: { engine: "claude", model: "sonnet" },
+            runtimeReceipt: {
+              model: "old-runtime",
+              modelSource: "assistant.message.model",
+            },
+          },
+          {
+            id: "u2",
+            kind: "message",
+            role: "user",
+            text: "second",
+          },
+          {
+            id: "memory-pick-empty-1",
+            kind: "message",
+            role: "assistant",
+            text: "",
+          },
+          {
+            id: "a2",
+            kind: "message",
+            role: "assistant",
+            text: "current",
+            executionTargetSnapshot: { engine: "claude", model: "k3" },
+            runtimeReceipt: {
+              model: "k3",
+              modelSource: "send.request",
+            },
+          },
+        ],
+      },
+    };
+    const next = threadReducer(seeded, {
+      type: "patchAssistantRuntimeReceipt",
+      threadId: "shared:1",
+      runtimeReceipt: {
+        model: "deepseek-v4-flash",
+        modelSource: "system.init.model",
+      },
+    });
+    const items = next.itemsByThread["shared:1"] ?? [];
+    expect(items.find((item) => item.id === "a1")).toMatchObject({
+      runtimeReceipt: { model: "old-runtime" },
+    });
+    const memoryEmpty = items.find((item) => item.id === "memory-pick-empty-1");
+    if (memoryEmpty) {
+      expect(memoryEmpty).not.toHaveProperty("runtimeReceipt");
+    }
+    expect(items.find((item) => item.id === "a2")).toMatchObject({
+      runtimeReceipt: {
+        model: "deepseek-v4-flash",
+        modelSource: "system.init.model",
+      },
+    });
+  });
+
+  it("does not stamp a Native assistant that has no snapshot", () => {
+    const seeded: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "claude:1": [
+          {
+            id: "u1",
+            kind: "message",
+            role: "user",
+            text: "hi",
+          },
+          {
+            id: "a1",
+            kind: "message",
+            role: "assistant",
+            text: "native reply",
+          },
+        ],
+      },
+    };
+    const next = threadReducer(seeded, {
+      type: "patchAssistantRuntimeReceipt",
+      threadId: "claude:1",
+      runtimeReceipt: {
+        model: "deepseek-v4-flash",
+        modelSource: "system.init.model",
+      },
+    });
+    expect(next.itemsByThread["claude:1"]?.[1]).toEqual(
+      seeded.itemsByThread["claude:1"]?.[1],
+    );
+    expect(next.itemsByThread["claude:1"]?.[1]).not.toHaveProperty("runtimeReceipt");
+    expect(next.itemsByThread["claude:1"]?.[1]).not.toHaveProperty(
+      "executionTargetSnapshot",
+    );
   });
 });

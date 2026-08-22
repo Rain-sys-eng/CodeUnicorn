@@ -78,6 +78,8 @@ type BrowserDockProps = {
   enabled?: boolean;
   className?: string;
   onSessionChange?: (session: BrowserSession | null) => void;
+  /** 主窗口内嵌 Dock 才有：关掉整个 Browser Dock 分栏，不销毁 session。 */
+  onClosePanel?: () => void;
 };
 
 type TauriInternalsWindow = Window & {
@@ -146,6 +148,7 @@ export function BrowserDock({
   enabled,
   className,
   onSessionChange,
+  onClosePanel,
 }: BrowserDockProps) {
   useEffect(() => {
     void loadBrowserAgentStyles();
@@ -829,6 +832,7 @@ export function BrowserDock({
           }}
           onPopOut={() => void handlePopOut()}
           onEnable={() => void handleEnableBrowserAgent()}
+          onClosePanel={onClosePanel}
           setBusy={setBusy}
           setNotice={setNotice}
         />

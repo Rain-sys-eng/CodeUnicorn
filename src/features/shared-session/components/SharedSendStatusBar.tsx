@@ -38,7 +38,6 @@ import {
   sharedSessionV2ProbeBinding,
   sharedSessionV2RecoverAttempt,
   sharedSessionV2RebuildBinding,
-  sharedSessionV2TurnState,
 } from "../services/sharedSessions";
 import {
   canCancel,
@@ -61,6 +60,7 @@ import {
 import {
   invalidateRecoveryOwnerPrefetch,
   prefetchRecoveryOwner,
+  resolveSharedRecoveryOwner,
   takePrefetchedRecoveryOwner,
   yieldRecoveryClickPaint,
   type RecoveryOwner,
@@ -200,34 +200,9 @@ export function SharedSendStatusBar({
     if (!workspaceId || !threadId) {
       return { kind: "ambiguous" };
     }
-    const turnState = await sharedSessionV2TurnState(workspaceId, threadId);
-    const inFlight = turnState.inFlightAttempts ?? [];
-    if (inFlight.length > 1) {
-      setStoppableAttemptId(null);
-      return { kind: "ambiguous" };
-    }
-    const attempt = inFlight[0];
-    if (attempt) {
-      const attemptId = attempt.attemptId?.trim();
-      const bindingKey = attempt.bindingKey?.trim();
-      if (attemptId && bindingKey) {
-        setStoppableAttemptId(attemptId);
-        return { kind: "attempt", attemptId, bindingKey };
-      }
-      setStoppableAttemptId(null);
-      return { kind: "ambiguous" };
-    }
-    setStoppableAttemptId(null);
-    const recoveryBindings = (turnState.bindings ?? []).filter(
-      (binding) => binding.provisioningState === "recovery-required",
-    );
-    if (recoveryBindings.length > 1) {
-      return { kind: "ambiguous" };
-    }
-    const bindingKey = recoveryBindings[0]?.bindingKey?.trim();
-    return bindingKey
-      ? { kind: "binding", bindingKey }
-      : { kind: "clear" };
+    const owner = await resolveSharedRecoveryOwner(workspaceId, threadId);
+    setStoppableAttemptId(owner.kind === "attempt" ? owner.attemptId : null);
+    return owner;
   }, [workspaceId, threadId]);
 
   useEffect(() => {

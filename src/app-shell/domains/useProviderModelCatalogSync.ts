@@ -23,6 +23,7 @@ const PROVIDER_SCOPED_ENGINES = new Set<EngineType>([
   "pi",
   "dsh",
   "gemini",
+  "qoder",
 ]);
 
 /**

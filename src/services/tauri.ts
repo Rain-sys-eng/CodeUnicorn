@@ -203,8 +203,8 @@ export {
   writeClientCreatedSessionIndex,
   writeRemappedClientSessionIndex,
 } from "./tauri/sessionIndex";
-export type { CodexRuntimeReloadResult, DockIconApplyResult, SettingsRecoveryNotice } from "./tauri/settings";
-export { getAppSettings, getCodexConfigPath, getCodexUnifiedExecExternalStatus, reloadCodexRuntimeConfig, restoreCodexUnifiedExecOfficialDefault, setCodexUnifiedExecOfficialOverride, setDockIcon, takeSettingsRecoveryNotice, updateAppSettings } from "./tauri/settings";
+export type { CodexRuntimeReloadResult, DockIconApplyResult, ImportedWorkspaceWallpaper, SettingsRecoveryNotice, WallpaperMarketCategory, WallpaperMarketItem, WallpaperMarketSearchResult } from "./tauri/settings";
+export { downloadWorkspaceWallpaper, getAppSettings, getCodexConfigPath, getCodexUnifiedExecExternalStatus, importWorkspaceWallpaper, readWorkspaceWallpaperBytes, readWorkspaceWallpaperPreview, reloadCodexRuntimeConfig, removeWorkspaceWallpaper, restoreCodexUnifiedExecOfficialDefault, searchWorkspaceWallpaperMarket, setCodexUnifiedExecOfficialOverride, setDockIcon, takeSettingsRecoveryNotice, updateAppSettings } from "./tauri/settings";
 export type {
   AgentMdResponse,
   ClaudeMdResponse,
@@ -297,7 +297,7 @@ export type {
   BrowserSnapshotBudget,
   BrowserTextNode,
 } from "../features/browser-agent/types";
-export { previewCodexLaunchProfile, runClaudeDoctor, runCodexDoctor, runDshDoctor, runGrokDoctor, runKimiDoctor, runOpenCodeDoctor, runPiDoctor } from "./tauri/doctor";
+export { previewCodexLaunchProfile, runClaudeDoctor, runCodexDoctor, runDshDoctor, runGrokDoctor, runKimiDoctor, runOpenCodeDoctor, runPiDoctor, runQoderDoctor } from "./tauri/doctor";
 export { cancelDshHost, ensureDshHost } from "./tauri/dshHost";
 export type { DshHostEnsureResult } from "./tauri/dshHost";
 export { getCliInstallPlan, getCliVersionStatus, runCliInstaller } from "./tauri/cliInstaller";
@@ -648,6 +648,7 @@ export {
   deleteGrokSession,
   deleteKimiSession,
   deleteDshSession,
+  deleteQoderSession,
   deleteOpenCodeSession,
   deletePiSession,
   forkClaudeSession,
@@ -663,6 +664,7 @@ export {
   listKimiSessions,
   listPiSessions,
   listDshSessions,
+  listQoderSessions,
   listMcpServerStatus,
   listThreads,
   loadClaudeSession,
@@ -672,6 +674,7 @@ export {
   loadKimiSession,
   loadPiSession,
   loadDshSession,
+  loadQoderSession,
   resumeThread,
   rewindCodexThread,
   startThread,

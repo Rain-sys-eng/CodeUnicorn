@@ -145,7 +145,109 @@ pub(crate) fn open_connection() -> Result<Connection, String> {
            updated_ms INTEGER NOT NULL
          );",
     );
+    migrate_legacy_qoder_session_identities(&connection)?;
     Ok(connection)
+}
+
+/// Session Index historically keyed Qoder rows by raw ACP id. Global and CN
+/// may legitimately produce the same raw id, so upgrade old rows in place to
+/// the profile-qualified identity before any list or writer can observe them.
+/// The vendor history files remain untouched.
+fn migrate_legacy_qoder_session_identities(connection: &Connection) -> Result<(), String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT session_id, provider_profile_id, tombstoned_at
+             FROM session_index
+             WHERE engine = 'qoder'",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    if rows.is_empty() {
+        return Ok(());
+    }
+
+    let tx = connection
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    for (legacy_id, provider_profile_id, tombstoned_at) in rows {
+        let identity =
+            match crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
+                &legacy_id,
+                provider_profile_id.as_deref(),
+            ) {
+                Ok(identity) => identity,
+                Err(error) => {
+                    log::warn!(
+                    "[session-index] retained malformed Qoder identity `{}` during migration: {}",
+                    legacy_id,
+                    error
+                );
+                    continue;
+                }
+            };
+        let canonical_id = identity.canonical_id();
+        let canonical_provider_profile_id = identity.provider_profile_id;
+        if canonical_id == legacy_id {
+            tx.execute(
+                "UPDATE session_index SET provider_profile_id = ?1
+                 WHERE engine = 'qoder' AND session_id = ?2",
+                params![canonical_provider_profile_id, legacy_id],
+            )
+            .map_err(|error| error.to_string())?;
+            continue;
+        }
+        let canonical_exists = tx
+            .query_row(
+                "SELECT 1 FROM session_index WHERE engine = 'qoder' AND session_id = ?1",
+                [&canonical_id],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?
+            .is_some();
+        if canonical_exists {
+            if let Some(tombstoned_at) = tombstoned_at {
+                tx.execute(
+                    "UPDATE session_index
+                     SET tombstoned_at = COALESCE(tombstoned_at, ?1),
+                         provider_profile_id = ?2
+                     WHERE engine = 'qoder' AND session_id = ?3",
+                    params![tombstoned_at, canonical_provider_profile_id, canonical_id],
+                )
+                .map_err(|error| error.to_string())?;
+            } else {
+                tx.execute(
+                    "UPDATE session_index SET provider_profile_id = ?1
+                     WHERE engine = 'qoder' AND session_id = ?2",
+                    params![canonical_provider_profile_id, canonical_id],
+                )
+                .map_err(|error| error.to_string())?;
+            }
+            tx.execute(
+                "DELETE FROM session_index WHERE engine = 'qoder' AND session_id = ?1",
+                [&legacy_id],
+            )
+            .map_err(|error| error.to_string())?;
+        } else {
+            tx.execute(
+                "UPDATE session_index SET session_id = ?1, provider_profile_id = ?2
+                 WHERE engine = 'qoder' AND session_id = ?3",
+                params![canonical_id, canonical_provider_profile_id, legacy_id],
+            )
+            .map_err(|error| error.to_string())?;
+        }
+    }
+    tx.commit().map_err(|error| error.to_string())
 }
 
 pub(crate) fn now_ms() -> i64 {
@@ -254,7 +356,29 @@ pub(crate) fn upsert_rows(
             .map_err(|error| error.to_string())?;
         for row in rows {
             let engine = row.engine.trim().to_ascii_lowercase();
-            let session_id = row.session_id.trim();
+            let qoder_identity = (engine == "qoder")
+                .then(|| {
+                    crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
+                        &row.session_id,
+                        row.provider_profile_id.as_deref(),
+                    )
+                })
+                .transpose()?;
+            let qoder_session_id = qoder_identity.as_ref().map(
+                crate::engine::qoder_provider_profile::QoderNativeSessionIdentity::canonical_id,
+            );
+            let session_id = qoder_session_id
+                .as_deref()
+                .unwrap_or_else(|| row.session_id.trim());
+            let provider_profile_id = qoder_identity
+                .as_ref()
+                .map(|identity| identity.provider_profile_id)
+                .or_else(|| {
+                    row.provider_profile_id
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                });
             if engine.is_empty() || session_id.is_empty() {
                 continue;
             }
@@ -301,10 +425,7 @@ pub(crate) fn upsert_rows(
                         .map(str::trim)
                         .filter(|value| !value.is_empty()),
                     row.size_bytes.map(|value| value as i64),
-                    row.provider_profile_id
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty()),
+                    provider_profile_id,
                     row.provider_profile_name
                         .as_deref()
                         .map(str::trim)
@@ -427,7 +548,7 @@ pub(crate) fn invalidate_source_freshness(
 }
 
 const INDEX_LIST_ENGINES: &[&str] = &[
-    "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh",
+    "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
 ];
 
 fn list_slice_for_workspace_engine(
@@ -436,6 +557,11 @@ fn list_slice_for_workspace_engine(
     engine: &str,
     limit: usize,
 ) -> Result<Vec<SessionIndexRow>, String> {
+    let fetch_limit = if engine == "codex" {
+        (limit.saturating_mul(8)).clamp(limit, 500)
+    } else {
+        limit
+    };
     let mut statement = connection
         .prepare(
             "SELECT engine, session_id, title, native_title, updated_at, created_at,
@@ -449,12 +575,76 @@ fn list_slice_for_workspace_engine(
              LIMIT ?3",
         )
         .map_err(|error| error.to_string())?;
-    let rows = statement
-        .query_map(params![workspace_key, engine, limit as i64], map_row)
+    let mut rows = statement
+        .query_map(params![workspace_key, engine, fetch_limit as i64], map_row)
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
+    if engine == "codex" {
+        hydrate_missing_codex_parents(connection, workspace_key, &mut rows)?;
+        retain_codex_parent_tree_within_limit(&mut rows, limit);
+    }
     Ok(rows)
+}
+
+fn hydrate_missing_codex_parents(
+    connection: &Connection,
+    workspace_key: &str,
+    rows: &mut Vec<SessionIndexRow>,
+) -> Result<(), String> {
+    let mut existing = std::collections::HashSet::<String>::new();
+    for row in rows.iter() {
+        existing.insert(row.session_id.clone());
+        let bare = strip_known_engine_prefix(&row.session_id);
+        if !bare.is_empty() {
+            existing.insert(bare.to_string());
+        }
+        if let Some(uuid) = extract_codex_canonical_session_id(&row.session_id) {
+            existing.insert(uuid);
+        }
+    }
+    let missing: Vec<String> = rows
+        .iter()
+        .filter_map(|row| row.parent_session_id.clone())
+        .filter(|parent| {
+            let bare = strip_known_engine_prefix(parent);
+            if existing.contains(parent) || existing.contains(bare) {
+                return false;
+            }
+            extract_codex_canonical_session_id(parent)
+                .map(|uuid| !existing.contains(&uuid))
+                .unwrap_or(true)
+        })
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let mut statement = connection
+        .prepare(
+            "SELECT engine, session_id, title, native_title, updated_at, created_at,
+                    cwd, workspace_path, physical_path, parent_session_id, size_bytes,
+                    provider_profile_id, provider_profile_name
+             FROM session_index
+             WHERE engine = 'codex'
+               AND tombstoned_at IS NULL
+               AND (workspace_path = ?1 OR cwd = ?1)
+               AND (session_id = ?2 OR session_id = ?3)",
+        )
+        .map_err(|error| error.to_string())?;
+    for parent in missing {
+        let bare = strip_known_engine_prefix(&parent);
+        let fetched = statement
+            .query_map(params![workspace_key, parent, bare], map_row)
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        for row in fetched {
+            if existing.insert(row.session_id.clone()) {
+                rows.push(row);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn row_matches_workspace(row: &SessionIndexRow, key: &str) -> bool {
@@ -743,9 +933,35 @@ pub(crate) fn tombstone_session_ids(
              ON CONFLICT(engine, session_id) DO NOTHING",
         )
         .map_err(|error| error.to_string())?;
+    let mut qoder_statement = connection
+        .prepare(
+            "UPDATE session_index
+             SET tombstoned_at = COALESCE(tombstoned_at, ?1)
+             WHERE engine = 'qoder' AND (session_id = ?2 OR session_id = ?3)",
+        )
+        .map_err(|error| error.to_string())?;
     for raw in session_ids {
         let full = raw.trim();
         if full.is_empty() {
+            continue;
+        }
+        if full.starts_with(crate::engine::qoder_provider_profile::QODER_NATIVE_SESSION_PREFIX) {
+            let identity =
+                crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
+                    full, None,
+                )?;
+            let canonical_id = identity.canonical_id();
+            let legacy_raw_id = if identity.is_legacy {
+                identity.raw_session_id
+            } else {
+                String::new()
+            };
+            updated += qoder_statement
+                .execute(params![marked_at, canonical_id, legacy_raw_id])
+                .map_err(|error| error.to_string())? as usize;
+            marker
+                .execute(params!["qoder", canonical_id, marked_at])
+                .map_err(|error| error.to_string())?;
             continue;
         }
         let engine_hint = full
@@ -811,7 +1027,16 @@ pub(crate) fn tombstone_engine_sessions(
         .map_err(|error| error.to_string())?;
     for (engine, session_id) in pairs {
         let engine = engine.trim().to_ascii_lowercase();
-        let session_id = session_id.trim();
+        let qoder_session_id = (engine == "qoder")
+            .then(|| {
+                crate::engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                    session_id, None,
+                )
+            })
+            .transpose()?;
+        let session_id = qoder_session_id
+            .as_deref()
+            .unwrap_or_else(|| session_id.trim());
         if engine.is_empty() || session_id.is_empty() {
             continue;
         }
@@ -841,7 +1066,16 @@ pub(crate) fn delete_engine_session_rows(
         .map_err(|error| error.to_string())?;
     for (engine, session_id) in pairs {
         let engine = engine.trim().to_ascii_lowercase();
-        let session_id = session_id.trim();
+        let qoder_session_id = (engine == "qoder")
+            .then(|| {
+                crate::engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                    session_id, None,
+                )
+            })
+            .transpose()?;
+        let session_id = qoder_session_id
+            .as_deref()
+            .unwrap_or_else(|| session_id.trim());
         if engine.is_empty() || session_id.is_empty() {
             continue;
         }
@@ -850,6 +1084,172 @@ pub(crate) fn delete_engine_session_rows(
             .map_err(|error| error.to_string())? as usize;
     }
     Ok(deleted)
+}
+
+fn strip_known_engine_prefix(id: &str) -> &str {
+    const PREFIXES: [&str; 8] = [
+        "codex:",
+        "claude:",
+        "kimi:",
+        "grok:",
+        "opencode:",
+        "pi:",
+        "gemini:",
+        "dsh:",
+    ];
+    let lower = id.to_ascii_lowercase();
+    for prefix in PREFIXES {
+        if lower.starts_with(prefix) {
+            return id[prefix.len()..].trim();
+        }
+    }
+    id
+}
+
+fn looks_like_uuid(value: &str) -> bool {
+    if value.len() != 36 {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        if index == 8 || index == 13 || index == 18 || index == 23 {
+            if byte != b'-' {
+                return false;
+            }
+            continue;
+        }
+        if !byte.is_ascii_hexdigit() {
+            return false;
+        }
+    }
+    true
+}
+
+fn extract_codex_canonical_session_id(id: &str) -> Option<String> {
+    let bare = strip_known_engine_prefix(id);
+    if looks_like_uuid(bare) {
+        return Some(bare.to_ascii_lowercase());
+    }
+    let Some(suffix) = bare.strip_prefix("rollout-") else {
+        return None;
+    };
+    let Some((_, uuid)) = suffix.rsplit_once('-') else {
+        return None;
+    };
+    if looks_like_uuid(uuid) {
+        Some(uuid.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+fn remember_codex_identity_keys(
+    visible_id_by_identifier: &mut std::collections::HashMap<String, String>,
+    visible_id: &str,
+) {
+    visible_id_by_identifier
+        .entry(visible_id.to_string())
+        .or_insert_with(|| visible_id.to_string());
+    let bare = strip_known_engine_prefix(visible_id);
+    if !bare.is_empty() {
+        visible_id_by_identifier
+            .entry(bare.to_string())
+            .or_insert_with(|| visible_id.to_string());
+    }
+    if let Some(uuid) = extract_codex_canonical_session_id(visible_id) {
+        visible_id_by_identifier
+            .entry(uuid.clone())
+            .or_insert_with(|| visible_id.to_string());
+        visible_id_by_identifier
+            .entry(format!("codex:{uuid}"))
+            .or_insert_with(|| visible_id.to_string());
+    }
+}
+
+fn resolve_visible_parent_id(
+    parent_session_id: &str,
+    visible_id_by_identifier: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    if let Some(visible) = visible_id_by_identifier.get(parent_session_id) {
+        return Some(visible.clone());
+    }
+    let bare = strip_known_engine_prefix(parent_session_id);
+    if let Some(visible) = visible_id_by_identifier.get(bare) {
+        return Some(visible.clone());
+    }
+    let uuid = extract_codex_canonical_session_id(parent_session_id)?;
+    visible_id_by_identifier.get(&uuid).cloned().or_else(|| {
+        visible_id_by_identifier
+            .get(&format!("codex:{uuid}"))
+            .cloned()
+    })
+}
+
+fn retain_codex_parent_tree_within_limit(rows: &mut Vec<SessionIndexRow>, requested_limit: usize) {
+    if rows.is_empty() || requested_limit == 0 {
+        rows.clear();
+        return;
+    }
+
+    let mut visible_id_by_identifier = std::collections::HashMap::<String, String>::new();
+    for row in rows.iter() {
+        remember_codex_identity_keys(&mut visible_id_by_identifier, &row.session_id);
+    }
+
+    let mut keep: Vec<String> = Vec::new();
+    let mut keep_set = std::collections::HashSet::<String>::new();
+    let mut kept_roots = 0usize;
+    for row in rows.iter() {
+        let parent_id = row
+            .parent_session_id
+            .as_deref()
+            .and_then(|parent| resolve_visible_parent_id(parent, &visible_id_by_identifier))
+            .filter(|parent| parent != &row.session_id);
+        if parent_id.is_some() {
+            continue;
+        }
+        if kept_roots >= requested_limit {
+            continue;
+        }
+        if keep_set.insert(row.session_id.clone()) {
+            keep.push(row.session_id.clone());
+            kept_roots += 1;
+        }
+    }
+
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for row in rows.iter() {
+            if keep_set.contains(&row.session_id) {
+                continue;
+            }
+            let Some(parent_id) = row
+                .parent_session_id
+                .as_deref()
+                .and_then(|parent| resolve_visible_parent_id(parent, &visible_id_by_identifier))
+            else {
+                continue;
+            };
+            if keep_set.contains(&parent_id) && keep_set.insert(row.session_id.clone()) {
+                keep.push(row.session_id.clone());
+                grew = true;
+            }
+        }
+    }
+
+    let order: std::collections::HashMap<String, usize> = keep
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (id.clone(), index))
+        .collect();
+    rows.retain(|row| keep_set.contains(&row.session_id));
+    rows.sort_by(|left, right| {
+        order
+            .get(&left.session_id)
+            .cmp(&order.get(&right.session_id))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+    });
 }
 
 fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionIndexRow> {
@@ -1122,6 +1522,93 @@ mod tests {
     }
 
     #[test]
+    fn qoder_same_raw_id_keeps_global_and_cn_rows_isolated() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        let mut global = index_row("qoder", "same-qoder-session", 200);
+        global.provider_profile_id = Some("__qoder_global__".into());
+        global.provider_profile_name = Some("Qoder Global".into());
+        let mut cn = index_row("qoder", "same-qoder-session", 201);
+        cn.provider_profile_id = Some("__qoder_cn__".into());
+        cn.provider_profile_name = Some("Qoder CN".into());
+
+        upsert_rows(&connection, &[global, cn]).expect("upsert both distributions");
+        let rows = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().any(|row| {
+            row.session_id == "qoder:__qoder_global__:same-qoder-session"
+                && row.provider_profile_id.as_deref() == Some("__qoder_global__")
+        }));
+        assert!(rows.iter().any(|row| {
+            row.session_id == "qoder:__qoder_cn__:same-qoder-session"
+                && row.provider_profile_id.as_deref() == Some("__qoder_cn__")
+        }));
+
+        let updated = tombstone_session_ids(
+            &connection,
+            &["qoder:__qoder_global__:same-qoder-session".into()],
+        )
+        .expect("tombstone Global only");
+        assert_eq!(updated, 1);
+        let remaining = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(
+            remaining[0].session_id,
+            "qoder:__qoder_cn__:same-qoder-session"
+        );
+    }
+
+    #[test]
+    fn qoder_legacy_row_migrates_using_its_durable_cn_owner() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        connection
+            .execute(
+                "INSERT INTO session_index (
+                    engine, session_id, title, updated_at, indexed_at, provider_profile_id
+                 ) VALUES ('qoder', 'legacy-qoder-session', 'Legacy', 1, 1, '__qoder_cn__')",
+                [],
+            )
+            .expect("seed legacy CN row");
+
+        migrate_legacy_qoder_session_identities(&connection).expect("migrate legacy row");
+        let session_id: String = connection
+            .query_row(
+                "SELECT session_id FROM session_index WHERE engine = 'qoder'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read migrated row");
+        assert_eq!(session_id, "qoder:__qoder_cn__:legacy-qoder-session");
+        let provider_profile_id: String = connection
+            .query_row(
+                "SELECT provider_profile_id FROM session_index WHERE engine = 'qoder'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read migrated profile");
+        assert_eq!(provider_profile_id, "__qoder_cn__");
+    }
+
+    #[test]
+    fn qoder_upsert_makes_legacy_global_owner_explicit() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        let row = index_row("qoder", "legacy-global-session", 1);
+
+        upsert_rows(&connection, &[row]).expect("upsert legacy Global row");
+        let (session_id, provider_profile_id): (String, String) = connection
+            .query_row(
+                "SELECT session_id, provider_profile_id FROM session_index WHERE engine = 'qoder'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read canonical Qoder row");
+        assert_eq!(session_id, "qoder:__qoder_global__:legacy-global-session");
+        assert_eq!(provider_profile_id, "__qoder_global__");
+    }
+
+    #[test]
     fn tombstone_unknown_id_blocks_later_rescan_resurrection() {
         let connection = Connection::open_in_memory().expect("open");
         connection.execute_batch(DDL).expect("ddl");
@@ -1150,6 +1637,68 @@ mod tests {
             listed.is_empty(),
             "bare-id tombstone markers must cover every known engine"
         );
+    }
+
+    #[test]
+    fn list_keeps_codex_parent_when_philosopher_pups_are_newer() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        let parent_id = "01a01b3c-db39-7362-9505-3e3535f4b878";
+        let mut rows = vec![index_row("codex", parent_id, 100)];
+        for (index, name) in [
+            "Socrates",
+            "Beauvoir",
+            "Faraday",
+            "Heisenberg",
+            "Bohr",
+            "Anscombe",
+            "Volta",
+            "Cicero",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut child = index_row("codex", &format!("pup-{index}-{name}"), 400 + index as i64);
+            child.title = name.into();
+            child.parent_session_id = Some(parent_id.into());
+            rows.push(child);
+        }
+        rows.push(index_row("claude", "claude-recent", 500));
+        upsert_rows(&connection, &rows).expect("upsert");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2).expect("list");
+        assert!(
+            listed.iter().any(|row| row.session_id == parent_id),
+            "parent must survive newer Codex philosopher pups"
+        );
+        assert!(listed.iter().any(|row| row.session_id == "claude-recent"));
+        assert!(
+            listed
+                .iter()
+                .any(|row| row.parent_session_id.as_deref() == Some(parent_id)),
+            "visible pups stay nested under the retained parent"
+        );
+    }
+
+    #[test]
+    fn list_hydrates_older_codex_parent_outside_mtime_window() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        let parent_id = "01a01b3c-db39-7362-9505-3e3535f4b878";
+        let mut rows = vec![index_row("codex", parent_id, 1)];
+        for index in 0..20 {
+            let mut child = index_row("codex", &format!("pup-{index}"), 1000 + index);
+            child.parent_session_id = Some(parent_id.into());
+            rows.push(child);
+        }
+        upsert_rows(&connection, &rows).expect("upsert");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2).expect("list");
+        assert!(
+            listed.iter().any(|row| row.session_id == parent_id),
+            "parent outside the mtime window must still be hydrated"
+        );
+        assert!(listed
+            .iter()
+            .any(|row| row.parent_session_id.as_deref() == Some(parent_id)));
     }
 
     #[test]
@@ -1296,7 +1845,7 @@ mod tests {
         let writers = include_str!("writers.rs");
         let commands = include_str!("commands.rs");
         let required = [
-            "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh",
+            "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
         ];
         let engine_table = store
             .split("const INDEX_LIST_ENGINES")

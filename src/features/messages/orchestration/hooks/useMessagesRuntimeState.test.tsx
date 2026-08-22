@@ -28,7 +28,7 @@ function buildRuntimeInput(
     labels: {
       approvalResumingAfterApproval: "resuming",
       codexSilentSuspected: "silent",
-      codexWaitingForFirstText: "waiting",
+      waitingForFirstText: "waiting",
       contextCompacting: "compacting",
     },
     nativeRuntimeRecoveryEnabled: true,

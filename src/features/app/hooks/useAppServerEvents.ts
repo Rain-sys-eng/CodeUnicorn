@@ -24,15 +24,27 @@ import { resolveConversationAssemblyMigrationGate } from "../../threads/assembly
 import { hydrateToolSnapshotWithEventParams } from "../../threads/adapters/toolSnapshotHydration";
 import { isGeneratedImageToolName } from "../../../utils/generatedImageArtifacts";
 import {
+  hasPendingSharedSessionBindingForEngine,
   rebindSharedSessionNativeThread,
   resolvePendingSharedSessionBindingForEngine,
+  resolvePendingSharedSessionBindingForTarget,
   resolveSharedSessionBindingByNativeThread,
   resolveSharedSessionBindingFromRuntimeOwner,
   resolveSharedRuntimeControlOwner,
 } from "../../shared-session/runtime/sharedSessionBridge";
+import { isSharedSessionSupportedEngine } from "../../shared-session/utils/sharedSessionEngines";
+import {
+  canonicalQoderThreadId,
+  parseQoderSessionIdentity,
+} from "../../threads/utils/qoderSessionIdentity";
 import { isSharedV2SendEnabled } from "../../shared-session/runtime/sharedV2SendFlag";
 import type { SharedSessionNativeBinding } from "../../shared-session/runtime/sharedSessionBridge";
 import { getActiveTurnTargetForAttempt } from "../../shared-session/target/targetStore";
+import {
+  extractRuntimeModelFromPayload,
+  getRuntimeReceipt,
+  rememberRuntimeReceipt,
+} from "../../threads/utils/runtimeModelReceipt";
 import { updateSharedSessionNativeBinding as updateSharedSessionNativeBindingService } from "../../shared-session/services/sharedSessions";
 import { noteThreadAppServerEventReceived } from "../../threads/utils/streamLatencyDiagnostics";
 import {
@@ -108,7 +120,7 @@ export type AppServerEventHandlers = {
     workspaceId: string,
     threadId: string,
     sessionId: string,
-    engine?: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+    engine?: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
     turnId?: string | null,
   ) => void;
   onBackgroundThreadAction?: (
@@ -219,14 +231,14 @@ export type AppServerEventHandlers = {
     threadId: string,
     itemId: string,
     delta: string,
-    engineHint?: "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+    engineHint?: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
     turnId?: string | null,
   ) => void;
   onReasoningSummaryBoundary?: (
     workspaceId: string,
     threadId: string,
     itemId: string,
-    engineHint?: "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+    engineHint?: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
     turnId?: string | null,
   ) => void;
   onReasoningTextDelta?: (
@@ -234,7 +246,7 @@ export type AppServerEventHandlers = {
     threadId: string,
     itemId: string,
     delta: string,
-    engineHint?: "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+    engineHint?: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
     turnId?: string | null,
   ) => void;
   onCommandOutputDelta?: (
@@ -267,6 +279,13 @@ export type AppServerEventHandlers = {
     workspaceId: string,
     threadId: string,
     tokenUsage: Record<string, unknown>,
+  ) => void;
+  onAssistantRuntimeReceipt?: (
+    workspaceId: string,
+    threadId: string,
+    runtimeReceipt: NonNullable<
+      Extract<import("../../../types").ConversationItem, { kind: "message" }>["runtimeReceipt"]
+    >,
   ) => void;
   onAccountRateLimitsUpdated?: (
     workspaceId: string,
@@ -307,6 +326,80 @@ const DEFAULT_APP_SERVER_EVENT_BATCH_CHUNK_SIZE = 64;
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value ? String(value) : "";
+}
+
+function emitAssistantRuntimeReceipt(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  incoming: Parameters<typeof rememberRuntimeReceipt>[2],
+) {
+  const receipt = rememberRuntimeReceipt(workspaceId, threadId, incoming);
+  if (!receipt) {
+    return;
+  }
+  handlers.onAssistantRuntimeReceipt?.(workspaceId, threadId, receipt);
+}
+
+function maybeCaptureRuntimeReceipt(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  method: string,
+  params: Record<string, unknown>,
+  sharedThreadId?: string | null,
+  options?: { skip?: boolean },
+) {
+  if (options?.skip) {
+    return;
+  }
+  const isRaw = method.endsWith("/raw");
+  const isTurnCompleted = method === "turn/completed";
+  if (!isRaw && !isTurnCompleted) {
+    return;
+  }
+  const rawType = asString(params.type).trim().toLowerCase();
+  const subtype = asString(params.subtype).trim().toLowerCase();
+  const isRuntimeModelSidecar = rawType === "runtime_model";
+  const isAssistantIdentity =
+    rawType === "assistant" ||
+    subtype === "assistant.message.model" ||
+    subtype.includes("assistant");
+  const isInitIdentity =
+    rawType === "system" ||
+    subtype === "system.init.model" ||
+    subtype.includes("init");
+  if (isRaw && !isRuntimeModelSidecar && !isAssistantIdentity && !isInitIdentity) {
+    return;
+  }
+  const threadId = sharedThreadId || extractThreadIdFromParams(params);
+  if (!threadId || !threadId.startsWith("shared:")) {
+    return;
+  }
+  const result = asRecord(params.result);
+  const model = extractRuntimeModelFromPayload(params) ??
+    extractRuntimeModelFromPayload(result);
+  if (!model) {
+    return;
+  }
+  const modelSource = isTurnCompleted
+    ? "turn.completed"
+    : isRuntimeModelSidecar && isInitIdentity
+      ? "system.init.model"
+      : isAssistantIdentity || isRuntimeModelSidecar
+        ? "assistant.message.model"
+        : isInitIdentity
+          ? "system.init.model"
+          : "assistant.message.model";
+  emitAssistantRuntimeReceipt(handlers, workspaceId, threadId, {
+    model,
+    modelSource,
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function parseOptionalBoolean(value: unknown): boolean | null {
@@ -574,6 +667,7 @@ function extractAgentMessageDeltaPayload(
     !isGrokThreadId(threadId) &&
     !isKimiThreadId(threadId) &&
     !isPiThreadId(threadId) &&
+    !isQoderThreadId(threadId) &&
     !isDshThreadId(threadId)
   ) {
     return null;
@@ -725,6 +819,10 @@ function isPiThreadId(threadId: string): boolean {
   return threadId.startsWith("pi:") || threadId.startsWith("pi-pending-");
 }
 
+function isQoderThreadId(threadId: string): boolean {
+  return threadId.startsWith("qoder:") || threadId.startsWith("qoder-pending-");
+}
+
 function isGrokThreadId(threadId: string): boolean {
   return (
     threadId.startsWith("grok:") || threadId.startsWith("grok-pending-")
@@ -739,7 +837,7 @@ function isDshThreadId(threadId: string): boolean {
 
 function inferGeminiReasoningHintFromThreadId(
   threadId: string,
-): "gemini" | "grok" | "kimi" | "pi" | "dsh" | null {
+): "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null {
   if (!threadId) {
     return null;
   }
@@ -752,6 +850,9 @@ function inferGeminiReasoningHintFromThreadId(
   if (isPiThreadId(threadId)) {
     return "pi";
   }
+  if (isQoderThreadId(threadId)) {
+    return "qoder";
+  }
   if (isDshThreadId(threadId)) {
     return "dsh";
   }
@@ -760,7 +861,7 @@ function inferGeminiReasoningHintFromThreadId(
 
 function inferRawMethodEngine(
   method: string,
-): "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | undefined {
+): "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | undefined {
   switch (method) {
     case "claude/raw":
       return "claude";
@@ -776,6 +877,8 @@ function inferRawMethodEngine(
       return "opencode";
     case "pi/raw":
       return "pi";
+    case "qoder/raw":
+      return "qoder";
     case "dsh/raw":
       return "dsh";
     default:
@@ -819,17 +922,92 @@ function isCodexRawGeneratedImageEvent(
 }
 
 function shouldRebindSharedNativeThreadOnStartedEvent(
-  engine: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi",
+  engine: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "qoder",
 ): boolean {
   // Claude 与 local CLIs 在 thread/started 上可能从 pending 占位收敛到
   // `engine:{sessionId}`；Codex 使用 raw thread id，不在此路径做前缀 rebind。
+  // Qoder 终态 id 额外带 distribution：`qoder:<profile>:<sessionId>`。
   return (
     engine === "claude" ||
     engine === "kimi" ||
     engine === "grok" ||
     engine === "pi" ||
-    engine === "opencode"
+    engine === "opencode" ||
+    engine === "qoder"
   );
+}
+
+function readEventProviderProfileId(
+  params: Record<string, unknown>,
+  thread: Record<string, unknown> | null,
+): string | null {
+  const owner =
+    params.sharedOwner && typeof params.sharedOwner === "object"
+      ? (params.sharedOwner as Record<string, unknown>)
+      : null;
+  const snapshot =
+    owner?.executionTargetSnapshot &&
+    typeof owner.executionTargetSnapshot === "object"
+      ? (owner.executionTargetSnapshot as Record<string, unknown>)
+      : null;
+  const candidates = [
+    params.providerProfileId,
+    params.provider_profile_id,
+    thread?.providerProfileId,
+    thread?.provider_profile_id,
+    owner?.providerProfileId,
+    owner?.provider_profile_id,
+    snapshot?.providerProfileId,
+    snapshot?.provider_profile_id,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function resolveThreadStartedProviderProfileId(params: {
+  params: Record<string, unknown>;
+  thread: Record<string, unknown> | null;
+  threadId: string;
+  sessionId: string;
+  eventEngine: string | null;
+}): string | null {
+  const fromEvent = readEventProviderProfileId(params.params, params.thread);
+  if (fromEvent) {
+    return fromEvent;
+  }
+  if (params.eventEngine !== "qoder") {
+    return null;
+  }
+  for (const value of [params.threadId, params.sessionId]) {
+    const identity = parseQoderSessionIdentity(value);
+    if (identity && !identity.isLegacy) {
+      return identity.providerProfileId;
+    }
+  }
+  return null;
+}
+
+function resolveFinalizedSharedNativeThreadId(
+  eventEngine:
+    | "claude"
+    | "opencode"
+    | "codex"
+    | "gemini"
+    | "grok"
+    | "kimi"
+    | "pi"
+    | "qoder",
+  sessionId: string,
+  providerProfileId: string | null,
+): string | null {
+  if (eventEngine === "qoder") {
+    return canonicalQoderThreadId(sessionId, providerProfileId);
+  }
+  return `${eventEngine}:${sessionId}`;
 }
 
 function isAgentMessageSnapshotMethod(method: string): boolean {
@@ -1080,7 +1258,7 @@ function emitReasoningSummaryDelta(
   threadId: string,
   itemId: string,
   delta: string,
-  engineHint: "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+  engineHint: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
   turnId: string | null,
 ): void {
   if (turnId) {
@@ -1112,7 +1290,7 @@ function emitReasoningSummaryBoundary(
   workspaceId: string,
   threadId: string,
   itemId: string,
-  engineHint: "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+  engineHint: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
   turnId: string | null,
 ): void {
   if (turnId) {
@@ -1143,7 +1321,7 @@ function emitReasoningTextDelta(
   threadId: string,
   itemId: string,
   delta: string,
-  engineHint: "gemini" | "grok" | "kimi" | "pi" | "dsh" | null,
+  engineHint: "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null,
   turnId: string | null,
 ): void {
   if (turnId) {
@@ -1435,7 +1613,7 @@ function routeNormalizedRealtimeEvent({
         threadId,
         itemId,
         delta,
-        event.engine === "gemini" || event.engine === "grok" || event.engine === "kimi" || event.engine === "pi" ? event.engine : null,
+        event.engine === "gemini" || event.engine === "grok" || event.engine === "kimi" || event.engine === "pi" || event.engine === "qoder" ? event.engine : null,
         turnId,
       );
       return true;
@@ -1450,7 +1628,7 @@ function routeNormalizedRealtimeEvent({
         workspaceId,
         threadId,
         itemId,
-        event.engine === "gemini" || event.engine === "grok" || event.engine === "kimi" || event.engine === "pi" ? event.engine : null,
+        event.engine === "gemini" || event.engine === "grok" || event.engine === "kimi" || event.engine === "pi" || event.engine === "qoder" ? event.engine : null,
         turnId,
       );
       return true;
@@ -1479,7 +1657,7 @@ function routeNormalizedRealtimeEvent({
         threadId,
         itemId,
         delta,
-        event.engine === "gemini" || event.engine === "grok" || event.engine === "kimi" || event.engine === "pi" ? event.engine : null,
+        event.engine === "gemini" || event.engine === "grok" || event.engine === "kimi" || event.engine === "pi" || event.engine === "qoder" ? event.engine : null,
         turnId,
       );
       return true;
@@ -1540,7 +1718,7 @@ function tryRouteNormalizedRealtimeEvent({
   handlers: AppServerEventHandlers;
   workspaceId: string;
   message: Record<string, unknown>;
-  engineOverride?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh";
+  engineOverride?: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder";
   threadIdOverride?: string;
   sharedBinding?: SharedSessionNativeBinding | null;
   threadAgentDeltaSeenRef: MutableRefObject<Record<string, true>>;
@@ -1578,6 +1756,9 @@ function tryRouteNormalizedRealtimeEvent({
     return false;
   }
   const isSharedOwnerProjection = effectiveThreadId.startsWith("shared:");
+  const runtimeReceipt = isSharedOwnerProjection
+    ? getRuntimeReceipt(workspaceId, effectiveThreadId)
+    : null;
   if (shouldInjectThreadId || isSharedOwnerProjection) {
     // agent-canvas: 事件写到隔离 thread，但 activeTurn 挂在 shared: 上
     const activeTurnThreadId = isAgentCanvasThreadId(effectiveThreadId)
@@ -1593,14 +1774,18 @@ function tryRouteNormalizedRealtimeEvent({
             sharedBinding.attemptId,
           )
         : null);
-    normalized.threadId = effectiveThreadId;
+    if (shouldInjectThreadId || isSharedOwnerProjection) {
+      normalized.threadId = effectiveThreadId;
+    }
     normalized.item = {
       ...normalized.item,
       engineSource: engine,
-      ...(executionTargetSnapshot &&
-      normalized.item.kind === "message" &&
+      ...(normalized.item.kind === "message" &&
       normalized.item.role === "assistant"
-        ? { executionTargetSnapshot }
+        ? {
+            ...(executionTargetSnapshot ? { executionTargetSnapshot } : {}),
+            ...(runtimeReceipt ? { runtimeReceipt } : {}),
+          }
         : {}),
     };
     if (normalized.rawItem) {
@@ -1719,6 +1904,18 @@ export function dispatchAppServerEvent(
     (realtimeThreadId
       ? resolveSharedSessionBindingByNativeThread(workspace_id, realtimeThreadId)
       : null);
+  maybeCaptureRuntimeReceipt(
+    handlers,
+    workspace_id,
+    method,
+    params,
+    sharedBridge?.sharedThreadId ?? null,
+    {
+      skip:
+        isAgentAttempt(sharedBridge?.attemptId) ||
+        Boolean(sharedBridge?.bindingKey?.startsWith("squad:")),
+    },
+  );
   // Multi-Agent worker realtime：不进主幕 shared: 时间线，但必须复用主幕同源
   // adapter + liveAssistantTextChannel（agent-canvas: 作用域）。禁止旁路抠字。
   if (
@@ -1762,6 +1959,7 @@ export function dispatchAppServerEvent(
         | "opencode"
         | "dsh"
         | "pi"
+        | "qoder"
         | undefined);
     if (
       tryRouteNormalizedRealtimeEvent({
@@ -2098,25 +2296,34 @@ export function dispatchAppServerEvent(
       rawEngine === "kimi" ||
       rawEngine === "gemini" ||
       rawEngine === "pi" ||
-      rawEngine === "dsh"
+      rawEngine === "dsh" ||
+      rawEngine === "qoder"
         ? rawEngine
         : null;
 
+    const eventProviderProfileId = resolveThreadStartedProviderProfileId({
+      params,
+      thread,
+      threadId,
+      sessionId,
+      eventEngine,
+    });
+    let skipNativeThreadStart = false;
     if (
       !sharedBridge &&
       threadId &&
       eventEngine &&
-      (eventEngine === "codex" ||
-        eventEngine === "claude" ||
-        eventEngine === "kimi" ||
-        eventEngine === "grok" ||
-        eventEngine === "pi" ||
-        eventEngine === "opencode")
+      isSharedSessionSupportedEngine(eventEngine)
     ) {
-      const pendingBinding = resolvePendingSharedSessionBindingForEngine(
-        workspace_id,
-        eventEngine,
-      );
+      const pendingBinding =
+        resolvePendingSharedSessionBindingForTarget(
+          workspace_id,
+          eventEngine,
+          eventProviderProfileId,
+        ) ??
+        (eventEngine === "qoder" && !eventProviderProfileId
+          ? resolvePendingSharedSessionBindingForEngine(workspace_id, eventEngine)
+          : null);
       if (pendingBinding) {
         if (pendingBinding.nativeThreadId !== threadId) {
           const rebound = rebindSharedSessionNativeThread({
@@ -2143,6 +2350,11 @@ export function dispatchAppServerEvent(
         } else {
           sharedBridge = pendingBinding;
         }
+      } else if (
+        hasPendingSharedSessionBindingForEngine(workspace_id, eventEngine)
+      ) {
+        // 同 engine 多条 pending 无法唯一认主时，禁止 Native 开行。
+        skipNativeThreadStart = true;
       }
     }
 
@@ -2155,8 +2367,12 @@ export function dispatchAppServerEvent(
         eventEngine !== "dsh" &&
         shouldRebindSharedNativeThreadOnStartedEvent(eventEngine)
       ) {
-        const finalizedNativeThreadId = `${eventEngine}:${sessionId}`;
-        if (threadId !== finalizedNativeThreadId) {
+        const finalizedNativeThreadId = resolveFinalizedSharedNativeThreadId(
+          eventEngine,
+          sessionId,
+          eventProviderProfileId ?? sharedBridge.providerProfileId ?? null,
+        );
+        if (finalizedNativeThreadId && threadId !== finalizedNativeThreadId) {
           const rebound = rebindSharedSessionNativeThread({
             workspaceId: workspace_id,
             oldNativeThreadId: threadId,
@@ -2178,6 +2394,9 @@ export function dispatchAppServerEvent(
       }
       return;
     }
+    if (skipNativeThreadStart) {
+      return;
+    }
 
     if (
       threadId &&
@@ -2186,15 +2405,25 @@ export function dispatchAppServerEvent(
       eventEngine &&
       threadId.startsWith(`${eventEngine}-pending-`)
     ) {
-      migrateThreadAgentEventTracking({
-        sourceThreadId: threadId,
-        targetThreadId: `${eventEngine}:${sessionId}`,
-        threadAgentDeltaSeenRef,
-        nestedTrackerRefs: [
-          threadAgentCompletedSeenRef,
-          threadAgentSnapshotSeenRef,
-        ],
-      });
+      const migratedThreadId =
+        eventEngine === "qoder"
+          ? resolveFinalizedSharedNativeThreadId(
+              eventEngine,
+              sessionId,
+              eventProviderProfileId,
+            )
+          : `${eventEngine}:${sessionId}`;
+      if (migratedThreadId) {
+        migrateThreadAgentEventTracking({
+          sourceThreadId: threadId,
+          targetThreadId: migratedThreadId,
+          threadAgentDeltaSeenRef,
+          nestedTrackerRefs: [
+            threadAgentCompletedSeenRef,
+            threadAgentSnapshotSeenRef,
+          ],
+        });
+      }
     }
 
     // If we have a real sessionId (not "pending"), notify for thread ID update
@@ -2546,6 +2775,7 @@ export function dispatchAppServerEvent(
         ) {
           return false;
         }
+        const runtimeReceipt = getRuntimeReceipt(workspace_id, threadId);
         handlers.onNormalizedRealtimeEvent({
           engine: sharedBridge.engine,
           workspaceId: workspace_id,
@@ -2561,6 +2791,7 @@ export function dispatchAppServerEvent(
             isFinal: true,
             engineSource: sharedBridge.engine,
             executionTargetSnapshot: sharedBridge.executionTargetSnapshot,
+            ...(runtimeReceipt ? { runtimeReceipt } : {}),
           },
           operation: "completeAgentMessage",
           sourceMethod: method,
@@ -2804,6 +3035,22 @@ export function dispatchAppServerEvent(
       (params.token_usage as Record<string, unknown> | undefined);
     if (threadId && tokenUsage) {
       handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
+      const windowTokens = Number(
+        tokenUsage.modelContextWindow ?? tokenUsage.model_context_window,
+      );
+      if (
+        threadId.startsWith("shared:") &&
+        !isAgentAttempt(sharedBridge?.attemptId) &&
+        !sharedBridge?.bindingKey?.startsWith("squad:") &&
+        Number.isFinite(windowTokens) &&
+        windowTokens > 0
+      ) {
+        emitAssistantRuntimeReceipt(handlers, workspace_id, threadId, {
+          model: getRuntimeReceipt(workspace_id, threadId)?.model,
+          contextWindowTokens: windowTokens,
+          contextWindowSource: "live",
+        });
+      }
     }
     return;
   }

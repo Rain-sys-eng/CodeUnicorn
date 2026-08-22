@@ -18,24 +18,24 @@
 :root .chat-input-box-wrapper,
 [data-theme="dark"] .chat-input-box,
 [data-theme="dark"] .chat-input-box-wrapper {
-  --input-bg: color-mix(in srgb, var(--surface-messages, #0d0f14) 82%, var(--surface-control, #27272e) 18%);
+  --input-bg: color-mix(in srgb, var(--surface-messages, #0d0d0d) 82%, var(--surface-control, #27272e) 18%);
   --input-border: color-mix(in srgb, var(--border-muted, #222228) 82%, transparent);
   --input-focus-border: color-mix(in srgb, var(--accent-strong, #3b82f6) 72%, var(--border-strong, #353540));
-  --input-placeholder: color-mix(in srgb, var(--text-muted, #b3b3b3) 82%, transparent);
+  --input-placeholder: var(--text-faint, #b4b4b4);
   --text-primary: var(--text-primary, #e6e7ea);
-  --text-secondary: var(--text-muted, #b3b3b3);
-  --text-muted: var(--text-faint, #666666);
-  --dropdown-bg: #1f2028;
-  --tooltip-bg: #1a1c24;
+  --text-secondary: var(--text-muted, #c8c8c8);
+  --text-muted: var(--text-faint, #b4b4b4);
+  --dropdown-bg: #1f1f1f;
+  --tooltip-bg: #1a1a1a;
   --dropdown-border: var(--border-strong, #353540);
   --dropdown-hover: var(--surface-hover, #2a2d2e);
-  --dropdown-selected: color-mix(in srgb, var(--accent-strong, #3b82f6) 52%, #111827);
+  --dropdown-selected: color-mix(in srgb, var(--accent-strong, #3b82f6) 52%, var(--surface-active));
   --dropdown-selected-text: #f8fbff;
   --button-hover: var(--surface-hover, rgba(255, 255, 255, 0.1));
   --composer-panel-shadow: 0 16px 42px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.035);
   --composer-panel-focus-shadow: 0 18px 48px rgba(0, 0, 0, 0.22), 0 0 0 1px color-mix(in srgb, var(--input-focus-border) 34%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   --composer-toolbar-border: color-mix(in srgb, var(--border-muted, #222228) 68%, transparent);
-  --composer-tool-popover-bg: color-mix(in srgb, var(--surface-control, #27272e) 92%, var(--surface-messages, #0d0f14) 8%);
+  --composer-tool-popover-bg: color-mix(in srgb, var(--surface-control, #27272e) 92%, var(--surface-messages, #0d0d0d) 8%);
   --composer-tool-popover-border: color-mix(in srgb, var(--input-focus-border, #3b82f6) 34%, var(--border-strong, #353540));
   --composer-tool-popover-shadow: 0 20px 48px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.035);
   --selector-pill-bg: color-mix(in srgb, var(--surface-control, #27272e) 72%, transparent);
@@ -135,12 +135,12 @@
 [data-theme="dark"] .composer-tool-menu-sub-content {
   /* Literal + non-self app tokens only — avoid circular --x: var(--x). */
   --text-primary: #e6e7ea;
-  --text-secondary: #b3b3b3;
-  --text-muted: #888888;
-  --dropdown-bg: #1f2028;
+  --text-secondary: #c8c8c8;
+  --text-muted: #b4b4b4;
+  --dropdown-bg: #1f1f1f;
   --dropdown-border: #353540;
   --dropdown-hover: #2a2d2e;
-  --composer-tool-popover-bg: #1f2028;
+  --composer-tool-popover-bg: #1f1f1f;
   --composer-tool-popover-border: #353540;
   --composer-tool-popover-shadow: 0 20px 48px rgba(0, 0, 0, 0.32),
     0 0 0 1px rgba(255, 255, 255, 0.035);

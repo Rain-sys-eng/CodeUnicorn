@@ -257,7 +257,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: color-mix(in srgb, var(--surface-card) 92%, #0f172a 8%);
+  background: color-mix(in srgb, var(--surface-card) 92%, var(--surface-messages) 8%);
 }
 
 .message-image-lightbox {

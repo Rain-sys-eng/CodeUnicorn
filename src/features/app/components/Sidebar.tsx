@@ -133,6 +133,7 @@ import type {
   EngineProviderProfileOption,
   EngineProviderProfileSelection,
 } from "../../threads/constants/codexProviderProfiles";
+import { PROVIDER_TARGET_CATALOG_INVALIDATED_EVENT } from "../../composer/components/ChatInputBox/hooks/useProviderTargetCatalogOwners";
 import {
   runWithLoadingProgress,
   type LoadingProgressController,
@@ -924,13 +925,24 @@ function SidebarImpl({
         }
       }
     };
-    void loadProfiles("claude", getClaudeProviders, setClaudeProviderProfiles);
-    void loadProfiles("codex", getCodexProviders, setCodexProviderProfiles);
-    void loadProfiles("kimi", getKimiProviders, setKimiProviderProfiles);
-    void loadProfiles("grok", getGrokProviders, setGrokProviderProfiles);
-    void loadProfiles("opencode", getOpenCodeProviders, setOpenCodeProviderProfiles);
+    const reloadAllProfiles = () => {
+      void loadProfiles("claude", getClaudeProviders, setClaudeProviderProfiles);
+      void loadProfiles("codex", getCodexProviders, setCodexProviderProfiles);
+      void loadProfiles("kimi", getKimiProviders, setKimiProviderProfiles);
+      void loadProfiles("grok", getGrokProviders, setGrokProviderProfiles);
+      void loadProfiles("opencode", getOpenCodeProviders, setOpenCodeProviderProfiles);
+    };
+    reloadAllProfiles();
+    window.addEventListener(
+      PROVIDER_TARGET_CATALOG_INVALIDATED_EVENT,
+      reloadAllProfiles,
+    );
     return () => {
       cancelled = true;
+      window.removeEventListener(
+        PROVIDER_TARGET_CATALOG_INVALIDATED_EVENT,
+        reloadAllProfiles,
+      );
     };
   }, []);
 
@@ -1133,6 +1145,8 @@ function SidebarImpl({
         return <EngineIcon engine="pi" size={14} />;
       case "engine-dsh":
         return <EngineIcon engine="dsh" size={14} />;
+      case "engine-qoder":
+        return <EngineIcon engine="qoder" size={14} />;
       case "reload":
         return <RefreshCw size={13} />;
       case "activate":

@@ -17,6 +17,11 @@ import {
   upsertEngineSelectedModelId,
 } from "./modelSelection";
 import { resolveClaudeManagedRuntimeModel } from "../../features/models/claudeManagedRuntimeModel";
+import {
+  findDshCatalogModel,
+  resolveDshNativeRuntimeModel,
+  resolveDshPickerTargetEngine,
+} from "../../features/composer/utils/dshNativeModelSelection";
 import { resolveThreadEngine } from "./selectedComposerSession";
 
 export function useAppShellComposerModelSection({
@@ -102,6 +107,7 @@ export function useAppShellComposerModelSection({
   }, [activeEngine, engineModelsAsOptions, activeEngineSelectedModelId]);
 
   const hasActiveComposerThread = activeThreadId !== null;
+  const activeThreadEngine = resolveThreadEngine(activeThreadId ?? "");
   const effectiveSelectedModelId = useMemo(() => {
     return getEffectiveSelectedModelId({
       activeEngine,
@@ -110,8 +116,16 @@ export function useAppShellComposerModelSection({
       hasActiveThread: hasActiveComposerThread,
       // Codex/Claude：允许会话级自由/自定义模型名（含本地配置、catalog 未登记项），
       // 避免 Atomic picker 选中后被 repair 静默回退。
+      // DSH：账本是 host `{provider}/{model}`，切回时空/残留 catalog 不得回落默认。
+      // Qoder：Global/CN 共用一份 last-write catalog；切历史会话不准拉 ACP。
+      // 会话账本 modelId 必须保住，残留另一 distribution 的列表不得修成默认。
       allowUnknownActiveThreadModel:
-        activeEngine === "codex" || activeEngine === "claude",
+        activeEngine === "codex" ||
+        activeEngine === "claude" ||
+        activeEngine === "dsh" ||
+        activeThreadEngine === "dsh" ||
+        activeEngine === "qoder" ||
+        activeThreadEngine === "qoder",
       codexModels: effectiveModels,
       engineModelsAsOptions,
       engineSelectedModelIdByType,
@@ -125,6 +139,7 @@ export function useAppShellComposerModelSection({
     hasActiveComposerThread,
     selectedComposerSelection,
     selectedModelId,
+    activeThreadEngine,
   ]);
   const effectiveSelectedModel = useMemo(() => {
     return effectiveModels.find((model) => model.id === effectiveSelectedModelId) ?? null;
@@ -222,9 +237,25 @@ export function useAppShellComposerModelSection({
         return;
       }
       let targetEngine = activeEngine;
+      const threadEngine = resolveThreadEngine(activeThreadId ?? "");
+      const dshCatalogModels =
+        activeEngine === "dsh"
+          ? effectiveModels
+          : ((providerModelCatalogs.dsh as ModelOption[] | undefined) ?? []);
       // 本 catalog 先按 id 或 runtime `.model` 命中，避免 DSH `{provider}/{model}`
       // 的 last-segment / runtime 被其它 CLI catalog id 抢走。
-      let nextSelectedModel = findModelById(effectiveModels, id);
+      let nextSelectedModel: ModelOption | null = null;
+      if (threadEngine === "dsh" || activeEngine === "dsh") {
+        const dshHit = findDshCatalogModel(dshCatalogModels, id);
+        if (dshHit) {
+          nextSelectedModel = dshHit;
+          targetEngine = "dsh";
+        } else {
+          nextSelectedModel = findModelById(effectiveModels, id);
+        }
+      } else {
+        nextSelectedModel = findModelById(effectiveModels, id);
+      }
       if (!nextSelectedModel) {
         // Cross-engine pick from the grouped provider dropdown: exact catalog
         // id only. Do not match `.model` across catalogs — that is how
@@ -238,8 +269,17 @@ export function useAppShellComposerModelSection({
               (model: any) => model.id === id,
             ) ?? null;
           if (found) {
-            targetEngine = engine;
-            nextSelectedModel = found;
+            targetEngine = resolveDshPickerTargetEngine({
+              requestedId: id,
+              threadEngine,
+              activeEngine,
+              dshModels: dshCatalogModels,
+              foreignEngine: engine as typeof targetEngine,
+            });
+            nextSelectedModel =
+              targetEngine === "dsh"
+                ? (findDshCatalogModel(dshCatalogModels, id) ?? found)
+                : found;
             break;
           }
         }
@@ -251,9 +291,26 @@ export function useAppShellComposerModelSection({
         if (!freeformId) {
           return;
         }
+        const keepOnDsh =
+          resolveDshPickerTargetEngine({
+            requestedId: freeformId,
+            threadEngine,
+            activeEngine,
+            dshModels: dshCatalogModels,
+            foreignEngine: targetEngine,
+          }) === "dsh";
+        if (keepOnDsh) {
+          targetEngine = "dsh";
+        }
         nextSelectedModel = {
           id: freeformId,
-          model: freeformId,
+          model: keepOnDsh
+            ? (findDshCatalogModel(dshCatalogModels, freeformId)?.model?.trim() ||
+              resolveDshNativeRuntimeModel({
+                catalogEntryId: freeformId,
+              }) ||
+              freeformId)
+            : freeformId,
           displayName: freeformId,
           description: "",
           source: "custom",
@@ -266,7 +323,6 @@ export function useAppShellComposerModelSection({
       // Stay-on-thread: skip is about thread ownership, not drifted
       // `activeEngine`. When the user is on a DSH thread and the pick
       // belongs to another engine, keep the DSH ledger / send resolver.
-      const threadEngine = resolveThreadEngine(activeThreadId ?? "");
       const skipDshThreadLedger =
         threadEngine === "dsh" && targetEngine !== "dsh";
       const nextSelectedEffort =
@@ -431,8 +487,12 @@ export function useAppShellComposerModelSection({
   // freeform（allowUnknown）会保留 catalog 外 modelId——这是业务能力，不是 #185 缺口；
   // 这里只收敛 effort/model 的有效投影，禁止无变化 persist 触发反馈环。
   useEffect(() => {
+    const threadEngine = resolveThreadEngine(activeThreadId ?? "");
+    // Unprefixed local Codex ids have no engine prefix; only skip when the
+    // active thread is a known non-Codex native session (DSH switch window).
     if (
       activeEngine !== "codex" ||
+      (threadEngine !== null && threadEngine !== "codex") ||
       !activeThreadId ||
       !selectedComposerSelection ||
       !modelsReady
@@ -488,6 +548,7 @@ export function useAppShellComposerModelSection({
     selectedEffort: effectiveSelectedEffort,
     onSelectEffort: handleSelectComposerEffort,
     reasoningSupported: effectiveReasoningSupported,
+    selectedEngine: activeEngine,
   });
   useComposerMenuActions({
     models: effectiveModels,
@@ -503,6 +564,7 @@ export function useAppShellComposerModelSection({
     onSelectEffort: handleSelectComposerEffort,
     reasoningSupported: effectiveReasoningSupported,
     onFocusComposer: () => composerInputRef.current?.focus(),
+    selectedEngine: activeEngine,
   });
 
   return {

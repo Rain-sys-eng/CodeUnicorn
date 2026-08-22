@@ -41,7 +41,7 @@ function renderBootstrapFallback(error: unknown) {
         style={{
           position: "fixed",
           inset: 0,
-          background: "#0d0f14",
+          background: "#0d0d0d",
           color: "#e2e8f0",
           fontFamily: "ui-monospace, monospace",
           fontSize: 13,

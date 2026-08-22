@@ -15,6 +15,7 @@ export const SESSION_FIELDS = [
   "grokDoctor",
   "opencodeDoctor",
   "piDoctor",
+  "qoderDoctor",
   "appSettingsLoading",
   "reduceTransparency",
   "setReduceTransparency",

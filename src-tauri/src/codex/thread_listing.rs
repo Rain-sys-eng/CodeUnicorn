@@ -296,21 +296,133 @@ fn thread_entry_timestamp(entry: &Value) -> i64 {
         .max(0)
 }
 
-fn normalize_parent_session_ids_to_visible_entry_ids(entries: &mut [Value]) {
+fn strip_known_engine_prefix(id: &str) -> &str {
+    const PREFIXES: [&str; 8] = [
+        "codex:", "claude:", "kimi:", "grok:", "opencode:", "pi:", "gemini:", "dsh:",
+    ];
+    let lower = id.to_ascii_lowercase();
+    for prefix in PREFIXES {
+        if lower.starts_with(prefix) {
+            return id[prefix.len()..].trim();
+        }
+    }
+    id
+}
+
+fn looks_like_uuid(value: &str) -> bool {
+    if value.len() != 36 {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        if index == 8 || index == 13 || index == 18 || index == 23 {
+            if byte != b'-' {
+                return false;
+            }
+            continue;
+        }
+        if !byte.is_ascii_hexdigit() {
+            return false;
+        }
+    }
+    true
+}
+
+fn extract_codex_canonical_session_id(id: &str) -> Option<String> {
+    let bare = strip_known_engine_prefix(id);
+    if looks_like_uuid(bare) {
+        return Some(bare.to_ascii_lowercase());
+    }
+    let Some(suffix) = bare.strip_prefix("rollout-") else {
+        return None;
+    };
+    let Some((_, uuid)) = suffix.rsplit_once('-') else {
+        return None;
+    };
+    if looks_like_uuid(uuid) {
+        Some(uuid.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+fn remember_codex_identity_keys(
+    visible_id_by_identifier: &mut HashMap<String, String>,
+    visible_id: &str,
+    extra: Option<&str>,
+) {
+    let mut remember = |raw: &str| {
+        let Some(normalized) = normalize_optional_string(Some(raw)) else {
+            return;
+        };
+        visible_id_by_identifier
+            .entry(normalized.clone())
+            .or_insert_with(|| visible_id.to_string());
+        let bare = strip_known_engine_prefix(&normalized);
+        if !bare.is_empty() {
+            visible_id_by_identifier
+                .entry(bare.to_string())
+                .or_insert_with(|| visible_id.to_string());
+        }
+        if let Some(uuid) = extract_codex_canonical_session_id(&normalized) {
+            visible_id_by_identifier
+                .entry(uuid.clone())
+                .or_insert_with(|| visible_id.to_string());
+            visible_id_by_identifier
+                .entry(format!("codex:{uuid}"))
+                .or_insert_with(|| visible_id.to_string());
+        }
+    };
+    remember(visible_id);
+    if let Some(extra) = extra {
+        remember(extra);
+    }
+}
+
+fn resolve_visible_parent_id(
+    parent_session_id: &str,
+    visible_id_by_identifier: &HashMap<String, String>,
+) -> Option<String> {
+    if let Some(visible) = visible_id_by_identifier.get(parent_session_id) {
+        return Some(visible.clone());
+    }
+    let bare = strip_known_engine_prefix(parent_session_id);
+    if let Some(visible) = visible_id_by_identifier.get(bare) {
+        return Some(visible.clone());
+    }
+    let uuid = extract_codex_canonical_session_id(parent_session_id)?;
+    visible_id_by_identifier
+        .get(&uuid)
+        .cloned()
+        .or_else(|| visible_id_by_identifier.get(&format!("codex:{uuid}")).cloned())
+}
+
+fn thread_entry_parent_session_id(entry: &Value) -> Option<String> {
+    normalize_optional_string(
+        entry
+            .get("parentSessionId")
+            .or_else(|| entry.get("parent_session_id"))
+            .and_then(Value::as_str),
+    )
+}
+
+fn build_visible_codex_identity_map(entries: &[Value]) -> HashMap<String, String> {
     let mut visible_id_by_identifier = HashMap::<String, String>::new();
-    for entry in entries.iter() {
+    for entry in entries {
         let Some(visible_id) = thread_entry_id(entry) else {
             continue;
         };
-        visible_id_by_identifier.insert(visible_id.clone(), visible_id.clone());
-        for key in ["canonicalSessionId", "canonical_session_id"] {
-            if let Some(identifier) =
-                normalize_optional_string(entry.get(key).and_then(Value::as_str))
-            {
-                visible_id_by_identifier.insert(identifier, visible_id.clone());
-            }
-        }
+        let canonical = entry
+            .get("canonicalSessionId")
+            .or_else(|| entry.get("canonical_session_id"))
+            .and_then(Value::as_str);
+        remember_codex_identity_keys(&mut visible_id_by_identifier, &visible_id, canonical);
     }
+    visible_id_by_identifier
+}
+
+fn normalize_parent_session_ids_to_visible_entry_ids(entries: &mut [Value]) {
+    let visible_id_by_identifier = build_visible_codex_identity_map(entries);
 
     for entry in entries.iter_mut() {
         let Some(entry_map) = entry.as_object_mut() else {
@@ -323,15 +435,71 @@ fn normalize_parent_session_ids_to_visible_entry_ids(entries: &mut [Value]) {
             .and_then(|value| normalize_optional_string(Some(value)));
         let Some(visible_parent_id) = parent_session_id
             .as_deref()
-            .and_then(|parent_id| visible_id_by_identifier.get(parent_id))
+            .and_then(|parent_id| resolve_visible_parent_id(parent_id, &visible_id_by_identifier))
         else {
             continue;
         };
         entry_map.insert(
             "parentSessionId".to_string(),
-            Value::String(visible_parent_id.clone()),
+            Value::String(visible_parent_id),
         );
     }
+}
+
+fn retain_codex_parent_tree_within_limit(entries: &mut Vec<Value>, requested_limit: usize) {
+    if entries.is_empty() || requested_limit == 0 {
+        entries.clear();
+        return;
+    }
+
+    let visible_id_by_identifier = build_visible_codex_identity_map(entries);
+    let mut keep = HashSet::<String>::new();
+    let mut kept_roots = 0usize;
+
+    for entry in entries.iter() {
+        let Some(id) = thread_entry_id(entry) else {
+            continue;
+        };
+        let parent_id = thread_entry_parent_session_id(entry)
+            .and_then(|parent| resolve_visible_parent_id(&parent, &visible_id_by_identifier))
+            .filter(|parent| parent != &id);
+        if parent_id.is_some() {
+            continue;
+        }
+        if kept_roots >= requested_limit {
+            continue;
+        }
+        keep.insert(id);
+        kept_roots += 1;
+    }
+
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for entry in entries.iter() {
+            let Some(id) = thread_entry_id(entry) else {
+                continue;
+            };
+            if keep.contains(&id) {
+                continue;
+            }
+            let Some(parent_id) = thread_entry_parent_session_id(entry)
+                .and_then(|parent| resolve_visible_parent_id(&parent, &visible_id_by_identifier))
+            else {
+                continue;
+            };
+            if keep.contains(&parent_id) {
+                keep.insert(id);
+                grew = true;
+            }
+        }
+    }
+
+    entries.retain(|entry| {
+        thread_entry_id(entry)
+            .map(|id| keep.contains(&id))
+            .unwrap_or(false)
+    });
 }
 
 pub(crate) fn build_local_codex_session_preview(summary: Option<String>, model: String) -> String {
@@ -399,6 +567,46 @@ mod tests {
         assert_eq!(entry["id"], "child-session");
         assert_eq!(entry["parentSessionId"], "parent-session");
         assert_eq!(entry["nativeTitle"], "Agent 12");
+    }
+
+    #[test]
+    fn retain_codex_parent_tree_keeps_parent_and_nested_pups() {
+        let parent_uuid = "01a01b3c-db39-7362-9505-3e3535f4b878";
+        let parent_id = format!("codex:rollout-2026-08-20T02-16-08-{parent_uuid}");
+        let parent_ref = format!("codex:{parent_uuid}");
+        let mut entries = vec![
+            json!({
+                "id": parent_id,
+                "canonicalSessionId": parent_uuid,
+                "updatedAt": 100,
+                "preview": "any"
+            }),
+            json!({
+                "id": "01a01d13-7328-7153-99f3-faf8693a30cb",
+                "parentSessionId": parent_uuid,
+                "updatedAt": 400,
+                "preview": "Socrates"
+            }),
+            json!({
+                "id": "codex:01a01d24-29c1-7741-8941-e17e7a5b5e85",
+                "parentSessionId": parent_ref,
+                "updatedAt": 390,
+                "preview": "Beauvoir"
+            }),
+            json!({
+                "id": "01a01d2d-a9c0-73e2-a507-603c2dd048da",
+                "parentSessionId": "01a01c67-d7e4-7cc0-a638-74a21cc47767",
+                "updatedAt": 380,
+                "preview": "Faraday"
+            }),
+        ];
+        retain_codex_parent_tree_within_limit(&mut entries, 1);
+        let ids: Vec<String> = entries.iter().filter_map(thread_entry_id).collect();
+        assert_eq!(ids.len(), 3);
+        assert!(ids.iter().any(|id| id.contains(parent_uuid)));
+        assert!(ids.contains(&"01a01d13-7328-7153-99f3-faf8693a30cb".to_string()));
+        assert!(ids.contains(&"codex:01a01d24-29c1-7741-8941-e17e7a5b5e85".to_string()));
+        assert!(!ids.contains(&"01a01d2d-a9c0-73e2-a507-603c2dd048da".to_string()));
     }
 }
 
@@ -595,9 +803,7 @@ pub(crate) fn merge_unified_codex_thread_entries(
             .cmp(&left_timestamp)
             .then_with(|| thread_entry_id(left).cmp(&thread_entry_id(right)))
     });
-    if merged_entries.len() > requested_limit {
-        merged_entries.truncate(requested_limit);
-    }
+    retain_codex_parent_tree_within_limit(&mut merged_entries, requested_limit);
     merged_entries
 }
 

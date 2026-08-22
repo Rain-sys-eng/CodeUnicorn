@@ -11,17 +11,43 @@
 }
 
 .workspace-wallpaper .first-run-fluid,
+.workspace-wallpaper-media,
 .workspace-wallpaper-image {
   position: absolute;
   inset: 0;
 }
 
+.workspace-wallpaper-media,
 .workspace-wallpaper-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: var(--workspace-wallpaper-object-fit, cover);
+  object-position: var(--workspace-wallpaper-object-position, center);
   display: block;
-  filter: saturate(0.92) contrast(0.96);
+  transform: var(--workspace-wallpaper-flip, none);
+  filter: none;
+}
+
+.workspace-wallpaper[data-media-blur] .workspace-wallpaper-media,
+.workspace-wallpaper[data-media-blur] .workspace-wallpaper-image {
+  filter: blur(var(--workspace-wallpaper-media-blur, 0px));
+}
+
+.workspace-wallpaper-video {
+  background: #000;
+}
+
+.workspace-wallpaper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: color-mix(
+    in srgb,
+    #000 var(--workspace-wallpaper-darken, 0%),
+    transparent
+  );
 }
 
 .workspace-wallpaper::after {
@@ -29,19 +55,18 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 2;
   background: color-mix(
     in srgb,
     var(--workspace-wallpaper-wash, #ededf0)
       var(--workspace-wallpaper-wash-opacity, 10%),
     transparent
   );
-  /* Frost belongs on the wallpaper, not on sidebar / .main. Putting
-   * backdrop-filter on those chrome columns creates sibling stacking
-   * contexts; WebKit then paints the later .main card over the sidebar
-   * and clips the project-row + button. */
-  backdrop-filter: blur(var(--workspace-wallpaper-frost, 12px)) saturate(1.2);
-  -webkit-backdrop-filter: blur(var(--workspace-wallpaper-frost, 12px))
-    saturate(1.2);
+  /* Frost is off by default so a custom wallpaper stays sharp. A
+   * previous backdrop-filter: blur(var(--frost)) still frosted at 0px
+   * in WKWebView, and persisted veilOpacity values kept applying. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* WebView2: blur over WebGL composites black. */
@@ -78,7 +103,7 @@
  * chrome pane at 24px and make the slider appear broken.
  */
 :root[data-workspace-wallpaper] {
-  --workspace-wallpaper-frost: 12px;
+  --workspace-wallpaper-frost: 0px;
   --desktop-main-radius: 0;
   --desktop-main-shadow: none;
 }
@@ -271,16 +296,293 @@
   opacity: 0.16;
 }
 
+/*
+ * Settings CSS is lazy-loaded after this file, so punch-through selectors
+ * must beat later `.settings-embedded` / light-theme `#f9f9f9` sidebar fills.
+ * Keep the chrome as thin as Home; leave inner preference cards readable.
+ */
+:root[data-workspace-wallpaper] .settings-embedded,
+:root[data-workspace-wallpaper] .main.settings-open > .settings-embedded,
+:root[data-workspace-wallpaper] .settings-body,
 :root[data-workspace-wallpaper] .settings-content-wrap,
-:root[data-workspace-wallpaper] .settings-embedded {
-  background: color-mix(in srgb, #ffffff 72%, transparent);
+:root[data-workspace-wallpaper] .settings-content,
+:root[data-workspace-wallpaper] .settings-content [data-slot="scroll-area"],
+:root[data-workspace-wallpaper] .settings-content [data-slot="scroll-area-viewport"],
+:root[data-workspace-wallpaper] .settings-page-head,
+:root[data-workspace-wallpaper] .settings-section,
+:root[data-workspace-wallpaper] .settings-section-basic,
+:root[data-workspace-wallpaper] .settings-section-tabbed {
+  background: transparent;
 }
 
-:root[data-workspace-wallpaper][data-theme="dark"] .settings-content-wrap,
+:root[data-workspace-wallpaper] .settings-sidebar,
+:root[data-workspace-wallpaper][data-theme="light"] .settings-sidebar,
+:root[data-workspace-wallpaper][data-theme="dark"] .settings-sidebar,
+:root[data-workspace-wallpaper][data-theme="dim"] .settings-sidebar,
+:root[data-workspace-wallpaper]:not([data-theme]) .settings-sidebar {
+  background: var(--workspace-wallpaper-veil);
+  border-right-color: color-mix(in srgb, var(--border-subtle) 45%, transparent);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-workspace-wallpaper]:not([data-theme]) .settings-sidebar {
+    background: var(--workspace-wallpaper-veil);
+  }
+}
+
+/*
+ * Settings cards stay frosted so the wallpaper remains visible behind
+ * the form. The previous punch-through only covered Basic preference
+ * cards, so CLI / shortcuts / projects / other sections kept opaque
+ * grey slabs. Windows WebView2 composites backdrop-filter over WebGL
+ * as black, so that path uses a wash instead of blur.
+ *
+ * Dialogs / popovers stay opaque (preference-settings-ui-guide §4.5).
+ */
+:root[data-workspace-wallpaper] .settings-embedded {
+  --settings-wallpaper-card: color-mix(in srgb, #ffffff 34%, transparent);
+  --settings-wallpaper-card-border: color-mix(in srgb, #ffffff 52%, transparent);
+  --settings-wallpaper-control: color-mix(in srgb, #ffffff 46%, transparent);
+  --settings-basic-surface: var(--settings-wallpaper-card);
+  --settings-basic-surface-strong: var(--settings-wallpaper-control);
+  --settings-basic-border: var(--settings-wallpaper-card-border);
+  --settings-basic-divider: color-mix(in srgb, #ffffff 28%, transparent);
+  --settings-basic-control: var(--settings-wallpaper-control);
+  --settings-basic-control-hover: color-mix(in srgb, #ffffff 58%, transparent);
+  --settings-basic-control-border: var(--settings-wallpaper-card-border);
+}
+
 :root[data-workspace-wallpaper][data-theme="dark"] .settings-embedded,
-:root[data-workspace-wallpaper][data-theme="dim"] .settings-content-wrap,
 :root[data-workspace-wallpaper][data-theme="dim"] .settings-embedded {
-  background: color-mix(in srgb, #0d0f14 72%, transparent);
+  --settings-wallpaper-card: color-mix(in srgb, #121214 22%, transparent);
+  --settings-wallpaper-card-border: color-mix(in srgb, #ffffff 10%, transparent);
+  --settings-wallpaper-control: color-mix(in srgb, #ffffff 8%, transparent);
+  --settings-basic-surface: var(--settings-wallpaper-card);
+  --settings-basic-surface-strong: var(--settings-wallpaper-control);
+  --settings-basic-border: var(--settings-wallpaper-card-border);
+  --settings-basic-divider: color-mix(in srgb, #ffffff 8%, transparent);
+  --settings-basic-control: var(--settings-wallpaper-control);
+  --settings-basic-control-hover: color-mix(in srgb, #ffffff 12%, transparent);
+  --settings-basic-control-border: color-mix(in srgb, #ffffff 12%, transparent);
+}
+
+/* Closer ancestors (basic/tabbed/vendor) redeclare the same tokens.
+ * Re-point them here so leftover `var(--settings-basic-surface)` fills
+ * follow the wallpaper wash instead of the opaque mix. */
+:root[data-workspace-wallpaper] .settings-embedded :is(
+  .settings-section-basic,
+  .settings-section-tabbed,
+  .vendor-settings-panel,
+  .settings-shortcuts-section
+) {
+  --settings-basic-surface: var(--settings-wallpaper-card);
+  --settings-basic-surface-strong: var(--settings-wallpaper-control);
+  --settings-basic-border: var(--settings-wallpaper-card-border);
+  --settings-basic-divider: color-mix(in srgb, #ffffff 28%, transparent);
+  --settings-basic-control: var(--settings-wallpaper-control);
+  --settings-basic-control-hover: color-mix(in srgb, #ffffff 58%, transparent);
+  --settings-basic-control-border: var(--settings-wallpaper-card-border);
+}
+
+:root[data-workspace-wallpaper][data-theme="dark"] .settings-embedded :is(
+  .settings-section-basic,
+  .settings-section-tabbed,
+  .vendor-settings-panel,
+  .settings-shortcuts-section
+),
+:root[data-workspace-wallpaper][data-theme="dim"] .settings-embedded :is(
+  .settings-section-basic,
+  .settings-section-tabbed,
+  .vendor-settings-panel,
+  .settings-shortcuts-section
+) {
+  --settings-basic-divider: color-mix(in srgb, #ffffff 8%, transparent);
+  --settings-basic-control-hover: color-mix(in srgb, #ffffff 12%, transparent);
+  --settings-basic-control-border: color-mix(in srgb, #ffffff 12%, transparent);
+}
+
+:root[data-workspace-wallpaper] .settings-embedded :is(
+  .settings-basic-group-card,
+  .settings-pref-card,
+  .settings-basic-shadcn-card,
+  .settings-toggle-row,
+  .settings-group-list,
+  .settings-project-row,
+  .settings-open-app-row,
+  .settings-override-row,
+  .settings-doctor,
+  .settings-agent-card,
+  .settings-agent-table-row,
+  .settings-prompt-editor-card,
+  .settings-prompt-card,
+  .settings-email-card,
+  .settings-mail-session-row,
+  .settings-mail-timeline-row,
+  .settings-shortcuts-detail,
+  .vendor-group-card,
+  .vendor-provider-group,
+  .vendor-summary-card,
+  .vendor-provider-table-frame,
+  .vendor-plugin-model-entry,
+  .vendor-empty,
+  .vendor-codex-runtime-card,
+  .curated-section,
+  .curated-section-row,
+  .settings-agent-library-tabs,
+  .settings-project-sessions-attribution-panel,
+  .mref-rules-card,
+  .mref-model-card,
+  [data-slot="card"]
+) {
+  background: var(--settings-wallpaper-card);
+  border-color: var(--settings-wallpaper-card-border);
+  backdrop-filter: blur(22px) saturate(1.28);
+  -webkit-backdrop-filter: blur(22px) saturate(1.28);
+}
+
+:root[data-workspace-wallpaper] .settings-embedded :is(
+  .settings-shortcuts-kbd,
+  .settings-shortcuts-search,
+  .settings-shortcuts-recorder,
+  .vendor-engine-search,
+  .built-in-agent-search,
+  .settings-shortcuts-row--selected,
+  .vendor-engine-tab-active
+) {
+  background: var(--settings-wallpaper-control);
+  border-color: var(--settings-wallpaper-card-border);
+}
+
+:root[data-workspace-wallpaper] .settings-embedded .settings-shortcuts-kbd-group--large .settings-shortcuts-kbd {
+  background: var(--settings-wallpaper-control);
+  border-color: var(--settings-wallpaper-card-border);
+}
+
+/* Nested rows keep hairlines only — frosting them again creates grey slabs. */
+:root[data-workspace-wallpaper] .settings-embedded :is(
+  .settings-group-list,
+  .vendor-group-card,
+  .vendor-provider-group,
+  .settings-email-card,
+  .settings-basic-group-card
+) :is(
+  .settings-group-row,
+  .settings-toggle-row,
+  .vendor-card,
+  .vendor-current-config,
+  .vendor-group-row,
+  .settings-card-switch-header,
+  .settings-basic-sounds-card-content
+) {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-platform="windows"][data-workspace-wallpaper] .settings-embedded {
+  --settings-wallpaper-card: color-mix(in srgb, #ffffff 58%, transparent);
+  --settings-wallpaper-control: color-mix(in srgb, #ffffff 46%, transparent);
+}
+
+:root[data-platform="windows"][data-workspace-wallpaper][data-theme="dark"] .settings-embedded,
+:root[data-platform="windows"][data-workspace-wallpaper][data-theme="dim"] .settings-embedded {
+  --settings-wallpaper-card: color-mix(in srgb, #121212 62%, transparent);
+  --settings-wallpaper-control: color-mix(in srgb, #121212 48%, transparent);
+}
+
+:root[data-platform="windows"][data-workspace-wallpaper] .settings-embedded :is(
+  .settings-basic-group-card,
+  .settings-pref-card,
+  .settings-basic-shadcn-card,
+  .settings-toggle-row,
+  .settings-group-list,
+  .settings-project-row,
+  .settings-open-app-row,
+  .settings-override-row,
+  .settings-doctor,
+  .settings-agent-card,
+  .settings-agent-table-row,
+  .settings-prompt-editor-card,
+  .settings-prompt-card,
+  .settings-email-card,
+  .settings-mail-session-row,
+  .settings-mail-timeline-row,
+  .settings-shortcuts-detail,
+  .vendor-group-card,
+  .vendor-provider-group,
+  .vendor-summary-card,
+  .vendor-provider-table-frame,
+  .vendor-plugin-model-entry,
+  .vendor-empty,
+  .vendor-codex-runtime-card,
+  .curated-section,
+  .curated-section-row,
+  .settings-agent-library-tabs,
+  .settings-project-sessions-attribution-panel,
+  .mref-rules-card,
+  .mref-model-card,
+  [data-slot="card"]
+) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-workspace-wallpaper] .app.reduced-transparency .settings-embedded :is(
+  .settings-basic-group-card,
+  .settings-pref-card,
+  .settings-basic-shadcn-card,
+  .settings-toggle-row,
+  .settings-group-list,
+  .settings-project-row,
+  .settings-open-app-row,
+  .settings-override-row,
+  .settings-doctor,
+  .settings-agent-card,
+  .settings-agent-table-row,
+  .settings-prompt-editor-card,
+  .settings-prompt-card,
+  .settings-email-card,
+  .settings-mail-session-row,
+  .settings-mail-timeline-row,
+  .settings-shortcuts-detail,
+  .vendor-group-card,
+  .vendor-provider-group,
+  .vendor-summary-card,
+  .vendor-provider-table-frame,
+  .vendor-plugin-model-entry,
+  .vendor-empty,
+  .vendor-codex-runtime-card,
+  .curated-section,
+  .curated-section-row,
+  .settings-agent-library-tabs,
+  .settings-project-sessions-attribution-panel,
+  .mref-rules-card,
+  .mref-model-card,
+  [data-slot="card"]
+) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-workspace-wallpaper] .settings-embedded .settings-pref-segment.is-active,
+:root[data-workspace-wallpaper] .settings-embedded .settings-web-btn {
+  background: #ffffff;
+}
+
+:root[data-workspace-wallpaper][data-theme="dark"] .settings-embedded .settings-pref-segment.is-active,
+:root[data-workspace-wallpaper][data-theme="dim"] .settings-embedded .settings-pref-segment.is-active,
+:root[data-workspace-wallpaper][data-theme="dark"] .settings-embedded .settings-web-btn,
+:root[data-workspace-wallpaper][data-theme="dim"] .settings-embedded .settings-web-btn {
+  background: color-mix(in srgb, #1c1c1e 72%, transparent);
+}
+
+:root[data-workspace-wallpaper] .settings-nav.active {
+  background: color-mix(in srgb, #ffffff 42%, transparent);
+}
+
+:root[data-workspace-wallpaper][data-theme="dark"] .settings-nav.active,
+:root[data-workspace-wallpaper][data-theme="dim"] .settings-nav.active {
+  background: color-mix(in srgb, #ffffff 10%, transparent);
 }
 
 :root[data-workspace-wallpaper] .composer-input,
@@ -293,4 +595,55 @@
 :root[data-workspace-wallpaper][data-theme="dim"] .composer-input,
 :root[data-workspace-wallpaper][data-theme="dim"] .composer-input:focus-within {
   background: #16181f;
+}
+
+/*
+ * Markdown chips / fences stay opaque without wallpaper (the muted
+ * surface is the contrast). With wallpaper they become stickers —
+ * punch them to the same wash ink as chrome, never backdrop-filter
+ * (Win WebView2 blacks out over WebGL). No-wallpaper path is
+ * untouched because these selectors only fire with the attribute.
+ */
+:root[data-workspace-wallpaper] {
+  --message-inline-code-bg: color-mix(
+    in srgb,
+    var(--workspace-wallpaper-wash, #ededf0) 38%,
+    transparent
+  );
+  --message-codeblock-bg: color-mix(
+    in srgb,
+    var(--workspace-wallpaper-wash, #ededf0) 44%,
+    transparent
+  );
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
+  --message-codeblock-divider: color-mix(in srgb, var(--text-strong) 12%, transparent);
+}
+
+:root[data-workspace-wallpaper] :is(.message, .thinking-block) .markdown :not(pre) > code,
+:root[data-workspace-wallpaper] .reasoning-markdown :where(:not(pre) > code) {
+  background: var(--message-inline-code-bg);
+  color: var(--text-stronger);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-strong) 12%, transparent);
+}
+
+:root[data-workspace-wallpaper] :is(.message, .thinking-block) .markdown-codeblock,
+:root[data-workspace-wallpaper] :is(.message, .thinking-block) .markdown-codeblock-single,
+:root[data-workspace-wallpaper] .fvp-file-markdown-codeblock,
+:root[data-workspace-wallpaper] .spec-hub-markdown .markdown-codeblock,
+:root[data-workspace-wallpaper] .spec-hub-markdown .markdown-codeblock-single {
+  background: var(--message-codeblock-bg);
+  border-color: color-mix(in srgb, var(--text-strong) 16%, transparent);
+}
+
+:root[data-workspace-wallpaper] :is(.message, .thinking-block) .markdown-codeblock-header,
+:root[data-workspace-wallpaper] .fvp-file-markdown-codeblock-label,
+:root[data-workspace-wallpaper] .spec-hub-markdown .markdown-codeblock-header {
+  background: var(--message-codeblock-header-bg);
+  border-bottom-color: var(--message-codeblock-divider);
+}
+
+:root[data-workspace-wallpaper] .fvp-file-markdown :where(p code, li code, blockquote code, td code, th code),
+:root[data-workspace-wallpaper] .spec-hub-markdown :not(pre) > code {
+  background: var(--message-inline-code-bg);
+  border-color: color-mix(in srgb, var(--text-strong) 14%, transparent);
 }

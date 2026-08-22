@@ -13,14 +13,30 @@ type UseAppShellAccessModeSectionInput = {
   ) => void;
 };
 
+function initialAccessMode(
+  engine: EngineType,
+  defaultAccessMode: AccessMode,
+): AccessMode {
+  if (engine === "codex") {
+    return "full-access";
+  }
+  return resolveRestoredAccessMode(
+    engine,
+    getComposerEnginePrefForEngine(engine).accessMode,
+    defaultAccessMode,
+  );
+}
+
 export function useAppShellAccessModeSection({
   activeEngine,
   appSettingsLoading,
   defaultAccessMode,
   persistComposerEnginePref,
 }: UseAppShellAccessModeSectionInput) {
-  const [accessMode, setAccessMode] = useState<AccessMode>("full-access");
-  const claudeAccessModeRef = useRef<AccessMode>("full-access");
+  const [accessMode, setAccessMode] = useState<AccessMode>(() =>
+    initialAccessMode(activeEngine, defaultAccessMode),
+  );
+  const claudeAccessModeRef = useRef<AccessMode>(accessMode);
 
   useEffect(() => {
     if (activeEngine === "codex") {

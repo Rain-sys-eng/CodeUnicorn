@@ -26,11 +26,11 @@ const messages = {
       "revertFileAction": "Deshacer",
       "revertAllConfirmTitle": "Deshacer todos los cambios",
       "revertAllConfirmBody":
-        "Se descartarán los cambios locales en {{count}} archivos y se restaurarán al último commit. Esto no se puede deshacer.",
+        "Se descartarán los cambios locales no indexados en {{count}} archivos y se restaurarán al índice (o a HEAD si no hay nada indexado). Los cambios ya indexados se conservan. Esto no se puede deshacer.",
       "revertAllConfirmAction": "Deshacer todo",
       "revertFileConfirmTitle": "Deshacer cambios del archivo",
       "revertFileConfirmBody":
-        "Se descartarán los cambios locales de «{{path}}» y se restaurará al último commit. Esto no se puede deshacer.",
+        "Se descartarán los cambios locales no indexados de «{{path}}» y se restaurará al índice (o a HEAD si no hay nada indexado). Los cambios ya indexados se conservan. Esto no se puede deshacer.",
       "revertFileConfirmAction": "Deshacer"
     },
     "noThinkingContent": "No hay contenido de razonamiento",
@@ -74,6 +74,7 @@ const messages = {
     "restoringHistoryPhaseHydrate": "Ensamblar",
     "generatingResponse": "Generando respuesta...",
     "responding": "Respondiendo...",
+    "waitingForFirstText": "{{engine}} está en ejecución. Esperando el primer fragmento de texto...",
     "codexWaitingForFirstText": "Codex está en ejecución. Esperando el primer fragmento de texto...",
     "codexSilentSuspected": "No hay nueva salida de Codex desde hace un rato. Seguimos escuchando actividad del runtime...",
     "nonStreamingHint": "Este modelo puede devolver una salida sin streaming, o la red puede no estar disponible. Espera...",
@@ -90,6 +91,7 @@ const messages = {
     "totalDuration": "Duración",
     "durationSeconds": "{{duration}}",
     "tokenUsage": "Entrada {{input}} / Salida {{output}}",
+    "liveTokenUsage": "{{tokens}} tokens",
     "tokenUsageTooltip": "Entrada {{input}} token / Salida {{output}} token",
     "messageActions": "Acciones de mensaje",
     "copyMessage": "Copiar mensaje",

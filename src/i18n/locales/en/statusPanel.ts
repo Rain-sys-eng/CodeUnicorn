@@ -171,7 +171,7 @@ const statusPanel = {
           "Coding-plan provider recognized, but no limit windows were returned.",
         error: "Limit query failed: {{message}}",
         unsupported:
-          "{{engine}} base_url is not a known coding-plan host (Kimi / MiniMax / Zhipu).",
+          "{{engine}} does not support quota queries (no known coding-plan host, or this CLI has no account-limit API).",
         notSupported: "Quota is not supported for this relay",
       },
     },

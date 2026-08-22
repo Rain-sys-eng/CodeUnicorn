@@ -30,6 +30,7 @@ pub fn capability_state(engine_type: EngineType, capability: &str) -> &'static s
         EngineType::Kimi => EngineFeatures::kimi(),
         EngineType::Pi => EngineFeatures::pi(),
         EngineType::Dsh => EngineFeatures::dsh(),
+        EngineType::Qoder => EngineFeatures::qoder(),
     };
 
     match capability {
@@ -130,10 +131,7 @@ mod tests {
             spec_capability_state(EngineType::Pi, "image.input"),
             "supported"
         );
-        assert_eq!(
-            capability_state(EngineType::Pi, "image.input"),
-            "supported"
-        );
+        assert_eq!(capability_state(EngineType::Pi, "image.input"), "supported");
     }
 
     #[test]

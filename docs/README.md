@@ -29,6 +29,7 @@ status: active
 | **Plans** | [`plans/README.md`](plans/README.md) | 有时间边界的 implementation plan |
 | **Research** | [`research/README.md`](research/README.md) | 外部调研、spike 与设计输入，不代表 shipped behavior |
 | **Reports** | [`reports/README.md`](reports/README.md) | 带日期的治理、影响与验收报告 |
+| **Promotion** | [`promotion/README.md`](promotion/README.md) | 面向外部用户的客户端推广材料（能力介绍、对比、场景） |
 | **Designs** | [`designs/README.md`](designs/README.md) | HTML 原型、选款页、视觉 mock；不是 shipped UI |
 
 ## 历史文档
@@ -80,6 +81,7 @@ status: active
 - [`perf/README.md`](perf/README.md)
 - [`perf/pr-1092-performance-retrospective.md`](perf/pr-1092-performance-retrospective.md) — PR #1092 性能复盘：主因、解法、防再犯
 - [`analysis/workspace-switch-session-catalog-performance-regression-2026-08-08.md`](analysis/workspace-switch-session-catalog-performance-regression-2026-08-08.md) — workspace navigation exhaustive catalog scan 根因、版本归因与闭环修复指南
+- [`analysis/dsh-k3-long-goal-client-stall-2026-08-21.md`](analysis/dsh-k3-long-goal-client-stall-2026-08-21.md) — DSH k3 超长 goal：host 仍活、客户端假死；mux coalesce 最小修复与后续缺口
 - [`perf/render-jank-knife-experiments-2026-07-08.md`](perf/render-jank-knife-experiments-2026-07-08.md)
 - [`perf/streaming-render-stall-design-2026-07-30.md`](perf/streaming-render-stall-design-2026-07-30.md)
 

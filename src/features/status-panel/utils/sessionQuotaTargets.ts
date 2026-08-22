@@ -159,7 +159,9 @@ export function formatSessionQuotaTargetTitle(target: SessionQuotaTarget): strin
                   ? "DSH"
                   : target.engine === "pi"
                     ? "PI"
-                    : target.engine;
+                    : target.engine === "qoder"
+                      ? "Qoder"
+                      : target.engine;
   if (
     target.providerLabel &&
     target.providerLabel !== target.engine &&

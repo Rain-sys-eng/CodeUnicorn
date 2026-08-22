@@ -9,6 +9,10 @@ const reasoning = {
     "claudeDefault": "Predeterminado",
     "grokDefault": "Predeterminado",
     "defaultDescription": "Usar el comportamiento de razonamiento predeterminado del motor",
+    "off": {
+      "label": "Desactivado",
+      "description": "Razonamiento desactivado"
+    },
     "low": {
       "label": "Bajo",
       "description": "Respuestas rápidas con razonamiento básico"

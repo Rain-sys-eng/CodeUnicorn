@@ -52,6 +52,10 @@ import {
   KIMI_LOCAL_PROVIDER_PROFILE_ID,
   LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_CN_PROVIDER_PROFILE_ID,
+  QODER_CN_PROVIDER_PROFILE_NAME,
+  QODER_GLOBAL_PROVIDER_PROFILE_ID,
+  QODER_GLOBAL_PROVIDER_PROFILE_NAME,
   type EngineProviderProfileSelection,
   type EngineProviderProfileOption,
 } from "../../threads/constants/codexProviderProfiles";
@@ -65,6 +69,13 @@ import {
   activateEngineProviderProfileAndNotify,
   isActivatableProviderEngine,
 } from "../../vendors/activateEngineProviderProfile";
+import {
+  LAST_PROVIDER_PROFILE_CHANGED_EVENT,
+  LAST_PROVIDER_PROFILE_KEYS,
+  type LastProviderEngine,
+  readLastProviderProfileId,
+  writeLastProviderProfileId,
+} from "../../vendors/lastProviderProfileMemory";
 
 /** 新建会话菜单项 id → 对应 CLI engine；用于 CLI 配置管理启停过滤。 */
 const NEW_SESSION_ENGINE_ACTION_IDS: Readonly<Record<string, EngineType>> = {
@@ -76,16 +87,25 @@ const NEW_SESSION_ENGINE_ACTION_IDS: Readonly<Record<string, EngineType>> = {
   "new-session-grok": "grok",
   "new-session-pi": "pi",
   "new-session-dsh": "dsh",
+  "new-session-qoder": "qoder",
 };
 
-const LAST_PROVIDER_PROFILE_KEYS = {
-  claude: "claudeLastProviderProfileId",
-  codex: "codexLastProviderProfileId",
-  kimi: "kimiLastProviderProfileId",
-  grok: "grokLastProviderProfileId",
-  opencode: "opencodeLastProviderProfileId",
-} as const;
-type ProviderEngine = keyof typeof LAST_PROVIDER_PROFILE_KEYS;
+type ProviderEngine = LastProviderEngine;
+
+const QODER_GLOBAL_PROFILE: EngineProviderProfileOption = {
+  id: QODER_GLOBAL_PROVIDER_PROFILE_ID,
+  name: QODER_GLOBAL_PROVIDER_PROFILE_NAME,
+  source: "managed",
+};
+const QODER_CN_PROFILE: EngineProviderProfileOption = {
+  id: QODER_CN_PROVIDER_PROFILE_ID,
+  name: QODER_CN_PROVIDER_PROFILE_NAME,
+  source: "managed",
+};
+const QODER_DISTRIBUTION_PROFILES: readonly EngineProviderProfileOption[] = [
+  QODER_GLOBAL_PROFILE,
+  QODER_CN_PROFILE,
+];
 
 export type ProviderContinuationDialogState = {
   workspaceId: string;
@@ -124,22 +144,6 @@ function providerContinuationRecoveryMessage(errorCode: string | null): string {
 const PINNABLE_WORKSPACE_ACTION_ID_SET = new Set<string>(
   PINNABLE_WORKSPACE_ACTION_IDS,
 );
-
-function readLastProviderProfileId(engine: ProviderEngine): string | null {
-  try {
-    return window.localStorage.getItem(LAST_PROVIDER_PROFILE_KEYS[engine]);
-  } catch {
-    return null;
-  }
-}
-
-function writeLastProviderProfileId(engine: ProviderEngine, id: string) {
-  try {
-    window.localStorage.setItem(LAST_PROVIDER_PROFILE_KEYS[engine], id);
-  } catch {
-    // ignore storage write failures
-  }
-}
 
 /**
  * 新建菜单「选供应商 = 启用启动」统一入口。
@@ -201,6 +205,7 @@ export type WorkspaceMenuIconKind =
   | "engine-grok"
   | "engine-pi"
   | "engine-dsh"
+  | "engine-qoder"
   | "new-shared"
   | "alias"
   | "assign-group"
@@ -1382,6 +1387,39 @@ export function useSidebarMenus({
     () => readLastProviderProfileId("opencode"),
   );
 
+  useEffect(() => {
+    const syncRememberedProfiles = () => {
+      setClaudeSelectedProfileId(readLastProviderProfileId("claude"));
+      setCodexSelectedProfileId(readLastProviderProfileId("codex"));
+      setKimiSelectedProfileId(readLastProviderProfileId("kimi"));
+      setGrokSelectedProfileId(readLastProviderProfileId("grok"));
+      setOpencodeSelectedProfileId(readLastProviderProfileId("opencode"));
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key &&
+        !Object.values(LAST_PROVIDER_PROFILE_KEYS).includes(
+          event.key as (typeof LAST_PROVIDER_PROFILE_KEYS)[LastProviderEngine],
+        )
+      ) {
+        return;
+      }
+      syncRememberedProfiles();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(
+      LAST_PROVIDER_PROFILE_CHANGED_EVENT,
+      syncRememberedProfiles,
+    );
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(
+        LAST_PROVIDER_PROFILE_CHANGED_EVENT,
+        syncRememberedProfiles,
+      );
+    };
+  }, []);
+
   const buildSessionMenuGroup = useCallback(
     (
       workspace: WorkspaceInfo,
@@ -1464,6 +1502,16 @@ export function useSidebarMenus({
               statusLabel: t("sidebar.providerUnavailableLabel"),
             }
           : engineMeta;
+      const resolveQoderParentActionMeta = () => {
+        const engineMeta = resolveEngineActionMeta(workspace, "qoder");
+        // engineOptions 只汇报 Global 的单一 Qoder status，不能拿它阻断
+        // CN child；父项始终可打开二级选择。
+        return {
+          ...engineMeta,
+          unavailable: false,
+          statusLabel: null,
+        };
+      };
       const localProviderName = t("providers.localConfig", {
         defaultValue: LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
       });
@@ -1519,6 +1567,7 @@ export function useSidebarMenus({
         kimi: t("workspace.engineKimi"),
         grok: t("workspace.engineGrok"),
         pi: t("workspace.enginePi"),
+        qoder: t("workspace.engineQoder"),
       };
       // Shared CLI 子引擎同样受 CLI 配置管理控制。
       const sharedEngineEntries = (
@@ -1529,6 +1578,7 @@ export function useSidebarMenus({
           ["kimi", "engine-kimi"],
           ["grok", "engine-grok"],
           ["pi", "engine-pi"],
+          ["qoder", "engine-qoder"],
         ] as const
       ).filter(([engine]) => isEngineSessionEntryVisible(engine));
       const actions = [
@@ -1752,6 +1802,42 @@ export function useSidebarMenus({
             const threadId = await runAddAgent("pi");
             await handleCreatedSession(threadId);
           },
+        },
+        {
+          id: "new-session-qoder",
+          label: t("workspace.engineQoder"),
+          iconKind: "engine-qoder",
+          submenuTitle: t("sidebar.qoderDistributionChoiceTitle", {
+            defaultValue: "选择 Qoder 发行版",
+          }),
+          selectionHint: t("sidebar.qoderDistributionChoiceHint", {
+            defaultValue: "Global 与 CN 的账号、配置、模型彼此隔离",
+          }),
+          ...withProviderAvailability(
+            resolveQoderParentActionMeta(),
+            QODER_GLOBAL_PROFILE,
+          ),
+          submenuOnly: true,
+          onSelect: () => {},
+          children: QODER_DISTRIBUTION_PROFILES.map((profile) => ({
+            id: `new-session-qoder-distribution-${profile.id}`,
+            label: profile.name,
+            badgeLabel: t("sidebar.providerIsolatedConfigLabel"),
+            iconKind: "engine-qoder" as const,
+            ...withProviderAvailability(
+              profile.id === QODER_GLOBAL_PROVIDER_PROFILE_ID
+                ? resolveEngineActionMeta(workspace, "qoder")
+                : resolveQoderParentActionMeta(),
+              profile,
+            ),
+            onSelect: async () => {
+              const threadId = await runAddAgent(
+                "qoder",
+                creationProviderSelection(profile),
+              );
+              await handleCreatedSession(threadId);
+            },
+          })),
         },
         {
           id: "new-session-grok",

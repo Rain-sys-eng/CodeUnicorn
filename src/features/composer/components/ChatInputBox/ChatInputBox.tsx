@@ -399,6 +399,28 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
         defaultValue: '可作为来源；目标续接尚未验证',
       }),
     });
+    const enhancerTargetModelGroups = useMemo(
+      () =>
+        atomicProviderTargetCatalog.groups.map((group) => {
+          const seen = new Set<string>();
+          const models = [] as typeof group.profiles[number]['models'];
+          for (const profile of group.profiles) {
+            for (const model of profile.models ?? []) {
+              if (!seen.has(model.id)) {
+                seen.add(model.id);
+                models.push(model);
+              }
+            }
+          }
+          return {
+            providerId: group.providerId,
+            providerLabel: group.providerLabel,
+            enabled: group.enabled,
+            models,
+          };
+        }),
+      [atomicProviderTargetCatalog.groups],
+    );
 
     // Shared/Atomic enrichment：完整 executionTarget 时主动 ensure catalog。
     // 失败不清 target；闭合态标签由 ModelSelect snapshot authority 承担。
@@ -408,7 +430,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       const engine = executionTarget?.engine;
       if (
         !engine ||
-        !["claude", "codex", "grok", "kimi", "opencode", "pi", "dsh"].includes(engine)
+        !["claude", "codex", "grok", "kimi", "opencode", "pi", "dsh", "qoder"].includes(engine)
       ) {
         return;
       }
@@ -457,7 +479,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       }
       const engine = currentProvider as EngineType;
       if (
-        !["claude", "codex", "grok", "kimi", "opencode", "pi", "dsh"].includes(engine)
+        !["claude", "codex", "grok", "kimi", "opencode", "pi", "dsh", "qoder"].includes(engine)
       ) {
         return;
       }
@@ -1333,7 +1355,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       enhancingEngine,
       selectedEnhancerEngine,
       selectedEnhancerModel,
+      selectedEnhancerIntensity,
       enhancerModelOptions,
+      enhancerModelGroups,
+      visibleEnhancerEngines,
       enhancerTimeoutSeconds,
       timeoutLimits: promptEnhancerTimeoutLimits,
       showEnhancerDialog,
@@ -1343,7 +1368,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       handleEnhancePrompt,
       handleEnhancerEngineChange,
       handleEnhancerModelChange,
+      handleEnhancerProviderModelChange,
+      handleEnhancerIntensityChange,
       handleEnhancerTimeoutChange,
+      handleOriginalPromptChange,
       handleRunPromptEnhancement,
       handleUseEnhancedPrompt,
       handleKeepOriginalPrompt,
@@ -1355,6 +1383,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       currentProvider,
       selectedModel,
       modelGroups: providerModelGroups,
+      targetModelGroups: enhancerTargetModelGroups,
       setHasContent,
       handleInput,
       stageNextCommitOptions,
@@ -1757,7 +1786,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
           {!isInputBoxCollapsed && (
             <div
               ref={editableWrapperRef}
-              className={`input-editable-wrapper${isDragOver ? " is-drag-over" : ""}`}
+              className={`input-editable-wrapper scrollable${isDragOver ? " is-drag-over" : ""}`}
               onMouseOver={handleMouseOver}
               onMouseLeave={handleMouseLeave}
               onDragOver={handleDragOver}
@@ -1961,7 +1990,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
                 loadingEngine: enhancingEngine,
                 selectedEngine: selectedEnhancerEngine,
                 selectedModel: selectedEnhancerModel,
+                selectedIntensity: selectedEnhancerIntensity,
                 modelOptions: enhancerModelOptions,
+                modelGroups: enhancerModelGroups,
+                visibleEngines: visibleEnhancerEngines,
                 timeoutSeconds: enhancerTimeoutSeconds,
                 timeoutLimits: promptEnhancerTimeoutLimits,
                 originalPrompt,
@@ -1969,7 +2001,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
                 canUseEnhanced: canUseEnhancedPrompt,
                 onEngineChange: handleEnhancerEngineChange,
                 onModelChange: handleEnhancerModelChange,
+                onProviderModelChange: handleEnhancerProviderModelChange,
+                onIntensityChange: handleEnhancerIntensityChange,
                 onTimeoutChange: handleEnhancerTimeoutChange,
+                onOriginalPromptChange: handleOriginalPromptChange,
                 onRunEnhancement: handleRunPromptEnhancement,
                 onUseEnhanced: handleUseEnhancedPrompt,
                 onKeepOriginal: handleKeepOriginalPrompt,

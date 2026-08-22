@@ -429,6 +429,9 @@ export function mapCommonRealtimeEvent(
   if (!threadId) {
     return null;
   }
+  // Qoder 已进 Shared 集合（enable-qoder-shared-target）：shared:<id> 事件必须走
+  // normalized 路由，否则 per-turn target badge / receipt 无法附着。gemini/dsh 的
+  // Shared fail-closed 由上游保证（本 mapper 不会被以 shared: owner 调用），不在此设卡。
 
   const codexRawGeneratedImageEvent = mapCodexRawGeneratedImageEvent({
     engine,

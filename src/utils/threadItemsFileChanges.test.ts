@@ -232,6 +232,10 @@ describe("threadItemsFileChanges.mergeToolChanges", () => {
         path: "package.json",
         kind: "modified",
       },
+      {
+        path: "CLAUDE.md",
+        kind: "modified",
+      },
     ]);
 
     expect(inferred).toEqual([
@@ -240,6 +244,65 @@ describe("threadItemsFileChanges.mergeToolChanges", () => {
         kind: "modified",
         diff: undefined,
       },
+      {
+        path: "CLAUDE.md",
+        kind: "modified",
+        diff: undefined,
+      },
     ]);
+  });
+
+  it("parses DSH live write arguments stored as a raw JSON string", () => {
+    const inferred = inferFileChangesFromPayload(
+      JSON.stringify({
+        file_path: "src/main/java/com/example/demo/security/SecurityConfig.java",
+        content: "package com.example.demo.security;\n",
+      }),
+    );
+
+    expect(inferred).toHaveLength(1);
+    expect(inferred[0]?.path).toBe(
+      "src/main/java/com/example/demo/security/SecurityConfig.java",
+    );
+    expect(inferred[0]?.diff).toContain("+package com.example.demo.security;");
+  });
+
+  it("parses DSH live edit arguments stored as a raw JSON string", () => {
+    const inferred = inferFileChangesFromPayload(
+      JSON.stringify({
+        file_path: "CLAUDE.md",
+        old_string: "apple",
+        new_string: "kiwi",
+      }),
+    );
+
+    expect(inferred).toHaveLength(1);
+    expect(inferred[0]?.path).toBe("CLAUDE.md");
+    expect(inferred[0]?.diff).toContain("-apple");
+    expect(inferred[0]?.diff).toContain("+kiwi");
+  });
+
+  it("does not treat a JSON todos payload as file changes", () => {
+    expect(
+      inferFileChangesFromPayload(
+        JSON.stringify({
+          todos: [{ content: "write KiwiController", status: "in_progress" }],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("still parses apply_patch text that is not a JSON object", () => {
+    const inferred = inferFileChangesFromPayload(
+      [
+        "*** Begin Patch",
+        "*** Update File: src/a.ts",
+        "@@",
+        "-old",
+        "+new",
+        "*** End Patch",
+      ].join("\n"),
+    );
+    expect(inferred.some((entry) => entry.path === "src/a.ts")).toBe(true);
   });
 });

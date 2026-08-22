@@ -51,7 +51,7 @@ export type SessionOverviewUsageSummaryView = {
 
 export type SessionOverviewQuotaView = {
   source: SessionOverviewQuotaSource;
-  /** 展示用供应商名：codex / kimi / minimax / zhipu / sub2api */
+  /** 展示用供应商名：codex / kimi / qoder / minimax / zhipu / sub2api */
   providerLabel: string | null;
   showRemaining: boolean;
   planType: string | null;
@@ -571,13 +571,17 @@ export function buildSessionOverviewQuota(
     codingPlanQuota.source === "empty_credentials" ||
     codingPlanQuota.source === "empty"
   ) {
+    const providerLabel =
+      engine === "qoder"
+        ? "qoder"
+        : formatRelayProviderLabel(
+            codingPlanQuota.source,
+            codingPlanQuota.siteOrigin,
+          );
     return emptyQuotaView({
       source:
         codingPlanQuota.source === "unsupported" ? "unsupported" : "empty",
-      providerLabel: formatRelayProviderLabel(
-        codingPlanQuota.source,
-        codingPlanQuota.siteOrigin,
-      ),
+      providerLabel,
       showRemaining: usageShowRemaining,
       // unsupported 展示友好 error；empty_credentials 也展示（如缺 key）
       error:

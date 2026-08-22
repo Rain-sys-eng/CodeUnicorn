@@ -717,6 +717,8 @@ fn is_codex_thread_id_filters_non_codex_prefixes() {
     assert!(!is_codex_thread_id("claude-pending-1"));
     assert!(!is_codex_thread_id("opencode:session-1"));
     assert!(!is_codex_thread_id("gemini:session-1"));
+    assert!(!is_codex_thread_id("qoder:session-1"));
+    assert!(!is_codex_thread_id("qoder-pending-1"));
     assert!(!is_codex_thread_id(""));
 }
 

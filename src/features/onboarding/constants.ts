@@ -69,4 +69,8 @@ export const FIRST_RUN_ENGINE_META: Record<
     titleKey: "onboarding.engine.pi.title",
     hintKey: "onboarding.engine.pi.hint",
   },
+  qoder: {
+    titleKey: "onboarding.engine.qoder.title",
+    hintKey: "onboarding.engine.qoder.hint",
+  },
 };

@@ -744,6 +744,42 @@ mod tests {
         assert_eq!(identity.old_path, None);
     }
 
+    fn index_blob_text(repo: &Repository, path: &str) -> String {
+        let index = repo.index().expect("open index");
+        let entry = index
+            .get_path(std::path::Path::new(path), 0)
+            .unwrap_or_else(|| panic!("missing index path {path}"));
+        let blob = repo.find_blob(entry.id).expect("find index blob");
+        String::from_utf8(blob.content().to_vec()).expect("index blob utf8")
+    }
+
+    #[test]
+    fn workdir_action_paths_stay_on_workdir_layer_for_mixed_file() {
+        let root =
+            std::env::temp_dir().join(format!("ccgui-mixed-discard-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("create mixed discard root");
+        let repo = Repository::init(&root).expect("init mixed discard repo");
+        commit_initial_file(&repo, &root);
+
+        fs::write(root.join("tracked.txt"), "staged line\n").expect("write staged content");
+        let mut index = repo.index().expect("open index");
+        index
+            .add_path(std::path::Path::new("tracked.txt"))
+            .expect("stage mixed file");
+        index.write().expect("write mixed index");
+        fs::write(root.join("tracked.txt"), "unstaged line\n").expect("write unstaged content");
+
+        assert_eq!(
+            git_action_paths_for_file(&root, "tracked.txt", GitStatusLayer::Workdir),
+            vec!["tracked.txt".to_string()]
+        );
+        assert_eq!(index_blob_text(&repo, "tracked.txt"), "staged line\n");
+        assert_eq!(
+            fs::read_to_string(root.join("tracked.txt")).expect("read worktree"),
+            "unstaged line\n"
+        );
+    }
+
     #[test]
     fn image_mime_type_detects_known_extensions() {
         assert_eq!(image_mime_type("icon.PNG"), Some("image/png"));

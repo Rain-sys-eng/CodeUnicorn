@@ -61,6 +61,8 @@ function getEngineLabel(engine: EngineType): string {
       return "DSH";
     case "pi":
       return "PI CLI";
+    case "qoder":
+      return "Qoder CLI";
     case "codex":
     default:
       return "Codex";

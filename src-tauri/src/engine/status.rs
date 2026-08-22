@@ -4,7 +4,7 @@
 
 use serde::Deserialize;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
@@ -111,7 +111,8 @@ fn public_models_for_engine(engine_type: EngineType) -> Vec<ModelInfo> {
             get_generated_fallback_models(engine_type)
         }
         EngineType::Pi => get_generated_fallback_models(engine_type),
-        EngineType::Gemini | EngineType::Dsh => Vec::new(),
+        // Qoder catalog is ACP runtime-only (no static fallback roster).
+        EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => Vec::new(),
     }
 }
 
@@ -203,7 +204,8 @@ pub(crate) fn get_local_engine_models_for_validation(
             cached_opencode_runtime_models(),
             public_models_for_engine(EngineType::OpenCode),
         )),
-        EngineType::Gemini | EngineType::Dsh => None,
+        // Qoder models come from the live ACP handshake, not a local store.
+        EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => None,
     }
 }
 
@@ -474,7 +476,9 @@ pub(crate) fn get_provider_scoped_engine_models(
                 &provider,
             )));
         }
-        EngineType::Gemini | EngineType::Pi | EngineType::Dsh => return Ok(None),
+        EngineType::Gemini | EngineType::Pi | EngineType::Dsh | EngineType::Qoder => {
+            return Ok(None)
+        }
     };
     Ok(Some(merge_provider_models_with_public(
         provider_models,
@@ -568,6 +572,69 @@ async fn probe_cli_help(bin: &str, path_env: Option<&String>) -> bool {
             .stderr(std::process::Stdio::null())
             .output()
             .await
+    })
+    .await;
+
+    matches!(help_result, Ok(Ok(output)) if output.status.success())
+}
+
+async fn probe_opencode_cli_version(
+    bin: &str,
+    path_env: Option<&String>,
+) -> (bool, Option<String>, Option<String>) {
+    let version_result = timeout(DETECTION_TIMEOUT, async {
+        let mut cmd = build_async_command(bin);
+        if let Some(path) = path_env {
+            cmd.env("PATH", path);
+        }
+        let _native_artifact_lease =
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                &mut cmd,
+            )?;
+        let output = cmd
+            .arg("--version")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+            .map_err(|error| format!("Failed to execute opencode: {error}"))?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("opencode --version failed: {}", stderr.trim()))
+        }
+    })
+    .await;
+
+    match version_result {
+        Ok(Ok(version)) => (true, Some(version), None),
+        Ok(Err(error)) => (false, None, Some(error)),
+        Err(_) => (
+            false,
+            None,
+            Some("Timeout detecting opencode CLI".to_string()),
+        ),
+    }
+}
+
+async fn probe_opencode_cli_help(bin: &str, path_env: Option<&String>) -> bool {
+    let help_result = timeout(DETECTION_TIMEOUT, async {
+        let mut cmd = build_async_command(bin);
+        if let Some(path) = path_env {
+            cmd.env("PATH", path);
+        }
+        let _native_artifact_lease =
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                &mut cmd,
+            )?;
+        cmd.arg("--help")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .await
+            .map_err(|error| error.to_string())
     })
     .await;
 
@@ -676,33 +743,18 @@ async fn detect_opencode_status_with_options(
     let path_env = build_codex_path_env(custom_bin);
 
     let (mut installed, mut version, mut error) =
-        probe_cli_version(&bin, "opencode", path_env.as_ref()).await;
+        probe_opencode_cli_version(&bin, path_env.as_ref()).await;
 
     // OpenCode CLI in GUI-launched environments can intermittently fail `--version`
     // due to startup env quirks. Use a lightweight second probe to avoid false
     // "not installed" states in engine selector.
     if !installed {
-        let help_probe = timeout(DETECTION_TIMEOUT, async {
-            let mut cmd = build_async_command(&bin);
-            if let Some(ref path) = &path_env {
-                cmd.env("PATH", path);
+        if probe_opencode_cli_help(&bin, path_env.as_ref()).await {
+            installed = true;
+            if version.is_none() {
+                version = Some("unknown".to_string());
             }
-            cmd.arg("--help")
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()
-                .await
-        })
-        .await;
-
-        if let Ok(Ok(output)) = help_probe {
-            if output.status.success() {
-                installed = true;
-                if version.is_none() {
-                    version = Some("unknown".to_string());
-                }
-                error = None;
-            }
+            error = None;
         }
     }
 
@@ -866,6 +918,178 @@ fn get_pi_home_dir() -> Option<PathBuf> {
         }
     }
     dirs::home_dir().map(|home| home.join(".pi").join("agent"))
+}
+
+pub fn get_qoder_home_dir() -> Option<PathBuf> {
+    crate::engine::qoder_provider_profile::resolve_qoder_home_dir(None)
+}
+
+/// Parse `qodercli status -o json`; returns Some(logged_in) when the probe ran.
+pub(crate) fn parse_qoder_status_json(stdout: &str) -> Option<bool> {
+    let value: serde_json::Value = serde_json::from_str(stdout.trim()).ok()?;
+    value.get("logged_in")?.as_bool()
+}
+
+async fn probe_qoder_logged_in(
+    distribution: crate::engine::qoder_provider_profile::QoderDistribution,
+    bin: &str,
+    path_env: Option<&String>,
+    home_dir: Option<&Path>,
+) -> Option<bool> {
+    let mut command = crate::backend::app_server::build_command_for_binary(bin);
+    if let Some(home_dir) = home_dir {
+        command.env(distribution.config_dir_env_var(), home_dir);
+        command.arg("--config-dir").arg(home_dir);
+    }
+    command.args(["status", "-o", "json"]);
+    command.stdout(std::process::Stdio::piped());
+    command.stderr(std::process::Stdio::null());
+    if let Some(path_env) = path_env {
+        command.env("PATH", path_env);
+    }
+    crate::engine::qoder_auth::apply_qoder_pat_env_for_distribution(&mut command, distribution);
+    let output = tokio::time::timeout(std::time::Duration::from_secs(10), command.output())
+        .await
+        .ok()?
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_qoder_status_json(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Fetch the live ACP model catalog (models.availableModels + reasoning
+/// options) via a throwaway `qodercli --acp` handshake. Never blocks engine
+/// detection: any failure degrades to an empty catalog with a diagnostic.
+async fn get_qoder_models(
+    distribution: crate::engine::qoder_provider_profile::QoderDistribution,
+    custom_bin: Option<&str>,
+    home_dir: Option<&str>,
+) -> (Vec<ModelInfo>, Option<String>) {
+    let cwd = std::env::temp_dir();
+    let cwd_string = cwd.to_string_lossy().to_string();
+    let result = crate::engine::qoder::run_qoder_acp_initialized_for_distribution(
+        distribution,
+        custom_bin,
+        &cwd,
+        home_dir,
+        std::time::Duration::from_secs(20),
+        |acp| -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<Vec<ModelInfo>, String>> + Send + '_>,
+        > {
+            let cwd_string = cwd_string.clone();
+            Box::pin(async move {
+                let session = acp
+                    .request(
+                        "session/new",
+                        serde_json::json!({
+                            "cwd": cwd_string,
+                            "mcpServers": [],
+                        }),
+                        QODER_MODEL_PROBE_TIMEOUT,
+                    )
+                    .await?;
+                Ok(crate::engine::qoder::parse_qoder_models_from_session_new(
+                    &session,
+                ))
+            })
+        },
+    )
+    .await;
+    match result {
+        Ok(models) if !models.is_empty() => (models, None),
+        Ok(_) => (
+            Vec::new(),
+            Some("Qoder CLI 未返回可用模型（确认已登录且账号有可用模型）".to_string()),
+        ),
+        Err(error) => (Vec::new(), Some(format!("Qoder 模型目录探测失败：{error}"))),
+    }
+}
+
+const QODER_MODEL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+fn scope_qoder_models_to_distribution(
+    distribution: crate::engine::qoder_provider_profile::QoderDistribution,
+    models: Vec<ModelInfo>,
+) -> Vec<ModelInfo> {
+    models
+        .into_iter()
+        .map(|model| model.with_provider_profile_id(distribution.provider_profile_id()))
+        .collect()
+}
+
+pub async fn detect_qoder_status(custom_bin: Option<&str>) -> EngineStatus {
+    detect_qoder_status_with_home(custom_bin, None).await
+}
+
+pub async fn detect_qoder_status_with_home(
+    custom_bin: Option<&str>,
+    configured_home_dir: Option<&str>,
+) -> EngineStatus {
+    detect_qoder_distribution_status(
+        crate::engine::qoder_provider_profile::QoderDistribution::Global,
+        custom_bin,
+        configured_home_dir,
+    )
+    .await
+}
+
+pub async fn detect_qoder_distribution_status(
+    distribution: crate::engine::qoder_provider_profile::QoderDistribution,
+    custom_bin: Option<&str>,
+    configured_home_dir: Option<&str>,
+) -> EngineStatus {
+    let cli_name = distribution.cli_name();
+    let bin_path = resolve_bin_path(cli_name, custom_bin);
+    let bin = bin_path
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| cli_name.to_string());
+    let path_env = build_codex_path_env(custom_bin);
+    let (installed, version, error) = probe_cli_version(&bin, cli_name, path_env.as_ref()).await;
+    if !installed {
+        return not_installed_status(EngineType::Qoder, error);
+    }
+    let home_dir = crate::engine::qoder_provider_profile::resolve_qoder_distribution_home_dir(
+        distribution,
+        configured_home_dir.map(Path::new),
+    );
+    let logged_in =
+        probe_qoder_logged_in(distribution, &bin, path_env.as_ref(), home_dir.as_deref()).await;
+    let has_pat =
+        crate::engine::qoder_auth::qoder_has_pat_credential_for_distribution(distribution);
+    if logged_in == Some(false) && !has_pat {
+        return EngineStatus {
+            engine_type: EngineType::Qoder,
+            installed: true,
+            version,
+            bin_path: Some(bin),
+            home_dir: home_dir.map(|p| p.to_string_lossy().to_string()),
+            models: Vec::new(),
+            default_model: None,
+            features: EngineFeatures::qoder(),
+            error: Some(format!("Qoder CLI 未登录：请先运行 {} login", cli_name)),
+        };
+    }
+    let (models, config_diagnostic) = get_qoder_models(
+        distribution,
+        Some(&bin),
+        home_dir.as_deref().and_then(|p| p.to_str()),
+    )
+    .await;
+    let models = scope_qoder_models_to_distribution(distribution, models);
+    let default_model = models.iter().find(|m| m.default).map(|m| m.id.clone());
+    EngineStatus {
+        engine_type: EngineType::Qoder,
+        installed: true,
+        version,
+        bin_path: Some(bin),
+        home_dir: home_dir.map(|p| p.to_string_lossy().to_string()),
+        models,
+        default_model,
+        features: EngineFeatures::qoder(),
+        error: config_diagnostic,
+    }
 }
 
 /// Parse `pi --list-models` fixed-width table into ModelInfo entries.
@@ -1720,17 +1944,22 @@ async fn get_opencode_models(
         if let Some(path) = path_env {
             cmd.env("PATH", path);
         }
+        let _native_artifact_lease =
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                &mut cmd,
+            )?;
         cmd.arg("models")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .output()
             .await
+            .map_err(|error| error.to_string())
     })
     .await;
 
     let output = match output_result {
         Ok(Ok(out)) => out,
-        Ok(Err(err)) => return Err(format!("Failed to execute opencode models: {}", err)),
+        Ok(Err(err)) => return Err(format!("Failed to execute opencode models: {err}")),
         Err(_) => return Err("Timeout listing OpenCode models".to_string()),
     };
 
@@ -1835,6 +2064,7 @@ pub async fn detect_all_engines(
     kimi_bin: Option<&str>,
     grok_bin: Option<&str>,
     pi_bin: Option<&str>,
+    qoder_bin: Option<&str>,
     dsh_settings: &crate::engine::dsh::supervisor::DshRuntimeSettings,
     gemini_enabled: bool,
 ) -> Vec<EngineStatus> {
@@ -1847,6 +2077,7 @@ pub async fn detect_all_engines(
         kimi_status,
         grok_status,
         pi_status,
+        qoder_status,
         dsh_status,
     ) = tokio::join!(
         detect_claude_status(claude_bin),
@@ -1862,6 +2093,7 @@ pub async fn detect_all_engines(
         detect_kimi_status(kimi_bin),
         detect_grok_status(grok_bin),
         detect_pi_status(pi_bin),
+        detect_qoder_status(qoder_bin),
         crate::engine::dsh::detect_dsh_status(dsh_settings),
     );
 
@@ -1873,6 +2105,7 @@ pub async fn detect_all_engines(
         kimi_status,
         grok_status,
         pi_status,
+        qoder_status,
         dsh_status,
     ]
 }
@@ -1887,6 +2120,7 @@ pub async fn detect_preferred_engine(
     kimi_bin: Option<&str>,
     grok_bin: Option<&str>,
     pi_bin: Option<&str>,
+    qoder_bin: Option<&str>,
     dsh_settings: Option<&crate::engine::dsh::supervisor::DshRuntimeSettings>,
 ) -> EngineType {
     let default_dsh = crate::engine::dsh::supervisor::DshRuntimeSettings::default();
@@ -1899,6 +2133,7 @@ pub async fn detect_preferred_engine(
         kimi_status,
         grok_status,
         pi_status,
+        qoder_status,
         dsh_status,
     ) = tokio::join!(
         detect_claude_status(claude_bin),
@@ -1914,6 +2149,7 @@ pub async fn detect_preferred_engine(
         detect_kimi_status(kimi_bin),
         detect_grok_status(grok_bin),
         detect_pi_status(pi_bin),
+        detect_qoder_status(qoder_bin),
         crate::engine::dsh::detect_dsh_status(dsh_settings),
     );
 
@@ -1942,6 +2178,9 @@ pub async fn detect_preferred_engine(
     if dsh_status.installed {
         return EngineType::Dsh;
     }
+    if qoder_status.installed {
+        return EngineType::Qoder;
+    }
 
     // Default to Claude so error message is helpful
     EngineType::Claude
@@ -1962,6 +2201,7 @@ pub async fn resolve_engine_type(
     kimi_bin: Option<&str>,
     grok_bin: Option<&str>,
     pi_bin: Option<&str>,
+    qoder_bin: Option<&str>,
 ) -> EngineType {
     // 1. Check workspace-specific setting
     if let Some(engine) = workspace_engine.filter(|s| !s.is_empty()) {
@@ -1975,6 +2215,7 @@ pub async fn resolve_engine_type(
             "grok" => return EngineType::Grok,
             "pi" => return EngineType::Pi,
             "dsh" => return EngineType::Dsh,
+            "qoder" => return EngineType::Qoder,
             _ => {} // Invalid value, fall through
         }
     }
@@ -1991,6 +2232,7 @@ pub async fn resolve_engine_type(
             "grok" => return EngineType::Grok,
             "pi" => return EngineType::Pi,
             "dsh" => return EngineType::Dsh,
+            "qoder" => return EngineType::Qoder,
             _ => {} // Invalid value, fall through
         }
     }
@@ -2005,6 +2247,7 @@ pub async fn resolve_engine_type(
         kimi_bin,
         grok_bin,
         pi_bin,
+        qoder_bin,
         None,
     ))
     .await
@@ -2013,12 +2256,31 @@ pub async fn resolve_engine_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::qoder_provider_profile::{
+        QoderDistribution, QODER_CN_PROVIDER_PROFILE_ID, QODER_GLOBAL_PROVIDER_PROFILE_ID,
+    };
     use serde_json::json;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn qoder_catalog_rows_keep_the_requested_distribution_profile() {
+        let models = vec![ModelInfo::new("qoder-model", "Qoder model")];
+        let global = scope_qoder_models_to_distribution(QoderDistribution::Global, models.clone());
+        let cn = scope_qoder_models_to_distribution(QoderDistribution::Cn, models);
+
+        assert_eq!(
+            global[0].provider_profile_id.as_deref(),
+            Some(QODER_GLOBAL_PROVIDER_PROFILE_ID)
+        );
+        assert_eq!(
+            cn[0].provider_profile_id.as_deref(),
+            Some(QODER_CN_PROVIDER_PROFILE_ID)
+        );
+    }
 
     #[test]
     fn parse_pi_models_output_keeps_thinking_vision_and_default() {
@@ -2494,6 +2756,7 @@ anthropic claude-opus    200k   32k    no       yes
             None,
             None,
             None,
+            None,
         )
         .await;
         assert_eq!(resolved, EngineType::OpenCode);
@@ -2504,6 +2767,7 @@ anthropic claude-opus    200k   32k    no       yes
         let resolved = resolve_engine_type(
             Some("gemini"),
             Some("claude"),
+            None,
             None,
             None,
             None,
@@ -2536,6 +2800,7 @@ anthropic claude-opus    200k   32k    no       yes
             None,
             None,
             Some(script_path.to_string_lossy().as_ref()),
+            None,
             None,
             None,
             None,
@@ -2580,6 +2845,7 @@ anthropic claude-opus    200k   32k    no       yes
             None,
             None,
             None,
+            None,
         )
         .await;
 
@@ -2605,6 +2871,7 @@ anthropic claude-opus    200k   32k    no       yes
             None,
             None,
             None,
+            None,
         )
         .await;
         assert_eq!(resolved, EngineType::Kimi);
@@ -2615,6 +2882,7 @@ anthropic claude-opus    200k   32k    no       yes
         let resolved = resolve_engine_type(
             Some("grok"),
             Some("claude"),
+            None,
             None,
             None,
             None,

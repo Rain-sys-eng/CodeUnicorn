@@ -125,6 +125,7 @@ import {
   TEMPORARILY_DISABLED_SIDEBAR_SECTIONS as BASE_DISABLED_SIDEBAR_SECTIONS,
 } from "./settings-view/settingsViewConstants";
 import { useSystemProxySettings } from "./settings-view/hooks/useSystemProxySettings";
+import type { SettingsHighlightTarget } from "../../app/hooks/useSettingsModalState";
 
 export type SettingsViewProps = {
   workspaceGroups: WorkspaceGroup[];
@@ -175,6 +176,7 @@ export type SettingsViewProps = {
     opencodeBin: string | null,
   ) => Promise<CodexDoctorResult>;
   onRunPiDoctor?: (piBin: string | null) => Promise<CodexDoctorResult>;
+  onRunQoderDoctor?: (qoderBin: string | null) => Promise<CodexDoctorResult>;
   onRunDoctor?: (
     codexBin: string | null,
     codexArgs: string | null,
@@ -200,19 +202,7 @@ export type SettingsViewProps = {
   scaleShortcutText: string;
   onTestNotificationSound: (soundId?: string, customSoundPath?: string) => void;
   initialSection?: SettingsViewSection;
-  initialHighlightTarget?:
-    | "experimental-collaboration-modes"
-    | "basic-open-apps"
-    | "basic-web-service"
-    | "basic-email"
-    | "project-groups"
-    | "project-sessions"
-    | "agent-management"
-    | "prompt-library"
-    | "mcp-servers"
-    | "mcp-skills"
-    | "runtime-pool"
-    | "cli-validation";
+  initialHighlightTarget?: SettingsHighlightTarget;
 };
 const TEMPORARILY_DISABLED_SIDEBAR_SECTIONS: ReadonlySet<SettingsViewSection> =
   BASE_DISABLED_SIDEBAR_SECTIONS as ReadonlySet<SettingsViewSection>;
@@ -337,6 +327,7 @@ export function SettingsView({
   onRunGrokDoctor,
   onRunOpenCodeDoctor,
   onRunPiDoctor,
+  onRunQoderDoctor,
   onRunDoctor,
   activeWorkspace,
   activeThreadId = null,
@@ -479,6 +470,10 @@ export function SettingsView({
     result: CodexDoctorResult | null;
   }>({ status: "idle", result: null });
   const [piDoctorState, setPiDoctorState] = useState<{
+    status: "idle" | "running" | "done";
+    result: CodexDoctorResult | null;
+  }>({ status: "idle", result: null });
+  const [qoderDoctorState, setQoderDoctorState] = useState<{
     status: "idle" | "running" | "done";
     result: CodexDoctorResult | null;
   }>({ status: "idle", result: null });
@@ -895,6 +890,10 @@ export function SettingsView({
       case "cli-validation":
         setActiveSection("runtime-environment");
         setRuntimeEnvironmentSubTab("cli-validation");
+        return;
+      case "qoder-global":
+      case "qoder-cn":
+        setActiveSection("providers");
         return;
       default:
         return;
@@ -1537,6 +1536,33 @@ export function SettingsView({
         result: {
           ok: false,
           codexBin: piBin,
+          version: null,
+          appServerOk: false,
+          details: error instanceof Error ? error.message : String(error),
+          path: null,
+          nodeOk: false,
+          nodeVersion: null,
+          nodeDetails: null,
+        },
+      });
+    }
+  };
+
+  const handleRunQoderDoctor = async () => {
+    const qoderBin = appSettings.qoderBin ?? null;
+    setQoderDoctorState({ status: "running", result: null });
+    try {
+      if (!onRunQoderDoctor) {
+        throw new Error("Qoder doctor is not available.");
+      }
+      const result = await onRunQoderDoctor(qoderBin);
+      setQoderDoctorState({ status: "done", result });
+    } catch (error) {
+      setQoderDoctorState({
+        status: "done",
+        result: {
+          ok: false,
+          codexBin: qoderBin,
           version: null,
           appServerOk: false,
           details: error instanceof Error ? error.message : String(error),
@@ -2265,6 +2291,19 @@ export function SettingsView({
               codexReloadMessage={codexRuntimeReloadState.message}
               handleReloadCodexRuntimeConfig={handleReloadCodexRuntimeConfig}
               onUpdateAppSettings={onUpdateAppSettings}
+              initialCli={
+                initialHighlightTarget === "qoder-global" ||
+                initialHighlightTarget === "qoder-cn"
+                  ? "qoder"
+                  : undefined
+              }
+              initialQoderDistribution={
+                initialHighlightTarget === "qoder-cn"
+                  ? "cn"
+                  : initialHighlightTarget === "qoder-global"
+                    ? "global"
+                    : undefined
+              }
             />
           )}
           {activeSection === "commit" && (
@@ -2388,6 +2427,8 @@ export function SettingsView({
                 dshDoctorState={dshDoctorState}
                 handleRunPiDoctor={handleRunPiDoctor}
                 piDoctorState={piDoctorState}
+                handleRunQoderDoctor={handleRunQoderDoctor}
+                qoderDoctorState={qoderDoctorState}
                 handleRunDoctor={handleRunDoctor}
                 doctorState={doctorState}
                 remoteHostDraft={remoteHostDraft}
@@ -2416,6 +2457,8 @@ export function SettingsView({
                     setDshDoctorState({ status: "done", result });
                   } else if (engine === "pi") {
                     setPiDoctorState({ status: "done", result });
+                  } else if (engine === "qoder") {
+                    setQoderDoctorState({ status: "done", result });
                   } else {
                     setClaudeDoctorState({ status: "done", result });
                   }

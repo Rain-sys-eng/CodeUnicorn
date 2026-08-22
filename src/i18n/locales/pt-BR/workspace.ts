@@ -63,6 +63,7 @@ const workspace = {
     "engineGemini": "Gemini",
     "engineKimi": "Kimi CLI",
     "enginePi": "PI CLI",
+    "engineQoder": "Qoder CLI",
     "engineGrok": "Grok CLI",
     "engineOpenCode": "OpenCode",
     "engineDsh": "DeepSeek Harness",
@@ -271,6 +272,9 @@ const workspace = {
     "deleteWorktreeConfirm": "Tem certeza de que deseja excluir \"{{name}}\"?",
     "deleteWorktreeMessage": "Isso fechará o agent, removerá seu worktree e o excluirá do ccgui.",
     "deleteWorktreeFailed": "Falha ao excluir o worktree"
+  },
+  "sharedSession": {
+    "dshUnsupported": "Não disponível em Shared Session"
   }
 };
 

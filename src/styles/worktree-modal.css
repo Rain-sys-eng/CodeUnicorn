@@ -31,8 +31,8 @@
     radial-gradient(120% 150% at -10% -10%, rgba(37, 99, 235, 0.14) 0%, rgba(37, 99, 235, 0) 42%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--surface-card-strong), #0f172a 4%) 0%,
-      color-mix(in srgb, var(--surface-card), #0b1320 2%) 100%
+      color-mix(in srgb, var(--surface-card-strong), var(--surface-messages) 4%) 0%,
+      color-mix(in srgb, var(--surface-card), var(--surface-messages) 2%) 100%
     );
   padding: 12px;
   box-sizing: border-box;
@@ -816,7 +816,7 @@
   height: 21px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 10%);
-  background: color-mix(in srgb, var(--surface-card-muted), #0f172a 26%);
+  background: color-mix(in srgb, var(--surface-card-muted), var(--surface-messages) 26%);
   transition: background-color 180ms ease;
 }
 
@@ -984,8 +984,8 @@
     radial-gradient(120% 140% at -16% -22%, rgba(37, 99, 235, 0.18) 0%, rgba(37, 99, 235, 0) 52%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--surface-card-strong), #0f172a 4%) 0%,
-      color-mix(in srgb, var(--surface-card), #0b1320 2%) 100%
+      color-mix(in srgb, var(--surface-card-strong), var(--surface-messages) 4%) 0%,
+      color-mix(in srgb, var(--surface-card), var(--surface-messages) 2%) 100%
     );
   box-shadow: 0 22px 56px rgba(0, 0, 0, 0.36);
   padding: 16px;

@@ -7,6 +7,8 @@ const MEMORY_SCOUT_TIMEOUT_MS = 1500;
 const CLAUDE_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 /** Keep aligned with composer / grok.rs allowlist (low|medium|high). */
 const GROK_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
+/** DSH host deepseek adapter reasoning efforts (llm.models reasoning.efforts). */
+const DSH_REASONING_EFFORTS = new Set(["off", "low", "high", "max"]);
 
 export function buildLocalizedMemoryScoutPreviewText(brief: MemoryBrief, t: TFunction) {
   if (brief.status === "ok") {
@@ -33,7 +35,7 @@ export function extractClaudeCandidateSessionId(response: Record<string, unknown
 }
 
 export function normalizeEngineScopedEffort(
-  engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh",
+  engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
   effort: string | null | undefined,
 ): string | null {
   if (typeof effort !== "string") {
@@ -51,6 +53,9 @@ export function normalizeEngineScopedEffort(
   }
   if (engine === "codex") {
     return trimmed;
+  }
+  if (engine === "dsh") {
+    return DSH_REASONING_EFFORTS.has(trimmed) ? trimmed : null;
   }
   return null;
 }

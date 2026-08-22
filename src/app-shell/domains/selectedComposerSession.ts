@@ -1,4 +1,10 @@
 import { getComposerEnginePrefForEngine } from "../../features/composer/hooks/composerEnginePrefsStore";
+import { isTrustedDshCatalogId } from "../../features/threads/hooks/threadMessagingHelpers";
+import {
+  getClientStoreSync,
+  isClientStoreReady,
+  writeClientStoreValue,
+} from "../../services/clientStorage";
 
 export type ComposerSessionSelection = {
   modelId: string | null;
@@ -10,10 +16,12 @@ const CLAUDE_FORK_THREAD_PREFIX = "claude-fork:";
 const CLAUDE_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 /** Keep aligned with `GROK_REASONING_OPTIONS` / grok.rs allowlist. */
 const GROK_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
+/** DSH host deepseek adapter reasoning efforts (llm.models reasoning.efforts). */
+const DSH_REASONING_EFFORTS = new Set(["off", "low", "high", "max"]);
 
 export function resolveThreadEngine(
   threadId: string,
-): "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "codex" | null {
+): "claude" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" | "codex" | null {
   if (
     threadId.startsWith("claude:") ||
     threadId.startsWith("claude-pending-") ||
@@ -38,6 +46,9 @@ export function resolveThreadEngine(
   }
   if (threadId.startsWith("pi:") || threadId.startsWith("pi-pending-")) {
     return "pi";
+  }
+  if (threadId.startsWith("qoder:") || threadId.startsWith("qoder-pending-")) {
+    return "qoder";
   }
   if (threadId.startsWith("codex:") || threadId.startsWith("codex-pending-")) {
     return "codex";
@@ -94,6 +105,10 @@ export function normalizeComposerSessionSelectionForThread(
     effort = effort && CLAUDE_REASONING_EFFORTS.has(effort) ? effort : null;
   } else if (engine === "grok") {
     effort = effort && GROK_REASONING_EFFORTS.has(effort) ? effort : null;
+  } else if (engine === "dsh") {
+    effort = effort && DSH_REASONING_EFFORTS.has(effort) ? effort : null;
+  } else if (engine === "qoder") {
+    effort = effort || null;
   } else if (engine === "gemini" || engine === "kimi" || engine === "opencode" || engine === "pi") {
     effort = null;
   }
@@ -239,4 +254,83 @@ export function fillPendingComposerSelectionEffortFromEnginePref(
     modelId: selection.modelId,
     effort: prefEffort,
   });
+}
+
+const dshComposerSelectionSeedListeners = new Set<() => void>();
+
+export function subscribeDshComposerSelectionSeeded(
+  listener: () => void,
+): () => void {
+  dshComposerSelectionSeedListeners.add(listener);
+  return () => {
+    dshComposerSelectionSeedListeners.delete(listener);
+  };
+}
+
+function notifyDshComposerSelectionSeeded() {
+  for (const listener of dshComposerSelectionSeedListeners) {
+    listener();
+  }
+}
+
+/**
+ * Seed a DSH thread ledger from host history `{provider}/{model}` only when
+ * the existing ledger is missing or not a trusted DSH catalog id.
+ * Never uses global `composerEnginePrefs.dsh.modelId`.
+ */
+export function seedDshComposerSelectionFromHost(input: {
+  workspaceId: string | null;
+  threadId: string;
+  catalogId: string | null | undefined;
+  effort?: string | null;
+}): boolean {
+  if (!input.threadId.startsWith("dsh:")) {
+    return false;
+  }
+  const catalogId = input.catalogId?.trim() || "";
+  if (!isTrustedDshCatalogId(catalogId)) {
+    return false;
+  }
+  const sessionKey = getThreadComposerSelectionStorageKey(
+    input.workspaceId,
+    input.threadId,
+  );
+  const stored = isClientStoreReady("composer")
+    ? getClientStoreSync<unknown>("composer", sessionKey)
+    : undefined;
+  const existing = normalizeComposerSessionSelectionForThread(
+    input.threadId,
+    stored,
+  );
+  const hostEffort = input.effort?.trim() || null;
+  if (isTrustedDshCatalogId(existing?.modelId)) {
+    // 模型一致时只回填 host 当前 thinking effort（官方切档或他端改档后仍能还原）；
+    // 模型不一致时整条回填。用户显式选择以 ledger 为准，host 只在空档时补位。
+    if (!existing || existing.modelId !== catalogId || existing.effort === hostEffort) {
+      return false;
+    }
+    if (!hostEffort) {
+      return false;
+    }
+    const next = normalizeComposerSessionSelectionForThread(input.threadId, {
+      modelId: existing.modelId,
+      effort: hostEffort,
+    });
+    if (!next || !isClientStoreReady("composer")) {
+      return false;
+    }
+    writeClientStoreValue("composer", sessionKey, next);
+    notifyDshComposerSelectionSeeded();
+    return true;
+  }
+  const next = normalizeComposerSessionSelectionForThread(input.threadId, {
+    modelId: catalogId,
+    effort: existing?.effort ?? input.effort ?? null,
+  });
+  if (!next || !isClientStoreReady("composer")) {
+    return false;
+  }
+  writeClientStoreValue("composer", sessionKey, next);
+  notifyDshComposerSelectionSeeded();
+  return true;
 }

@@ -295,6 +295,31 @@ describe("topbarSessionTabs", () => {
     expect(items[0]?.engineLabel).toBe("PI CLI");
   });
 
+  it("infers DSH from thread id when engineSource is missing", () => {
+    const items = buildTopbarSessionTabItems(
+      "w1",
+      "dsh:session-2",
+      {
+        w1: [
+          {
+            id: "dsh:session-2",
+            name: "你好啊",
+            updatedAt: Date.now(),
+          },
+        ],
+      },
+      {
+        tabs: [{ workspaceId: "w1", threadId: "dsh:session-2" }],
+        activationOrdinalByTabKey: { "w1::dsh:session-2": 1 },
+        nextActivationOrdinal: 1,
+      },
+      "Untitled",
+    );
+
+    expect(items[0]?.engineType).toBe("dsh");
+    expect(items[0]?.engineLabel).toBe("DSH");
+  });
+
   it("infers PI from thread id when engineSource is missing", () => {
     const items = buildTopbarSessionTabItems(
       "w1",

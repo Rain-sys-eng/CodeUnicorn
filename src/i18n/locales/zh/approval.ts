@@ -29,6 +29,8 @@ const approval = {
     noteLabel: "说明",
     none: "无",
     noExtraDetails: "无额外详情。",
+    showDebugDetails: "显示请求详情",
+    hideDebugDetails: "隐藏请求详情",
     decline: "拒绝",
     close: "关闭",
     approveTurnBatch: "批准本次全部操作 ({{count}} 项)",

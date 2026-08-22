@@ -24,9 +24,11 @@ type UseComposerMenuActionsOptions = {
   onSelectEffort: (effort: string) => void;
   reasoningSupported: boolean;
   onFocusComposer?: () => void;
+  selectedEngine?: string | null;
 };
 
 const ACCESS_ORDER: AccessMode[] = ["full-access"];
+const DSH_ACCESS_ORDER: AccessMode[] = ["default", "full-access"];
 
 export function useComposerMenuActions({
   models,
@@ -42,6 +44,7 @@ export function useComposerMenuActions({
   onSelectEffort,
   reasoningSupported,
   onFocusComposer,
+  selectedEngine,
 }: UseComposerMenuActionsOptions) {
   const handlers = useMemo(
     () => ({
@@ -58,10 +61,12 @@ export function useComposerMenuActions({
         }
       },
       cycleAccessMode() {
-        const currentIndex = ACCESS_ORDER.indexOf(accessMode);
+        const accessOrder =
+          selectedEngine === "dsh" ? DSH_ACCESS_ORDER : ACCESS_ORDER;
+        const currentIndex = accessOrder.indexOf(accessMode);
         const nextIndex =
-          currentIndex >= 0 ? (currentIndex + 1) % ACCESS_ORDER.length : 0;
-        const nextAccess = ACCESS_ORDER[nextIndex];
+          currentIndex >= 0 ? (currentIndex + 1) % accessOrder.length : 0;
+        const nextAccess = accessOrder[nextIndex];
         if (nextAccess) {
           onFocusComposer?.();
           onSelectAccessMode(nextAccess);
@@ -111,6 +116,7 @@ export function useComposerMenuActions({
       reasoningSupported,
       selectedCollaborationModeId,
       selectedEffort,
+      selectedEngine,
       selectedModelId,
     ],
   );

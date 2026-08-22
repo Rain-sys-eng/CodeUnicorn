@@ -6,6 +6,10 @@ const reasoning = {
     claudeDefault: "Default",
     grokDefault: "Default",
     defaultDescription: "Use the engine default reasoning behavior",
+    off: {
+      label: "Off",
+      description: "Thinking disabled",
+    },
     low: {
       label: "Low",
       description: "Quick responses with basic reasoning",

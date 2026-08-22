@@ -26,5 +26,12 @@ export function resolveComposerAtomicSelectedModelId(input: {
     return fromTarget;
   }
 
+  // DSH catalog ids are `{provider}/{model}`. Falling back to the global
+  // native selectedModelId after visiting Codex/Claude paints that leftover
+  // on the closed trigger and moves the green dot off DeepSeek Harness.
+  if (input.executionTarget?.engine === "dsh") {
+    return "";
+  }
+
   return input.globalSelectedModelId?.trim() || "";
 }
