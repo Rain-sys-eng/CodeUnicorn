@@ -752,7 +752,10 @@ export interface ChatInputBoxProps {
   /** Open the Skills section in Settings (forwarded by the curated-skill chip in the readiness bar). */
   onOpenSkillsSettings?: () => void;
   /** Remove message from queue callback */
-  onRemoveFromQueue?: (id: string) => void;
+  onRemoveFromQueue?: (
+    id: string,
+    options?: { confirmedPendingAck?: boolean },
+  ) => void | Promise<boolean | void>;
   /** Fuse a queued message into the active turn */
   onFuseFromQueue?: (id: string) => void;
   /** Whether queued fuse is available for the active thread */

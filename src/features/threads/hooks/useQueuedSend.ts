@@ -17,11 +17,17 @@ import {
 } from "../../startup-orchestration/utils/startupTrace";
 import { isStartupForceEntered } from "../../startup-orchestration/utils/startupForceEnter";
 import {
+  dispatchSharedSendEvent,
   getSharedSendActiveAttemptId,
   getSharedSendState,
   getSharedSendStateRevision,
   useSharedSendState,
 } from "../../shared-session/runtime/sharedSendStateStore";
+import {
+  invalidateRecoveryOwnerPrefetch,
+  resolveSharedRecoveryOwner,
+} from "../../shared-session/runtime/recoveryClickPath";
+import { sharedSessionV2AbandonUnresolvedAttempt } from "../../shared-session/services/sharedSessions";
 import { getSharedTargetState } from "../../shared-session/target/targetStore";
 import {
   isResolvedExecutionTarget,
@@ -241,7 +247,11 @@ type UseQueuedSendResult = {
     images?: string[],
     options?: MessageSendOptions,
   ) => Promise<void>;
-  removeQueuedMessage: (threadId: string, messageId: string) => void;
+  removeQueuedMessage: (
+    threadId: string,
+    messageId: string,
+    options?: { confirmedPendingAck?: boolean },
+  ) => Promise<boolean>;
   fuseQueuedMessage: (threadId: string, messageId: string) => Promise<void>;
   canFuseActiveQueue: boolean;
   /** 全局融合不可用时的 i18n key；canFuse 时为 null。 */
@@ -262,6 +272,27 @@ type ThreadFusionState = {
 
 type QueuedDispatchResult =
   "committed" | "dispatched" | "blocked" | "ambiguous";
+
+function resolveSharedQueuePersistenceOwner(
+  threadId: string,
+  previousQueue: QueuedMessage[] | undefined,
+  nextQueue: QueuedMessage[] | undefined,
+): { workspaceId: string; threadId: string } | null {
+  const scopedItems = [...(nextQueue ?? []), ...(previousQueue ?? [])];
+  const owner = scopedItems.find(
+    (item) =>
+      item.ownerWorkspaceId?.trim() && item.ownerThreadId === threadId,
+  );
+  if (!owner?.ownerWorkspaceId) {
+    return null;
+  }
+  const workspaceId = owner.ownerWorkspaceId.trim();
+  const ownerMatches = scopedItems.every(
+    (item) =>
+      item.ownerWorkspaceId === workspaceId && item.ownerThreadId === threadId,
+  );
+  return ownerMatches ? { workspaceId, threadId } : null;
+}
 
 type SlashCommandKind =
   | "fork"
@@ -738,21 +769,40 @@ export function useQueuedSend({
         previous: Record<string, QueuedMessage[]>,
       ) => Record<string, QueuedMessage[]>,
     ) => {
-      const next = updater(queuedByThreadRef.current);
-      if (Object.is(next, queuedByThreadRef.current)) {
+      const previous = queuedByThreadRef.current;
+      const next = updater(previous);
+      if (Object.is(next, previous)) {
         return;
       }
       queuedByThreadRef.current = next;
       setQueuedByThreadState(next);
-      if (isSharedSession && activeWorkspace && activeThreadId) {
-        writeSharedQueuedFollowUps(
-          activeWorkspace.id,
-          activeThreadId,
-          next[activeThreadId] ?? [],
-        );
+      if (isSharedSession) {
+        const affectedThreadIds = new Set([
+          ...Object.keys(previous),
+          ...Object.keys(next),
+        ]);
+        for (const threadId of affectedThreadIds) {
+          const previousQueue = previous[threadId];
+          const nextQueue = next[threadId];
+          if (Object.is(previousQueue, nextQueue)) {
+            continue;
+          }
+          const owner = resolveSharedQueuePersistenceOwner(
+            threadId,
+            previousQueue,
+            nextQueue,
+          );
+          if (owner) {
+            writeSharedQueuedFollowUps(
+              owner.workspaceId,
+              owner.threadId,
+              nextQueue ?? [],
+            );
+          }
+        }
       }
     },
-    [activeThreadId, activeWorkspace, isSharedSession],
+    [isSharedSession],
   );
 
   const recordDeliveryDecision = useCallback(
@@ -1002,9 +1052,76 @@ export function useQueuedSend({
   );
 
   const removeQueuedMessage = useCallback(
-    (threadId: string, messageId: string) => {
+    async (
+      threadId: string,
+      messageId: string,
+      options?: { confirmedPendingAck?: boolean },
+    ): Promise<boolean> => {
+      const queuedItem = (queuedByThreadRef.current[threadId] ?? []).find(
+        (entry) => entry.id === messageId,
+      );
+      if (!queuedItem) {
+        return false;
+      }
+      if (queuedItem.sharedDispatchState === "pending-ack") {
+        if (!options?.confirmedPendingAck) {
+          return false;
+        }
+        const ownerWorkspaceId = queuedItem.ownerWorkspaceId?.trim();
+        if (!ownerWorkspaceId || queuedItem.ownerThreadId !== threadId) {
+          return false;
+        }
+        let owner;
+        try {
+          owner = await resolveSharedRecoveryOwner(ownerWorkspaceId, threadId);
+          if (owner.kind === "ambiguous") {
+            return false;
+          }
+          invalidateRecoveryOwnerPrefetch(ownerWorkspaceId, threadId);
+          if (owner.kind === "attempt") {
+            const abandonResult = await sharedSessionV2AbandonUnresolvedAttempt(
+              ownerWorkspaceId,
+              threadId,
+              { attemptId: owner.attemptId, forceStop: true },
+            );
+            if (abandonResult.status === "clear") {
+              dispatchSharedSendEvent(ownerWorkspaceId, threadId, {
+                type: "probeNotAccepted",
+              });
+            } else {
+              dispatchSharedSendEvent(ownerWorkspaceId, threadId, {
+                type: "commitCancelled",
+              });
+            }
+          } else {
+            // StatusBar 的既有约定：不存在未决 attempt 时以 durable state 解锁。
+            dispatchSharedSendEvent(ownerWorkspaceId, threadId, {
+              type: "probeNotAccepted",
+            });
+          }
+          dispatchSharedSendEvent(ownerWorkspaceId, threadId, {
+            type: "canonicalCommitted",
+          });
+        } catch {
+          return false;
+        }
+        queuedAfterTerminalPulseRef.current.delete(messageId);
+        queuedAfterSharedRevisionRef.current.delete(messageId);
+        setInFlightByThread((prev) =>
+          prev[threadId]?.id === messageId
+            ? { ...prev, [threadId]: null }
+            : prev,
+        );
+        setQueuedByThread((prev) => ({
+          ...prev,
+          [threadId]: (prev[threadId] ?? []).filter(
+            (entry) => entry.id !== messageId,
+          ),
+        }));
+        return true;
+      }
       if (inFlightByThread[threadId]?.id === messageId) {
-        return;
+        return false;
       }
       queuedAfterTerminalPulseRef.current.delete(messageId);
       queuedAfterSharedRevisionRef.current.delete(messageId);
@@ -1014,6 +1131,7 @@ export function useQueuedSend({
           (entry) => entry.id !== messageId,
         ),
       }));
+      return true;
     },
     [inFlightByThread, setQueuedByThread],
   );
@@ -2145,16 +2263,14 @@ export function useQueuedSend({
       threadId: string,
       item: QueuedMessage,
     ): WorkspaceInfo | null => {
-      if (item.ownerWorkspaceId) {
-        const resolved = resolveWorkspace?.(item.ownerWorkspaceId) ?? null;
-        if (resolved) {
-          return resolved;
-        }
-        if (activeWorkspace?.id === item.ownerWorkspaceId) {
-          return activeWorkspace;
-        }
+      if (!item.ownerWorkspaceId || item.ownerThreadId !== threadId) {
+        return null;
       }
-      if (threadId === activeThreadId) {
+      const resolved = resolveWorkspace?.(item.ownerWorkspaceId) ?? null;
+      if (resolved) {
+        return resolved;
+      }
+      if (activeWorkspace?.id === item.ownerWorkspaceId) {
         return activeWorkspace;
       }
       return null;
@@ -2189,10 +2305,7 @@ export function useQueuedSend({
       }
       const threadIsShared = isThreadShared(threadId);
       if (threadIsShared) {
-        const ownerWsId =
-          (queuedByThread[threadId]?.[0]?.ownerWorkspaceId ??
-            (threadId === activeThreadId ? activeWorkspace?.id : undefined)) ||
-          "";
+        const ownerWsId = queuedByThread[threadId]?.[0]?.ownerWorkspaceId ?? "";
         if (!ownerWsId) {
           return false;
         }
@@ -2225,12 +2338,12 @@ export function useQueuedSend({
       }
       const ownerWorkspace = resolveOwnerWorkspace(threadId, nextItem);
       const isBackground = threadId !== activeThreadId;
-      if (isBackground && !ownerWorkspace) {
+      if (!ownerWorkspace && (isBackground || threadIsShared)) {
         // 不串线：无 owner 禁止 drain 到 active。
         return false;
       }
       if (
-        isBackground &&
+        (isBackground || threadIsShared) &&
         nextItem.ownerThreadId &&
         nextItem.ownerThreadId !== threadId
       ) {

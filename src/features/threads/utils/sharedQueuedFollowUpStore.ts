@@ -55,6 +55,12 @@ function normalizeSendOptions(value: unknown): MessageSendOptions | undefined {
   }
 }
 
+function normalizeOwnerId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : undefined;
+}
+
 function normalizeQueuedMessage(value: unknown): QueuedMessage | null {
   if (!isRecord(value)) {
     return null;
@@ -87,6 +93,8 @@ function normalizeQueuedMessage(value: unknown): QueuedMessage | null {
     sendOptions: normalizeSendOptions(value.sendOptions),
     sharedExecutionTarget,
     sharedPredecessorAttemptId,
+    ownerWorkspaceId: normalizeOwnerId(value.ownerWorkspaceId),
+    ownerThreadId: normalizeOwnerId(value.ownerThreadId),
     sharedDispatchState:
       value.sharedDispatchState === "pending-ack" ? "pending-ack" : undefined,
   };

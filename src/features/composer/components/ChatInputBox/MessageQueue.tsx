@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ConfirmDialog } from '../../../../components/ui/ConfirmDialog';
 import type { QueuedMessage } from './types';
 
 const MESSAGE_QUEUE_PREVIEW_LIMIT = 120;
@@ -47,7 +49,10 @@ export interface MessageQueueProps {
   /** Queue items */
   queue: QueuedMessage[];
   /** Remove item callback */
-  onRemove: (id: string) => void;
+  onRemove: (
+    id: string,
+    options?: { confirmedPendingAck?: boolean },
+  ) => void | Promise<boolean | void>;
   /** Fuse item callback */
   onFuse?: (id: string) => void;
   /** Whether fuse is available */
@@ -74,13 +79,35 @@ export function MessageQueue({
   fusingMessageId = null,
 }: MessageQueueProps) {
   const { t } = useTranslation();
+  const [pendingAckRemovalId, setPendingAckRemovalId] = useState<string | null>(
+    null,
+  );
+  const [isAbandoningPendingAck, setIsAbandoningPendingAck] = useState(false);
+
+  const confirmPendingAckRemoval = async () => {
+    if (!pendingAckRemovalId || isAbandoningPendingAck) {
+      return;
+    }
+    setIsAbandoningPendingAck(true);
+    try {
+      const removed = await onRemove(pendingAckRemovalId, {
+        confirmedPendingAck: true,
+      });
+      if (removed !== false) {
+        setPendingAckRemovalId(null);
+      }
+    } finally {
+      setIsAbandoningPendingAck(false);
+    }
+  };
 
   if (queue.length === 0) {
     return null;
   }
 
   return (
-    <div className="message-queue">
+    <>
+      <div className="message-queue">
       {/* Render in reverse order so newest is at bottom (closest to input) */}
       {[...queue].reverse().map((item, reversedIndex) => {
         // Calculate actual queue position (1-based, from bottom)
@@ -154,11 +181,15 @@ export function MessageQueue({
               <button
                 type="button"
                 className="message-queue-action message-queue-remove"
-                onClick={() => onRemove(item.id)}
+                onClick={() => {
+                  if (isPendingAck) {
+                    setPendingAckRemovalId(item.id);
+                    return;
+                  }
+                  void onRemove(item.id);
+                }}
                 disabled={isFusing}
                 aria-disabled={isFusing}
-                // 排队中：可删；确认中：按钮仍可用作卡死 pending-ack 的出口，
-                // 若底层仍 in-flight 会静默 no-op（防双发，不在此改生命周期）。
                 title={
                   isPendingAck
                     ? t(statusKey)
@@ -171,7 +202,23 @@ export function MessageQueue({
           </div>
         );
       })}
-    </div>
+      </div>
+      <ConfirmDialog
+        open={pendingAckRemovalId !== null}
+        title={t('sharedSend.recoverySkipConfirmTitle')}
+        body={t('sharedSend.recoverySkipConfirm')}
+        confirmText={t('sharedSend.recoverySkipConfirmAction')}
+        danger
+        onCancel={() => {
+          if (!isAbandoningPendingAck) {
+            setPendingAckRemovalId(null);
+          }
+        }}
+        onConfirm={() => {
+          void confirmPendingAckRemoval();
+        }}
+      />
+    </>
   );
 }
 

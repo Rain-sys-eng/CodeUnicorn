@@ -5,6 +5,7 @@ import type { WorkspaceInfo } from "../../../types";
 import { resetClientStorageForTests } from "../../../services/clientStorage";
 import {
   dispatchSharedSendEvent,
+  getSharedSendState,
   resetSharedSendStateStoreForTests,
   setSharedSendActiveAttempt,
   tryAcquireSharedSend,
@@ -14,10 +15,21 @@ import {
   selectNextTarget,
 } from "../../shared-session/target/targetStore";
 import {
+  readSharedQueuedFollowUps,
+  writeSharedQueuedFollowUps,
+} from "../utils/sharedQueuedFollowUpStore";
+import {
   __setEnableBackgroundQueueDrainForTests,
   buildQueueDrainSignal,
   useQueuedSend,
 } from "./useQueuedSend";
+
+const sharedSessionServices = vi.hoisted(() => ({
+  sharedSessionV2AbandonUnresolvedAttempt: vi.fn(),
+  sharedSessionV2TurnState: vi.fn(),
+}));
+
+vi.mock("../../shared-session/services/sharedSessions", () => sharedSessionServices);
 
 /** renderHook 的 props 宽类型，避免 initialProps 字面量收窄导致 rerender 报错 */
 type QueuedSendHookProps = Parameters<typeof useQueuedSend>[0];
@@ -201,6 +213,8 @@ describe("useQueuedSend", () => {
     resetSharedTargetStoreForTests();
     // S1 安全版默认开后台；个别用例显式关闸。
     __setEnableBackgroundQueueDrainForTests(true);
+    sharedSessionServices.sharedSessionV2AbandonUnresolvedAttempt.mockReset();
+    sharedSessionServices.sharedSessionV2TurnState.mockReset();
   });
   it("sends queued messages one at a time after processing completes", async () => {
     const options = makeOptions();
@@ -1832,6 +1846,106 @@ describe("useQueuedSend", () => {
     expect(sendUserMessageToThread).toHaveBeenCalledTimes(1);
   });
 
+  it("abandons a pending Shared ACK only after explicit confirmation", async () => {
+    const threadId = "shared:thread-1";
+    selectNextTarget(workspace.id, threadId, sharedTarget);
+    primeSharedRunning(threadId);
+    const sendUserMessageToThread = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({
+      activeThreadId: threadId,
+      activeTurnId: "runtime-turn-1",
+      activeEngine: "codex",
+      isSharedSession: true,
+      isProcessing: true,
+      sendUserMessageToThread,
+    });
+    const { result, rerender } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("Abandon only after confirmation");
+      dispatchSharedSendEvent(workspace.id, threadId, {
+        type: "terminalCommitted",
+      });
+      rerender({
+        ...options,
+        activeTurnId: null,
+        activeTerminalPulse: 1,
+        isProcessing: false,
+      });
+      await Promise.resolve();
+    });
+
+    const messageId = result.current.activeQueue[0]?.id;
+    expect(messageId).toBeTruthy();
+    expect(result.current.activeQueue[0]?.sharedDispatchState).toBe("pending-ack");
+
+    await act(async () => {
+      await expect(
+        result.current.removeQueuedMessage(threadId, messageId!),
+      ).resolves.toBe(false);
+    });
+    expect(
+      sharedSessionServices.sharedSessionV2AbandonUnresolvedAttempt,
+    ).not.toHaveBeenCalled();
+    expect(result.current.activeQueue).toHaveLength(1);
+
+    sharedSessionServices.sharedSessionV2TurnState.mockResolvedValue({
+      status: "ok",
+      inFlightAttempts: [
+        { attemptId: "attempt-queued", bindingKey: "codex:provider-1" },
+      ],
+      bindings: [],
+    });
+    sharedSessionServices.sharedSessionV2AbandonUnresolvedAttempt.mockRejectedValueOnce(
+      new Error("runtime unavailable"),
+    );
+
+    await act(async () => {
+      await expect(
+        result.current.removeQueuedMessage(threadId, messageId!, {
+          confirmedPendingAck: true,
+        }),
+      ).resolves.toBe(false);
+    });
+    expect(result.current.activeQueue).toHaveLength(1);
+
+    sharedSessionServices.sharedSessionV2AbandonUnresolvedAttempt.mockResolvedValue({
+      status: "cancelled-committed",
+      attemptId: "attempt-queued",
+      bindingKey: "codex:provider-1",
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.removeQueuedMessage(threadId, messageId!, {
+          confirmedPendingAck: true,
+        }),
+      ).resolves.toBe(true);
+    });
+
+    expect(
+      sharedSessionServices.sharedSessionV2AbandonUnresolvedAttempt,
+    ).toHaveBeenCalledWith(workspace.id, threadId, {
+      attemptId: "attempt-queued",
+      forceStop: true,
+    });
+    expect(getSharedSendState(workspace.id, threadId).state).toBe("idle");
+    expect(result.current.activeQueue).toHaveLength(0);
+
+    await act(async () => {
+      rerender({
+        ...options,
+        activeTurnId: null,
+        activeTerminalPulse: 2,
+        isProcessing: false,
+      });
+      await Promise.resolve();
+    });
+    expect(sendUserMessageToThread).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects a committed Shared ACK whose frozen target does not match", async () => {
     const threadId = "shared:thread-1";
     selectNextTarget(workspace.id, threadId, sharedTarget);
@@ -2322,6 +2436,116 @@ describe("useQueuedSend", () => {
       [],
       undefined,
     );
+  });
+
+  it("persists a background Shared queue under its original owner", async () => {
+    const threadA = "shared:thread-a";
+    const threadB = "shared:thread-b";
+    const workspaceB: WorkspaceInfo = {
+      id: "workspace-b",
+      name: "other",
+      path: "/tmp/other",
+      connected: true,
+      settings: { sidebarCollapsed: false },
+    };
+    selectNextTarget(workspace.id, threadA, sharedTarget);
+    primeSharedRunning(threadA);
+    const sendUserMessageToThread = vi.fn().mockResolvedValue(undefined);
+    const activeOptions = makeOptions({
+      activeThreadId: threadA,
+      activeTurnId: "runtime-turn-a",
+      activeEngine: "codex",
+      activeWorkspace: workspace,
+      isSharedSession: true,
+      isProcessing: true,
+      threadStatusById: {
+        [threadA]: { isProcessing: true, terminalPulse: 0 },
+        [threadB]: { isProcessing: false, terminalPulse: 0 },
+      },
+      resolveWorkspace: (id: string) =>
+        id === workspace.id ? workspace : id === workspaceB.id ? workspaceB : null,
+      sendUserMessageToThread,
+    });
+    const { result, rerender } = renderHook(
+      (props: QueuedSendHookProps) => useQueuedSend(props),
+      { initialProps: activeOptions as QueuedSendHookProps },
+    );
+
+    await act(async () => {
+      await result.current.handleSend("Stay with owner A");
+    });
+    expect(readSharedQueuedFollowUps(workspace.id, threadA)[0]).toMatchObject({
+      text: "Stay with owner A",
+      ownerWorkspaceId: workspace.id,
+      ownerThreadId: threadA,
+    });
+
+    await act(async () => {
+      dispatchSharedSendEvent(workspace.id, threadA, {
+        type: "terminalCommitted",
+      });
+      rerender({
+        ...activeOptions,
+        activeThreadId: threadB,
+        activeTurnId: null,
+        activeWorkspace: workspaceB,
+        isProcessing: false,
+        threadStatusById: {
+          [threadA]: { isProcessing: false, terminalPulse: 1 },
+          [threadB]: { isProcessing: false, terminalPulse: 0 },
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(sendUserMessageToThread).toHaveBeenCalledWith(
+      workspace,
+      threadA,
+      "Stay with owner A",
+      [],
+      expect.objectContaining({ sharedExecutionTarget: sharedTarget }),
+    );
+    expect(readSharedQueuedFollowUps(workspace.id, threadA)[0]).toMatchObject({
+      text: "Stay with owner A",
+      ownerWorkspaceId: workspace.id,
+      ownerThreadId: threadA,
+      sharedDispatchState: "pending-ack",
+    });
+    expect(readSharedQueuedFollowUps(workspaceB.id, threadB)).toEqual([]);
+  });
+
+  it("holds a rehydrated Shared queue item without an owner", async () => {
+    const threadId = "shared:thread-1";
+    writeSharedQueuedFollowUps(workspace.id, threadId, [
+      {
+        id: "legacy-ownerless",
+        text: "Never fall back to the active session",
+        createdAt: 1,
+        sharedExecutionTarget: sharedTarget,
+      },
+    ]);
+    const sendUserMessageToThread = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({
+      activeThreadId: threadId,
+      activeEngine: "codex",
+      isSharedSession: true,
+      isProcessing: false,
+      threadStatusById: {
+        [threadId]: { isProcessing: false, terminalPulse: 0 },
+      },
+      sendUserMessageToThread,
+    });
+
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.activeQueue).toHaveLength(1);
+    expect(sendUserMessageToThread).not.toHaveBeenCalled();
   });
 
   it("does not re-dispatch the same queue item after a failed send", async () => {

@@ -25,12 +25,19 @@
 ## 3. 接线与清理
 
 - [x] 3.1 composer / app-shell 传 threadStatus、activeItems、resolveWorkspace
-- [x] 3.2 删除劣质 HTML demo
-- [x] 3.3 Vitest useQueuedSend + handoff **75 passed**
+- [x] 3.3 Vitest useQueuedSend + handoff 已通过
+
+## 3A. P0 Shared pending-ack recovery 与 owner persistence
+
+- [x] 3A.1 将 `pending-ack` 的删除请求接入现有 `ConfirmDialog`；明确告知 Runtime 可能已接收、不会重发、不能撤回。
+- [x] 3A.2 复用 Shared V2 terminal abandon contract；仅成功后结算 cancelled、移除 queue item、清 in-flight。失败/无 owner 时保持原状态。
+- [x] 3A.3 将 queue persistence 写回按 queue owner 定位；rehydrate round-trip `ownerWorkspaceId` / `ownerThreadId`，owner 缺失仅 hold。
+- [x] 3A.4 单测：`pending-ack` 删除不会静默 no-op；取消/abandon 失败不丢队列；abandon 成功不重发；非 active owner 写回与 rehydrate 不串线。
 
 ## 4. 验证（手工）
 
-- [ ] 4.1 焦点：123 → 挂 456 → 自动发且 strip 空
-- [ ] 4.2 离焦：A 挂队列 → 切 B → A 在 ready 后后台 drain（cap=1）
-- [ ] 4.3 紧切回：不应「已回复还在条里」+ 不应同句刷屏
-- [ ] 4.4 三会话各 1 队列：不卡死、不连发
+- [x] 4.1 焦点：123 → 挂 456 → 自动发且 strip 空（用户验收通过）
+- [x] 4.2 离焦：A 挂队列 → 切 B → A 在 ready 后后台 drain（cap=1，用户验收通过）
+- [x] 4.3 紧切回：不应「已回复还在条里」+ 不应同句刷屏（用户验收通过）
+- [x] 4.4 三会话各 1 队列：不卡死、不连发（用户验收通过）
+- [x] 4.5 Shared pending-ack：点击删除 → 明示确认 → abandon 成功后解除；取消或失败时消息仍在，且不会重发（用户验收通过）。
