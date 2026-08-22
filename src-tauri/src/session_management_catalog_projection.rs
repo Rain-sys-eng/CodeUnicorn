@@ -116,6 +116,25 @@ fn expand_hidden_session_id_aliases(session_id: &str) -> Vec<String> {
     if trimmed.is_empty() {
         return Vec::new();
     }
+    if trimmed.starts_with("qoder:") {
+        return match engine::qoder_provider_profile::parse_qoder_native_session_identity(
+            trimmed,
+            None,
+        ) {
+            Ok(identity) if !identity.is_legacy => vec![identity.canonical_id()],
+            Ok(identity) => {
+                let mut keys = vec![
+                    identity.canonical_id(),
+                    format!("qoder:{}", identity.raw_session_id),
+                    identity.raw_session_id,
+                ];
+                keys.sort();
+                keys.dedup();
+                keys
+            }
+            Err(_) => vec![trimmed.to_string()],
+        };
+    }
     let mut keys = vec![trimmed.to_string()];
     let parts = trimmed.split(':').collect::<Vec<_>>();
     if let Some(last) = parts.last().copied().filter(|value| !value.is_empty()) {
@@ -1061,8 +1080,21 @@ async fn build_workspace_scope_catalog_data(
             match qoder_list_result {
                 Ok(qoder_sessions) => {
                     qoder_session_count += qoder_sessions.len();
-                    entries.extend(qoder_sessions.into_iter().map(|session| {
-                        let session_id = format!("qoder:{}", session.session_id);
+                    entries.extend(qoder_sessions.into_iter().filter_map(|session| {
+                        let session_id = match engine::qoder_provider_profile::canonical_qoder_native_session_id(
+                            &session.session_id,
+                            session.provider_profile_id.as_deref(),
+                        ) {
+                            Ok(session_id) => session_id,
+                            Err(error) => {
+                                log::warn!(
+                                    "[session_management.list_workspace_sessions] ignored invalid Qoder session identity `{}`: {}",
+                                    session.session_id,
+                                    error
+                                );
+                                return None;
+                            }
+                        };
                         let entry = WorkspaceSessionCatalogEntry {
                             archived_at: archived_at_for_session(
                                 &owner_metadata,
@@ -1108,7 +1140,7 @@ async fn build_workspace_scope_catalog_data(
                             children_count: None,
                             continuation: ProviderContinuationProjection::default(),
                         };
-                        finalize_existing_catalog_entry(entry, &metadata_by_workspace_id)
+                        Some(finalize_existing_catalog_entry(entry, &metadata_by_workspace_id))
                     }));
                 }
                 Err(error) => {
