@@ -56,13 +56,13 @@ describe("workspace wallpaper styles", () => {
     expect(css).toContain(":root[data-workspace-wallpaper] .fvp");
     expect(css).toContain("--workspace-wallpaper-veil:");
     expect(css).toContain(
-      ":root[data-workspace-wallpaper] {\n  --workspace-wallpaper-frost: 12px;\n  --desktop-main-radius: 0;\n  --desktop-main-shadow: none;\n}",
+      ":root[data-workspace-wallpaper] {\n  --workspace-wallpaper-frost: 0px;\n  --desktop-main-radius: 0;\n  --desktop-main-shadow: none;\n}",
     );
     expect(css).not.toContain(
       "--workspace-wallpaper-wash-opacity: 8%;\n  --workspace-wallpaper-frost:",
     );
-    expect(css).toContain(
-      "backdrop-filter: blur(var(--workspace-wallpaper-frost, 12px))",
+    expect(css).not.toContain(
+      "backdrop-filter: blur(var(--workspace-wallpaper-frost",
     );
     expect(css).toContain(
       ':root[data-platform="windows"] .workspace-wallpaper::after',

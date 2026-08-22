@@ -16,7 +16,7 @@ import {
 
 export const WORKSPACE_WALLPAPER_MODES = ["none", "fluid", "custom"] as const;
 
-export const DEFAULT_WORKSPACE_WALLPAPER_VEIL_OPACITY = 12;
+export const DEFAULT_WORKSPACE_WALLPAPER_VEIL_OPACITY = 0;
 export const MIN_WORKSPACE_WALLPAPER_VEIL_OPACITY = 0;
 export const MAX_WORKSPACE_WALLPAPER_VEIL_OPACITY = 20;
 
@@ -85,14 +85,11 @@ export const DEFAULT_WORKSPACE_WALLPAPER: WorkspaceWallpaperSettings = {
 };
 
 export function sanitizeWorkspaceWallpaperVeilOpacity(
-  value: number | null | undefined,
+  _value: number | null | undefined,
 ): number {
-  return clampInt(
-    value,
-    MIN_WORKSPACE_WALLPAPER_VEIL_OPACITY,
-    MAX_WORKSPACE_WALLPAPER_VEIL_OPACITY,
-    DEFAULT_WORKSPACE_WALLPAPER_VEIL_OPACITY,
-  );
+  // Frost overlay is off. Persisted radii (old default 12, leftovers
+  // like 6) must not keep frosting the wallpaper until a slider exists.
+  return DEFAULT_WORKSPACE_WALLPAPER_VEIL_OPACITY;
 }
 
 export function sanitizeWorkspaceWallpaperBlur(

@@ -99,7 +99,7 @@ export type WorkspaceWallpaperSettings = {
   customImagePath: string | null;
   fluidPreset?: WorkspaceWallpaperFluidPreset;
   fluidMotion?: WorkspaceWallpaperFluidMotion;
-  /** Frost blur in px, 0–20. Default 12. Reuses the old veil slider field. */
+  /** Frost blur in px, 0–20. Default 0. Reuses the old veil slider field. */
   veilOpacity?: number;
   library?: WorkspaceWallpaperLibraryItem[];
   selectedLibraryId?: string | null;

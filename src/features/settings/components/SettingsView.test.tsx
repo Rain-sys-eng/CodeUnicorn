@@ -301,7 +301,7 @@ const baseSettings: AppSettings = {
     customImagePath: null,
     fluidPreset: "mist",
     fluidMotion: "drift",
-    veilOpacity: 12,
+    veilOpacity: 0,
   },
   userMsgColor: "",
   usageShowRemaining: false,
@@ -1631,7 +1631,7 @@ describe("SettingsView Display", () => {
           customImagePath: null,
           fluidPreset: "mist",
           fluidMotion: "drift",
-          veilOpacity: 12,
+          veilOpacity: 0,
         }),
       }),
     );

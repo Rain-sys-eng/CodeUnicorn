@@ -254,6 +254,11 @@ export function WorkspaceWallpaperHost() {
       data-testid="workspace-wallpaper"
       data-mode={mode}
       data-media-kind={isVideo ? "video" : mode === "custom" ? "image" : "fluid"}
+      data-media-blur={
+        sanitizeWorkspaceWallpaperBlur(wallpaper.wallpaperBlur) > 0
+          ? "true"
+          : undefined
+      }
     >
       {mode === "fluid" ? (
         <FirstRunFluidBackdrop

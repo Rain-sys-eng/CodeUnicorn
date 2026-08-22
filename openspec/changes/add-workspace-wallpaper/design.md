@@ -25,8 +25,8 @@ type WorkspaceWallpaperSettings = {
 };
 ```
 
-- 默认：`{ mode: "none", customImagePath: null, veilOpacity: 12 }`。背景是 opt-in，用户必须在设置里手动开 `fluid` 或 `custom`。
-- `veilOpacity` 现在表示毛玻璃模糊半径（px），范围 0–20，缺字段回 12。开启背景时 Settings 提供滑杆，host 把它写成 `--workspace-wallpaper-frost`。
+- 默认：`{ mode: "none", customImagePath: null, veilOpacity: 0 }`。背景是 opt-in，用户必须在设置里手动开 `fluid` 或 `custom`。
+- `veilOpacity` 现在表示毛玻璃模糊半径（px），范围 0–20，缺字段回 0。开壁纸默认原图，不上霜。旧默认 12 视为未设置。开启背景时 Settings 可提供滑杆，host 把它写成 `--workspace-wallpaper-frost`。
 - `custom` 但路径空 / 非法 / 非图片扩展名 → sanitize 保留 `custom`；运行时显示回退到 `fluid`，不改写用户存储。
 - 旧设置缺字段 → `none`。已持久化 `fluid` / `custom` 的用户保持原值。
 
@@ -50,7 +50,7 @@ AppRouter (main)
 开启 wallpaper 时：
 
 - 壁纸层只做轻微 saturate/contrast + 8–10% wash。chrome 不再用可调灰蒙层。
-- sidebar / `.main` / `.right-panel` 共用同一层 16% 轻色洗 + 可调 frost（默认 12px，0–20）。滑杆调的是 blur，不是透明度。
+- sidebar / `.main` / `.right-panel` 共用同一层 16% 轻色洗 + 可调 frost（默认 0px，0–20）。滑杆调的是 blur，不是透明度。
 - `prefers-reduced-transparency` 把 frost 置 0。
 - 开启 wallpaper 时关掉 `.main` 的 desktop 圆角，并恢复 sidebar / `.main` 的 1px 分割线。
 - 消息气泡、popover、Dialog、settings 浮层、composer 输入框保持不透明（preference guide：弹层必须实色可读）。

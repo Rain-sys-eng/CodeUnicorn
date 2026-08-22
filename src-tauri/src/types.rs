@@ -1559,7 +1559,7 @@ fn default_workspace_wallpaper_fluid_motion() -> String {
 }
 
 fn default_workspace_wallpaper_veil_opacity() -> u8 {
-    12
+    0
 }
 
 fn default_workspace_wallpaper_blur() -> u8 {
@@ -2401,6 +2401,7 @@ mod tests {
             serde_json::from_str(legacy).expect("legacy deserialize");
         assert_eq!(legacy_settings.workspace_wallpaper.fluid_motion, "drift");
         assert_eq!(legacy_settings.workspace_wallpaper.fluid_preset, "ash");
+        assert_eq!(legacy_settings.workspace_wallpaper.veil_opacity, 0);
     }
 
     #[test]

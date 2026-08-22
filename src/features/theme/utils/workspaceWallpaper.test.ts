@@ -56,7 +56,7 @@ describe("workspaceWallpaper", () => {
       customImagePath: null,
       fluidPreset: "ash",
       fluidMotion: "tornado",
-      veilOpacity: 12,
+      veilOpacity: 0,
       library: [],
       selectedLibraryId: null,
       wallpaperBlur: 0,
@@ -96,7 +96,7 @@ describe("workspaceWallpaper", () => {
       customImagePath: null,
       fluidPreset: "mist",
       fluidMotion: "storm",
-      veilOpacity: 12,
+      veilOpacity: 0,
       library: [],
       selectedLibraryId: null,
       wallpaperBlur: 0,
@@ -121,7 +121,7 @@ describe("workspaceWallpaper", () => {
       customImagePath: null,
       fluidPreset: "mist",
       fluidMotion: "drift",
-      veilOpacity: 12,
+      veilOpacity: 0,
       library: [],
       selectedLibraryId: null,
       wallpaperBlur: 0,
@@ -176,7 +176,7 @@ describe("workspaceWallpaper", () => {
         mode: "fluid",
         customImagePath: null,
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("fluid");
     expect(
@@ -184,7 +184,7 @@ describe("workspaceWallpaper", () => {
         mode: "custom",
         customImagePath: "/tmp/wall.png",
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("custom");
     expect(
@@ -192,7 +192,7 @@ describe("workspaceWallpaper", () => {
         mode: "custom",
         customImagePath: null,
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("fluid");
     expect(
@@ -200,7 +200,7 @@ describe("workspaceWallpaper", () => {
         mode: "none",
         customImagePath: null,
         fluidPreset: "mist",
-        veilOpacity: 12,
+        veilOpacity: 0,
       }),
     ).toBe("none");
   });
@@ -310,19 +310,26 @@ describe("workspaceWallpaper", () => {
     ).toBe("https://wallhaven.cc/w/abc123");
   });
 
-  it("clamps frost blur to the readable chrome range", () => {
+  it("clears persisted frost so wallpaper stays sharp", () => {
+    expect(
+      sanitizeWorkspaceWallpaper({
+        mode: "custom",
+        customImagePath: "/tmp/wall.png",
+        veilOpacity: 12,
+      }).veilOpacity,
+    ).toBe(0);
+    expect(
+      sanitizeWorkspaceWallpaper({
+        mode: "custom",
+        customImagePath: "/tmp/wall.png",
+        veilOpacity: 6,
+      }).veilOpacity,
+    ).toBe(0);
     expect(
       sanitizeWorkspaceWallpaper({
         mode: "fluid",
         customImagePath: null,
         veilOpacity: 16,
-      }).veilOpacity,
-    ).toBe(16);
-    expect(
-      sanitizeWorkspaceWallpaper({
-        mode: "fluid",
-        customImagePath: null,
-        veilOpacity: -4,
       }).veilOpacity,
     ).toBe(0);
     expect(
@@ -331,6 +338,6 @@ describe("workspaceWallpaper", () => {
         customImagePath: null,
         veilOpacity: 48,
       }).veilOpacity,
-    ).toBe(20);
+    ).toBe(0);
   });
 });

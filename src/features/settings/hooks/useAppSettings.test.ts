@@ -123,7 +123,7 @@ describe("useAppSettings", () => {
       customImagePath: null,
       fluidPreset: "mist",
       fluidMotion: "drift",
-      veilOpacity: 12,
+      veilOpacity: 0,
       library: [],
       selectedLibraryId: null,
       wallpaperBlur: 0,

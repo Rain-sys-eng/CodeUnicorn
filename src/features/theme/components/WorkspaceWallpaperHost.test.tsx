@@ -201,7 +201,7 @@ describe("WorkspaceWallpaperHost", () => {
       document.documentElement.style.getPropertyValue(
         "--workspace-wallpaper-frost",
       ),
-    ).toBe("12px");
+    ).toBe("0px");
   });
 
   it("falls back to a managed data URL when the asset protocol image fails", async () => {
@@ -270,6 +270,9 @@ describe("WorkspaceWallpaperHost", () => {
     );
     expect(video?.muted).toBe(true);
     expect(video?.loop).toBe(true);
+    expect(screen.getByTestId("workspace-wallpaper").getAttribute("data-media-blur")).toBe(
+      "true",
+    );
     expect(
       document.documentElement.style.getPropertyValue(
         "--workspace-wallpaper-media-blur",
@@ -332,7 +335,25 @@ describe("WorkspaceWallpaperHost", () => {
     expect(screen.queryByTestId("first-run-fluid")).toBeNull();
   });
 
-  it("writes the persisted frost blur onto the document root", async () => {
+  it("remaps the legacy 12px frost default to a sharp wallpaper", async () => {
+    getAppSettings.mockResolvedValueOnce({
+      workspaceWallpaper: {
+        mode: "custom",
+        customImagePath: "/Users/me/Wall.png",
+        veilOpacity: 12,
+      },
+    });
+    render(<WorkspaceWallpaperHost />);
+    await waitFor(() => {
+      expect(
+        document.documentElement.style.getPropertyValue(
+          "--workspace-wallpaper-frost",
+        ),
+      ).toBe("0px");
+    });
+  });
+
+  it("does not apply persisted frost onto the wallpaper overlay", async () => {
     getAppSettings.mockResolvedValueOnce({
       workspaceWallpaper: {
         mode: "fluid",
@@ -346,7 +367,7 @@ describe("WorkspaceWallpaperHost", () => {
         document.documentElement.style.getPropertyValue(
           "--workspace-wallpaper-frost",
         ),
-      ).toBe("18px");
+      ).toBe("0px");
     });
   });
 

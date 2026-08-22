@@ -73,10 +73,18 @@ Settings → 基础 → 外观 MUST 用 preference row + segmented control 提�
 - **AND** Home 空态顶部空白条 MUST 仍可作为窗口拖拽区
 - **AND** 搜索、Quick Switcher、侧栏折叠、右侧工具栏等标题栏控件 MUST 保持可点
 
+#### Scenario: Wallpaper opens without automatic frost
+
+- **WHEN** wallpaper mode 为 `fluid` 或 `custom`
+- **THEN** `--workspace-wallpaper-frost` MUST 为 0px
+- **AND** `.workspace-wallpaper::after` MUST NOT 使用 `backdrop-filter: blur(...)`
+- **AND** 已持久化的 `veilOpacity`（含旧默认 12 与残留值如 6）MUST 视为未设置
+- **AND** 壁纸 MUST 以原图呈现，不得自动叠一层毛玻璃
+
 #### Scenario: User adjusts wallpaper frost
 
 - **WHEN** wallpaper mode 不是 `none`
-- **THEN** Settings 外观 MUST 提供毛玻璃强度滑杆，范围 0–20px，默认 12
+- **THEN** Settings 外观 MUST 提供毛玻璃强度滑杆，范围 0–20px，默认 0
 - **AND** 拖动 MUST 立即写入 `workspaceWallpaper.veilOpacity` 并更新 `--workspace-wallpaper-frost`
 - **WHEN** mode 为 `none`
 - **THEN** 系统 MUST NOT 展示该滑杆
