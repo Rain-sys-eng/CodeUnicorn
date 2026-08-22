@@ -23,7 +23,7 @@ describe("parseQoderHistoryMessages", () => {
     );
   });
 
-  it("maps tool entries to command execution items", () => {
+  it("maps shell tool entries to command execution items", () => {
     const items = parseQoderHistoryMessages([
       {
         id: "qoder-tool-1",
@@ -37,6 +37,45 @@ describe("parseQoderHistoryMessages", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toEqual(
       expect.objectContaining({ id: "qoder-tool-1", kind: "tool", output: "ok" }),
+    );
+  });
+
+  it("maps generic qoder tools to mcp tool cards instead of terminal cards", () => {
+    const items = parseQoderHistoryMessages([
+      {
+        id: "tool:call_01a024d1af117dd1b4ea5705",
+        kind: "tool",
+        toolType: "Skill",
+        title: "Skill",
+        toolInput: { skill: "quest" },
+        toolOutput: { success: true, commandName: "quest" },
+        text: '{"success":true}',
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(
+      expect.objectContaining({
+        id: "tool:call_01a024d1af117dd1b4ea5705",
+        kind: "tool",
+        toolType: "mcpToolCall",
+        title: "Skill",
+      }),
+    );
+    expect(items[0]).not.toEqual(expect.objectContaining({ command: "Skill" }));
+  });
+
+  it("maps reasoning chunks to reasoning items", () => {
+    const items = parseQoderHistoryMessages([
+      { id: "reasoning:t1", kind: "reasoning", text: "thinking" },
+      { id: "message:a1", kind: "message", role: "assistant", text: "answer" },
+    ]);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual(
+      expect.objectContaining({ id: "reasoning:t1", kind: "reasoning" }),
+    );
+    expect(items[1]).toEqual(
+      expect.objectContaining({ id: "message:a1", kind: "message", role: "assistant" }),
     );
   });
 

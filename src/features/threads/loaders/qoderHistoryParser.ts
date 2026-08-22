@@ -2,6 +2,23 @@ import type { ConversationItem } from "../../../types";
 import { buildConversationItemFromThreadItem } from "../../../utils/threadItems";
 import { asRecord, asString } from "./historyLoaderUtils";
 
+const COMMAND_TOOL_RE = /bash|shell|exec|terminal|command|stdin/;
+const FILE_CHANGE_TOOL_RE = /write|edit|apply|patch|delete_file|remove_file/;
+
+function stringifyHistoryToolOutput(output: unknown, fallbackText: string): string {
+  if (typeof output === "string") {
+    return output;
+  }
+  if (output && typeof output === "object") {
+    try {
+      return JSON.stringify(output);
+    } catch {
+      return fallbackText;
+    }
+  }
+  return fallbackText;
+}
+
 function parseHistoryTimestampMs(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return value < 1_000_000_000_000 ? value * 1000 : value;
@@ -41,15 +58,26 @@ export function parseQoderHistoryMessages(raw: unknown): ConversationItem[] {
     }
     if (kind === "tool") {
       const toolName = asString(message.toolType) || asString(message.title) || "tool";
+      const normalizedName = toolName.toLowerCase();
+      const itemType = COMMAND_TOOL_RE.test(normalizedName)
+        ? "commandExecution"
+        : FILE_CHANGE_TOOL_RE.test(normalizedName)
+          ? "fileChange"
+          : "mcpToolCall";
+      const outputText = stringifyHistoryToolOutput(message.toolOutput, text);
       const converted = buildConversationItemFromThreadItem({
         id,
-        type: "commandExecution",
+        type: itemType,
         title: toolName,
-        command: toolName,
+        tool: toolName,
+        command: itemType === "commandExecution" ? toolName : undefined,
+        server: itemType === "mcpToolCall" ? "agent" : undefined,
         status: "completed",
         timestampMs,
         input: message.toolInput ?? undefined,
-        output: message.toolOutput ?? text,
+        arguments: message.toolInput ?? undefined,
+        output: outputText,
+        result: outputText,
       });
       if (converted) items.push(converted);
       continue;

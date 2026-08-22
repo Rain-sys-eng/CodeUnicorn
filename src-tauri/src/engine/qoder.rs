@@ -39,6 +39,14 @@ pub(crate) const QODER_LIST_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) const QODER_DELETE_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) const QODER_LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 pub(crate) const QODER_DOCTOR_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+/// qodercli 1.1.28 会把 `session/load` / `session/prompt` 的 JSON-RPC response
+/// 插在 `session/update` 流中间（实测：第一条 user chunk 之后立刻回 result，
+/// thought / tool_call / 最终正文在 response 之后才到）。request 必须在
+/// response 之后继续读到 idle，否则历史截断、实时少最后一段。
+const QODER_PROMPT_TRAILING_IDLE: Duration = Duration::from_millis(400);
+const QODER_LOAD_TRAILING_IDLE: Duration = Duration::from_millis(1000);
+const QODER_PROMPT_TRAILING_CAP: Duration = Duration::from_secs(2);
+const QODER_LOAD_TRAILING_CAP: Duration = Duration::from_secs(15);
 const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 const JSONRPC_INVALID_PARAMS: i64 = -32602;
 const JSONRPC_INTERNAL_ERROR: i64 = -32603;
@@ -239,6 +247,9 @@ pub(crate) fn extract_content_text(content: Option<&Value>) -> String {
     if let Some(text) = content.get("text").and_then(Value::as_str) {
         return text.to_string();
     }
+    if let Some(thinking) = content.get("thinking").and_then(Value::as_str) {
+        return thinking.to_string();
+    }
     if let Some(parts) = content.as_array() {
         return parts
             .iter()
@@ -246,11 +257,81 @@ pub(crate) fn extract_content_text(content: Option<&Value>) -> String {
                 part.as_str()
                     .map(str::to_string)
                     .or_else(|| part.get("text").and_then(Value::as_str).map(str::to_string))
+                    .or_else(|| {
+                        part.get("thinking")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .or_else(|| {
+                        let nested = extract_content_text(part.get("content"));
+                        if nested.is_empty() {
+                            None
+                        } else {
+                            Some(nested)
+                        }
+                    })
             })
             .collect::<Vec<_>>()
             .join("");
     }
     String::new()
+}
+
+pub(crate) fn extract_qoder_tool_call_id(update: &Value) -> Option<String> {
+    update
+        .get("toolCallId")
+        .or_else(|| update.get("toolCallID"))
+        .or_else(|| update.get("tool_call_id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+pub(crate) fn extract_qoder_tool_name(update: &Value) -> Option<String> {
+    update
+        .get("_meta")
+        .and_then(|meta| meta.get("qoder"))
+        .and_then(|qoder| qoder.get("toolName"))
+        .and_then(Value::as_str)
+        .or_else(|| update.get("title").and_then(Value::as_str))
+        .or_else(|| update.get("kind").and_then(Value::as_str))
+        .or_else(|| update.get("name").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+pub(crate) fn extract_qoder_tool_content_text(update: &Value) -> String {
+    let from_blocks = extract_content_text(update.get("content"));
+    if !from_blocks.trim().is_empty() {
+        return from_blocks;
+    }
+    let from_raw = extract_content_text(update.get("rawOutput"));
+    if !from_raw.trim().is_empty() {
+        return from_raw;
+    }
+    extract_content_text(update.get("output"))
+}
+
+pub(crate) fn acp_method_drains_trailing_updates(method: &str) -> bool {
+    matches!(method, "session/load" | "session/prompt")
+}
+
+fn trailing_update_idle_timeout(method: &str) -> Duration {
+    match method {
+        "session/load" => QODER_LOAD_TRAILING_IDLE,
+        "session/prompt" => QODER_PROMPT_TRAILING_IDLE,
+        _ => Duration::ZERO,
+    }
+}
+
+fn trailing_update_drain_cap(method: &str) -> Duration {
+    match method {
+        "session/load" => QODER_LOAD_TRAILING_CAP,
+        "session/prompt" => QODER_PROMPT_TRAILING_CAP,
+        _ => Duration::ZERO,
+    }
 }
 
 pub(crate) fn is_error_prefixed_text(text: &str) -> bool {
@@ -284,29 +365,40 @@ pub(crate) fn map_session_update(update: &Value) -> QoderSessionUpdate {
                 .get("status")
                 .and_then(Value::as_str)
                 .unwrap_or("pending");
-            if status != "pending" && status != "in_progress" {
+            let Some(tool_id) = extract_qoder_tool_call_id(update) else {
                 return QoderSessionUpdate::Ignore;
-            }
-            let tool_id = update
-                .get("toolCallId")
-                .or_else(|| update.get("toolCallID"))
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            if tool_id.is_empty() {
-                return QoderSessionUpdate::Ignore;
-            }
-            let tool_name = update
-                .get("title")
-                .or_else(|| update.get("kind"))
-                .or_else(|| update.get("name"))
-                .and_then(Value::as_str)
-                .unwrap_or("tool")
-                .to_string();
+            };
+            let tool_name = extract_qoder_tool_name(update).unwrap_or_else(|| "tool".to_string());
             let input = update
                 .get("rawInput")
                 .cloned()
                 .or_else(|| update.get("input").cloned());
+            // session/load 回放把 tool 压成一条 status=completed 的 tool_call
+            // snapshot（qodercli 1.1.28 实测）。不能只认 pending，否则历史
+            // 和部分 live 路径会把工具块整段丢掉。
+            if status == "completed" || status == "failed" {
+                let output = update
+                    .get("rawOutput")
+                    .cloned()
+                    .or_else(|| update.get("output").cloned())
+                    .or_else(|| update.get("content").cloned());
+                let error = if status == "failed" {
+                    Some(extract_qoder_tool_content_text(update))
+                        .map(|value| value.trim().to_string())
+                        .filter(|value| !value.is_empty())
+                } else {
+                    None
+                };
+                return QoderSessionUpdate::ToolCompleted {
+                    tool_id,
+                    tool_name: Some(tool_name),
+                    output,
+                    error,
+                };
+            }
+            if status != "pending" && status != "in_progress" {
+                return QoderSessionUpdate::Ignore;
+            }
             QoderSessionUpdate::ToolStarted {
                 tool_id,
                 tool_name,
@@ -318,32 +410,19 @@ pub(crate) fn map_session_update(update: &Value) -> QoderSessionUpdate {
             if status != "completed" && status != "failed" {
                 return QoderSessionUpdate::Ignore;
             }
-            let tool_id = update
-                .get("toolCallId")
-                .or_else(|| update.get("toolCallID"))
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            if tool_id.is_empty() {
+            let Some(tool_id) = extract_qoder_tool_call_id(update) else {
                 return QoderSessionUpdate::Ignore;
-            }
-            let tool_name = update
-                .get("title")
-                .or_else(|| update.get("kind"))
-                .or_else(|| update.get("name"))
-                .and_then(Value::as_str)
-                .map(str::to_string);
+            };
+            let tool_name = extract_qoder_tool_name(update);
             let output = update
-                .get("content")
+                .get("rawOutput")
                 .cloned()
-                .or_else(|| update.get("rawOutput").cloned());
+                .or_else(|| update.get("output").cloned())
+                .or_else(|| update.get("content").cloned());
             let error = if status == "failed" {
-                Some(
-                    extract_content_text(update.get("content"))
-                        .trim()
-                        .to_string(),
-                )
-                .filter(|value| !value.is_empty())
+                Some(extract_qoder_tool_content_text(update))
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
             } else {
                 None
             };
@@ -818,16 +897,49 @@ impl QoderAcpProcess {
         self.write_line(&jsonrpc_request(id, method, params))
             .await?;
         let deadline = tokio::time::Instant::now() + timeout_dur;
+        let drain_trailing = acp_method_drains_trailing_updates(method);
+        let idle = trailing_update_idle_timeout(method);
+        let drain_cap = trailing_update_drain_cap(method);
+        let mut settled: Option<Value> = None;
+        let mut drain_deadline: Option<tokio::time::Instant> = None;
         loop {
-            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-            if remaining.is_zero() {
-                return Err(format!("{method} timed out"));
+            let wait = if settled.is_some() {
+                let cap_remaining = drain_deadline
+                    .map(|until| until.saturating_duration_since(tokio::time::Instant::now()))
+                    .unwrap_or(idle);
+                if cap_remaining.is_zero() {
+                    return Ok(settled.take().unwrap_or(Value::Null));
+                }
+                idle.min(cap_remaining)
+            } else {
+                deadline.saturating_duration_since(tokio::time::Instant::now())
+            };
+            if wait.is_zero() {
+                return match settled.take() {
+                    Some(result) => Ok(result),
+                    None => Err(format!("{method} timed out")),
+                };
             }
-            let line = match timeout(remaining, self.stdout.next_line()).await {
+            let line = match timeout(wait, self.stdout.next_line()).await {
                 Ok(Ok(Some(line))) => line,
-                Ok(Ok(None)) => return Err(format!("{method} ended: ACP stdout closed")),
-                Ok(Err(error)) => return Err(format!("{method} stdout error: {error}")),
-                Err(_) => return Err(format!("{method} timed out")),
+                Ok(Ok(None)) => {
+                    return match settled.take() {
+                        Some(result) => Ok(result),
+                        None => Err(format!("{method} ended: ACP stdout closed")),
+                    };
+                }
+                Ok(Err(error)) => {
+                    return match settled.take() {
+                        Some(result) => Ok(result),
+                        None => Err(format!("{method} stdout error: {error}")),
+                    };
+                }
+                Err(_) => {
+                    return match settled.take() {
+                        Some(result) => Ok(result),
+                        None => Err(format!("{method} timed out")),
+                    };
+                }
             };
             let line = line.trim().to_string();
             if line.is_empty() {
@@ -853,7 +965,12 @@ impl QoderAcpProcess {
                             message = error.message
                         ));
                     }
-                    return Ok(result.unwrap_or(Value::Null));
+                    let result = result.unwrap_or(Value::Null);
+                    if !drain_trailing {
+                        return Ok(result);
+                    }
+                    settled = Some(result);
+                    drain_deadline = Some(tokio::time::Instant::now() + drain_cap);
                 }
                 AcpLine::Notification {
                     method: notif_method,
@@ -1583,6 +1700,48 @@ mod tests {
         assert_eq!(map_session_update(&user), QoderSessionUpdate::Ignore);
         let config = json!({"sessionUpdate":"config_option_update"});
         assert_eq!(map_session_update(&config), QoderSessionUpdate::Ignore);
+
+        // session/load replay snapshot: tool_call arrives already completed.
+        let completed_snapshot = json!({
+            "sessionUpdate":"tool_call",
+            "toolCallId":"call_01a024d1af117dd1b4ea5705",
+            "status":"completed",
+            "title":"Skill",
+            "content":[{"type":"content","content":{"type":"text","text":"{\"success\":true}"}}],
+            "kind":"other",
+            "rawInput":{"skill":"quest"},
+            "rawOutput":{"success":true},
+            "_meta":{"qoder":{"toolName":"Skill"}}
+        });
+        match map_session_update(&completed_snapshot) {
+            QoderSessionUpdate::ToolCompleted {
+                tool_id,
+                tool_name,
+                output,
+                error,
+            } => {
+                assert_eq!(tool_id, "call_01a024d1af117dd1b4ea5705");
+                assert_eq!(tool_name.as_deref(), Some("Skill"));
+                assert_eq!(output, Some(json!({"success":true})));
+                assert!(error.is_none());
+            }
+            other => panic!("expected ToolCompleted snapshot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn load_and_prompt_drain_trailing_session_updates() {
+        assert!(acp_method_drains_trailing_updates("session/load"));
+        assert!(acp_method_drains_trailing_updates("session/prompt"));
+        assert!(!acp_method_drains_trailing_updates("session/list"));
+        assert!(!acp_method_drains_trailing_updates("initialize"));
+        assert!(!acp_method_drains_trailing_updates("session/new"));
+        assert_eq!(
+            extract_qoder_tool_content_text(&json!({
+                "content":[{"type":"content","content":{"type":"text","text":"done"}}]
+            })),
+            "done"
+        );
     }
 
     #[test]
