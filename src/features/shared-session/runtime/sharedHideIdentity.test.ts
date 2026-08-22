@@ -134,4 +134,16 @@ describe("sharedHideIdentity", () => {
       expect(hasKnownSharedEnginePrefix("gemini:session")).toBe(false);
     });
   });
+
+  describe("Qoder distribution identity", () => {
+    it("does not let canonical Global/CN ids with the same raw session collide", () => {
+      const globalId = "qoder:__qoder_global__:same-raw-session";
+      const cnId = "qoder:__qoder_cn__:same-raw-session";
+      const globalKeys = new Set(collectSharedHideIdentityKeys(globalId));
+
+      expect([...globalKeys]).toEqual([globalId]);
+      expect(sharedHideIdentityIntersects(globalId, globalKeys)).toBe(true);
+      expect(sharedHideIdentityIntersects(cnId, globalKeys)).toBe(false);
+    });
+  });
 });

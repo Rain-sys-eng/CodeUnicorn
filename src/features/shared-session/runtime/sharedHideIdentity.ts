@@ -5,6 +5,8 @@
  * 任意 `:` 剥离会把盘符 `S:\…` 当成 engine 前缀。本模块按平台区分路径，只剥已知 engine。
  */
 
+import { collectQoderSessionIdentityKeys } from "../../threads/utils/qoderSessionIdentity";
+
 export const SHARED_HIDE_ENGINE_PREFIXES = [
   "claude",
   "codex",
@@ -126,6 +128,12 @@ export function collectSharedHideIdentityKeys(id: string): string[] {
   const trimmed = asTrimmedId(id);
   if (!trimmed) {
     return [];
+  }
+  if (trimmed.toLowerCase().startsWith("qoder:")) {
+    const qoderKeys = collectQoderSessionIdentityKeys(trimmed);
+    if (qoderKeys.length > 0) {
+      return qoderKeys;
+    }
   }
   const keys = new Set<string>([trimmed]);
   if (isSharedHideFilesystemPathId(trimmed)) {

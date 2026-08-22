@@ -24,6 +24,10 @@ import {
   resetLiveAssistantTextChannelForTests,
 } from "../utils/liveAssistantTextChannel";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
+import {
+  clearSharedSessionBindingsForSharedThread,
+  registerSharedSessionNativeBinding,
+} from "../../shared-session/runtime/sharedSessionBridge";
 import { initialState, threadReducer } from "./useThreadsReducer";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import { workspaceScopedHas } from "./workspaceScopedMap";
@@ -504,6 +508,30 @@ describe("useThreadTurnEvents", () => {
     expect(safeMessageActivity).not.toHaveBeenCalled();
   });
 
+  it("ignores thread started events for Shared-owned native bindings", () => {
+    registerSharedSessionNativeBinding({
+      workspaceId: "ws-1",
+      sharedThreadId: "shared:owned",
+      nativeThreadId: "grok:shared-owned-native",
+      engine: "grok",
+    });
+    const { result, dispatch, recordThreadActivity, safeMessageActivity } =
+      makeOptions();
+
+    act(() => {
+      result.current.onThreadStarted("ws-1", {
+        id: "grok:shared-owned-native",
+        preview: "3+3",
+        updatedAt: 1_700_000_000_200,
+      });
+    });
+
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(recordThreadActivity).not.toHaveBeenCalled();
+    expect(safeMessageActivity).not.toHaveBeenCalled();
+    clearSharedSessionBindingsForSharedThread("ws-1", "shared:owned");
+  });
+
   it("suppresses Codex helper threads on thread started", () => {
     const { result, dispatch, recordThreadActivity, safeMessageActivity } = makeOptions();
 
@@ -631,6 +659,37 @@ describe("useThreadTurnEvents", () => {
       "qoder",
       "__qoder_cn__",
     );
+  });
+
+  it("does not broaden a pending Qoder interrupt to workspace scope", async () => {
+    vi.mocked(engineInterruptTurn).mockRejectedValue(
+      new Error("unknown method: engine_interrupt_turn"),
+    );
+    const { result } = makeOptions({
+      pendingInterrupts: ["qoder:__qoder_cn__:session-cn"],
+      providerProfileByThread: {
+        "qoder:__qoder_cn__:session-cn": "__qoder_cn__",
+      },
+    });
+
+    act(() => {
+      result.current.onTurnStarted(
+        "ws-1",
+        "qoder:__qoder_cn__:session-cn",
+        "turn-cn",
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(engineInterruptTurn).toHaveBeenCalledWith(
+      "ws-1",
+      "turn-cn",
+      "qoder",
+      "__qoder_cn__",
+    );
+    expect(engineInterrupt).not.toHaveBeenCalled();
   });
 
   it("routes pending claude interrupts through turn-scoped engine interrupt", () => {
@@ -1197,7 +1256,9 @@ describe("useThreadTurnEvents", () => {
   it("keeps the Qoder CN binding when a pending thread is finalized before its interrupt", () => {
     const { result } = makeOptions({
       pendingInterrupts: ["qoder-pending-cn"],
-      activeTurnIdByThread: { "qoder:session-cn": "turn-cn" },
+      activeTurnIdByThread: {
+        "qoder:__qoder_cn__:session-cn": "turn-cn",
+      },
       providerProfileByThread: { "qoder-pending-cn": "__qoder_cn__" },
     });
 
@@ -1215,6 +1276,28 @@ describe("useThreadTurnEvents", () => {
       "qoder",
       "__qoder_cn__",
     );
+  });
+
+  it("upgrades a legacy Qoder finalized id to its explicit CN identity", () => {
+    const { result, dispatch } = makeOptions({
+      providerProfileByThread: { "qoder:session-cn": "__qoder_cn__" },
+    });
+
+    act(() => {
+      result.current.onThreadSessionIdUpdated(
+        "ws-1",
+        "qoder:session-cn",
+        "session-cn",
+        "qoder",
+      );
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "renameThreadId",
+      workspaceId: "ws-1",
+      oldThreadId: "qoder:session-cn",
+      newThreadId: "qoder:__qoder_cn__:session-cn",
+    });
   });
 
   it("renames local mappings when opencode pending thread gets real session id", () => {

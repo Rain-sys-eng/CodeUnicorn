@@ -1,10 +1,4 @@
-# shared-hide-list-prefilter Specification
-
-## Purpose
-
-Defines the shared-hide-list-prefilter behavior contract, covering Thread-list ingest prefilters use Shared hide identity.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Thread-list ingest prefilters use Shared hide identity
 
