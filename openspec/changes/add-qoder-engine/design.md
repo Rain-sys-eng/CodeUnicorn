@@ -4,7 +4,7 @@
 
 Qoder CLI（`qodercli`）是一等 ACP（Agent Client Protocol）server：`qodercli --acp` 以 stdio NDJSON JSON-RPC 2.0 提供 initialize / session 生命周期 / prompt / 配置面。它不是 kimi/pi 式纯 print CLI（print 面存在但本机实测不可用，spike §8），也不是 dsh 式常驻 host。 mossx 作为 ACP client 接入，交互面与其他 Native Engine 对齐。
 
-Phase S 证据：[`docs/research/mossx-qoder-capability-spike.md`](../../../docs/research/mossx-qoder-capability-spike.md)（qodercli 1.1.27 pinned）。**本 spike 期间本机模型 API 不可达**，成功 turn 的黄金流式事件未采集；凡标 `unknown` 的 capability 不得当成已实测。
+Phase S 证据：[`docs/research/mossx-qoder-capability-spike.md`](../../../docs/research/mossx-qoder-capability-spike.md)（qodercli 1.1.27 pinned）。~~本 spike 期间本机模型 API 不可达~~ **2026-08-22 黄金 turn 已补采**（1.1.28 + PAT 注入，probe6/7/8/9，spike §13）：reasoning / tool-output / cancel / fork / promptQueueing 已升实测值。
 
 ## Goals / Non-Goals
 
@@ -71,7 +71,7 @@ send_message(params):
 | Input ACK | request 未立即 error + 首个 `session/update` | `first-event`（弱，显式标注） |
 | Working | `agent_message_chunk` / `agent_thought_chunk` / `tool_call` | 真实 |
 | Terminal | prompt response：成功 `stopReason`（`end_turn` 等）/ 失败 JSON-RPC error | 真实，typed |
-| Interrupt | `session/cancel` notification → kill child | cancel ACK 未实测，按 weak 处理 |
+| Interrupt | `session/cancel` notification → kill child | cancel ACK 已实测（2026-08-22 probe7）：typed response `stopReason:"cancelled"`，无迟到 chunk |
 | Resume | `session/resume`（attach）/ `session/load`（replay） | 真实（已实测） |
 
 delta 走 `liveAssistantTextChannel` / `liveItemDeltaChannel`（红线 35）；terminal 后同 session 迟到 chunk 丢弃（Kimi R3 同案）。
@@ -111,9 +111,9 @@ Rust exhaustiveness 给 `EngineType::Qoder` 失败闭合臂（与 Gemini/DSH 同
 - G6 Session Management 过滤：第一期不单独做 qoder 解析器（grok/kimi/DSH 现状同样未覆盖）；侧栏/history 走 `qoderHistoryLoader`。
 - E7 可见性：默认可见（导航已有占位，`supported: true`）；`disabledCliEngines` 两层开关行为不变。
 - E3 自定义模型：不做（模型目录 = 账号实时目录）。
-- D9 专属 usage 卡：不做，走通用 token 卡（ACP usage 未实测）。
+- D9 专属 usage 卡：不做，走通用 token 卡（ACP usage shape 已 live 但 PAT 账号零值、`qoder.rs` 不解析，2026-08-22）。
 - E9 `useQueuedSend` 斜杠命令：qoder slash 经 ACP `available_commands_update` 到达但 v1 不在 mossx 斜杠 UI 暴露；`/clear` 等本地语义按通用路径。
-- input.mid-turn：`_meta.qoder.promptQueueing` 声明存在但 v1 不接 steer/queue；用户发送即新 turn。
+- input.mid-turn：`_meta.qoder.promptQueueing` 已 live 实测（probe9：流式中第二 prompt FIFO 排队）但 v1 不接 steer/queue；用户发送即新 turn。
 
 ### 11. 存量保护
 

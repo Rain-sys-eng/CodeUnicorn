@@ -1,6 +1,11 @@
 {
   "schemaVersion": "1.0",
-  "capabilityStates": ["supported", "compat-input", "unsupported", "unknown"],
+  "capabilityStates": [
+    "supported",
+    "compat-input",
+    "unsupported",
+    "unknown"
+  ],
   "capabilities": [
     "streaming.text",
     "streaming.reasoning",
@@ -157,17 +162,17 @@
     },
     "qoder": {
       "streaming.text": "supported",
-      "streaming.reasoning": "unknown",
-      "streaming.tool-output": "unknown",
+      "streaming.reasoning": "supported",
+      "streaming.tool-output": "supported",
       "tool.use": "supported",
       "tool.mcp": "supported",
       "reasoning.effort": "supported",
       "collaboration.mode": "unsupported",
       "session.continuation": "unsupported",
       "image.input": "supported",
-      "input.mid-turn": "unknown",
+      "input.mid-turn": "supported",
       "session.resume": "supported",
-      "session.fork": "unknown",
+      "session.fork": "supported",
       "session.switch": "unsupported",
       "session.tree": "unknown",
       "rpc.server": "unsupported"

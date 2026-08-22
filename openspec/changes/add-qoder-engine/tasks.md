@@ -119,5 +119,5 @@
 - Shared 资格评估（pendingProbe / 成功 terminal / cancel 实测后）
 - L3 NativeHistoryReader / Provider Continuation（`session/load` readback 通道）
 - `session/request_permission` → elicitation 卡产品化（D10）
-- 成功 turn 黄金事件补采（streaming.reasoning / tool-output / usage / fork / promptQueueing unknown → 实测值）
+- ~~成功 turn 黄金事件补采（streaming.reasoning / tool-output / usage / fork / promptQueueing unknown → 实测值）~~ **已完成 2026-08-22**（probe6/7/8/9；剩余：非零 usage 值、幕布五件套 app 内目视）
 - CN 版 `qoderclicn`；远程会话（`--remote` / `--teleport`）；SDK 面

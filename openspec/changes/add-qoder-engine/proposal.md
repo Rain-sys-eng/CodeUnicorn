@@ -28,7 +28,7 @@ mossx 当前支持 8 个 built-in CLI 引擎（Claude / Codex / Gemini / Grok / 
 
 ### Modified Capabilities
 
-- `engine-capability-matrix`: matrix fixture 与 Rust 推导增加 qoder 条目（streaming.text / tool.use / tool.mcp / reasoning.effort / image.input / session.resume = supported；streaming.reasoning / streaming.tool-output / input.mid-turn / session.fork / session.tree = unknown；collaboration.mode / session.continuation / session.switch / rpc.server = unsupported）。
+- `engine-capability-matrix`: matrix fixture 与 Rust 推导增加 qoder 条目（streaming.text / tool.use / tool.mcp / reasoning.effort / image.input / session.resume = supported；streaming.reasoning / streaming.tool-output / input.mid-turn / session.fork = unknown → **2026-08-22 黄金 turn 补采后升 supported**；session.tree = unknown；collaboration.mode / session.continuation / session.switch / rpc.server = unsupported）。
 - `engine-adapter-protocol-registry`: protocol family 增加 `acp-stdio`，registry 增加 `builtin.qoder`。
 - `cli-engine-visibility`: qoder 从 upcoming（`supported: false`）转为 supported 引擎，默认可见。
 - `shared-session-engine-selection`: 明确 qoder **不在** Shared 支持集合（picker disabled + reason，与 gemini/dsh 同形态）。
@@ -55,12 +55,12 @@ mossx 当前支持 8 个 built-in CLI 引擎（Claude / Codex / Gemini / Grok / 
 - 不做 L3 NativeHistoryReader / Provider Continuation（`session/load` 回放是未来通道，本 change 不接）。
 - 不做 `session/request_permission` → mossx elicitation 卡桥的完整产品化（v1 兜底 auto-approve + bypassPermissions；后续独立 change）。
 - 不做 Qoder 远程会话（`--remote` / `--teleport` / remote-control daemon）、SDK 面、插件/skills/hooks 管理面。
-- 不做 vendor provider key 管理（Qoder 无此面）；不做 pricing / context-ledger 成本核算（ACP usage 未实测）。
+- 不做 vendor provider key 管理（Qoder 无此面）；不做 pricing / context-ledger 成本核算（ACP usage shape 已 live 但 PAT 账号零值、`qoder.rs` 不解析，2026-08-22）。
 - 不解析 `~/.qoder/projects/**` 磁盘 session 文件（history 走 ACP；红线 21 禁止手改 vendor 文件）。
 
 ## 风险
 
-- **R1（高）成功 turn 黄金事件未采集**：本机账号模型 API 不可达（`Network attempt failed at unknown`），streaming.reasoning / tool-output / usage / cancel / fork 仅靠 binary strings + ACP v1 词汇 + Kimi ACP spike 交叉证据。matrix 相应项标 `unknown`；adapter 按全词汇实现（到达即归一），有可用账号后补黄金 turn 升级实测值。
+- **R1（已收口，2026-08-22）成功 turn 黄金事件补采完成**：qodercli 1.1.28 + PAT 注入跑通（probe6/7/8/9），streaming.reasoning / tool-output / cancel / fork / promptQueueing 全部升级为 live 实测值；usage shape 已验证但 PAT 账号零值。剩余未 live：`plan` 事件、`session/close` / `session/delete`、非零 usage。
 - **R2（中）隐藏 flag 漂移**：`--acp` / `--yolo` 不在 `--help`；capability cache key 含 binary realpath + version + sha256 + protocolVersion + agentCapabilities hash，版本变化重 probe。
 - **R3（中）`session/list` 空目录**：无成功 turn 时返回空；sidebar 首期允许 soft-empty（与 DSH host 不可达同策略），history loader 对缺条目容错。
 - **R4（低）错误双通道**：prompt 失败同时出现 JSON-RPC error 与 `[Error]` 文本 chunk；adapter 把错误文本并入 TurnError，不作为 assistant 正文二次投影。
