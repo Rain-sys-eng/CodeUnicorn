@@ -2989,6 +2989,9 @@ async fn build_global_engine_catalog_entries(
     let workspace_entries = workspaces_snapshot.values().cloned().collect::<Vec<_>>();
     let metadata_by_workspace_id =
         read_catalog_metadata_for_scope(storage_path, &workspace_entries)?;
+    let shared_event_log_path = storage_path
+        .parent()
+        .map(|parent| parent.join("shared-event-log-v2.sqlite3"));
     let mut entries = if include_engine("codex") {
         build_global_codex_catalog_entries(workspaces, storage_path, scan_mode, scan_quality)
             .await?
@@ -3422,7 +3425,11 @@ async fn build_global_engine_catalog_entries(
         }
 
         if include_engine("shared") {
-            match crate::shared_sessions::list_workspace_shared_sessions(&workspace.id, None) {
+            match crate::shared_sessions::list_workspace_shared_sessions(
+                &workspace.id,
+                None,
+                shared_event_log_path.as_deref(),
+            ) {
                 Ok(shared_sessions) => {
                     let owner_metadata = metadata_by_workspace_id
                         .get(&workspace.id)

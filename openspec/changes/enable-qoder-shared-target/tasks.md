@@ -27,6 +27,7 @@
 - [x] 2.3 基石 §14.3.5 Contract Test Suite qoder 覆盖：引擎参数化用例全部带上 qoder（`provider_engine_events_settle_exact_shared_attempts` #1/#4/#12、`newly_supported_shared_engines_use_weak_user_channel_context` #7、`newly_supported_engine_receipts_accept_local_and_managed_identity`、interrupt route 隔离 #6/#10）；新增 `qoder_shared_runtime_key_matches_native_ownership` / `qoder_runtime_only_catalog_passes_target_validation`；#9/#11/#13/#14 为引擎无关 durable 路径由存量套件覆盖
 - [x] 2.4 存量回归：matrix gate / 前端 1719 项 / Rust shared 套件全绿（3 项预存失败与 qoder 无关：codex 目录漂移 2 项、DSH app-shell bridge 欠账 1 项，均已实证 HEAD 可复现）
 - [x] 2.5 F15：`sharedHideIdentity.ts` 将 `qoder` 加入现有 `SHARED_HIDE_ENGINE_PREFIXES`；复用 raw / `engine:` identity 展开，确保 Qoder Shared-owned binding 的裸 parent pup 不进入 sidebar，独立 Qoder Native parent 不受影响；补 focused Vitest 与 `shared-session-thread` delta（22 assertions、target ESLint、typecheck、strict validate 全绿）。
+- [x] 2.6 F16：复用既有 V2 read-only binding identity 查询，供 daemon 的 `list_shared_sessions` / 无 `SharedEventWriter` catalog projection 按 Shared session 恢复 V2-only owner；补 V0 `bindings_by_target`，不得依赖 title，读失败只 fallback V0；覆盖 Qoder current / archived identity 的 owner 隔离回归与 RPC route 存在性。
 
 ## Phase 3 — 验收与校准回写
 

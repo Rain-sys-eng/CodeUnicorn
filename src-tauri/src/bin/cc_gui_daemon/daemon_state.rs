@@ -4621,6 +4621,28 @@ impl DaemonState {
         .await
     }
 
+    pub(super) async fn list_shared_sessions(
+        &self,
+        workspace_id: String,
+    ) -> Result<Vec<crate::shared_sessions::SharedSessionSummary>, String> {
+        {
+            let workspaces = self.workspaces.lock().await;
+            if !workspaces.contains_key(&workspace_id) {
+                return Err("workspace not found".to_string());
+            }
+        }
+
+        let event_log_path = self
+            .storage_path
+            .parent()
+            .map(|parent| parent.join("shared-event-log-v2.sqlite3"));
+        crate::shared_sessions::list_workspace_shared_sessions(
+            &workspace_id,
+            None,
+            event_log_path.as_deref(),
+        )
+    }
+
     pub(super) async fn list_global_codex_sessions(
         &self,
         query: Option<session_management::WorkspaceSessionCatalogQuery>,

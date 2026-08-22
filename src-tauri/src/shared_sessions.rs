@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -14,6 +14,7 @@ use crate::app_paths;
 use crate::codex;
 use crate::engine::{self, EngineType};
 use crate::shared::codex_core;
+use crate::shared_binding_visibility::collect_v2_shared_binding_ids_by_session;
 use crate::shared_event_log::{SessionTargetUpdate, SharedEventWriter};
 use crate::state::AppState;
 
@@ -1062,12 +1063,13 @@ pub(crate) fn read_latest_shared_session_snapshot(
 pub(crate) fn list_workspace_shared_sessions(
     workspace_id: &str,
     event_writer: Option<&crate::shared_event_log::SharedEventWriter>,
+    event_log_path: Option<&Path>,
 ) -> Result<Vec<SharedSessionSummary>, String> {
     let directory = workspace_shared_sessions_dir(workspace_id)?;
     if !directory.exists() {
         return Ok(Vec::new());
     }
-    let mut summaries = Vec::new();
+    let mut session_metas = Vec::new();
     for entry in std::fs::read_dir(&directory).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let file_type = entry.file_type().map_err(|error| error.to_string())?;
@@ -1079,11 +1081,45 @@ pub(crate) fn list_workspace_shared_sessions(
             Ok(meta) => meta,
             Err(_) => continue,
         };
+        session_metas.push(meta);
+    }
+
+    let v2_native_thread_ids_by_session = if event_writer.is_none() {
+        let shared_session_ids = session_metas
+            .iter()
+            .map(|meta| meta.id.clone())
+            .collect::<Vec<_>>();
+        match event_log_path {
+            Some(path) => match collect_v2_shared_binding_ids_by_session(path, &shared_session_ids)
+            {
+                Ok(ids_by_session) => ids_by_session,
+                Err(error) => {
+                    log::warn!(
+                        "[shared_sessions.list_workspace_shared_sessions] read-only V2 binding recovery failed for workspace {}: {}",
+                        workspace_id,
+                        error
+                    );
+                    BTreeMap::new()
+                }
+            },
+            None => BTreeMap::new(),
+        }
+    } else {
+        BTreeMap::new()
+    };
+
+    let mut summaries = Vec::with_capacity(session_metas.len());
+    for meta in session_metas {
         let mut native_thread_ids = meta
             .bindings_by_engine
             .values()
             .map(|binding| binding.native_thread_id.clone())
             .collect::<Vec<_>>();
+        native_thread_ids.extend(
+            meta.bindings_by_target
+                .values()
+                .map(|binding| binding.native_thread_id.clone()),
+        );
         if let Some(writer) = event_writer {
             native_thread_ids.extend(
                 writer
@@ -1093,6 +1129,8 @@ pub(crate) fn list_workspace_shared_sessions(
                     .filter_map(|binding| binding.native_session_id)
                     .filter(|native_session_id| !native_session_id.trim().is_empty()),
             );
+        } else if let Some(v2_native_thread_ids) = v2_native_thread_ids_by_session.get(&meta.id) {
+            native_thread_ids.extend(v2_native_thread_ids.iter().cloned());
         }
         native_thread_ids.sort();
         native_thread_ids.dedup();
@@ -1384,9 +1422,14 @@ pub async fn list_shared_sessions(
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
     ensure_known_workspace(&state.workspaces, &workspace_id).await?;
+    let event_log_path = state
+        .storage_path
+        .parent()
+        .map(|parent| parent.join("shared-event-log-v2.sqlite3"));
     Ok(json!(list_workspace_shared_sessions(
         &workspace_id,
         state.shared_event_writer.as_ref(),
+        event_log_path.as_deref(),
     )?))
 }
 

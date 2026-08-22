@@ -20,6 +20,7 @@
 - **F4 `shared_projection/commands.rs`**：投影能力 match + 支持引擎数组加 qoder。
 - **F5 `shared_sessions.rs`**：`is_pending_shared_binding_thread_id` / `binding_uses_established_native_thread` Qoder 臂从 fail-closed 改为真实判断（`qoder-pending-shared-` 前缀 + `qoder:` 前缀 strip）；发送 dispatch match 加 qoder。
 - **F15 Shared sidebar hide identity**：`SHARED_HIDE_ENGINE_PREFIXES` 加 `qoder`，让 `qoder:<sessionId>` 与裸 `sessionId` 走现有 Shared-owned parent / pup hide 链路；禁止新增 Qoder 专属标题过滤。
+- **F16 daemon/catalog V2 ownership recovery**：daemon 补齐既有前端调用的只读 `list_shared_sessions` RPC；其轻量 Shared adapter 与无 `SharedEventWriter` 的 catalog projection 必须复用既有只读 V2 binding 查询。V0 `bindings_by_engine` / `bindings_by_target` 为空时，按 `shared_session_id` 恢复 `shared_binding_state` / `binding.*` 的 current、archived identity，再交给既有 sidebar hide set。禁止标题猜测或 Shared 写路径副作用。
 - Shared negative-path tests + 基石 §14.3.5 统一 Contract Test Suite 的 qoder 覆盖。
 
 ## Capabilities
@@ -31,7 +32,7 @@
 ### Modified Capabilities
 
 - `shared-session-engine-selection`: Shared 支持集合从 6 引擎扩到 7 引擎（+ Qoder CLI）；picker / write gate / normalize 的 qoder 行为从 fail-closed 转为支持。本 delta **取代** `add-qoder-engine` 中「Shared Engine Exclusion Includes Qoder」排除 delta（该 change 归档时须相应修订或先于本 change 归档后由本 delta 覆盖）。
-- `shared-session-thread`: Qoder Shared-owned native binding 与其裸 parent-id 下的 pup MUST 复用同级引擎 hide identity，且不得影响用户主动创建的 Qoder Native Session。
+- `shared-session-thread`: Qoder Shared-owned native binding 与其裸 parent-id 下的 pup MUST 复用同级引擎 hide identity；daemon/catalog 在 V0 legacy metadata 不完整时 MUST 以 V2 durable binding 恢复精确 owner，且不得影响用户主动创建的 Qoder Native Session。
 
 ## 非目标
 
@@ -47,3 +48,4 @@
 - **R2（中）隐藏 flag / 版本漂移**：`--acp` 不在 `--help`；1.1.27→1.1.28 已发生一次 browser login 态丢失（PAT 不受影响）。capability cache key 含 version+sha256，版本变化重 probe。
 - **R3（低）`session/list` cwd 作用域**：Shared binding 的 cwd 与创建时不一致时 probe 不到；binding 创建即持 exact sessionId，probe 仅作 recovery 辅助，不作 identity 来源。
 - **R4（低）context 走 user channel**：长 ContextPackage 拼进 prompt 文本，token 成本与模型截断由通用 context compiler 预算控制；`strong_context_ack: false` 下不按 strong 语义承诺。
+- **R5（低）daemon catalog 读 V2**：只读 SQLite 使用既有 200ms busy timeout，失败时保留 V0 projection 并记录 warning；不凭 title 隐藏任何会话，避免把独立 Native Session 误归属到 Shared。

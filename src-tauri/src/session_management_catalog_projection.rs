@@ -341,6 +341,9 @@ async fn build_workspace_scope_catalog_data(
     let workspace_scope = catalog_workspace_scope(workspaces, workspace_id).await?;
     let workspaces_snapshot = workspaces.lock().await.clone();
     let metadata_by_workspace_id = read_catalog_metadata_for_scope(storage_path, &workspace_scope)?;
+    let shared_event_log_path = storage_path
+        .parent()
+        .map(|parent| parent.join("shared-event-log-v2.sqlite3"));
     let mut partial_sources = Vec::new();
     let mut source_statuses = Vec::new();
     let mut entries = Vec::new();
@@ -1197,7 +1200,11 @@ async fn build_workspace_scope_catalog_data(
             }
         }
 
-        match crate::shared_sessions::list_workspace_shared_sessions(&owner_workspace_id, None) {
+        match crate::shared_sessions::list_workspace_shared_sessions(
+            &owner_workspace_id,
+            None,
+            shared_event_log_path.as_deref(),
+        ) {
             Ok(shared_sessions) => {
                 let shared_completeness = if shared_sessions.is_empty() {
                     WorkspaceSessionSourceCompleteness::AuthoritativeEmpty
