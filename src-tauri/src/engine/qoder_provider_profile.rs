@@ -14,6 +14,28 @@ use crate::types::AppSettings;
 pub(crate) const QODER_LOCAL_PROVIDER_PROFILE_ID: &str = "__local_qoder__";
 pub(crate) const QODER_GLOBAL_PROVIDER_PROFILE_ID: &str = "__qoder_global__";
 pub(crate) const QODER_CN_PROVIDER_PROFILE_ID: &str = "__qoder_cn__";
+pub(crate) const QODER_NATIVE_SESSION_PREFIX: &str = "qoder:";
+
+/// Durable UI / Index / Shared binding identity for one Qoder native session.
+///
+/// Qoder Global and Qoder CN have independent homes and runtimes, so their raw
+/// ACP session ids are only unique within a distribution. New persisted values
+/// must use `qoder:<profile>:<raw>`; `qoder:<raw>` remains a legacy input only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QoderNativeSessionIdentity {
+    pub(crate) provider_profile_id: &'static str,
+    pub(crate) raw_session_id: String,
+    pub(crate) is_legacy: bool,
+}
+
+impl QoderNativeSessionIdentity {
+    pub(crate) fn canonical_id(&self) -> String {
+        format!(
+            "{QODER_NATIVE_SESSION_PREFIX}{}:{}",
+            self.provider_profile_id, self.raw_session_id
+        )
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum QoderDistribution {
@@ -126,6 +148,102 @@ pub(crate) fn qoder_distribution_from_provider_profile_id(
     }
 }
 
+/// Normalize the three accepted Qoder profile representations into the
+/// durable distribution profile id. `None` / historic local sentinel remain
+/// Global-compatible; unknown values must never silently route to Global.
+pub(crate) fn qoder_canonical_provider_profile_id(
+    provider_profile_id: Option<&str>,
+) -> Result<&'static str, String> {
+    Ok(qoder_distribution_from_provider_profile_id(provider_profile_id)?.provider_profile_id())
+}
+
+/// `__local_qoder__` is a compatibility sentinel, not a durable choice of
+/// Global. Only these two ids may override a legacy raw session's binding.
+pub(crate) fn has_explicit_qoder_distribution_owner(provider_profile_id: Option<&str>) -> bool {
+    matches!(
+        provider_profile_id.map(str::trim).filter(|value| !value.is_empty()),
+        Some(QODER_GLOBAL_PROVIDER_PROFILE_ID | QODER_CN_PROVIDER_PROFILE_ID)
+    )
+}
+
+/// Parse a Qoder identity at an external boundary.
+///
+/// Canonical identity carries its own distribution and must agree with an
+/// optional owner/profile supplied by the caller. Legacy `qoder:<raw>` and raw
+/// values use that owner when present, otherwise retain historic Global
+/// semantics. This lets old persisted bindings with an explicit CN owner be
+/// migrated correctly without guessing from raw ids alone.
+pub(crate) fn parse_qoder_native_session_identity(
+    value: &str,
+    provider_profile_id: Option<&str>,
+) -> Result<QoderNativeSessionIdentity, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("[QODER_SESSION_IDENTITY] Qoder session id is required".to_string());
+    }
+    let supplied_profile_id = provider_profile_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let expected_profile = qoder_canonical_provider_profile_id(supplied_profile_id)?;
+    let raw_or_prefixed = trimmed
+        .strip_prefix(QODER_NATIVE_SESSION_PREFIX)
+        .unwrap_or(trimmed)
+        .trim();
+    if raw_or_prefixed.is_empty() {
+        return Err("[QODER_SESSION_IDENTITY] Qoder session id is required".to_string());
+    }
+
+    for profile_id in [
+        QODER_GLOBAL_PROVIDER_PROFILE_ID,
+        QODER_CN_PROVIDER_PROFILE_ID,
+    ] {
+        let canonical_prefix = format!("{profile_id}:");
+        if let Some(raw_session_id) = raw_or_prefixed.strip_prefix(&canonical_prefix) {
+            let raw_session_id = raw_session_id.trim();
+            if raw_session_id.is_empty() {
+                return Err("[QODER_SESSION_IDENTITY] Qoder raw session id is required".to_string());
+            }
+            // `__local_qoder__` is a historical non-distribution sentinel.
+            // A profile-qualified identity is more precise and remains
+            // authoritative when old state still carries that sentinel.
+            if has_explicit_qoder_distribution_owner(supplied_profile_id)
+                && expected_profile != profile_id
+            {
+                return Err(format!(
+                    "[QODER_SESSION_IDENTITY] Qoder session profile `{profile_id}` does not match runtime owner `{expected_profile}`"
+                ));
+            }
+            return Ok(QoderNativeSessionIdentity {
+                provider_profile_id: profile_id,
+                raw_session_id: raw_session_id.to_string(),
+                is_legacy: false,
+            });
+        }
+    }
+
+    // A profile-looking segment is never a raw id. Reject it so a malformed
+    // canonical identity cannot accidentally route through Global.
+    if raw_or_prefixed.starts_with("__qoder_") && raw_or_prefixed.contains(':') {
+        return Err(format!(
+            "[QODER_SESSION_IDENTITY] unknown Qoder session profile in `{trimmed}`"
+        ));
+    }
+
+    Ok(QoderNativeSessionIdentity {
+        provider_profile_id: expected_profile,
+        raw_session_id: raw_or_prefixed.to_string(),
+        is_legacy: true,
+    })
+}
+
+/// Canonicalize one Qoder external id for persistence and UI projection.
+pub(crate) fn canonical_qoder_native_session_id(
+    value: &str,
+    provider_profile_id: Option<&str>,
+) -> Result<String, String> {
+    Ok(parse_qoder_native_session_identity(value, provider_profile_id)?.canonical_id())
+}
+
 /// Runtime key is a distribution boundary. Never use a shared workspace-only
 /// key here: Global and CN may be open in the same workspace concurrently.
 pub(crate) fn qoder_runtime_key(
@@ -137,6 +255,21 @@ pub(crate) fn qoder_runtime_key(
         "{workspace_id}::qoder::{}",
         distribution.runtime_segment()
     ))
+}
+
+/// Recover a fixed Qoder distribution from the runtime-owner key. This is
+/// intentionally suffix-based because workspace ids are opaque user data.
+pub(crate) fn qoder_provider_profile_id_from_runtime_key(
+    runtime_key: &str,
+) -> Option<&'static str> {
+    let runtime_key = runtime_key.trim();
+    if runtime_key.ends_with("::qoder::global") {
+        Some(QODER_GLOBAL_PROVIDER_PROFILE_ID)
+    } else if runtime_key.ends_with("::qoder::cn") {
+        Some(QODER_CN_PROVIDER_PROFILE_ID)
+    } else {
+        None
+    }
 }
 
 fn configured_or_env_path(value: Option<&Path>, env_var: &str) -> Option<PathBuf> {
@@ -243,6 +376,83 @@ mod tests {
         let error = qoder_distribution_from_provider_profile_id(Some("unknown"))
             .expect_err("unknown profile must not launch Global silently");
         assert!(error.contains("QODER_DISTRIBUTION"));
+    }
+
+    #[test]
+    fn canonical_qoder_native_session_identity_keeps_global_and_cn_separate() {
+        let global = canonical_qoder_native_session_id(
+            "same-raw-session",
+            Some(QODER_GLOBAL_PROVIDER_PROFILE_ID),
+        )
+        .expect("Global identity");
+        let cn = canonical_qoder_native_session_id(
+            "same-raw-session",
+            Some(QODER_CN_PROVIDER_PROFILE_ID),
+        )
+        .expect("CN identity");
+
+        assert_eq!(global, "qoder:__qoder_global__:same-raw-session");
+        assert_eq!(cn, "qoder:__qoder_cn__:same-raw-session");
+        assert_ne!(global, cn);
+    }
+
+    #[test]
+    fn legacy_qoder_identity_uses_its_durable_owner_when_available() {
+        let cn = parse_qoder_native_session_identity(
+            "qoder:legacy-session",
+            Some(QODER_CN_PROVIDER_PROFILE_ID),
+        )
+        .expect("legacy CN binding");
+        assert!(cn.is_legacy);
+        assert_eq!(cn.provider_profile_id, QODER_CN_PROVIDER_PROFILE_ID);
+        assert_eq!(cn.canonical_id(), "qoder:__qoder_cn__:legacy-session");
+
+        let global = parse_qoder_native_session_identity("qoder:legacy-session", None)
+            .expect("legacy Global binding");
+        assert_eq!(global.provider_profile_id, QODER_GLOBAL_PROVIDER_PROFILE_ID);
+    }
+
+    #[test]
+    fn canonical_qoder_identity_rejects_cross_distribution_runtime_owner() {
+        let error = parse_qoder_native_session_identity(
+            "qoder:__qoder_cn__:same-raw-session",
+            Some(QODER_GLOBAL_PROVIDER_PROFILE_ID),
+        )
+        .expect_err("CN identity must not route through Global runtime");
+        assert!(error.contains("does not match runtime owner"));
+    }
+
+    #[test]
+    fn canonical_qoder_identity_overrides_the_legacy_local_sentinel() {
+        let identity = parse_qoder_native_session_identity(
+            "qoder:__qoder_cn__:same-raw-session",
+            Some(QODER_LOCAL_PROVIDER_PROFILE_ID),
+        )
+        .expect("canonical CN identity must override the legacy local sentinel");
+        assert_eq!(identity.provider_profile_id, QODER_CN_PROVIDER_PROFILE_ID);
+
+        let blank_identity = parse_qoder_native_session_identity(
+            "qoder:__qoder_cn__:same-raw-session",
+            Some(""),
+        )
+        .expect("blank owner must behave as missing legacy owner");
+        assert_eq!(blank_identity.provider_profile_id, QODER_CN_PROVIDER_PROFILE_ID);
+    }
+
+    #[test]
+    fn runtime_key_recovers_distribution_without_parsing_workspace_id() {
+        assert_eq!(
+            qoder_provider_profile_id_from_runtime_key("workspace:with:colon::qoder::global"),
+            Some(QODER_GLOBAL_PROVIDER_PROFILE_ID)
+        );
+        assert_eq!(
+            qoder_provider_profile_id_from_runtime_key("workspace-1::qoder::cn"),
+            Some(QODER_CN_PROVIDER_PROFILE_ID)
+        );
+        assert_eq!(
+            qoder_provider_profile_id_from_runtime_key("workspace-1::qoder::unknown"),
+            None
+        );
     }
 
     #[test]

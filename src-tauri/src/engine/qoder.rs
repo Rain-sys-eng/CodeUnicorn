@@ -60,14 +60,26 @@ pub fn resolve_qoder_session_id_for_engine_send(
     continue_session: bool,
     explicit_session_id: Option<String>,
     tracked_session_id: Option<String>,
-) -> Option<String> {
-    continue_session
+    provider_profile_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(session_id) = continue_session
         .then(|| explicit_session_id.or(tracked_session_id))
         .flatten()
+    else {
+        return Ok(None);
+    };
+    Ok(Some(
+        super::qoder_provider_profile::parse_qoder_native_session_identity(
+            &session_id,
+            provider_profile_id,
+        )?
+        .raw_session_id,
+    ))
 }
 
 pub(crate) fn normalize_qoder_fork_session_id(
     value: Option<&str>,
+    provider_profile_id: Option<&str>,
 ) -> Result<Option<String>, String> {
     match value {
         None => Ok(None),
@@ -76,7 +88,13 @@ pub(crate) fn normalize_qoder_fork_session_id(
             if trimmed.is_empty() {
                 Err("forkSessionId is required for Qoder fork session".to_string())
             } else {
-                Ok(Some(trimmed.to_string()))
+                Ok(Some(
+                    super::qoder_provider_profile::parse_qoder_native_session_identity(
+                        trimmed,
+                        provider_profile_id,
+                    )?
+                    .raw_session_id,
+                ))
             }
         }
     }
@@ -669,11 +687,9 @@ pub(crate) fn resolve_qoder_distribution_bin(
         QoderDistribution::Global => QODER_CLI_NAME,
         QoderDistribution::Cn => QODERCN_CLI_NAME,
     };
-    Ok(
-        crate::backend::app_server::find_cli_binary(cli_name, None)
-            .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_else(|| cli_name.to_string()),
-    )
+    Ok(crate::backend::app_server::find_cli_binary(cli_name, None)
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_else(|| cli_name.to_string()))
 }
 
 fn initialize_params() -> Value {
@@ -1345,21 +1361,22 @@ impl QoderSession {
             }
         };
 
-        let (child, mut acp, mut stderr_task, stdin) = match spawn_qoder_acp_process_for_distribution(
-            self.distribution,
-            self.bin_path.as_deref(),
-            &self.workspace_path,
-            self.home_dir.as_deref(),
-            self.custom_args.as_deref(),
-        )
-        .await
-        {
-            Ok(spawned) => spawned,
-            Err(error) => {
-                self.emit_error(turn_id, error.clone());
-                return Err(error);
-            }
-        };
+        let (child, mut acp, mut stderr_task, stdin) =
+            match spawn_qoder_acp_process_for_distribution(
+                self.distribution,
+                self.bin_path.as_deref(),
+                &self.workspace_path,
+                self.home_dir.as_deref(),
+                self.custom_args.as_deref(),
+            )
+            .await
+            {
+                Ok(spawned) => spawned,
+                Err(error) => {
+                    self.emit_error(turn_id, error.clone());
+                    return Err(error);
+                }
+            };
 
         {
             let mut active = self.active_processes.lock().await;
@@ -1386,8 +1403,10 @@ impl QoderSession {
         let result = async {
             acp.initialize().await?;
             let cwd = self.workspace_path.to_string_lossy().to_string();
-            let fork_session_id =
-                normalize_qoder_fork_session_id(params.fork_session_id.as_deref())?;
+            let fork_session_id = normalize_qoder_fork_session_id(
+                params.fork_session_id.as_deref(),
+                Some(self.distribution.provider_profile_id()),
+            )?;
             let resume_id = params
                 .session_id
                 .as_ref()
@@ -1866,6 +1885,7 @@ impl Drop for QoderSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::qoder_provider_profile;
     use serde_json::json;
     use std::fs;
 
@@ -2280,38 +2300,69 @@ done
             resolve_qoder_session_id_for_engine_send(
                 false,
                 Some("abc".into()),
-                Some("tracked".into())
+                Some("tracked".into()),
+                Some(qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
             ),
-            None
+            Ok(None)
         );
         assert_eq!(
             resolve_qoder_session_id_for_engine_send(
                 true,
                 Some("abc".into()),
-                Some("tracked".into())
+                Some("tracked".into()),
+                Some(qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
             ),
-            Some("abc".into())
+            Ok(Some("abc".into()))
         );
         assert_eq!(
-            resolve_qoder_session_id_for_engine_send(true, None, Some("tracked".into())),
-            Some("tracked".into())
+            resolve_qoder_session_id_for_engine_send(
+                true,
+                None,
+                Some("tracked".into()),
+                Some(qoder_provider_profile::QODER_CN_PROVIDER_PROFILE_ID),
+            ),
+            Ok(Some("tracked".into()))
         );
     }
 
     #[test]
     fn normalizes_qoder_fork_session_id() {
         assert_eq!(
-            normalize_qoder_fork_session_id(Some(" parent-session ")).expect("fork id"),
+            normalize_qoder_fork_session_id(
+                Some(" parent-session "),
+                Some(qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
+            )
+            .expect("fork id"),
             Some("parent-session".to_string())
         );
         assert_eq!(
-            normalize_qoder_fork_session_id(None).expect("no fork"),
+            normalize_qoder_fork_session_id(
+                None,
+                Some(qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
+            )
+            .expect("no fork"),
             None
         );
         assert_eq!(
-            normalize_qoder_fork_session_id(Some(" ")).expect_err("blank fork rejected"),
+            normalize_qoder_fork_session_id(
+                Some(" "),
+                Some(qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
+            )
+            .expect_err("blank fork rejected"),
             "forkSessionId is required for Qoder fork session"
         );
+    }
+
+    #[test]
+    fn qoder_send_rejects_cross_distribution_canonical_session() {
+        let error = resolve_qoder_session_id_for_engine_send(
+            true,
+            Some("qoder:__qoder_cn__:same-session".into()),
+            None,
+            Some(qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
+        )
+        .expect_err("Global runtime must not accept CN canonical identity");
+        assert!(error.contains("does not match runtime owner"), "{error}");
     }
 
     #[test]

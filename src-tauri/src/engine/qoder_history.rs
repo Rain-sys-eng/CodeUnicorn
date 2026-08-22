@@ -1616,10 +1616,16 @@ mod tests {
             &global_home,
             &storage_slug,
             &workspace,
-            "global-session",
+            "same-raw-session",
             false,
         );
-        write_workspace_session(&cn_home, &storage_slug, &workspace, "cn-session", false);
+        write_workspace_session(
+            &cn_home,
+            &storage_slug,
+            &workspace,
+            "same-raw-session",
+            false,
+        );
 
         let settings = QoderDistributionSettings {
             global_config_dir: Some(global_home.to_string_lossy().to_string()),
@@ -1652,14 +1658,14 @@ mod tests {
                 .iter()
                 .map(|session| session.session_id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["global-session"],
+            vec!["same-raw-session"],
         );
         assert_eq!(
             cn_sessions
                 .iter()
                 .map(|session| session.session_id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["cn-session"],
+            vec!["same-raw-session"],
         );
         assert_eq!(
             global_sessions[0].provider_profile_id.as_deref(),
