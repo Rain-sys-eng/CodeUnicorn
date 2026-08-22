@@ -70,21 +70,19 @@ pub(crate) fn context_capabilities(target: &ExecutionTargetInput) -> RuntimeCont
     // 当前 runtime bridge 对五种 Shared CLI 都有 user-channel prompt ACK，
     // structured import 等待对应 CLI method probe 后再打开，禁止猜测支持。
     match target.engine {
-        EngineType::Codex => {
-            let structured_history_import = target
-                .runtime_capability_fingerprint
-                .as_deref()
-                .is_some_and(|fingerprint| fingerprint.contains("thread/inject_items"));
-            RuntimeContextCapabilities {
-                native_delta: false,
-                structured_history_import,
-                native_clone: false,
-                user_channel_transcript: true,
-                tool_history: structured_history_import,
-                image_history: false,
-                strong_context_ack: structured_history_import,
-            }
-        }
+        EngineType::Codex => RuntimeContextCapabilities {
+            // `thread/inject_items` only proves that the app-server exposes a method.
+            // Third-party providers may still reject a reconstructed message/tool chain
+            // whose provider-private reasoning item is unavailable. Shared must keep the
+            // portable semantic transcript boundary until a protocol-safe probe exists.
+            native_delta: false,
+            structured_history_import: false,
+            native_clone: false,
+            user_channel_transcript: true,
+            tool_history: false,
+            image_history: false,
+            strong_context_ack: false,
+        },
         EngineType::Claude => RuntimeContextCapabilities {
             native_delta: false,
             structured_history_import: false,
@@ -509,6 +507,26 @@ mod execution_target_contract_tests {
         };
 
         assert!(context_capabilities(&target).strong_context_ack);
+    }
+
+    #[test]
+    fn codex_shared_context_uses_weak_portable_transcript() {
+        let target = ExecutionTargetInput {
+            engine: EngineType::Codex,
+            provider_profile_id: Some("compatible-provider".to_string()),
+            model_catalog_entry_id: Some("codex-model".to_string()),
+            model: Some("codex-model".to_string()),
+            reasoning_effort: None,
+            provider_profile_name_snapshot: Some("Compatible Provider".to_string()),
+            provider_profile_source: Some(CanonicalProviderProfileSource::Managed),
+            runtime_capability_fingerprint: Some("thread/inject_items".to_string()),
+        };
+
+        let capabilities = context_capabilities(&target);
+        assert!(capabilities.user_channel_transcript);
+        assert!(!capabilities.structured_history_import);
+        assert!(!capabilities.tool_history);
+        assert!(!capabilities.strong_context_ack);
     }
 
     #[test]
