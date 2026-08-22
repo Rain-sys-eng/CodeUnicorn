@@ -390,11 +390,22 @@ mod execution_target_contract_tests {
 
     #[test]
     fn execution_target_validation_rejects_mismatched_catalog_runtime_pair() {
+        // 从当前 generatedModelCatalog 动态取条目，避免模型目录漂移使用例失效。
+        let catalog = crate::engine::status::get_local_engine_models_for_validation(
+            EngineType::Codex,
+        )
+        .expect("codex local catalog");
+        let selected = catalog.first().expect("non-empty codex catalog");
+        let expected_runtime_model = if selected.model.trim().is_empty() {
+            selected.id.trim().to_string()
+        } else {
+            selected.model.trim().to_string()
+        };
         let valid = ExecutionTargetInput {
             engine: EngineType::Codex,
             provider_profile_id: None,
-            model_catalog_entry_id: Some("gpt-5.3-codex-spark".to_string()),
-            model: Some("gpt-5.3-codex-spark".to_string()),
+            model_catalog_entry_id: Some(selected.id.clone()),
+            model: Some(expected_runtime_model.clone()),
             reasoning_effort: None,
             provider_profile_name_snapshot: Some("本地配置".to_string()),
             provider_profile_source: Some(CanonicalProviderProfileSource::Local),
@@ -411,7 +422,7 @@ mod execution_target_contract_tests {
         };
         assert!(validate_resolved_execution_target(&poisoned)
             .expect_err("mismatched runtime model must fail before the turn is persisted")
-            .contains("requires runtime model 'gpt-5.3-codex-spark'"));
+            .contains(&format!("requires runtime model '{expected_runtime_model}'")));
     }
 
     #[test]
@@ -7324,7 +7335,9 @@ mod native_continuation_import_tests {
             engine: NativeHistoryEngine::Codex,
             provider_profile_id: Some("provider-a".to_string()),
         };
-        let package = compile_native_context(&CompileNativeContextRequest {
+        // 编译器对空 history fail-closed（d528fc91c），因此用一条有效 entry 编译、
+        // 再清空 delta 来构造 zero-transfer 包，守住「空 delta 不产 marker-only 导入」。
+        let mut package = compile_native_context(&CompileNativeContextRequest {
             session_id: source.session_id.clone(),
             binding_key: "continuation:op".to_string(),
             destination: json!({"engine": "codex"}),
@@ -7332,8 +7345,15 @@ mod native_continuation_import_tests {
             history: NativeHistoryReadResult {
                 reader_id: "codex-rollout-jsonl/v1".to_string(),
                 source_fingerprint: "sha256:source".to_string(),
-                through_cursor: "jsonl-v1:0:sha256:source".to_string(),
-                entries: Vec::new(),
+                through_cursor: "jsonl-v1:1:sha256:source".to_string(),
+                entries: vec![ContextSourceEntry {
+                    source_entry_id: "user-1".to_string(),
+                    occurred_at: None,
+                    role: "user".to_string(),
+                    blocks: vec![json!({"text": "hello"})],
+                    provenance: json!({}),
+                    fidelity: NativeHistoryFidelity::Semantic,
+                }],
                 fidelity: NativeHistoryFidelity::Semantic,
                 omissions: Vec::new(),
             },
@@ -7348,7 +7368,8 @@ mod native_continuation_import_tests {
             },
             budget_estimated_tokens: None,
         })
-        .expect("compile empty projection");
+        .expect("compile projection package");
+        package.delta.clear();
 
         let (items, dropped) = codex_import_projection(&package);
         assert!(items.is_empty());
