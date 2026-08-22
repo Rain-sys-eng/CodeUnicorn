@@ -324,15 +324,17 @@ export function stripEmptyClaudeIndexFallbackSummaries(
       return true;
     }
     const engine = summary.engineSource;
-    const hidePlaceholder = shouldHidePlaceholderNativeDraftFromSidebar({
+    // Catalog nicknames like `Agent 12` are weak but real Codex titles.
+    // Do not reuse the Index/sidebar leftover-Agent-N predicate here.
+    const hidePendingDraft = shouldHidePlaceholderNativeDraftFromSidebar({
       engine,
       threadId: summary.id,
       displayName: summary.name,
-    });
+    }) && !/^agent\s+\d+$/i.test(summary.name.trim());
     const hideLegacyClaudeCodex =
       (engine === "claude" || engine === "codex") &&
       isEmptyNativeIndexFallbackSummary(summary);
-    if (!hidePlaceholder && !hideLegacyClaudeCodex) {
+    if (!hidePendingDraft && !hideLegacyClaudeCodex) {
       return true;
     }
     changed = true;
