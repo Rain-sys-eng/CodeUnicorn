@@ -7,10 +7,10 @@ use std::time::Instant;
 
 use crate::backend_budget::ScanCacheState;
 use crate::shared::workspace_listing::{
-    build_initial_directory_entries, normalize_workspace_relative_file_path,
-    normalized_relative_to_pathbuf, should_always_skip, sort_and_truncate_named_entries,
-    workspace_files_response, workspace_scan_budget_reached, WorkspaceScanState,
-    WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER, WORKSPACE_SCAN_TIME_BUDGET,
+    build_initial_directory_entries, canonicalize_or_original,
+    normalize_workspace_relative_file_path, normalized_relative_to_pathbuf, should_always_skip,
+    sort_and_truncate_named_entries, workspace_files_response, workspace_scan_budget_reached,
+    WorkspaceScanState, WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER, WORKSPACE_SCAN_TIME_BUDGET,
 };
 #[cfg(test)]
 pub(crate) use crate::shared::workspace_listing::{
@@ -470,13 +470,9 @@ fn read_workspace_file_with_limit_inner(
     max_bytes: u64,
 ) -> Result<WorkspaceFileResponse, String> {
     let normalized_path = normalize_workspace_relative_file_path(relative_path)?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_root = canonicalize_or_original(root);
     let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to open file: {err}"))?;
+    let canonical_path = canonicalize_or_original(&candidate);
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Invalid file path".to_string());
     }
@@ -564,17 +560,14 @@ fn resolve_allowed_external_absolute_path(
         return Err(invalid_path_message.to_string());
     }
 
-    let canonical_path = raw_path
-        .canonicalize()
-        .map_err(|err| format!("Failed to open file: {err}"))?;
+    let canonical_path = canonicalize_or_original(&raw_path);
 
     let mut within_allowed_root = false;
     for root in allowed_roots {
-        if let Ok(canonical_root) = root.canonicalize() {
-            if canonical_path.starts_with(&canonical_root) {
-                within_allowed_root = true;
-                break;
-            }
+        let canonical_root = canonicalize_or_original(root);
+        if canonical_path.starts_with(&canonical_root) {
+            within_allowed_root = true;
+            break;
         }
     }
     if !within_allowed_root {
