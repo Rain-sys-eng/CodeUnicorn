@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn readonly_v2_query_keeps_current_and_archived_ids_with_their_owner() {
+    fn readonly_v2_query_keeps_qoder_global_and_cn_ids_with_their_owner() {
         let dir = std::env::temp_dir().join(format!(
             "mossx-shared-binding-visibility-{}-{}",
             std::process::id(),
@@ -206,16 +206,29 @@ mod tests {
             connection
                 .execute(
                     "INSERT INTO shared_binding_state (
-                        session_id, binding_key, engine, native_session_id,
+                        session_id, binding_key, engine, provider_profile_id, native_session_id,
                         provisioning_json, availability, updated_at
-                     ) VALUES (?1, 'qoder:default', 'qoder', ?2, ?3, 'ready', 1)",
+                     ) VALUES (?1, 'qoder:__qoder_global__', 'qoder', '__qoder_global__', ?2, ?3, 'ready', 1)",
                     params![
                         "shared-qoder",
-                        "qoder:native-current",
-                        r#"{"archivedNativeSessionId":"qoder:native-archived"}"#
+                        "qoder:native-global-current",
+                        r#"{"archivedNativeSessionId":"qoder:native-global-archived"}"#
                     ],
                 )
-                .expect("insert qoder binding");
+                .expect("insert Qoder Global binding");
+            connection
+                .execute(
+                    "INSERT INTO shared_binding_state (
+                        session_id, binding_key, engine, provider_profile_id, native_session_id,
+                        provisioning_json, availability, updated_at
+                     ) VALUES (?1, 'qoder:__qoder_cn__', 'qoder', '__qoder_cn__', ?2, ?3, 'ready', 1)",
+                    params![
+                        "shared-qoder",
+                        "qoder:native-cn-current",
+                        r#"{"archivedNativeSessionId":"qoder:native-cn-archived"}"#
+                    ],
+                )
+                .expect("insert Qoder CN binding");
             connection
                 .execute(
                     "INSERT INTO shared_binding_state (
@@ -231,7 +244,7 @@ mod tests {
                         session_id, sequence, event_id, fact_type, payload_json,
                         payload_checksum, fidelity, committed_at
                      ) VALUES ('shared-qoder', 1, 'e1', 'binding.rebuilt',
-                        '{\"nativeSessionId\":\"qoder:native-historical\"}', 'x', 'full', 1)",
+                        '{\"nativeSessionId\":\"qoder:native-global-historical\"}', 'x', 'full', 1)",
                     [],
                 )
                 .expect("insert qoder event");
@@ -243,10 +256,13 @@ mod tests {
         )
         .expect("query");
         let qoder_ids = ids_by_session.get("shared-qoder").expect("qoder owner ids");
-        assert!(qoder_ids.contains("qoder:native-current"));
-        assert!(qoder_ids.contains("native-current"));
-        assert!(qoder_ids.contains("qoder:native-archived"));
-        assert!(qoder_ids.contains("qoder:native-historical"));
+        assert!(qoder_ids.contains("qoder:native-global-current"));
+        assert!(qoder_ids.contains("native-global-current"));
+        assert!(qoder_ids.contains("qoder:native-global-archived"));
+        assert!(qoder_ids.contains("qoder:native-global-historical"));
+        assert!(qoder_ids.contains("qoder:native-cn-current"));
+        assert!(qoder_ids.contains("native-cn-current"));
+        assert!(qoder_ids.contains("qoder:native-cn-archived"));
         assert!(!qoder_ids.contains("pi:native-pi"));
         assert!(ids_by_session
             .get("shared-pi")

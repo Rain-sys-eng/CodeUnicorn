@@ -21,9 +21,11 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio::time::timeout;
 
 use super::events::EngineEvent;
+use super::qoder_provider_profile::QoderDistribution;
 use super::{EngineConfig, EngineType, ModelInfo, SendMessageParams};
 
 const QODER_CLI_NAME: &str = "qodercli";
+const QODERCN_CLI_NAME: &str = "qoderclicn";
 const QODER_IDE_LAUNCHER_NAME: &str = "qoder";
 const ACP_PROTOCOL_VERSION: u32 = 1;
 const QODER_POST_TERMINAL_DRAIN: Duration = Duration::from_millis(250);
@@ -95,6 +97,7 @@ pub struct QoderSession {
     bin_path: Option<String>,
     home_dir: Option<String>,
     custom_args: Option<String>,
+    distribution: QoderDistribution,
     active_processes: Mutex<HashMap<String, ActiveQoderChildProcess>>,
     cancel_requested_turns: Mutex<HashSet<String>>,
     forced_cancelled_turns: Mutex<HashSet<String>>,
@@ -642,18 +645,34 @@ pub(crate) fn is_qoder_ide_launcher_bin(bin: &str) -> bool {
 }
 
 pub(crate) fn resolve_qodercli_bin(custom_bin: Option<&str>) -> Result<String, String> {
+    resolve_qoder_distribution_bin(QoderDistribution::Global, custom_bin)
+}
+
+pub(crate) fn resolve_qoder_distribution_bin(
+    distribution: QoderDistribution,
+    custom_bin: Option<&str>,
+) -> Result<String, String> {
     if let Some(custom) = custom_bin.map(str::trim).filter(|value| !value.is_empty()) {
         if is_qoder_ide_launcher_bin(custom) {
-            return Err(
-                "qoderBin must point to qodercli, not the Qoder IDE launcher (`qoder`)".to_string(),
-            );
+            return Err(format!(
+                "{} must point to {}, not the Qoder IDE launcher (`qoder`)",
+                match distribution {
+                    QoderDistribution::Global => "qoderBin",
+                    QoderDistribution::Cn => "qoderCnBin",
+                },
+                distribution.cli_name()
+            ));
         }
         return Ok(custom.to_string());
     }
+    let cli_name = match distribution {
+        QoderDistribution::Global => QODER_CLI_NAME,
+        QoderDistribution::Cn => QODERCN_CLI_NAME,
+    };
     Ok(
-        crate::backend::app_server::find_cli_binary(QODER_CLI_NAME, None)
+        crate::backend::app_server::find_cli_binary(cli_name, None)
             .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_else(|| QODER_CLI_NAME.to_string()),
+            .unwrap_or_else(|| cli_name.to_string()),
     )
 }
 
@@ -797,11 +816,32 @@ pub(crate) fn spawn_qoder_command(
     home_dir: Option<&str>,
     custom_args: Option<&str>,
 ) -> Result<Command, String> {
-    let bin = resolve_qodercli_bin(custom_bin)?;
+    spawn_qoder_command_for_distribution(
+        QoderDistribution::Global,
+        custom_bin,
+        workspace_path,
+        home_dir,
+        custom_args,
+    )
+}
+
+pub(crate) fn spawn_qoder_command_for_distribution(
+    distribution: QoderDistribution,
+    custom_bin: Option<&str>,
+    workspace_path: &Path,
+    home_dir: Option<&str>,
+    custom_args: Option<&str>,
+) -> Result<Command, String> {
+    let bin = resolve_qoder_distribution_bin(distribution, custom_bin)?;
     if is_qoder_ide_launcher_bin(&bin) {
-        return Err(
-            "qoderBin must point to qodercli, not the Qoder IDE launcher (`qoder`)".to_string(),
-        );
+        return Err(format!(
+            "{} must point to {}, not the Qoder IDE launcher (`qoder`)",
+            match distribution {
+                QoderDistribution::Global => "qoderBin",
+                QoderDistribution::Cn => "qoderCnBin",
+            },
+            distribution.cli_name()
+        ));
     }
     let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
     cmd.current_dir(workspace_path);
@@ -815,11 +855,11 @@ pub(crate) fn spawn_qoder_command(
     }
     cmd.arg("--acp");
     if let Some(home) = home_dir.map(str::trim).filter(|value| !value.is_empty()) {
-        cmd.env("QODER_HOME", home);
+        cmd.env(distribution.config_dir_env_var(), home);
         cmd.arg("--config-dir");
         cmd.arg(home);
     }
-    crate::engine::qoder_auth::apply_qoder_pat_env(&mut cmd);
+    crate::engine::qoder_auth::apply_qoder_pat_env_for_distribution(&mut cmd, distribution);
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -1034,7 +1074,38 @@ pub(crate) async fn spawn_qoder_acp_process(
     ),
     String,
 > {
-    let mut command = spawn_qoder_command(custom_bin, workspace_path, home_dir, custom_args)?;
+    spawn_qoder_acp_process_for_distribution(
+        QoderDistribution::Global,
+        custom_bin,
+        workspace_path,
+        home_dir,
+        custom_args,
+    )
+    .await
+}
+
+pub(crate) async fn spawn_qoder_acp_process_for_distribution(
+    distribution: QoderDistribution,
+    custom_bin: Option<&str>,
+    workspace_path: &Path,
+    home_dir: Option<&str>,
+    custom_args: Option<&str>,
+) -> Result<
+    (
+        Child,
+        QoderAcpProcess,
+        tokio::task::JoinHandle<String>,
+        std::sync::Arc<Mutex<Option<ChildStdin>>>,
+    ),
+    String,
+> {
+    let mut command = spawn_qoder_command_for_distribution(
+        distribution,
+        custom_bin,
+        workspace_path,
+        home_dir,
+        custom_args,
+    )?;
     let mut child = command
         .spawn()
         .map_err(|error| format!("Failed to spawn qodercli: {error}"))?;
@@ -1069,8 +1140,40 @@ where
         Box<dyn std::future::Future<Output = Result<T, String>> + Send + 'a>,
     >,
 {
-    let (mut child, mut acp, stderr_task, _stdin) =
-        spawn_qoder_acp_process(custom_bin, workspace_path, home_dir, None).await?;
+    run_qoder_acp_initialized_for_distribution(
+        QoderDistribution::Global,
+        custom_bin,
+        workspace_path,
+        home_dir,
+        timeout_dur,
+        body,
+    )
+    .await
+}
+
+pub(crate) async fn run_qoder_acp_initialized_for_distribution<T, F>(
+    distribution: QoderDistribution,
+    custom_bin: Option<&str>,
+    workspace_path: &Path,
+    home_dir: Option<&str>,
+    timeout_dur: Duration,
+    body: F,
+) -> Result<T, String>
+where
+    F: for<'a> FnOnce(
+        &'a mut QoderAcpProcess,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<T, String>> + Send + 'a>,
+    >,
+{
+    let (mut child, mut acp, stderr_task, _stdin) = spawn_qoder_acp_process_for_distribution(
+        distribution,
+        custom_bin,
+        workspace_path,
+        home_dir,
+        None,
+    )
+    .await?;
     let outcome = async {
         acp.initialize().await?;
         body(&mut acp).await
@@ -1142,6 +1245,20 @@ impl QoderSession {
         workspace_path: PathBuf,
         config: Option<EngineConfig>,
     ) -> Self {
+        Self::new_with_distribution(
+            workspace_id,
+            workspace_path,
+            config,
+            QoderDistribution::Global,
+        )
+    }
+
+    pub fn new_with_distribution(
+        workspace_id: String,
+        workspace_path: PathBuf,
+        config: Option<EngineConfig>,
+        distribution: QoderDistribution,
+    ) -> Self {
         let (event_sender, _) = broadcast::channel(1024);
         let config = config.unwrap_or_default();
         Self {
@@ -1152,6 +1269,7 @@ impl QoderSession {
             bin_path: config.bin_path,
             home_dir: config.home_dir,
             custom_args: config.custom_args,
+            distribution,
             active_processes: Mutex::new(HashMap::new()),
             cancel_requested_turns: Mutex::new(HashSet::new()),
             forced_cancelled_turns: Mutex::new(HashSet::new()),
@@ -1200,7 +1318,8 @@ impl QoderSession {
     }
 
     pub(crate) fn build_command(&self) -> Result<Command, String> {
-        spawn_qoder_command(
+        spawn_qoder_command_for_distribution(
+            self.distribution,
             self.bin_path.as_deref(),
             &self.workspace_path,
             self.home_dir.as_deref(),
@@ -1226,7 +1345,8 @@ impl QoderSession {
             }
         };
 
-        let (child, mut acp, mut stderr_task, stdin) = match spawn_qoder_acp_process(
+        let (child, mut acp, mut stderr_task, stdin) = match spawn_qoder_acp_process_for_distribution(
+            self.distribution,
             self.bin_path.as_deref(),
             &self.workspace_path,
             self.home_dir.as_deref(),

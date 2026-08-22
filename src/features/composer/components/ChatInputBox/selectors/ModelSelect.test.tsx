@@ -1383,6 +1383,65 @@ describe("ModelSelect atomic target groups", () => {
     expect(onReloadProviderConfig).toHaveBeenCalledWith("codex", "__disk__");
   });
 
+  it("opens the selected Qoder CN settings card from the CLI settings action", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onOpenCliSettings = vi.fn();
+    const qoderTarget: ExecutionTarget = {
+      engine: "qoder",
+      providerProfileId: "__qoder_cn__",
+      modelCatalogEntryId: "qoder-cn-model",
+      model: "qoder-cn-model",
+      providerProfileNameSnapshot: "CN",
+      providerProfileSource: "managed",
+      reasoning: null,
+    };
+    const qoderGroup: ProviderTargetGroup = {
+      providerId: "qoder",
+      providerLabel: "Qoder CLI",
+      enabled: true,
+      profiles: [
+        {
+          id: "__qoder_global__",
+          label: "Global",
+          source: "managed",
+          loading: false,
+          error: null,
+          models: [{ id: "qoder-global-model", label: "Qoder Global" }],
+        },
+        {
+          id: "__qoder_cn__",
+          label: "CN",
+          source: "managed",
+          loading: false,
+          error: null,
+          models: [{ id: "qoder-cn-model", label: "Qoder CN" }],
+        },
+      ],
+    };
+
+    render(
+      <ModelSelect
+        value="qoder-cn-model"
+        currentProvider="qoder"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onOpenCliSettings={onOpenCliSettings}
+        onExecutionTargetChange={vi.fn()}
+        executionTarget={qoderTarget}
+        targetGroups={[...buildAtomicGroups(), qoderGroup]}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:Qoder CN" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "models.openCliSettings" }),
+    );
+
+    expect(onOpenCliSettings).toHaveBeenCalledWith("qoder-cn");
+  });
+
   it("switches the current engine channel immediately via the channel dialog", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onExecutionTargetChange = vi.fn();
@@ -2122,10 +2181,16 @@ describe("resolveActiveProviderProfileId", () => {
         engine: "claude",
         providerProfileId: null,
       }),
-    ).toBe("__local_qoder__");
+    ).toBe("__qoder_global__");
     expect(
       normalizeExecutionProviderProfileId("qoder", "__local_qoder__"),
     ).toBeNull();
+    expect(
+      normalizeExecutionProviderProfileId("qoder", "__qoder_global__"),
+    ).toBe("__qoder_global__");
+    expect(
+      normalizeExecutionProviderProfileId("qoder", "__qoder_cn__"),
+    ).toBe("__qoder_cn__");
   });
 
   it("returns null for engines without provider profiles", () => {

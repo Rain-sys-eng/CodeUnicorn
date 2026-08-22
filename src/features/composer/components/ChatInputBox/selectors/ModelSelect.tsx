@@ -15,6 +15,7 @@ import {
 import type { ProviderModelGroup } from '../modelOptions';
 import type { ProviderTargetGroup } from '../hooks/useProviderTargetCatalogOwners';
 import type { ExecutionTarget } from '../../../../shared-session/target/types';
+import type { QoderSettingsHighlightTarget } from '../../../../app/hooks/useSettingsModalState';
 import { PROVIDER_CONTINUATION_UI_ROLLBACK_EVENT } from "../../../../threads/services/providerContinuationRequests";
 import {
   CLAUDE_LOCAL_PROVIDER_PROFILE_ID,
@@ -24,6 +25,8 @@ import {
   KIMI_LOCAL_PROVIDER_PROFILE_ID,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_CN_PROVIDER_PROFILE_ID,
+  QODER_GLOBAL_PROVIDER_PROFILE_ID,
   QODER_LOCAL_PROVIDER_PROFILE_ID,
 } from '../../../../threads/constants/codexProviderProfiles';
 import { EngineIcon } from '../../../../engine/components/EngineIcon';
@@ -75,8 +78,10 @@ interface ModelSelectProps {
   onAddModel?: (providerId?: string) => void;
   onRefreshConfig?: () => Promise<void> | void; // Refresh current provider config
   isRefreshingConfig?: boolean;
-  /** Jump to CLI / provider settings management page */
-  onOpenCliSettings?: () => void;
+  /** Jump to CLI / provider settings management page. */
+  onOpenCliSettings?: (
+    highlightTarget?: QoderSettingsHighlightTarget,
+  ) => void;
   // 共享会话(atomic)目标选择:与 legacy 相同的「引擎子菜单 → 平铺模型」
   // 交互,数据来自 target catalog,选中产出完整 ExecutionTarget。
   targetGroups?: ProviderTargetGroup[];
@@ -140,6 +145,14 @@ export function normalizeExecutionProviderProfileId(
   providerProfileId: string | null | undefined,
 ): string | null {
   const normalizedProviderProfileId = providerProfileId?.trim();
+  // Qoder Global/CN are fixed distribution identities, not ordinary local
+  // provider profiles. Preserve them through target selection and dispatch.
+  if (providerId === "qoder") {
+    return !normalizedProviderProfileId ||
+      normalizedProviderProfileId === QODER_LOCAL_PROVIDER_PROFILE_ID
+      ? null
+      : normalizedProviderProfileId;
+  }
   return !normalizedProviderProfileId ||
     LOCAL_PROVIDER_PROFILE_IDS[providerId] === normalizedProviderProfileId
     ? null
@@ -164,7 +177,12 @@ export function resolveActiveProviderProfileId(
           executionTarget.providerProfileId,
         )
       : null;
-  return targetProfileId ?? LOCAL_PROVIDER_PROFILE_IDS[providerId] ?? null;
+  if (targetProfileId) {
+    return targetProfileId;
+  }
+  return providerId === "qoder"
+    ? QODER_GLOBAL_PROVIDER_PROFILE_ID
+    : LOCAL_PROVIDER_PROFILE_IDS[providerId] ?? null;
 }
 
 /**
@@ -891,10 +909,18 @@ export const ModelSelect = memo(({
     [onAddModel],
   );
 
+  const qoderSettingsHighlightTarget: QoderSettingsHighlightTarget | undefined =
+    (hasTargetGroups ? executionTarget?.engine : currentProvider) === "qoder"
+      ? resolveActiveProviderProfileId("qoder", executionTarget) ===
+        QODER_CN_PROVIDER_PROFILE_ID
+        ? "qoder-cn"
+        : "qoder-global"
+      : undefined;
+
   const handleOpenCliSettings = useCallback(() => {
-    onOpenCliSettings?.();
+    onOpenCliSettings?.(qoderSettingsHighlightTarget);
     setIsOpen(false);
-  }, [onOpenCliSettings]);
+  }, [onOpenCliSettings, qoderSettingsHighlightTarget]);
 
   // Refresh keeps the menu open so the spinner / error stay visible.
   const handleRefreshConfig = useCallback(() => {

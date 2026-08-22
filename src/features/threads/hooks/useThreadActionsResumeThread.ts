@@ -506,6 +506,14 @@ export function useThreadActionsResumeThreadForWorkspace(
               workspacePathsByIdRef.current[workspaceId] ??
               resolveWorkspacePath?.(workspaceId) ??
               null,
+            providerProfileId:
+              latestThreadsByWorkspaceRef.current[workspaceId]?.find(
+                (thread) => thread.id === targetThreadId,
+              )?.providerProfileId ??
+              threadsByWorkspaceRef.current[workspaceId]?.find(
+                (thread) => thread.id === targetThreadId,
+              )?.providerProfileId ??
+              null,
             preferLocalCodexHistory: options?.preferLocalCodexHistory === true,
             onHistoryProgress: setThreadHistoryLoadingProgress
               ? (progress) => {
@@ -1791,6 +1799,14 @@ export function useThreadActionsResumeThreadForWorkspace(
         });
         if (workspacePath && !loadedThreadsRef.current[threadId]) {
           const realSessionId = threadId.slice("qoder:".length);
+          const qoderProviderProfileId =
+            latestThreadsByWorkspaceRef.current[workspaceId]?.find(
+              (thread) => thread.id === threadId,
+            )?.providerProfileId ??
+            threadsByWorkspaceRef.current[workspaceId]?.find(
+              (thread) => thread.id === threadId,
+            )?.providerProfileId ??
+            null;
           try {
             await runNativeHistoryOpenStages({
               report: (progress) => {
@@ -1800,7 +1816,14 @@ export function useThreadActionsResumeThreadForWorkspace(
                 setThreadHistoryLoadingProgress?.(threadId, progress);
               },
               shouldContinue: isCurrentResumeRequest,
-              load: () => loadQoderSessionService(workspacePath, realSessionId),
+              load: () =>
+                qoderProviderProfileId
+                  ? loadQoderSessionService(
+                      workspacePath,
+                      realSessionId,
+                      qoderProviderProfileId,
+                    )
+                  : loadQoderSessionService(workspacePath, realSessionId),
               extractMessages: (payload) =>
                 (payload as { messages?: unknown }).messages ?? payload,
               parse: parseQoderHistoryMessages,

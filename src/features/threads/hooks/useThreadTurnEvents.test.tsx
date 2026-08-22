@@ -54,6 +54,7 @@ type SetupOverrides = {
   interruptedThreads?: string[];
   activeThreadId?: string | null;
   activeTurnIdByThread?: Record<string, string | null>;
+  providerProfileByThread?: Record<string, string | null | undefined>;
   resolveCanonicalThreadId?: (threadId: string) => string;
   onDebug?: ReturnType<typeof vi.fn>;
   activeWorkspaceId?: string;
@@ -81,6 +82,10 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
   const activeTurnIdByThread = overrides.activeTurnIdByThread ?? {};
   const getActiveTurnIdForThread = vi.fn(
     (threadId: string) => activeTurnIdByThread[threadId] ?? null,
+  );
+  const getThreadProviderProfileId = vi.fn(
+    (_workspaceId: string, threadId: string) =>
+      overrides.providerProfileByThread?.[threadId] ?? null,
   );
   const establishedThreadIds = overrides.establishedThreadIds ?? [];
   const hasEstablishedThreadItems = vi.fn((threadId: string) =>
@@ -135,6 +140,7 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
       resolvePendingThreadForSession,
       resolvePendingThreadForTurn,
       getActiveTurnIdForThread,
+      getThreadProviderProfileId,
       hasEstablishedThreadItems,
       renamePendingMemoryCaptureKey,
       onDebug: overrides.onDebug,
@@ -160,6 +166,7 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
     resolvePendingThreadForSession,
     resolvePendingThreadForTurn,
     getActiveTurnIdForThread,
+    getThreadProviderProfileId,
     hasEstablishedThreadItems,
     renamePendingMemoryCaptureKey,
     codexCompactionInFlightByThreadRef,
@@ -605,6 +612,25 @@ describe("useThreadTurnEvents", () => {
     expect(interruptTurn).not.toHaveBeenCalled();
     expect(markProcessing).not.toHaveBeenCalled();
     expect(setActiveTurnId).not.toHaveBeenCalled();
+  });
+
+  it("routes a pending Qoder CN interrupt to its persisted distribution", () => {
+    const { result, pendingInterruptsRef } = makeOptions({
+      pendingInterrupts: ["qoder:session-cn"],
+      providerProfileByThread: { "qoder:session-cn": "__qoder_cn__" },
+    });
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "qoder:session-cn", "turn-cn");
+    });
+
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "qoder:session-cn")).toBe(false);
+    expect(engineInterruptTurn).toHaveBeenCalledWith(
+      "ws-1",
+      "turn-cn",
+      "qoder",
+      "__qoder_cn__",
+    );
   });
 
   it("routes pending claude interrupts through turn-scoped engine interrupt", () => {
@@ -1166,6 +1192,29 @@ describe("useThreadTurnEvents", () => {
     expect(engineInterruptTurn).toHaveBeenCalledWith("ws-1", "turn-42", "claude");
     expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "claude:session-xyz")).toBe(false);
     expect(interruptTurn).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Qoder CN binding when a pending thread is finalized before its interrupt", () => {
+    const { result } = makeOptions({
+      pendingInterrupts: ["qoder-pending-cn"],
+      activeTurnIdByThread: { "qoder:session-cn": "turn-cn" },
+      providerProfileByThread: { "qoder-pending-cn": "__qoder_cn__" },
+    });
+
+    act(() => {
+      result.current.onThreadSessionIdUpdated(
+        "ws-1",
+        "qoder-pending-cn",
+        "session-cn",
+      );
+    });
+
+    expect(engineInterruptTurn).toHaveBeenCalledWith(
+      "ws-1",
+      "turn-cn",
+      "qoder",
+      "__qoder_cn__",
+    );
   });
 
   it("renames local mappings when opencode pending thread gets real session id", () => {

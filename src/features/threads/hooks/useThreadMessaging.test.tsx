@@ -2585,6 +2585,28 @@ describe("useThreadMessaging", () => {
     expect(interruptTurn).not.toHaveBeenCalled();
   });
 
+  it("routes a native Qoder CN interrupt to its persisted distribution binding", async () => {
+    const { result } = makeThreadMessagingHook("qoder", {
+      activeThreadId: "qoder:session-cn",
+      ensuredThreadId: "qoder:session-cn",
+      activeTurnIdByThread: { "qoder:session-cn": "turn-cn" },
+      threadEngineById: { "qoder:session-cn": "qoder" },
+      providerProfileByThread: { "qoder:session-cn": "__qoder_cn__" },
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    expect(engineInterruptTurn).toHaveBeenCalledWith(
+      "ws-1",
+      "turn-cn",
+      "qoder",
+      "__qoder_cn__",
+    );
+    expect(engineInterrupt).not.toHaveBeenCalled();
+  });
+
   it("falls back to workspace interrupt when turn-scoped interrupt rpc is unavailable", async () => {
     vi.mocked(engineInterruptTurn).mockRejectedValue(
       new Error("unknown method: engine_interrupt_turn"),

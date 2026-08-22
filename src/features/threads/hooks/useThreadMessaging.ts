@@ -3717,6 +3717,7 @@ export function useThreadMessaging({
       onDebug,
       pushThreadErrorMessage,
       getThreadEngine,
+      getThreadProviderProfileId,
       resolveThreadKind,
       resolveThreadEngine,
       resolveComposerSelection,
@@ -3990,6 +3991,17 @@ export function useThreadMessaging({
             ? (getSharedTargetState(activeWorkspace.id, activeThreadId)
                 .activeTurnTarget?.providerProfileId ?? null)
             : null;
+        // Qoder Global/CN are two runtimes behind one engine id. Native Qoder
+        // threads must carry their persisted distribution binding when
+        // interrupting; omitting it intentionally resolves the legacy Global
+        // runtime in Rust.
+        const nativeQoderProviderProfileId =
+          activeThreadKind === "native" && resolvedThreadEngine === "qoder"
+            ? getThreadProviderProfileId?.(
+                activeWorkspace.id,
+                activeThreadId,
+              )?.trim() || null
+            : null;
         if (usesSharedV2Control) {
           // Shared V2 已由 durable attempt owner 精确中断；禁止再走 mutable
           // target / workspace-wide fallback 产生第二次 control side effect。
@@ -4008,12 +4020,12 @@ export function useThreadMessaging({
           // execute a precise kill once the backend emits the real turn id.
           if (activeTurnId) {
             try {
-              if (activeThreadKind === "shared") {
+              if (activeThreadKind === "shared" || nativeQoderProviderProfileId) {
                 await engineInterruptTurnService(
                   activeWorkspace.id,
                   activeTurnId,
                   resolvedThreadEngine,
-                  sharedProviderProfileId,
+                  sharedProviderProfileId ?? nativeQoderProviderProfileId,
                 );
               } else {
                 await engineInterruptTurnService(
@@ -4072,6 +4084,7 @@ export function useThreadMessaging({
       markProcessing,
       onDebug,
       pendingInterruptsRef,
+      getThreadProviderProfileId,
       resolveThreadEngine,
       resolveThreadKind,
       setActiveTurnId,

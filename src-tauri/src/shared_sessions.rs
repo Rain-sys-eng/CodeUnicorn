@@ -542,7 +542,8 @@ pub(crate) fn engine_binding_thread_id(engine: EngineType, seed: &str) -> String
         EngineType::OpenCode => format!("opencode-pending-shared-{seed}"),
         EngineType::Gemini => format!("gemini-pending-shared-{seed}"),
         EngineType::Dsh => format!("dsh-pending-shared-{seed}"),
-        // Qoder is never a Shared target (fail-closed); the arm exists for exhaustiveness.
+        // Qoder Shared bindings retain their distribution identity; this id is only provisional
+        // until the corresponding native session is established.
         EngineType::Qoder => format!("qoder-pending-shared-{seed}"),
     }
 }
@@ -2290,6 +2291,20 @@ mod tests {
         assert_eq!(
             shared_target_binding_key(EngineType::Codex, Some("openai")),
             "codex:openai"
+        );
+        assert_eq!(
+            shared_target_binding_key(
+                EngineType::Qoder,
+                Some(crate::engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
+            ),
+            "qoder:__qoder_global__"
+        );
+        assert_eq!(
+            shared_target_binding_key(
+                EngineType::Qoder,
+                Some(crate::engine::qoder_provider_profile::QODER_CN_PROVIDER_PROFILE_ID),
+            ),
+            "qoder:__qoder_cn__"
         );
     }
 

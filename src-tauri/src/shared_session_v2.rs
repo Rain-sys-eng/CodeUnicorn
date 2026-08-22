@@ -603,24 +603,40 @@ mod execution_target_contract_tests {
 
     #[test]
     fn qoder_shared_runtime_key_matches_native_ownership() {
-        // qoder_runtime_key 与 PI 同形：local sentinel → 纯 workspace_id。
+        // Qoder runtime key 必须携带 distribution；Global/CN 可在同一 workspace 并发。
         assert_eq!(
             provider_runtime_key_for_target("workspace-1", EngineType::Qoder, None)
-                .expect("qoder local runtime key"),
+                .expect("qoder Global runtime key"),
+            "workspace-1::qoder::global",
+        );
+        let global_runtime_key = provider_runtime_key_for_target(
             "workspace-1",
-        );
-        assert_eq!(
-            provider_runtime_key_for_target("workspace-1", EngineType::Qoder, Some("custom"))
-                .expect("qoder named runtime key"),
-            "workspace-1::qoder::custom",
-        );
+            EngineType::Qoder,
+            Some(crate::engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID),
+        )
+        .expect("explicit qoder Global runtime key");
+        assert_eq!(global_runtime_key, "workspace-1::qoder::global");
+        let cn_runtime_key = provider_runtime_key_for_target(
+            "workspace-1",
+            EngineType::Qoder,
+            Some(crate::engine::qoder_provider_profile::QODER_CN_PROVIDER_PROFILE_ID),
+        )
+        .expect("qoder CN runtime key");
+        assert_eq!(cn_runtime_key, "workspace-1::qoder::cn",);
+        assert_ne!(global_runtime_key, cn_runtime_key);
+        assert!(provider_runtime_key_for_target(
+            "workspace-1",
+            EngineType::Qoder,
+            Some("unknown-qoder-profile"),
+        )
+        .is_err());
     }
 
     #[test]
-    fn qoder_runtime_only_catalog_passes_target_validation() {
+    fn qoder_runtime_only_catalog_accepts_legacy_and_explicit_distribution_targets() {
         // Qoder 模型目录是 ACP runtime-only：发送路径禁止现场 probe，catalog 不可得
         // 时按空目录 + Allow 放行（Session Switch Catalog Fetch Gate）。
-        let target = ExecutionTargetInput {
+        let legacy_target = ExecutionTargetInput {
             engine: EngineType::Qoder,
             provider_profile_id: None,
             model_catalog_entry_id: Some("qmodel_38max".to_string()),
@@ -631,10 +647,57 @@ mod execution_target_contract_tests {
             runtime_capability_fingerprint: None,
         };
         assert_eq!(
-            validate_resolved_execution_target(&target)
+            validate_resolved_execution_target(&legacy_target)
                 .expect("qoder runtime-only catalog must not hard-fail"),
             EngineType::Qoder
         );
+
+        let legacy_sentinel = ExecutionTargetInput {
+            provider_profile_id: Some(
+                crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID.to_string(),
+            ),
+            provider_profile_name_snapshot: Some("Qoder Global".to_string()),
+            provider_profile_source: Some(CanonicalProviderProfileSource::Managed),
+            ..legacy_target.clone()
+        };
+        assert_eq!(
+            validate_resolved_execution_target(&legacy_sentinel)
+                .expect("legacy Qoder sentinel must remain Global-compatible"),
+            EngineType::Qoder
+        );
+
+        for (provider_profile_id, provider_name) in [
+            (
+                crate::engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID,
+                "Qoder Global",
+            ),
+            (
+                crate::engine::qoder_provider_profile::QODER_CN_PROVIDER_PROFILE_ID,
+                "Qoder CN",
+            ),
+        ] {
+            let target = ExecutionTargetInput {
+                provider_profile_id: Some(provider_profile_id.to_string()),
+                provider_profile_name_snapshot: Some(provider_name.to_string()),
+                provider_profile_source: Some(CanonicalProviderProfileSource::Managed),
+                ..legacy_target.clone()
+            };
+            assert_eq!(
+                validate_resolved_execution_target(&target)
+                    .unwrap_or_else(|error| panic!("{provider_name} target rejected: {error}")),
+                EngineType::Qoder
+            );
+        }
+
+        let unknown_target = ExecutionTargetInput {
+            provider_profile_id: Some("provider-qoder".to_string()),
+            provider_profile_name_snapshot: Some("Unknown Qoder".to_string()),
+            provider_profile_source: Some(CanonicalProviderProfileSource::Managed),
+            ..legacy_target
+        };
+        assert!(validate_resolved_execution_target(&unknown_target)
+            .expect_err("unknown Qoder profile must fail before Tx1")
+            .contains("QODER_DISTRIBUTION"));
     }
 
     #[test]
@@ -983,6 +1046,22 @@ fn validate_execution_target(target: &ExecutionTargetInput) -> Result<EngineType
     Ok(engine)
 }
 
+/// Qoder 的 provider profile 是 distribution identity，不接受普通 provider id。
+/// 入口层与 Tx1 core 都调用它，避免未来新增 caller 绕过入口校验后写入错误 Binding。
+fn validate_qoder_distribution_identity(
+    engine: EngineType,
+    provider_profile_id: Option<&str>,
+) -> Result<(), String> {
+    if engine != EngineType::Qoder {
+        return Ok(());
+    }
+    crate::engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+        provider_profile_id,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("invalid-target: {error}"))
+}
+
 pub(crate) fn validate_resolved_execution_target(
     target: &ExecutionTargetInput,
 ) -> Result<EngineType, String> {
@@ -1001,6 +1080,10 @@ pub(crate) fn validate_resolved_execution_target(
             }
         ));
     }
+    // Qoder 的 providerProfileId 实际是不可变的 distribution identity，而不是
+    // 普通 managed provider。必须在 Tx1 写入 turnRequested 前 fail-closed；否则
+    // 非法 profile 会到 runtime 才报错，留下无法执行的 durable attempt。
+    validate_qoder_distribution_identity(target.engine, provider_profile_id.as_deref())?;
     if target
         .provider_profile_name_snapshot
         .as_deref()
@@ -1278,6 +1361,18 @@ pub fn begin_turn_core(
         }
     };
     let provider_profile_id = target.normalized_provider();
+    if let Err(reason) =
+        validate_qoder_distribution_identity(engine, provider_profile_id.as_deref())
+    {
+        return Ok(BeginTurnOutcome {
+            status: BeginTurnStatus::TargetUnavailable,
+            reason: Some(reason),
+            attempt_id: None,
+            logical_turn_id: None,
+            binding_key: String::new(),
+            snapshot: None,
+        });
+    }
     let binding_key = shared_target_binding_key(engine, provider_profile_id.as_deref());
     if let Some((pending_binding_key, pending_attempt_id)) =
         unresolved_session_operation(writer, session_id)?
@@ -2732,9 +2827,11 @@ pub(crate) fn provider_runtime_key_for_target(
             workspace_id,
             provider_profile_id,
         )),
-        // qoder_runtime_key 内部 normalize：None / local sentinel → workspace_id。
-        EngineType::Qoder => Ok(
-            crate::engine::qoder_provider_profile::qoder_runtime_key(workspace_id, provider_profile_id),
+        // qoder_runtime_key 内部兼容 None / legacy sentinel → Qoder Global，并为
+        // Global/CN 分配彼此隔离的 runtime key。
+        EngineType::Qoder => crate::engine::qoder_provider_profile::qoder_runtime_key(
+            workspace_id,
+            provider_profile_id,
         ),
         _ => Err("dispatch receipt has unsupported Shared engine".to_string()),
     }
@@ -2956,7 +3053,6 @@ mod runtime_dispatch_receipt_tests {
                 "ccgui/opencode-model",
                 "provider-opencode",
             ),
-            (EngineType::Qoder, "qmodel_38max", "provider-qoder"),
         ] {
             let local_owner = durable_owner_for_receipt_test(engine, None, model, None);
             let local_runtime_key =
@@ -3002,6 +3098,95 @@ mod runtime_dispatch_receipt_tests {
             )
             .is_ok());
         }
+    }
+
+    #[test]
+    fn qoder_receipts_preserve_legacy_global_and_isolate_distributions() {
+        let model = "qmodel_38max";
+        let workspace_id = "workspace-qoder";
+
+        let legacy_owner = durable_owner_for_receipt_test(EngineType::Qoder, None, model, None);
+        let legacy_runtime_key =
+            provider_runtime_key_for_target(workspace_id, EngineType::Qoder, None)
+                .expect("legacy Qoder Global runtime key");
+        assert!(validate_runtime_dispatch_receipt(
+            &json!({
+                "mossxDispatchReceipt": {
+                    "engine": "qoder",
+                    "providerProfileId": null,
+                    "providerProfileSource": "local",
+                    "providerRuntimeKey": legacy_runtime_key,
+                    "model": model,
+                    "reasoningEffort": null,
+                }
+            }),
+            &legacy_owner,
+            workspace_id,
+        )
+        .is_ok());
+
+        let global_profile_id =
+            crate::engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID;
+        let cn_profile_id = crate::engine::qoder_provider_profile::QODER_CN_PROVIDER_PROFILE_ID;
+        let global_owner = durable_owner_for_receipt_test(
+            EngineType::Qoder,
+            Some(global_profile_id),
+            model,
+            Some("high"),
+        );
+        let global_runtime_key = provider_runtime_key_for_target(
+            workspace_id,
+            EngineType::Qoder,
+            Some(global_profile_id),
+        )
+        .expect("Qoder Global runtime key");
+        let cn_runtime_key =
+            provider_runtime_key_for_target(workspace_id, EngineType::Qoder, Some(cn_profile_id))
+                .expect("Qoder CN runtime key");
+        assert_ne!(global_runtime_key, cn_runtime_key);
+
+        let global_receipt = json!({
+            "mossxDispatchReceipt": {
+                "engine": "qoder",
+                "providerProfileId": global_profile_id,
+                "providerProfileSource": "managed",
+                "providerRuntimeKey": global_runtime_key,
+                "model": model,
+                "reasoningEffort": "high",
+            }
+        });
+        assert!(
+            validate_runtime_dispatch_receipt(&global_receipt, &global_owner, workspace_id).is_ok()
+        );
+
+        let cn_owner = durable_owner_for_receipt_test(
+            EngineType::Qoder,
+            Some(cn_profile_id),
+            model,
+            Some("high"),
+        );
+        let cn_receipt = json!({
+            "mossxDispatchReceipt": {
+                "engine": "qoder",
+                "providerProfileId": cn_profile_id,
+                "providerProfileSource": "managed",
+                "providerRuntimeKey": cn_runtime_key,
+                "model": model,
+                "reasoningEffort": "high",
+            }
+        });
+        assert!(validate_runtime_dispatch_receipt(&cn_receipt, &cn_owner, workspace_id).is_ok());
+
+        let mut cross_distribution_receipt = global_receipt;
+        cross_distribution_receipt["mossxDispatchReceipt"]["providerRuntimeKey"] =
+            json!(cn_runtime_key);
+        assert!(validate_runtime_dispatch_receipt(
+            &cross_distribution_receipt,
+            &global_owner,
+            workspace_id,
+        )
+        .expect_err("Qoder CN runtime key must not satisfy a Global receipt")
+        .contains("Runtime key does not match"));
     }
 
     #[test]
@@ -4430,7 +4615,7 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
                             crate::engine::pi_provider_profile::PI_LOCAL_PROVIDER_PROFILE_ID
                         }
                         EngineType::Qoder => {
-                            crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID
+                            crate::engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID
                         }
                         _ => unreachable!("new Shared engine branch is exhaustively matched"),
                     }
@@ -6499,7 +6684,61 @@ mod shared_interrupt_owner_tests {
         assert_route(EngineType::Grok, "provider-grok");
         assert_route(EngineType::OpenCode, "provider-opencode");
         assert_route(EngineType::Pi, "provider-pi");
-        assert_route(EngineType::Qoder, "provider-qoder");
+    }
+
+    #[test]
+    fn qoder_shared_interrupt_routes_isolate_global_and_cn_owners() {
+        let global_profile_id =
+            crate::engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID;
+        let cn_profile_id = crate::engine::qoder_provider_profile::QODER_CN_PROVIDER_PROFILE_ID;
+        assert_ne!(
+            shared_target_binding_key(EngineType::Qoder, Some(global_profile_id)),
+            shared_target_binding_key(EngineType::Qoder, Some(cn_profile_id)),
+        );
+        assert_ne!(
+            provider_runtime_key_for_target("ws-1", EngineType::Qoder, Some(global_profile_id))
+                .expect("Global runtime key"),
+            provider_runtime_key_for_target("ws-1", EngineType::Qoder, Some(cn_profile_id))
+                .expect("CN runtime key"),
+        );
+        assert_route(EngineType::Qoder, global_profile_id);
+        assert_route(EngineType::Qoder, cn_profile_id);
+    }
+
+    #[test]
+    fn qoder_unknown_distribution_is_rejected_before_turn_requested_is_written() {
+        let session_id = "qoder-unknown-distribution";
+        let (root, writer) = open_test_writer(session_id);
+
+        let outcome = begin_turn_core(
+            &writer,
+            session_id,
+            &target(EngineType::Qoder, "provider-qoder"),
+            "hello".to_string(),
+            None,
+        )
+        .expect("begin must return target-unavailable rather than write");
+
+        assert_eq!(outcome.status, BeginTurnStatus::TargetUnavailable);
+        assert!(outcome
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("QODER_DISTRIBUTION")));
+        assert!(outcome.binding_key.is_empty());
+        assert!(writer
+            .events_for_session(session_id)
+            .expect("read durable events")
+            .is_empty());
+        assert!(writer
+            .binding_state(
+                session_id,
+                &shared_target_binding_key(EngineType::Qoder, Some("provider-qoder")),
+            )
+            .expect("read durable binding")
+            .is_none());
+
+        writer.shutdown().expect("shutdown writer");
+        std::fs::remove_dir_all(root).expect("remove test root");
     }
 
     #[test]

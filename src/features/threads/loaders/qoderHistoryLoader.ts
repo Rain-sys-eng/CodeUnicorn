@@ -7,13 +7,19 @@ import { parseQoderHistoryMessages } from "./qoderHistoryParser";
 type QoderHistoryLoaderOptions = {
   workspaceId: string;
   workspacePath: string | null;
-  loadQoderSession: (workspacePath: string, sessionId: string) => Promise<unknown>;
+  providerProfileId?: string | null;
+  loadQoderSession: (
+    workspacePath: string,
+    sessionId: string,
+    providerProfileId?: string | null,
+  ) => Promise<unknown>;
   onProgress?: HistoryLoadingProgressListener;
 };
 
 export function createQoderHistoryLoader({
   workspaceId,
   workspacePath,
+  providerProfileId,
   loadQoderSession,
   onProgress,
 }: QoderHistoryLoaderOptions): HistoryLoader {
@@ -45,7 +51,10 @@ export function createQoderHistoryLoader({
           onProgress?.(progress);
         },
         shouldContinue: () => true,
-        load: () => loadQoderSession(workspacePath, sessionId),
+        load: () =>
+          providerProfileId
+            ? loadQoderSession(workspacePath, sessionId, providerProfileId)
+            : loadQoderSession(workspacePath, sessionId),
         extractMessages: (payload) =>
           ((payload ?? {}) as { messages?: unknown }).messages ?? payload,
         parse: parseQoderHistoryMessages,

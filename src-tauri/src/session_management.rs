@@ -936,10 +936,7 @@ pub(crate) async fn delete_workspace_sessions_core(
         .get_engine_config(engine::EngineType::Pi)
         .await
         .and_then(|item| item.home_dir);
-    let qoder_home_dir = engine_manager
-        .get_engine_config(engine::EngineType::Qoder)
-        .await
-        .and_then(|item| item.home_dir);
+    let qoder_distribution_settings = engine_manager.qoder_distribution_settings().await;
     let dsh_config = engine_manager
         .get_engine_config(engine::EngineType::Dsh)
         .await;
@@ -1023,13 +1020,20 @@ pub(crate) async fn delete_workspace_sessions_core(
             }
             "qoder" => {
                 let workspace_path = target.owner_workspace_path.clone();
-                let qoder_home_dir = qoder_home_dir.clone();
+                let workspace_id = target.owner_workspace_id.clone();
+                let provider_profile_id = target.provider_profile_id.clone();
+                let qoder_distribution_settings = qoder_distribution_settings.clone();
                 let raw_id = target.native_session_id.clone();
                 let handle = tokio::spawn(async move {
-                    engine::qoder_history::delete_qoder_session(
+                    let launch_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                        &workspace_id,
+                        provider_profile_id.as_deref(),
+                        &qoder_distribution_settings,
+                    )?;
+                    engine::qoder_history::delete_qoder_session_for_launch_profile(
                         &workspace_path,
                         &raw_id,
-                        qoder_home_dir.as_deref(),
+                        &launch_profile,
                     )
                     .await
                 });

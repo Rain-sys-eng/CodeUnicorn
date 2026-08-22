@@ -1701,8 +1701,8 @@ pub(crate) fn rows_from_qoder_summaries(
                 physical_path: None,
                 parent_session_id: None,
                 size_bytes: session.file_size_bytes,
-                provider_profile_id: None,
-                provider_profile_name: None,
+                provider_profile_id: session.provider_profile_id.clone(),
+                provider_profile_name: session.provider_profile_name.clone(),
             }
         })
         .collect()
@@ -1934,12 +1934,16 @@ mod tests {
                 engine: Some("qoder".into()),
                 canonical_session_id: Some("019ffb7b-dedc-7b36-8d2f-f85f35501036".into()),
                 attribution_status: None,
+                provider_profile_id: Some("__qoder_cn__".into()),
+                provider_profile_name: Some("Qoder CN".into()),
             }],
         );
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].engine, "qoder");
         assert_eq!(rows[0].session_id, "019ffb7b-dedc-7b36-8d2f-f85f35501036");
         assert_eq!(rows[0].title, "我是 Qoder");
+        assert_eq!(rows[0].provider_profile_id.as_deref(), Some("__qoder_cn__"));
+        assert_eq!(rows[0].provider_profile_name.as_deref(), Some("Qoder CN"));
         assert!(rows[0]
             .workspace_path
             .as_deref()

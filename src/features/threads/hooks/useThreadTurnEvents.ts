@@ -266,6 +266,10 @@ type UseThreadTurnEventsOptions = {
     turnId: string | null | undefined,
   ) => string | null;
   getActiveTurnIdForThread?: (threadId: string) => string | null;
+  getThreadProviderProfileId?: (
+    workspaceId: string,
+    threadId: string,
+  ) => string | null | undefined;
   hasEstablishedThreadItems?: (threadId: string) => boolean;
   renamePendingMemoryCaptureKey: (
     oldThreadId: string,
@@ -296,6 +300,7 @@ export function useThreadTurnEvents({
   resolvePendingThreadForSession,
   resolvePendingThreadForTurn,
   getActiveTurnIdForThread,
+  getThreadProviderProfileId,
   hasEstablishedThreadItems,
   renamePendingMemoryCaptureKey,
   onDebug,
@@ -521,10 +526,22 @@ export function useThreadTurnEvents({
       if (workspaceScopedHas(pendingInterruptsRef.current, workspaceId, threadId)) {
         workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, threadId);
         const engine = inferEngineFromThreadId(threadId);
+        const qoderProviderProfileId =
+          engine === "qoder"
+            ? getThreadProviderProfileId?.(workspaceId, threadId)?.trim() || null
+            : null;
         if (engine === "codex" && turnId) {
           void interruptTurnService(workspaceId, threadId, turnId).catch(() => {});
         } else if (turnId) {
-          void engineInterruptTurnService(workspaceId, turnId, engine).catch(() => {
+          const interrupt = qoderProviderProfileId
+            ? engineInterruptTurnService(
+                workspaceId,
+                turnId,
+                engine,
+                qoderProviderProfileId,
+              )
+            : engineInterruptTurnService(workspaceId, turnId, engine);
+          void interrupt.catch(() => {
             // Fallback for older runtimes missing turn-scoped interrupt.
             void engineInterruptService(workspaceId).catch(() => {});
           });
@@ -536,7 +553,13 @@ export function useThreadTurnEvents({
         setActiveTurnId(threadId, turnId);
       }
     },
-    [dispatch, markProcessing, pendingInterruptsRef, setActiveTurnId],
+    [
+      dispatch,
+      getThreadProviderProfileId,
+      markProcessing,
+      pendingInterruptsRef,
+      setActiveTurnId,
+    ],
   );
 
   const onTurnCompleted = useCallback(
@@ -1493,11 +1516,21 @@ export function useThreadTurnEvents({
         const activeTurnId = getActiveTurnIdForThread?.(newThreadId) ?? null;
         if (activeTurnId) {
           workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, newThreadId);
-          void engineInterruptTurnService(
-            workspaceId,
-            activeTurnId,
-            enginePrefix,
-          ).catch(() => {
+          const qoderProviderProfileId =
+            enginePrefix === "qoder"
+              ? getThreadProviderProfileId?.(workspaceId, sourceThreadId)?.trim()
+                || getThreadProviderProfileId?.(workspaceId, newThreadId)?.trim()
+                || null
+              : null;
+          const interrupt = qoderProviderProfileId
+            ? engineInterruptTurnService(
+                workspaceId,
+                activeTurnId,
+                enginePrefix,
+                qoderProviderProfileId,
+              )
+            : engineInterruptTurnService(workspaceId, activeTurnId, enginePrefix);
+          void interrupt.catch(() => {
             void engineInterruptService(workspaceId).catch(() => {});
           });
         }
@@ -1535,6 +1568,7 @@ export function useThreadTurnEvents({
       resolvePendingThreadForTurn,
       migrateThreadInterruptGuards,
       getActiveTurnIdForThread,
+      getThreadProviderProfileId,
       hasEstablishedThreadItems,
       pendingInterruptsRef,
       activeThreadId,

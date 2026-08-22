@@ -419,7 +419,7 @@ mod codex {
         run_claude_doctor_with_settings, run_codex_doctor_with_settings,
         run_dsh_doctor_with_settings, run_grok_doctor_with_settings, run_kimi_doctor_with_settings,
         run_opencode_doctor_with_settings, run_pi_doctor_with_settings,
-        run_qoder_doctor_with_settings,
+        run_qoder_doctor_for_profile_with_settings, run_qoder_doctor_with_settings,
     };
     pub(crate) use crate::codex_installer::{
         build_cli_install_plan_with_backend, resolve_cli_version_status,
@@ -1950,7 +1950,28 @@ async fn handle_rpc_request(
         }
         "qoder_doctor" => {
             let qoder_bin = parse_optional_string(&params, "qoderBin");
-            state.qoder_doctor(qoder_bin).await
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId");
+            state.qoder_doctor(qoder_bin, provider_profile_id).await
+        }
+        "qoder_auth_status" => {
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId")
+                .or_else(|| parse_optional_string(&params, "distribution"));
+            state.qoder_auth_status(provider_profile_id).await
+        }
+        "qoder_auth_set_pat" => {
+            let key = parse_string(&params, "key")?;
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId")
+                .or_else(|| parse_optional_string(&params, "distribution"));
+            state
+                .qoder_auth_set_pat(key, provider_profile_id)
+                .await?;
+            Ok(json!({ "ok": true }))
+        }
+        "qoder_auth_delete_pat" => {
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId")
+                .or_else(|| parse_optional_string(&params, "distribution"));
+            state.qoder_auth_delete_pat(provider_profile_id).await?;
+            Ok(json!({ "ok": true }))
         }
         "ensure_dsh_host" => state.ensure_dsh_host().await,
         "cancel_dsh_host" => state.cancel_dsh_host().await,
@@ -2233,7 +2254,10 @@ async fn handle_rpc_request(
         "list_qoder_sessions" => {
             let workspace_path = parse_string(&params, "workspacePath")?;
             let limit = parse_optional_u32(&params, "limit").map(|value| value as usize);
-            state.list_qoder_sessions(workspace_path, limit).await
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId");
+            state
+                .list_qoder_sessions(workspace_path, limit, provider_profile_id)
+                .await
         }
         "list_shared_sessions" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
@@ -2434,7 +2458,10 @@ async fn handle_rpc_request(
         "load_qoder_session" => {
             let workspace_path = parse_string(&params, "workspacePath")?;
             let session_id = parse_string(&params, "sessionId")?;
-            state.load_qoder_session(workspace_path, session_id).await
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId");
+            state
+                .load_qoder_session(workspace_path, session_id, provider_profile_id)
+                .await
         }
         "load_codex_session" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
@@ -2468,8 +2495,9 @@ async fn handle_rpc_request(
         "delete_qoder_session" => {
             let workspace_path = parse_string(&params, "workspacePath")?;
             let session_id = parse_string(&params, "sessionId")?;
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId");
             state
-                .delete_qoder_session(workspace_path, session_id)
+                .delete_qoder_session(workspace_path, session_id, provider_profile_id)
                 .await?;
             Ok(json!({ "ok": true }))
         }

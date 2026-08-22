@@ -672,9 +672,57 @@ impl DaemonState {
         crate::codex::run_dsh_doctor_with_settings(dsh_bin, &settings).await
     }
 
-    pub(super) async fn qoder_doctor(&self, qoder_bin: Option<String>) -> Result<Value, String> {
+    pub(super) async fn qoder_doctor(
+        &self,
+        qoder_bin: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
         let settings = self.app_settings.lock().await.clone();
-        crate::codex::run_qoder_doctor_with_settings(qoder_bin, &settings).await
+        crate::codex::run_qoder_doctor_for_profile_with_settings(
+            qoder_bin,
+            provider_profile_id,
+            &settings,
+        )
+        .await
+    }
+
+    pub(super) async fn qoder_auth_status(
+        &self,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+            provider_profile_id.as_deref(),
+        )?;
+        let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
+        let status = engine::qoder_auth::qoder_auth_status_from_path_for_distribution(
+            path,
+            distribution,
+        )
+        .await?;
+        serde_json::to_value(status).map_err(|error| error.to_string())
+    }
+
+    pub(super) async fn qoder_auth_set_pat(
+        &self,
+        key: String,
+        provider_profile_id: Option<String>,
+    ) -> Result<(), String> {
+        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+            provider_profile_id.as_deref(),
+        )?;
+        let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
+        engine::qoder_auth::set_qoder_pat(&path, &key).await
+    }
+
+    pub(super) async fn qoder_auth_delete_pat(
+        &self,
+        provider_profile_id: Option<String>,
+    ) -> Result<(), String> {
+        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+            provider_profile_id.as_deref(),
+        )?;
+        let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
+        engine::qoder_auth::delete_qoder_pat(&path).await
     }
 
     pub(super) async fn ensure_dsh_host(&self) -> Result<Value, String> {
@@ -837,6 +885,10 @@ impl DaemonState {
                 );
             }
         }
+        // Keep daemon-mode Qoder Global/CN launch descriptors in step with
+        // persisted settings before a history/catalog request can observe the
+        // previous config roots or CN binary.
+        self.sync_engine_configs().await;
         Ok(updated)
     }
 
@@ -935,10 +987,17 @@ impl DaemonState {
                 engine::EngineType::Qoder,
                 engine::EngineConfig {
                     bin_path: settings.qoder_bin.clone(),
-                    home_dir: None,
+                    home_dir: settings.qoder_config_dir.clone(),
                     custom_args: None,
                     default_model: None,
                 },
+            )
+            .await;
+        self.engine_manager
+            .set_qoder_distribution_settings(
+                engine::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                    &settings,
+                ),
             )
             .await;
         let _ = engine::dsh::runtime_settings_from_app(&settings);
@@ -1039,6 +1098,27 @@ impl DaemonState {
                     .await
                     .map(|status| status.models)
                     .unwrap_or_default())
+            }
+            engine::EngineType::Qoder => {
+                let qoder_distribution_settings =
+                    engine::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                        &settings,
+                    );
+                let launch_profile =
+                    engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                        "model-catalog",
+                        provider_profile_id,
+                        &qoder_distribution_settings,
+                    )?;
+                // Distribution catalogs are independent. Never reuse the
+                // engine-level Global cache for a Qoder CN selector.
+                let status = engine::status::detect_qoder_distribution_status(
+                    launch_profile.distribution,
+                    launch_profile.bin_path.as_deref(),
+                    launch_profile.home_dir.as_deref().and_then(|path| path.to_str()),
+                )
+                .await;
+                Ok(status.models)
             }
             _ => Ok(self
                 .get_engine_status(engine_type)
@@ -2397,19 +2477,22 @@ impl DaemonState {
                         "qoder",
                         provider_profile_id.as_deref(),
                     )?;
+                let qoder_distribution_settings =
+                    engine::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                        &settings,
+                    );
                 let provider_launch_profile =
                     engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
                         &workspace_id,
                         effective_provider_profile_id.as_deref(),
-                        None,
+                        &qoder_distribution_settings,
                     )?;
                 let session = self
                     .engine_manager
                     .get_or_create_qoder_session_for_runtime(
                         &workspace_id,
                         &workspace_path,
-                        &provider_launch_profile.runtime_key,
-                        provider_launch_profile.home_dir.as_deref(),
+                        &provider_launch_profile,
                     )
                     .await;
                 let resolved_session_id = resolve_qoder_session_id_for_engine_send(
@@ -3279,19 +3362,30 @@ impl DaemonState {
             }
             engine::EngineType::Qoder => {
                 let workspace_path = self.workspace_path_for_engine(&workspace_id).await?;
+                let effective_provider_profile_id =
+                    session_management::resolve_engine_provider_profile_id(
+                        self.storage_path.as_path(),
+                        &workspace_id,
+                        session_id.as_deref(),
+                        "qoder",
+                        None,
+                    )?;
+                let qoder_distribution_settings =
+                    engine::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                        &settings,
+                    );
                 let provider_launch_profile =
                     engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
                         &workspace_id,
-                        None,
-                        None,
+                        effective_provider_profile_id.as_deref(),
+                        &qoder_distribution_settings,
                     )?;
                 let session = self
                     .engine_manager
                     .get_or_create_qoder_session_for_runtime(
                         &workspace_id,
                         &workspace_path,
-                        &provider_launch_profile.runtime_key,
-                        provider_launch_profile.home_dir.as_deref(),
+                        &provider_launch_profile,
                     )
                     .await;
                 let resolved_session_id = resolve_qoder_session_id_for_engine_send(
@@ -3327,6 +3421,20 @@ impl DaemonState {
                 .await
                 .map_err(|_| "Qoder response timed out".to_string())??;
                 let response_session_id = session.get_session_id().await;
+                if let (Some(session_id), Some(binding)) = (
+                    response_session_id.as_deref(),
+                    provider_launch_profile.binding.as_ref(),
+                ) {
+                    session_management::record_engine_provider_binding_core(
+                        &self.workspaces,
+                        self.storage_path.as_path(),
+                        workspace_id.clone(),
+                        session_id.to_string(),
+                        "qoder".to_string(),
+                        binding.clone(),
+                    )
+                    .await?;
+                }
                 self.record_auto_session_metadata_if_present(
                     &workspace_id,
                     response_session_id.as_deref(),
@@ -3550,7 +3658,11 @@ impl DaemonState {
             }
             engine::EngineType::Qoder => {
                 self.engine_manager
-                    .interrupt_qoder_sessions(&workspace_id, Some(&turn_id))
+                    .interrupt_qoder_session_for_profile(
+                        &workspace_id,
+                        provider_profile_id.as_deref(),
+                        Some(&turn_id),
+                    )
                     .await
             }
             engine::EngineType::Grok => {
@@ -4173,16 +4285,21 @@ impl DaemonState {
         &self,
         workspace_path: String,
         limit: Option<usize>,
+        provider_profile_id: Option<String>,
     ) -> Result<Value, String> {
         let path = PathBuf::from(workspace_path);
-        let config = self
-            .engine_manager
-            .get_engine_config(engine::EngineType::Qoder)
-            .await;
-        let sessions = engine::qoder_history::list_qoder_sessions(
+        let settings = self.app_settings.lock().await.clone();
+        let launch_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+            &path.to_string_lossy(),
+            provider_profile_id.as_deref(),
+            &engine::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                &settings,
+            ),
+        )?;
+        let sessions = engine::qoder_history::list_qoder_sessions_for_launch_profile(
             &path,
             limit,
-            config.as_ref().and_then(|item| item.home_dir.as_deref()),
+            &launch_profile,
         )
         .await?;
         serde_json::to_value(sessions).map_err(|error| error.to_string())
@@ -4192,16 +4309,21 @@ impl DaemonState {
         &self,
         workspace_path: String,
         session_id: String,
+        provider_profile_id: Option<String>,
     ) -> Result<Value, String> {
         let path = PathBuf::from(workspace_path);
-        let config = self
-            .engine_manager
-            .get_engine_config(engine::EngineType::Qoder)
-            .await;
-        let result = engine::qoder_history::load_qoder_session(
+        let settings = self.app_settings.lock().await.clone();
+        let launch_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+            &path.to_string_lossy(),
+            provider_profile_id.as_deref(),
+            &engine::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                &settings,
+            ),
+        )?;
+        let result = engine::qoder_history::load_qoder_session_for_launch_profile(
             &path,
             &session_id,
-            config.as_ref().and_then(|item| item.home_dir.as_deref()),
+            &launch_profile,
         )
         .await?;
         serde_json::to_value(result).map_err(|error| error.to_string())
@@ -4211,16 +4333,21 @@ impl DaemonState {
         &self,
         workspace_path: String,
         session_id: String,
+        provider_profile_id: Option<String>,
     ) -> Result<(), String> {
         let path = PathBuf::from(workspace_path);
-        let config = self
-            .engine_manager
-            .get_engine_config(engine::EngineType::Qoder)
-            .await;
-        engine::qoder_history::delete_qoder_session(
+        let settings = self.app_settings.lock().await.clone();
+        let launch_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+            &path.to_string_lossy(),
+            provider_profile_id.as_deref(),
+            &engine::qoder_provider_profile::QoderDistributionSettings::from_app_settings(
+                &settings,
+            ),
+        )?;
+        engine::qoder_history::delete_qoder_session_for_launch_profile(
             &path,
             &session_id,
-            config.as_ref().and_then(|item| item.home_dir.as_deref()),
+            &launch_profile,
         )
         .await
     }
