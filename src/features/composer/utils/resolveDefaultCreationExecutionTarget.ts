@@ -40,7 +40,7 @@ const LOCAL_PROFILE_IDS: Partial<Record<EngineType, string>> = {
   qoder: QODER_LOCAL_PROVIDER_PROFILE_ID,
 };
 
-export type CreateSessionSupportedEngine = SharedSessionSupportedEngine | "dsh" | "qoder";
+export type CreateSessionSupportedEngine = SharedSessionSupportedEngine | "dsh";
 
 export type ResolvedCreationExecutionTarget = Omit<ExecutionTarget, "engine"> & {
   engine: CreateSessionSupportedEngine;
@@ -53,11 +53,8 @@ export type ResolvedCreationExecutionTarget = Omit<ExecutionTarget, "engine"> & 
 export function isCreateSessionSupportedEngine(
   engine: EngineType | null | undefined,
 ): engine is CreateSessionSupportedEngine {
-  return (
-    isSharedSessionSupportedEngine(engine) ||
-    engine === "dsh" ||
-    engine === "qoder"
-  );
+  // qoder 已在 SharedSessionSupportedEngine 集合内（enable-qoder-shared-target）。
+  return isSharedSessionSupportedEngine(engine) || engine === "dsh";
 }
 
 function hasResolvedCreationTargetIdentity(

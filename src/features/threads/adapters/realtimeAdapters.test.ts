@@ -795,18 +795,22 @@ describe("realtime adapters", () => {
     expect(event?.item.kind).toBe("reasoning");
   });
 
-  it("fail-closes qoder events on Shared thread ids", () => {
+  it("maps qoder events on Shared thread ids (Shared target badge route)", () => {
+    // enable-qoder-shared-target：qoder 进 Shared 集合后，shared:<id> 事件必须穿过
+    // normalized 路由，否则 target badge / runtime receipt 无法附着（回归：首条
+    // Shared Qoder turn 缺发送标识）。
     const event = qoderRealtimeAdapter.mapEvent({
       workspaceId: "ws-qoder",
       message: {
-        method: "text:delta",
+        method: "item/completed",
         params: {
           threadId: "shared:session-1",
-          itemId: "agent-1",
-          delta: "working",
+          item: { id: "agent-1", type: "agentMessage", text: "done", status: "completed" },
         },
       },
     });
-    expect(event).toBeNull();
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("qoder");
+    expect(event?.item.kind).toBe("message");
   });
 });

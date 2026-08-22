@@ -89,7 +89,7 @@ describe("Provider target catalog owners", () => {
     discoverCodexModelsMock.mockResolvedValue({ data: [] });
   });
 
-  it.each(["claude", "codex", "grok", "kimi", "opencode", "pi"])(
+  it.each(["claude", "codex", "grok", "kimi", "opencode", "pi", "qoder"])(
     "recognizes %s as a Provider Profile engine",
     (engine) => {
       expect(isProviderProfileEngine(engine)).toBe(true);
@@ -104,8 +104,9 @@ describe("Provider target catalog owners", () => {
     expect(isProviderProfileEngine("dsh")).toBe(false);
   });
 
-  it("keeps Qoder outside the Provider Profile picker", () => {
-    expect(isProviderProfileEngine("qoder")).toBe(false);
+  it("includes Qoder in the Provider Profile picker with a local-only profile", () => {
+    // enable-qoder-shared-target：qoder 进 Shared 集合，local-only（无 managed provider 面）。
+    expect(isProviderProfileEngine("qoder")).toBe(true);
   });
 
   it("loads profiles once and models only for the opened binding", async () => {
@@ -133,10 +134,11 @@ describe("Provider target catalog owners", () => {
       "kimi",
       "opencode",
       "pi",
+      "qoder",
     ]);
     expect(
       result.current.groups.filter((group) => group.enabled),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     expect(
       result.current.groups.flatMap((group) => group.profiles).every(
         (profile) => profile.enabled !== false,
@@ -230,6 +232,7 @@ describe("Provider target catalog owners", () => {
       "kimi",
       "opencode",
       "pi",
+      "qoder",
     ]);
     expect(
       result.current.groups.some((group) => group.providerId === "dsh"),
@@ -259,12 +262,12 @@ describe("Provider target catalog owners", () => {
       "kimi",
       "opencode",
       "pi",
-      "dsh",
       "qoder",
+      "dsh",
     ]);
     expect(result.current.groups.every((group) => group.enabled)).toBe(true);
     expect(isProviderProfileEngine("dsh")).toBe(false);
-    expect(isProviderProfileEngine("qoder")).toBe(false);
+    expect(isProviderProfileEngine("qoder")).toBe(true);
     expect(
       result.current.groups.find((group) => group.providerId === "dsh")?.profiles,
     ).toEqual([
@@ -275,7 +278,7 @@ describe("Provider target catalog owners", () => {
     ]);
   });
 
-  it("exposes Qoder as a Native engine on Home create-session without making it a Provider Profile engine", async () => {
+  it("exposes Qoder on Home create-session via the shared Provider Profile group", async () => {
     const { result } = renderHook(() =>
       useAtomicProviderTargetCatalog({
         enabled: true,
@@ -299,7 +302,7 @@ describe("Provider target catalog owners", () => {
         source: "disk",
       }),
     ]);
-    expect(isProviderProfileEngine("qoder")).toBe(false);
+    expect(isProviderProfileEngine("qoder")).toBe(true);
   });
 
   it("loads DSH models from the host catalog without a provider profile", async () => {
@@ -1151,6 +1154,7 @@ describe("Provider target catalog owners", () => {
         "codex",
         "kimi",
         "pi",
+        "qoder",
       ]);
     });
 
@@ -1175,6 +1179,7 @@ describe("Provider target catalog owners", () => {
         "kimi",
         "opencode",
         "pi",
+        "qoder",
       ]);
     });
 
@@ -1190,7 +1195,7 @@ describe("Provider target catalog owners", () => {
         }),
       );
 
-      expect(result.current.groups).toHaveLength(6);
+      expect(result.current.groups).toHaveLength(7);
 
       act(() => {
         seedCliEngineVisibility(["opencode"]);
@@ -1202,6 +1207,7 @@ describe("Provider target catalog owners", () => {
         "grok",
         "kimi",
         "pi",
+        "qoder",
       ]);
     });
   });

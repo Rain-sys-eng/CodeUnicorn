@@ -1538,6 +1538,7 @@ export function useSidebarMenus({
         kimi: t("workspace.engineKimi"),
         grok: t("workspace.engineGrok"),
         pi: t("workspace.enginePi"),
+        qoder: t("workspace.engineQoder"),
       };
       // Shared CLI 子引擎同样受 CLI 配置管理控制。
       const sharedEngineEntries = (
@@ -1548,6 +1549,7 @@ export function useSidebarMenus({
           ["kimi", "engine-kimi"],
           ["grok", "engine-grok"],
           ["pi", "engine-pi"],
+          ["qoder", "engine-qoder"],
         ] as const
       ).filter(([engine]) => isEngineSessionEntryVisible(engine));
       const actions = [

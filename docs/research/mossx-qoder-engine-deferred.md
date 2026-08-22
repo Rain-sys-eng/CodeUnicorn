@@ -18,20 +18,25 @@ status: active
 
 ---
 
-## 1. 必须有真实成功 turn 才能升级
+## 1. 黄金 turn 已补采（2026-08-22），剩余待办
 
-本机 Spike（qodercli 1.1.27）账号 `logged_in: true`，但模型 API 返回 `Network attempt failed at unknown`。因此下列矩阵格保持 `unknown`，adapter 按 ACP 词汇实现、到达才归一：
+2026-08-22 用 mossx PAT 注入跑通黄金 turn（qodercli 1.1.28；probe6 成功 + probe7/8/9，transcript 在本地 evidence 目录）。下列矩阵格已升级为实测值，fixture / spike / 基石校准已同步回写：
+
+| 项 | 升级后 | 证据 |
+|----|--------|------|
+| `streaming.reasoning` | **supported**（`agent_thought_chunk` live） | probe6 |
+| `streaming.tool-output` | **supported**（`tool_call` pending → `tool_call_update` completed，带 `rawInput`/`rawOutput`/`_meta.qoder.toolName`） | probe6 |
+| `input.mid-turn` | **supported**（流式中第二 prompt FIFO 排队，不报错） | probe9 |
+| `session.fork` | **supported**（`session/fork` 返回新 sessionId，fork 携带历史） | probe8 |
+| `session/cancel` → `stopReason: cancelled` | **已 live**（typed response，非 error；无迟到 chunk） | probe7 |
+
+仍 blocked / 后置：
 
 | 项 | 现状 | 升级条件 |
 |----|------|----------|
-| `streaming.reasoning` | unknown | live 观测 `agent_thought_chunk` |
-| `streaming.tool-output` | unknown | live 观测 `tool_call` / `tool_call_update` |
-| `input.mid-turn` | unknown | 实测 `_meta.qoder.promptQueueing` |
-| `session.fork` | unknown（仅 initialize 声明，未 live） | 实测 `session/fork` 或 CLI `--fork-session` |
-| usage / token 卡 | 通用 token 路径；无专属 Qoder usage 卡 | ACP usage 字段 live 到达 |
-| `session/cancel` → `stopReason: cancelled` | 代码按词汇实现 | 成功 turn 上打断一次 |
-
-幕布五件套目视（streaming 光标 / reasoning 折叠 / tool 块 / usage 收尾 / 历史与 live 一致）同样 blocked，harness：`docs/research/spikes/harness/qoder-acp/probes/probe6_golden_turn.py`。
+| usage / token 卡 | response `usage` + `_meta.quota.model_usage` shape 已 live，但 PAT 账号**全零值**；`qoder.rs` 当前不解析该字段 | 非零值账号验证后再接专属卡 |
+| 幕布五件套目视（streaming 光标 / reasoning 折叠 / tool 块 / usage 收尾 / 历史与 live 一致） | 未做 | 在 app 内跑真实 turn 目视 |
+| `plan` 事件 / `session/close` / `session/delete` | 未 live | 顺手观测，不阻塞 |
 
 ---
 
@@ -39,8 +44,8 @@ status: active
 
 | 项 | 为什么现在不做 | 再开条件 |
 |----|----------------|----------|
-| Shared 资格 | pendingProbe / 成功 terminal / cancel 未完整实测；picker disabled + write gate fail-closed | 黄金 turn 证明 ACK/terminal 后独立 change 评估 |
-| L3 NativeHistoryReader / Provider Continuation | `session/load` 回放通道已验证，但不是 Continuation 契约 | 独立 change；禁止把 Native resume 借给 Shared recovery |
+| Shared 资格 | ~~pendingProbe / 成功 terminal / cancel 未完整实测~~ **2026-08-22 补采完成 + F 层 wiring 已落地**（`enable-qoder-shared-target` Phase 1/2 完成：双集合 / context 臂 / canonical 枚举 / picker 目录全绿） | 剩余：Contract Suite qoder 覆盖（tasks 2.3）+ 真实 Shared 会话目视 + 基石校准回写后收口 |
+| L3 NativeHistoryReader / Provider Continuation | history reader 已转**磁盘 jsonl primary**（Grok/PI/Kimi NativeHistoryReader 形态，`encode_qoder_project_slug` + `parse_qoder_jsonl_messages`，2026-08-22）；Provider Continuation 契约仍未接 | Continuation 独立 change，以新 jsonl reader 为 source adapter 评估；禁止把 Native resume 借给 Shared recovery |
 | `session/request_permission` → elicitation 卡 | v1 = `bypassPermissions` + auto-approve，防 headless 挂死 | 产品化问用户时走统一 `RequestUserInputMessage`，禁止 per-engine 弹层 |
 | 斜杠目录（`available_commands_update`） | v1 不在 mossx 斜杠 UI 暴露 | 需要 slash picker 时再接 |
 | `qodercli commit` / CommitMessageEngine | 与 DSH 同：排除 | 需要 commit 助手时再评估 |
@@ -78,7 +83,7 @@ status: active
 
 ## 5. 再开 change 时的最小入口
 
-1. 有可用 Qoder 模型 API 的环境跑 probe6 黄金 turn。
-2. 把矩阵 `unknown` 格升为实测值，并回写基石设计「零、当前实现校准」。
-3. Shared 资格另开 change：先 Spike ACK/terminal/cancel，再改双集合；禁止只把 qoder 加进 Set。
+1. ~~有可用 Qoder 模型 API 的环境跑 probe6 黄金 turn~~（已完成，2026-08-22；注意 browser login 会随 CLI 升级丢失，用 mossx PAT 注入）。
+2. ~~把矩阵 `unknown` 格升为实测值，并回写基石设计「零、当前实现校准」~~（已完成：`streaming.reasoning` / `streaming.tool-output` / `input.mid-turn` / `session.fork` → supported；`session.tree` 保持 unknown）。剩余：幕布五件套 app 内目视、非零 usage 值。
+3. Shared 资格另开 change：先 Spike Shared 语境的 ACK/terminal/cancel 完整链路，再改双集合；禁止只把 qoder 加进 Set。
 4. elicitation 走现有 user-input 卡，不新造 Qoder 弹层。

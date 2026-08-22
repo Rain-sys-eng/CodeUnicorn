@@ -197,8 +197,8 @@ describe("resolveDefaultCreationExecutionTarget", () => {
       providerProfileNameSnapshot: LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
       providerProfileSource: "disk",
     });
-    // Qoder is Native-only (not Shared)：Shared 契约 fail-closed，创建契约放行。
-    expect(isResolvedExecutionTarget(target)).toBe(false);
+    // Qoder 已进 Shared 集合（enable-qoder-shared-target）：Shared 契约与创建契约都放行。
+    expect(isResolvedExecutionTarget(target)).toBe(true);
     expect(isResolvedCreationExecutionTarget(target)).toBe(true);
   });
 

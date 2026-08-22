@@ -2566,7 +2566,7 @@ fn normalize_identity(value: Option<&str>) -> Option<&str> {
 
 fn normalize_native_session_identity(engine: EngineType, value: Option<&str>) -> Option<String> {
     let normalized = normalize_identity(value)?;
-    // Claude / Kimi / Grok / OpenCode：catalog 与 FE hide 使用 `engine:{raw}`。
+    // Claude / Kimi / Grok / OpenCode / Qoder：catalog 与 FE hide 使用 `engine:{raw}`。
     // Codex 保持 raw thread id（无前缀）。pending 占位原样保留，避免误写成
     // `grok:grok-pending-shared-*`。
     match engine {
@@ -2574,7 +2574,8 @@ fn normalize_native_session_identity(engine: EngineType, value: Option<&str>) ->
         | EngineType::Kimi
         | EngineType::Pi
         | EngineType::Grok
-        | EngineType::OpenCode => {
+        | EngineType::OpenCode
+        | EngineType::Qoder => {
             let token = engine_token(engine);
             let prefix = format!("{token}:");
             if crate::shared_sessions::is_pending_shared_binding_thread_id(engine, normalized) {
@@ -2592,7 +2593,7 @@ fn normalize_native_session_identity(engine: EngineType, value: Option<&str>) ->
             }
             Some(format!("{prefix}{raw}"))
         }
-        EngineType::Codex | EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => {
+        EngineType::Codex | EngineType::Gemini | EngineType::Dsh => {
             Some(normalized.to_string())
         }
     }
@@ -2675,6 +2676,7 @@ mod tests {
             EngineType::Grok,
             EngineType::OpenCode,
             EngineType::Pi,
+            EngineType::Qoder,
         ] {
             let coordinator = SharedRuntimeCoordinator::default();
             let runtime_turn_id = format!("{}-turn-1", engine_token(engine));

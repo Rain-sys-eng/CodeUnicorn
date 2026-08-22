@@ -19,7 +19,7 @@ describe("isAtomicExecutionTarget", () => {
     expect(isResolvedExecutionTarget(target)).toBe(true);
   });
 
-  it("accepts Qoder local disk target as atomic but not Shared-resolved", () => {
+  it("accepts Qoder local disk target as atomic and, after Shared extension, resolved", () => {
     const target = {
       engine: "qoder" as const,
       providerProfileId: null,
@@ -30,7 +30,7 @@ describe("isAtomicExecutionTarget", () => {
       reasoning: null,
     };
     expect(isAtomicExecutionTarget(target)).toBe(true);
-    expect(isResolvedExecutionTarget(target)).toBe(false);
+    expect(isResolvedExecutionTarget(target)).toBe(true);
   });
 
   it("rejects an unnormalized Qoder local sentinel with disk source", () => {

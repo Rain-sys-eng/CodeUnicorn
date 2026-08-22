@@ -2098,7 +2098,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.selectedModel).toBe('');
   });
 
-  it('enables the five supported provider options inside shared sessions', async () => {
+  it('enables the seven supported provider options inside shared sessions', async () => {
     renderAdapter({
       isSharedSession: true,
       engines: [
@@ -2128,7 +2128,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       kimi: true,
       grok: true,
       dsh: false,
-      qoder: false,
+      qoder: true,
       pi: true,
     });
   });

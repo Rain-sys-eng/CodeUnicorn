@@ -69,8 +69,12 @@ fn is_legacy_local_provider(engine: EngineType, provider_profile_id: &str) -> bo
         EngineType::Pi => {
             provider_profile_id == crate::engine::pi_provider_profile::PI_LOCAL_PROVIDER_PROFILE_ID
         }
+        EngineType::Qoder => {
+            provider_profile_id
+                == crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID
+        }
         // Native-only engines are never Shared local providers.
-        EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => false,
+        EngineType::Gemini | EngineType::Dsh => false,
     }
 }
 

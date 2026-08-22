@@ -608,11 +608,13 @@ describe("useSidebarMenus", () => {
     expect(sharedAction?.children?.map((child) => child.id)).toEqual([
       "new-session-shared-claude",
       "new-session-shared-codex",
+      "new-session-shared-pi",
+      "new-session-shared-qoder",
     ]);
   });
 
   it("hides Shared CLI entry when all shared engines are disabled", async () => {
-    seedCliEngineVisibility(["claude", "codex", "opencode", "kimi", "grok"]);
+    seedCliEngineVisibility(["claude", "codex", "opencode", "kimi", "grok", "pi", "qoder"]);
     const handlers = createHandlers();
     const { result } = renderHook(() => useSidebarMenus(handlers));
 
@@ -2412,6 +2414,8 @@ describe("useSidebarMenus", () => {
       "new-session-shared-opencode",
       "new-session-shared-kimi",
       "new-session-shared-grok",
+      "new-session-shared-pi",
+      "new-session-shared-qoder",
     ]);
 
     const grokAction = sharedAction?.children?.find(
@@ -2604,6 +2608,8 @@ describe("useSidebarMenus", () => {
       "new-session-codex",
       "new-session-opencode",
       "new-session-kimi",
+      "new-session-pi",
+      "new-session-qoder",
       "new-session-grok",
       "new-session-dsh",
     ]);

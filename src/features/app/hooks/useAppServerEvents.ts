@@ -915,16 +915,18 @@ function isCodexRawGeneratedImageEvent(
 }
 
 function shouldRebindSharedNativeThreadOnStartedEvent(
-  engine: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi",
+  engine: "claude" | "opencode" | "codex" | "gemini" | "grok" | "kimi" | "pi" | "qoder",
 ): boolean {
   // Claude 与 local CLIs 在 thread/started 上可能从 pending 占位收敛到
   // `engine:{sessionId}`；Codex 使用 raw thread id，不在此路径做前缀 rebind。
+  // Qoder 与 kimi 同约定（forwarder 以 `qoder:<sessionId>` 为终态 id）。
   return (
     engine === "claude" ||
     engine === "kimi" ||
     engine === "grok" ||
     engine === "pi" ||
-    engine === "opencode"
+    engine === "opencode" ||
+    engine === "qoder"
   );
 }
 
@@ -2228,6 +2230,7 @@ export function dispatchAppServerEvent(
         eventEngine === "kimi" ||
         eventEngine === "grok" ||
         eventEngine === "pi" ||
+        eventEngine === "qoder" ||
         eventEngine === "opencode")
     ) {
       const pendingBinding = resolvePendingSharedSessionBindingForEngine(
@@ -2270,7 +2273,6 @@ export function dispatchAppServerEvent(
         sessionId !== "pending" &&
         eventEngine &&
         eventEngine !== "dsh" &&
-        eventEngine !== "qoder" &&
         shouldRebindSharedNativeThreadOnStartedEvent(eventEngine)
       ) {
         const finalizedNativeThreadId = `${eventEngine}:${sessionId}`;

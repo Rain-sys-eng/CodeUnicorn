@@ -8,6 +8,7 @@ import {
   LOCAL_PROVIDER_PROFILE_DISPLAY_NAME,
   OPENCODE_LOCAL_PROVIDER_PROFILE_ID,
   PI_LOCAL_PROVIDER_PROFILE_ID,
+  QODER_LOCAL_PROVIDER_PROFILE_ID,
 } from "../../threads/constants/codexProviderProfiles";
 import type { SharedSessionSupportedEngine } from "../utils/sharedSessionEngines";
 
@@ -40,6 +41,8 @@ export function localProviderSentinelId(
       return OPENCODE_LOCAL_PROVIDER_PROFILE_ID;
     case "pi":
       return PI_LOCAL_PROVIDER_PROFILE_ID;
+    case "qoder":
+      return QODER_LOCAL_PROVIDER_PROFILE_ID;
   }
 }
 

@@ -58,12 +58,12 @@ export type ProviderTargetGroup = {
 
 type ProfileCatalog = Partial<
   Record<
-    "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi",
+    "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi" | "qoder",
     EngineProviderProfileOption[]
   >
 >;
 
-type ProviderProfileEngine = Exclude<ProviderId, "gemini" | "dsh" | "qoder">;
+type ProviderProfileEngine = Exclude<ProviderId, "gemini" | "dsh">;
 
 const PROVIDER_PROFILE_ENGINES: readonly ProviderProfileEngine[] = [
   "claude",
@@ -72,6 +72,7 @@ const PROVIDER_PROFILE_ENGINES: readonly ProviderProfileEngine[] = [
   "kimi",
   "opencode",
   "pi",
+  "qoder",
 ];
 
 export function isProviderProfileEngine(
@@ -123,6 +124,13 @@ const DEFAULT_PROFILES: ProfileCatalog = {
       source: "disk",
     },
   ],
+  qoder: [
+    {
+      id: QODER_LOCAL_PROVIDER_PROFILE_ID,
+      name: QODER_LOCAL_PROVIDER_PROFILE_NAME,
+      source: "disk",
+    },
+  ],
 };
 
 let profileCatalogCache: ProfileCatalog | null = null;
@@ -157,7 +165,7 @@ type AtomicProviderTargetCatalogOptions =
   };
 
 function normalizeProfiles(
-  engine: "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi",
+  engine: "claude" | "codex" | "kimi" | "grok" | "opencode" | "pi" | "qoder",
   providers: Array<{
     id: string;
     name: string;
@@ -240,6 +248,8 @@ async function loadProfileCatalog(): Promise<ProfileCatalog> {
               : DEFAULT_PROFILES.opencode,
           // PI has no multi-provider store; always surface native ~/.pi profile.
           pi: DEFAULT_PROFILES.pi,
+          // Qoder 账号体系无 API-key provider 面；始终用本地 profile（--config-dir 默认）。
+          qoder: DEFAULT_PROFILES.qoder,
         };
         return profileCatalogCache;
       })
@@ -754,36 +764,8 @@ function useProviderTargetCatalogOwner({
         ],
       });
     }
-    // Qoder is Native-only, same as DSH. Shared stays fail-closed; Home
-    // create-session needs a picker row so Qoder catalog models can be chosen.
-    const showQoder =
-      mode !== "shared" &&
-      (currentProvider === "qoder" || !disabledCliEngineIds.has("qoder"));
-    if (showQoder) {
-      const key = modelCatalogKey("qoder", QODER_LOCAL_PROVIDER_PROFILE_ID);
-      groups.push({
-        providerId: "qoder",
-        providerLabel: resolveProviderLabel("qoder"),
-        enabled: true,
-        disabledReason: undefined,
-        profiles: [
-          {
-            id: QODER_LOCAL_PROVIDER_PROFILE_ID,
-            label: QODER_LOCAL_PROVIDER_PROFILE_NAME,
-            source: "disk",
-            enabled: true,
-            disabledReason: undefined,
-            models:
-              loadedModels[key] ?? modelCatalogCache.get(key) ?? EMPTY_MODELS,
-            loading: loadingBindings.has(key),
-            reloadingConfig: catalogActions.has(`reload-config:${key}`),
-            discoveringModels: false,
-            discoverySupported: false,
-            error: modelErrors[key] ?? null,
-          },
-        ],
-      });
-    }
+    // Qoder 已进 PROVIDER_PROFILE_ENGINES（enable-qoder-shared-target）：shared 与
+    // create-session 两种模式都走通用分组，local-only profile 来自 DEFAULT_PROFILES。
     return groups;
   }, [
     currentProvider,

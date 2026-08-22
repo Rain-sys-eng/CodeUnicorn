@@ -38,6 +38,7 @@ fn is_supported_shared_session_engine(engine: EngineType) -> bool {
             | EngineType::Grok
             | EngineType::OpenCode
             | EngineType::Pi
+            | EngineType::Qoder
     )
 }
 
@@ -199,14 +200,21 @@ fn validate_resolved_shared_selected_target(target: &SharedSelectedTarget) -> Re
             Some(provider_profile_id),
         )?,
         None => crate::engine::status::get_local_engine_models_for_validation(engine),
-    }
-    .ok_or_else(|| {
-        format!(
-            "invalid-shared-target: model catalog is unavailable for {} provider {}",
-            engine.icon(),
-            provider_profile_id.unwrap_or("default")
-        )
-    })?;
+    };
+    // 与 shared_session_v2::validate_execution_target 同策：Qoder 模型目录是 ACP
+    // runtime-only（无静态 fallback roster），选择/持久化路径不得因目录不可得硬失败；
+    // catalog 可用时仍交叉校验 entry/model pair。
+    let models = match (engine, models) {
+        (EngineType::Qoder, None) => Vec::new(),
+        (_, Some(models)) => models,
+        (_, None) => {
+            return Err(format!(
+                "invalid-shared-target: model catalog is unavailable for {} provider {}",
+                engine.icon(),
+                provider_profile_id.unwrap_or("default")
+            ));
+        }
+    };
     // 不限制用户模型名：catalog 未登记的自定义模型也允许保存为 next-send target。
     crate::engine::status::validate_model_catalog_pair(
         target.model_catalog_entry_id.as_deref(),
@@ -481,7 +489,8 @@ pub(crate) fn is_pending_shared_binding_thread_id(engine: EngineType, thread_id:
         EngineType::Pi => normalized.starts_with("pi-pending-shared-"),
         EngineType::Grok => normalized.starts_with("grok-pending-shared-"),
         EngineType::OpenCode => normalized.starts_with("opencode-pending-shared-"),
-        EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => false,
+        EngineType::Qoder => normalized.starts_with("qoder-pending-shared-"),
+        EngineType::Gemini | EngineType::Dsh => false,
     }
 }
 
@@ -497,14 +506,15 @@ pub(crate) fn binding_uses_established_native_thread(engine: EngineType, thread_
         | EngineType::Pi
         | EngineType::Grok
         | EngineType::OpenCode
-        | EngineType::Dsh => {
+        | EngineType::Dsh
+        | EngineType::Qoder => {
             let prefix = format!("{}:", engine.icon());
             normalized
                 .strip_prefix(prefix.as_str())
                 .unwrap_or(normalized)
                 .trim()
         }
-        EngineType::Codex | EngineType::Gemini | EngineType::Qoder => normalized,
+        EngineType::Codex | EngineType::Gemini => normalized,
     };
     if raw.is_empty() || is_pending_shared_binding_thread_id(engine, raw) {
         return false;
@@ -515,8 +525,9 @@ pub(crate) fn binding_uses_established_native_thread(engine: EngineType, thread_
         | EngineType::Kimi
         | EngineType::Pi
         | EngineType::Grok
-        | EngineType::OpenCode => true,
-        EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => false,
+        | EngineType::OpenCode
+        | EngineType::Qoder => true,
+        EngineType::Gemini | EngineType::Dsh => false,
     }
 }
 
@@ -2011,6 +2022,7 @@ mod tests {
             EngineType::Grok,
             EngineType::OpenCode,
             EngineType::Pi,
+            EngineType::Qoder,
         ] {
             assert!(is_pending_shared_binding_thread_id(
                 engine,
@@ -2054,6 +2066,7 @@ mod tests {
             EngineType::Grok,
             EngineType::OpenCode,
             EngineType::Pi,
+            EngineType::Qoder,
         ] {
             assert!(!binding_uses_established_native_thread(
                 engine,
@@ -2097,6 +2110,23 @@ mod tests {
             validate_resolved_shared_selected_target(&target)
                 .unwrap_or_else(|error| panic!("{engine:?} local target rejected: {error}"));
         }
+    }
+
+    #[test]
+    fn resolved_qoder_local_target_validates_without_static_catalog() {
+        // Qoder 模型目录是 ACP runtime-only：选择/持久化路径不得硬失败
+        //（回归：invalid-shared-target: model catalog is unavailable for qoder）。
+        let target = SharedSelectedTarget {
+            engine: EngineType::Qoder,
+            provider_profile_id: None,
+            model_catalog_entry_id: Some("qmodel_38max".to_string()),
+            model: Some("qmodel_38max".to_string()),
+            reasoning: None,
+            provider_profile_name_snapshot: Some("本地配置".to_string()),
+            provider_profile_source: Some("disk".to_string()),
+        };
+        validate_resolved_shared_selected_target(&target)
+            .expect("qoder runtime-only catalog must not hard-fail on select/persist");
     }
 
     #[test]

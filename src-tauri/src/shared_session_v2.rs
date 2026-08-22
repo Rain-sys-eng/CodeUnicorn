@@ -97,7 +97,14 @@ pub(crate) fn context_capabilities(target: &ExecutionTargetInput) -> RuntimeCont
             // response 当作 context acceptance。fingerprint 只用于审计，不参与降级。
             strong_context_ack: true,
         },
-        EngineType::Kimi | EngineType::Grok | EngineType::OpenCode | EngineType::Pi => {
+        EngineType::Kimi
+        | EngineType::Grok
+        | EngineType::OpenCode
+        | EngineType::Pi
+        | EngineType::Qoder => {
+            // Qoder（2026-08-22 黄金 turn 实测，spike §13/§14）：user-channel prompt
+            // prefix 投递，inputAck "first-event" 弱语义；structured import 待 ACP
+            // method probe，禁止猜测打开。
             RuntimeContextCapabilities {
                 native_delta: false,
                 structured_history_import: false,
@@ -500,6 +507,7 @@ mod execution_target_contract_tests {
             EngineType::Grok,
             EngineType::OpenCode,
             EngineType::Pi,
+            EngineType::Qoder,
         ] {
             let target = ExecutionTargetInput {
                 engine,
@@ -561,6 +569,42 @@ mod execution_target_contract_tests {
             provider_runtime_key_for_target("workspace-1", EngineType::Pi, Some("custom"))
                 .expect("pi named runtime key"),
             "workspace-1::pi::custom",
+        );
+    }
+
+    #[test]
+    fn qoder_shared_runtime_key_matches_native_ownership() {
+        // qoder_runtime_key 与 PI 同形：local sentinel → 纯 workspace_id。
+        assert_eq!(
+            provider_runtime_key_for_target("workspace-1", EngineType::Qoder, None)
+                .expect("qoder local runtime key"),
+            "workspace-1",
+        );
+        assert_eq!(
+            provider_runtime_key_for_target("workspace-1", EngineType::Qoder, Some("custom"))
+                .expect("qoder named runtime key"),
+            "workspace-1::qoder::custom",
+        );
+    }
+
+    #[test]
+    fn qoder_runtime_only_catalog_passes_target_validation() {
+        // Qoder 模型目录是 ACP runtime-only：发送路径禁止现场 probe，catalog 不可得
+        // 时按空目录 + Allow 放行（Session Switch Catalog Fetch Gate）。
+        let target = ExecutionTargetInput {
+            engine: EngineType::Qoder,
+            provider_profile_id: None,
+            model_catalog_entry_id: Some("qmodel_38max".to_string()),
+            model: Some("qmodel_38max".to_string()),
+            reasoning_effort: None,
+            provider_profile_name_snapshot: Some("本地配置".to_string()),
+            provider_profile_source: Some(CanonicalProviderProfileSource::Local),
+            runtime_capability_fingerprint: None,
+        };
+        assert_eq!(
+            validate_resolved_execution_target(&target)
+                .expect("qoder runtime-only catalog must not hard-fail"),
+            EngineType::Qoder
         );
     }
 
@@ -886,13 +930,20 @@ fn validate_execution_target(target: &ExecutionTargetInput) -> Result<EngineType
         )?,
         None => crate::engine::status::get_local_engine_models_for_validation(engine),
     };
-    let models = models.ok_or_else(|| {
-        format!(
-            "invalid-target-model: model catalog is unavailable for {} provider {}",
-            engine.icon(),
-            provider_profile_id.as_deref().unwrap_or("default")
-        )
-    })?;
+    // Qoder 模型目录是 ACP runtime-only（无静态 fallback roster），发送路径
+    // 禁止现场 probe（Session Switch Catalog Fetch Gate）：catalog 不可得时按空
+    // 目录 + Allow 策略放行，catalog 可用时仍交叉校验 entry/model pair。
+    let models = match (engine, models) {
+        (EngineType::Qoder, None) => Vec::new(),
+        (_, Some(models)) => models,
+        (_, None) => {
+            return Err(format!(
+                "invalid-target-model: model catalog is unavailable for {} provider {}",
+                engine.icon(),
+                provider_profile_id.as_deref().unwrap_or("default")
+            ));
+        }
+    };
     // 与 selection 持久化一致：不因 catalog 未登记而拒绝用户自定义模型名。
     crate::engine::status::validate_model_catalog_pair(
         target.model_catalog_entry_id.as_deref(),
@@ -2652,6 +2703,10 @@ pub(crate) fn provider_runtime_key_for_target(
             workspace_id,
             provider_profile_id,
         )),
+        // qoder_runtime_key 内部 normalize：None / local sentinel → workspace_id。
+        EngineType::Qoder => Ok(
+            crate::engine::qoder_provider_profile::qoder_runtime_key(workspace_id, provider_profile_id),
+        ),
         _ => Err("dispatch receipt has unsupported Shared engine".to_string()),
     }
 }
@@ -2872,6 +2927,7 @@ mod runtime_dispatch_receipt_tests {
                 "ccgui/opencode-model",
                 "provider-opencode",
             ),
+            (EngineType::Qoder, "qmodel_38max", "provider-qoder"),
         ] {
             let local_owner = durable_owner_for_receipt_test(engine, None, model, None);
             let local_runtime_key =
@@ -3527,7 +3583,7 @@ async fn materialize_attempt_binding(
         }
         // Kimi / OpenCode / Pi 真实 id 由 CLI 事后回写；首轮可暂存 pending，
         // settlement 后 rebind 到 `engine:{raw}`。若已有 established 前缀 id 则复用。
-        EngineType::Kimi | EngineType::OpenCode | EngineType::Pi => {
+        EngineType::Kimi | EngineType::OpenCode | EngineType::Pi | EngineType::Qoder => {
             if let Some(existing_id) = existing.as_deref().filter(|value| {
                 crate::shared_sessions::binding_uses_established_native_thread(owner.engine, value)
             }) {
@@ -4328,7 +4384,7 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
             )
             .await
         }
-        EngineType::Kimi | EngineType::Grok | EngineType::OpenCode | EngineType::Pi => {
+        EngineType::Kimi | EngineType::Grok | EngineType::OpenCode | EngineType::Pi | EngineType::Qoder => {
             let runtime_provider_profile_id = owner.provider_profile_id.clone().or_else(|| {
                 Some(
                     match owner.engine {
@@ -4343,6 +4399,9 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
                         }
                         EngineType::Pi => {
                             crate::engine::pi_provider_profile::PI_LOCAL_PROVIDER_PROFILE_ID
+                        }
+                        EngineType::Qoder => {
+                            crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID
                         }
                         _ => unreachable!("new Shared engine branch is exhaustively matched"),
                     }
@@ -5064,6 +5123,24 @@ pub(crate) async fn shared_session_v2_interrupt_turn(
                     })?;
                 session.interrupt_turn(&route.runtime_turn_id).await
             }
+            EngineType::Qoder => {
+                let runtime_key = provider_runtime_key_for_target(
+                    &workspace_id,
+                    route.engine,
+                    route.provider_profile_id.as_deref(),
+                )?;
+                let session = state
+                    .engine_manager
+                    .get_qoder_session_for_runtime(&runtime_key)
+                    .await
+                    .ok_or_else(|| {
+                        format!(
+                            "shared-control-owner-unavailable: Qoder runtime missing for attempt {}",
+                            route.attempt_id
+                        )
+                    })?;
+                session.interrupt_turn(&route.runtime_turn_id).await
+            }
             unsupported => Err(format!(
                 "target-unavailable: unsupported Shared interrupt engine {}",
                 unsupported.icon()
@@ -5695,6 +5772,40 @@ pub(crate) async fn shared_session_v2_probe_binding(
                 None => json!({ "status": "runtime-missing", "runtimeKey": runtime_key }),
             }
         }
+        Some(row) if row.engine == EngineType::Qoder.icon() => {
+            let runtime_key = provider_runtime_key_for_target(
+                &workspace_id,
+                EngineType::Qoder,
+                row.provider_profile_id.as_deref(),
+            )?;
+            match state
+                .engine_manager
+                .get_qoder_session_for_runtime(&runtime_key)
+                .await
+            {
+                Some(session) => {
+                    let runtime_session_id = session.get_session_id().await;
+                    let expected_session_id = row
+                        .native_session_id
+                        .as_deref()
+                        .and_then(|value| raw_engine_session_id(EngineType::Qoder, value));
+                    json!({
+                        "status": if runtime_session_id.as_deref() == expected_session_id {
+                            "matched"
+                        } else if expected_session_id
+                            .is_some_and(|value| value.starts_with("qoder-pending-shared-"))
+                        {
+                            "runtime-created-awaiting-session"
+                        } else {
+                            "mismatch"
+                        },
+                        "runtimeKey": runtime_key,
+                        "runtimeSessionId": runtime_session_id,
+                    })
+                }
+                None => json!({ "status": "runtime-missing", "runtimeKey": runtime_key }),
+            }
+        }
         Some(_) => json!({ "status": "unsupported-engine" }),
         None => json!({ "status": "binding-missing" }),
     };
@@ -5914,9 +6025,8 @@ mod shared_interrupt_owner_tests {
                 EngineType::Grok => "ccgui/grok-4.5".to_string(),
                 EngineType::OpenCode => "ccgui/opencode-model".to_string(),
                 EngineType::Pi => "auto".to_string(),
-                EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => {
-                    "unsupported".to_string()
-                }
+                EngineType::Qoder => "qmodel_38max".to_string(),
+                EngineType::Gemini | EngineType::Dsh => "unsupported".to_string()
             }),
             reasoning_effort: Some("medium".to_string()),
             provider_profile_name_snapshot: Some(provider.to_string()),
@@ -5980,16 +6090,17 @@ mod shared_interrupt_owner_tests {
         assert_eq!(route.provider_profile_id.as_deref(), Some(provider));
         assert_eq!(route.binding_key, binding_key);
         // 与 SharedRuntimeCoordinator::normalize_native_session_identity 对齐：
-        // Claude/Kimi/Pi/Grok/OpenCode 使用 engine: 前缀；Codex/Gemini/Dsh 保持 raw。
+        // Claude/Kimi/Pi/Grok/OpenCode/Qoder 使用 engine: 前缀；Codex/Gemini/Dsh 保持 raw。
         let expected_native_thread_id = match engine {
             EngineType::Claude
             | EngineType::Kimi
             | EngineType::Pi
             | EngineType::Grok
-            | EngineType::OpenCode => {
+            | EngineType::OpenCode
+            | EngineType::Qoder => {
                 format!("{}:native-{provider}", engine.icon())
             }
-            EngineType::Codex | EngineType::Gemini | EngineType::Dsh | EngineType::Qoder => {
+            EngineType::Codex | EngineType::Gemini | EngineType::Dsh => {
                 format!("native-{provider}")
             }
         };
@@ -6359,6 +6470,7 @@ mod shared_interrupt_owner_tests {
         assert_route(EngineType::Grok, "provider-grok");
         assert_route(EngineType::OpenCode, "provider-opencode");
         assert_route(EngineType::Pi, "provider-pi");
+        assert_route(EngineType::Qoder, "provider-qoder");
     }
 
     #[test]

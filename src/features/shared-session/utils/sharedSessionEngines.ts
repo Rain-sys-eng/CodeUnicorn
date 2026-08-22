@@ -6,7 +6,8 @@ export type SharedSessionSupportedEngine =
   | "kimi"
   | "grok"
   | "opencode"
-  | "pi";
+  | "pi"
+  | "qoder";
 
 const SHARED_SESSION_SUPPORTED_ENGINES = new Set<EngineType>([
   "claude",
@@ -15,6 +16,7 @@ const SHARED_SESSION_SUPPORTED_ENGINES = new Set<EngineType>([
   "grok",
   "opencode",
   "pi",
+  "qoder",
 ]);
 
 export function isSharedSessionSupportedEngine(
@@ -24,7 +26,7 @@ export function isSharedSessionSupportedEngine(
 }
 
 /**
- * Read/legacy fallback for stored snapshots. Gemini/DSH/Qoder are Native-only;
+ * Read/legacy fallback for stored snapshots. Gemini/DSH are Native-only;
  * write paths must use {@link assertSharedSessionWriteEngine} instead of this.
  */
 export function normalizeSharedSessionEngine(
