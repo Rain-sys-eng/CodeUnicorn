@@ -57,20 +57,21 @@ pub struct OpenCodeActiveProcessSnapshot {
 
 struct ActiveOpenCodeChildProcess {
     child: Child,
+    _native_artifact_lease: crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease,
     #[allow(dead_code)]
     started_at_ms: u64,
 }
 
 impl ActiveOpenCodeChildProcess {
-    fn new(child: Child) -> Self {
+    fn new(
+        child: Child,
+        native_artifact_lease: crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease,
+    ) -> Self {
         Self {
             child,
+            _native_artifact_lease: native_artifact_lease,
             started_at_ms: unix_timestamp_ms_for_process_diagnostics(),
         }
-    }
-
-    fn into_child(self) -> Child {
-        self.child
     }
 
     #[allow(dead_code)]
@@ -271,7 +272,16 @@ impl OpenCodeSession {
         snapshots.remove(tool_id);
     }
 
-    fn build_command(&self, params: &SendMessageParams) -> Result<Command, String> {
+    fn build_command(
+        &self,
+        params: &SendMessageParams,
+    ) -> Result<
+        (
+            Command,
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease,
+        ),
+        String,
+    > {
         let bin =
             crate::backend::app_server_cli::resolve_safe_opencode_binary(self.bin_path.as_deref())?
                 .to_string_lossy()
@@ -348,8 +358,12 @@ impl OpenCodeSession {
             cmd.env("OPENCODE_CONFIG_CONTENT", content);
         }
 
+        let native_artifact_lease =
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                &mut cmd,
+            )?;
         Self::configure_spawn_command(&mut cmd);
-        Ok(cmd)
+        Ok((cmd, native_artifact_lease))
     }
 
     async fn terminate_child_process(
@@ -417,7 +431,8 @@ impl OpenCodeSession {
             );
         }
 
-        let mut cmd = self.build_command(&effective_params)?;
+        let (mut cmd, native_artifact_lease) = self.build_command(&effective_params)?;
+        let native_artifact_monitor = native_artifact_lease.monitor();
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("Failed to spawn opencode: {}", e))?;
@@ -439,7 +454,10 @@ impl OpenCodeSession {
 
         {
             let mut active = self.active_processes.lock().await;
-            active.insert(turn_id.to_string(), ActiveOpenCodeChildProcess::new(child));
+            active.insert(
+                turn_id.to_string(),
+                ActiveOpenCodeChildProcess::new(child, native_artifact_lease),
+            );
         }
 
         self.emit_turn_event(
@@ -486,12 +504,22 @@ impl OpenCodeSession {
         let mut active_tool_calls: i32 = 0;
         let mut text_delta_count: usize = 0;
         let mut heartbeat_pulse: u64 = 0;
+        let mut native_artifact_budget_exceeded = false;
+        let mut next_native_artifact_budget_check = Instant::now() + Duration::from_secs(1);
         let started_at = Instant::now();
         let model_idle_timeout = Self::idle_timeout_for_model(effective_params.model.as_deref());
 
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         loop {
+            if Instant::now() >= next_native_artifact_budget_check {
+                next_native_artifact_budget_check = Instant::now() + Duration::from_secs(1);
+                if let Err(error) = native_artifact_monitor.enforce_budget() {
+                    native_artifact_budget_exceeded = true;
+                    error_output.push_str(&format!("{error}\n"));
+                    break;
+                }
+            }
             if started_at.elapsed() >= OPENCODE_TOTAL_TIMEOUT {
                 timed_out = true;
                 error_output.push_str(&format!(
@@ -624,21 +652,22 @@ impl OpenCodeSession {
             }
         }
 
-        let mut child = {
+        let mut active_process = {
             let mut active = self.active_processes.lock().await;
-            active
-                .remove(turn_id)
-                .map(ActiveOpenCodeChildProcess::into_child)
+            active.remove(turn_id)
         };
 
-        let status = if let Some(mut child_proc) = child.take() {
-            if timed_out || quiesced_without_terminal {
-                if let Err(error) = self.terminate_child_process(turn_id, &mut child_proc).await {
+        let status = if let Some(active_process) = active_process.as_mut() {
+            if timed_out || quiesced_without_terminal || native_artifact_budget_exceeded {
+                if let Err(error) = self
+                    .terminate_child_process(turn_id, &mut active_process.child)
+                    .await
+                {
                     error_output.push_str(&format!("{error}\n"));
                 }
                 None
             } else {
-                child_proc.wait().await.ok()
+                active_process.child.wait().await.ok()
             }
         } else {
             None
@@ -647,6 +676,18 @@ impl OpenCodeSession {
         let stderr_text = stderr_task.await.unwrap_or_default();
         if !stderr_text.trim().is_empty() {
             error_output.push_str(&stderr_text);
+        }
+        drop(active_process);
+
+        if native_artifact_budget_exceeded {
+            let error_msg = if error_output.trim().is_empty() {
+                "OpenCode stopped because private Bun temporary artifacts exceeded the storage limit."
+                    .to_string()
+            } else {
+                error_output.trim().to_string()
+            };
+            self.emit_error(turn_id, error_msg.clone());
+            return Err(error_msg);
         }
 
         if timed_out && !quiesced_without_terminal {
@@ -712,19 +753,19 @@ impl OpenCodeSession {
 
     pub async fn interrupt(&self) -> Result<(), String> {
         self.interrupted.store(true, Ordering::SeqCst);
-        let children: Vec<(String, Child)> = {
+        let children: Vec<(String, ActiveOpenCodeChildProcess)> = {
             let mut active = self.active_processes.lock().await;
-            active
-                .drain()
-                .map(|(turn_id, process)| (turn_id, process.into_child()))
-                .collect()
+            active.drain().collect()
         };
         let mut snapshots = self.tool_output_snapshots.lock().await;
         snapshots.clear();
         drop(snapshots);
         let mut first_terminate_error: Option<String> = None;
-        for (turn_id, mut child) in children {
-            if let Err(error) = self.terminate_child_process(&turn_id, &mut child).await {
+        for (turn_id, mut process) in children {
+            if let Err(error) = self
+                .terminate_child_process(&turn_id, &mut process.child)
+                .await
+            {
                 log::warn!(
                     "[opencode] interrupt failed to terminate child for turn={}: {}",
                     turn_id,
@@ -743,14 +784,13 @@ impl OpenCodeSession {
 
     pub async fn interrupt_turn(&self, turn_id: &str) -> Result<(), String> {
         self.interrupted.store(true, Ordering::SeqCst);
-        let mut child = {
+        let mut active_process = {
             let mut active = self.active_processes.lock().await;
-            active
-                .remove(turn_id)
-                .map(ActiveOpenCodeChildProcess::into_child)
+            active.remove(turn_id)
         };
-        if let Some(child_proc) = child.as_mut() {
-            self.terminate_child_process(turn_id, child_proc).await?;
+        if let Some(active_process) = active_process.as_mut() {
+            self.terminate_child_process(turn_id, &mut active_process.child)
+                .await?;
         }
         Ok(())
     }
@@ -790,9 +830,9 @@ impl Drop for OpenCodeSession {
             return;
         }
         for (turn_id, process) in active.drain() {
-            let mut child = process.into_child();
-            let pid = child.id();
-            match child.start_kill() {
+            let mut process = process;
+            let pid = process.child.id();
+            match process.child.start_kill() {
                 Ok(()) => {
                     log::info!(
                         "[opencode] drop fallback started child kill workspace={} turn={} pid={:?}",

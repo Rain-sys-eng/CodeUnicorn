@@ -578,6 +578,69 @@ async fn probe_cli_help(bin: &str, path_env: Option<&String>) -> bool {
     matches!(help_result, Ok(Ok(output)) if output.status.success())
 }
 
+async fn probe_opencode_cli_version(
+    bin: &str,
+    path_env: Option<&String>,
+) -> (bool, Option<String>, Option<String>) {
+    let version_result = timeout(DETECTION_TIMEOUT, async {
+        let mut cmd = build_async_command(bin);
+        if let Some(path) = path_env {
+            cmd.env("PATH", path);
+        }
+        let _native_artifact_lease =
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                &mut cmd,
+            )?;
+        let output = cmd
+            .arg("--version")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+            .map_err(|error| format!("Failed to execute opencode: {error}"))?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("opencode --version failed: {}", stderr.trim()))
+        }
+    })
+    .await;
+
+    match version_result {
+        Ok(Ok(version)) => (true, Some(version), None),
+        Ok(Err(error)) => (false, None, Some(error)),
+        Err(_) => (
+            false,
+            None,
+            Some("Timeout detecting opencode CLI".to_string()),
+        ),
+    }
+}
+
+async fn probe_opencode_cli_help(bin: &str, path_env: Option<&String>) -> bool {
+    let help_result = timeout(DETECTION_TIMEOUT, async {
+        let mut cmd = build_async_command(bin);
+        if let Some(path) = path_env {
+            cmd.env("PATH", path);
+        }
+        let _native_artifact_lease =
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                &mut cmd,
+            )?;
+        cmd.arg("--help")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .await
+            .map_err(|error| error.to_string())
+    })
+    .await;
+
+    matches!(help_result, Ok(Ok(output)) if output.status.success())
+}
+
 /// Build an uninstalled EngineStatus stub.
 fn not_installed_status(engine_type: EngineType, error: Option<String>) -> EngineStatus {
     EngineStatus {
@@ -680,33 +743,18 @@ async fn detect_opencode_status_with_options(
     let path_env = build_codex_path_env(custom_bin);
 
     let (mut installed, mut version, mut error) =
-        probe_cli_version(&bin, "opencode", path_env.as_ref()).await;
+        probe_opencode_cli_version(&bin, path_env.as_ref()).await;
 
     // OpenCode CLI in GUI-launched environments can intermittently fail `--version`
     // due to startup env quirks. Use a lightweight second probe to avoid false
     // "not installed" states in engine selector.
     if !installed {
-        let help_probe = timeout(DETECTION_TIMEOUT, async {
-            let mut cmd = build_async_command(&bin);
-            if let Some(ref path) = &path_env {
-                cmd.env("PATH", path);
+        if probe_opencode_cli_help(&bin, path_env.as_ref()).await {
+            installed = true;
+            if version.is_none() {
+                version = Some("unknown".to_string());
             }
-            cmd.arg("--help")
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()
-                .await
-        })
-        .await;
-
-        if let Ok(Ok(output)) = help_probe {
-            if output.status.success() {
-                installed = true;
-                if version.is_none() {
-                    version = Some("unknown".to_string());
-                }
-                error = None;
-            }
+            error = None;
         }
     }
 
@@ -1861,17 +1909,22 @@ async fn get_opencode_models(
         if let Some(path) = path_env {
             cmd.env("PATH", path);
         }
+        let _native_artifact_lease =
+            crate::engine::opencode_native_artifact::OpenCodeNativeArtifactLease::prepare(
+                &mut cmd,
+            )?;
         cmd.arg("models")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .output()
             .await
+            .map_err(|error| error.to_string())
     })
     .await;
 
     let output = match output_result {
         Ok(Ok(out)) => out,
-        Ok(Err(err)) => return Err(format!("Failed to execute opencode models: {}", err)),
+        Ok(Err(err)) => return Err(format!("Failed to execute opencode models: {err}")),
         Err(_) => return Err("Timeout listing OpenCode models".to_string()),
     };
 

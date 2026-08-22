@@ -1075,7 +1075,9 @@ fn resolve_opencode_bin(config: Option<&engine::EngineConfig>) -> Result<String,
         .map(|path| path.to_string_lossy().to_string())
 }
 
-fn build_opencode_command(config: Option<&engine::EngineConfig>) -> Result<Command, String> {
+fn build_opencode_command(
+    config: Option<&engine::EngineConfig>,
+) -> Result<engine::opencode_native_artifact::ContainedOpenCodeCommand, String> {
     let bin = resolve_opencode_bin(config)?;
     let mut command = backend::app_server::build_command_for_binary(&bin);
     if let Some(home_dir) = config.and_then(|entry| entry.home_dir.as_ref()) {
@@ -1088,7 +1090,7 @@ fn build_opencode_command(config: Option<&engine::EngineConfig>) -> Result<Comma
             }
         }
     }
-    Ok(command)
+    engine::opencode_native_artifact::ContainedOpenCodeCommand::new(command)
 }
 
 fn parse_engine_type_string(value: Option<&str>) -> Option<engine::EngineType> {

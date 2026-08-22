@@ -17,7 +17,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::backend::events::AppServerEvent;
@@ -692,13 +691,15 @@ fn resolve_opencode_bin(config: Option<&EngineConfig>) -> Result<String, String>
         .map(|path| path.to_string_lossy().to_string())
 }
 
-fn build_opencode_command(config: Option<&EngineConfig>) -> Result<Command, String> {
+fn build_opencode_command(
+    config: Option<&EngineConfig>,
+) -> Result<crate::engine::opencode_native_artifact::ContainedOpenCodeCommand, String> {
     let bin = resolve_opencode_bin(config)?;
     let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
     if let Some(home) = config.and_then(|c| c.home_dir.as_ref()) {
         cmd.env("OPENCODE_HOME", home);
     }
-    Ok(cmd)
+    crate::engine::opencode_native_artifact::ContainedOpenCodeCommand::new(cmd)
 }
 
 fn opencode_session_candidate_paths(

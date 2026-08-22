@@ -50,6 +50,8 @@ pub(crate) mod kimi_provider_profile;
 pub mod manager;
 #[path = "../../engine/opencode.rs"]
 pub mod opencode;
+#[path = "../../engine/opencode_native_artifact.rs"]
+pub(crate) mod opencode_native_artifact;
 #[path = "../../engine/opencode_provider_profile.rs"]
 pub(crate) mod opencode_provider_profile;
 #[path = "../../engine/pi.rs"]
@@ -129,12 +131,12 @@ pub mod commands {
 
     fn build_opencode_command(
         config: Option<&EngineConfig>,
-    ) -> Result<tokio::process::Command, String> {
+    ) -> Result<super::opencode_native_artifact::ContainedOpenCodeCommand, String> {
         let mut cmd = build_command_for_binary(&resolve_opencode_bin(config)?);
         if let Some(home) = config.and_then(|item| item.home_dir.as_ref()) {
             cmd.env("OPENCODE_HOME", home);
         }
-        Ok(cmd)
+        super::opencode_native_artifact::ContainedOpenCodeCommand::new(cmd)
     }
 
     fn parse_opencode_session_list(stdout: &str) -> Vec<OpenCodeSessionEntry> {

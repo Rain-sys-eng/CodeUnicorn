@@ -11,6 +11,7 @@ use crate::backend::app_server::{
     build_codex_path_env, build_command_for_binary, check_cli_binary, find_claude_code_binary,
     find_cli_binary,
 };
+use crate::backend::app_server_cli::check_opencode_cli_binary;
 use crate::types::AppSettings;
 
 const INSTALL_TIMEOUT_SECS: u64 = 180;
@@ -448,6 +449,18 @@ fn engine_binary_name(engine: CliInstallEngine) -> &'static str {
         CliInstallEngine::Pi => "pi",
         CliInstallEngine::Dsh => "dsh",
         CliInstallEngine::Qoder => "qodercli",
+    }
+}
+
+async fn check_installed_engine_binary(
+    engine: CliInstallEngine,
+    path_env: Option<String>,
+) -> Result<Option<String>, String> {
+    let binary = engine_binary_name(engine);
+    if engine == CliInstallEngine::OpenCode {
+        check_opencode_cli_binary(binary, path_env).await
+    } else {
+        check_cli_binary(binary, path_env).await
     }
 }
 
@@ -1133,7 +1146,7 @@ pub(crate) async fn resolve_cli_version_status(
         | CliInstallEngine::Pi
         | CliInstallEngine::Dsh
         | CliInstallEngine::Qoder => {
-            match check_cli_binary(engine_binary_name(engine), path_env.clone()).await {
+            match check_installed_engine_binary(engine, path_env.clone()).await {
                 Ok(Some(version)) => Some(version),
                 Ok(None) => None,
                 Err(_) => None,
@@ -1330,7 +1343,7 @@ pub(crate) async fn build_cli_install_plan_with_backend(
     }
 
     let engine_binary = engine_binary_name(engine);
-    match check_cli_binary(engine_binary, path_env.clone()).await {
+    match check_installed_engine_binary(engine, path_env.clone()).await {
         Ok(_) => {
             if action == CliInstallAction::InstallLatest {
                 let hint = match strategy {

@@ -44,6 +44,7 @@ pub mod kimi_history;
 pub(crate) mod kimi_provider_profile;
 pub mod manager;
 pub mod opencode;
+pub(crate) mod opencode_native_artifact;
 pub(crate) mod opencode_provider_profile;
 pub mod pi;
 pub mod pi_auth;

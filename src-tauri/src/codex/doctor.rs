@@ -8,7 +8,7 @@ use crate::backend::app_server::{
     check_codex_installation, classify_endpoint_failure, find_claude_code_binary,
     get_cli_debug_info, probe_codex_app_server, resolve_codex_launch_context,
 };
-use crate::backend::app_server_cli::resolve_safe_opencode_binary;
+use crate::backend::app_server_cli::{check_opencode_cli_binary, resolve_safe_opencode_binary};
 use crate::codex::launch_profile::resolve_global_codex_launch_profile;
 use crate::types::AppSettings;
 
@@ -782,7 +782,7 @@ pub(crate) async fn run_opencode_doctor_with_settings(
     };
     let path_env = build_codex_path_env(Some(requested_bin.as_str()));
     let debug_info = get_cli_debug_info(Some(requested_bin.as_str()));
-    let version_result = check_cli_binary(&requested_bin, path_env.clone()).await;
+    let version_result = check_opencode_cli_binary(&requested_bin, path_env.clone()).await;
     let (version, mut cli_error, fallback_retried) = match version_result {
         Ok(Some(version)) => (Some(version), None, false),
         Ok(None) => (Some("unknown".to_string()), None, true),
@@ -874,6 +874,7 @@ pub(crate) async fn run_opencode_doctor_with_settings(
         "networkDiagnosis": network_diagnosis,
         "opencodeModels": models_probe,
         "opencodeDefaultModel": default_model_probe,
+        "opencodeNativeArtifactContainment": crate::engine::opencode_native_artifact::runtime_diagnostics(),
         "debug": debug_info,
     }))
 }
@@ -1339,6 +1340,7 @@ mod tests {
             "networkDiagnosis",
             "opencodeModels",
             "opencodeDefaultModel",
+            "opencodeNativeArtifactContainment",
             "debug",
         ] {
             assert!(
@@ -1352,6 +1354,10 @@ mod tests {
         assert!(diagnostics["version"].is_null());
         assert!(diagnostics["opencodeModels"].is_null());
         assert!(diagnostics["opencodeDefaultModel"].is_null());
+        assert_eq!(
+            diagnostics["opencodeNativeArtifactContainment"]["runtimeProvenance"],
+            "unverified"
+        );
         assert!(diagnostics["debug"].is_object());
 
         let _ = std::fs::remove_file(&script_path);
@@ -1378,6 +1384,10 @@ mod tests {
         // The default-model probe reads the real user config; only its
         // structure is deterministic across machines.
         assert!(diagnostics["opencodeDefaultModel"]["status"].is_string());
+        assert_eq!(
+            diagnostics["opencodeNativeArtifactContainment"]["runtimeProvenance"],
+            "unverified"
+        );
 
         let _ = std::fs::remove_file(&script_path);
         let _ = std::fs::remove_dir_all(script_path.parent().unwrap_or(std::path::Path::new("")));
