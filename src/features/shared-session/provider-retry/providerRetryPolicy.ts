@@ -43,7 +43,7 @@ export function clampSharedProviderRetrySettings(
     typeof patch?.resumePrompt === "string" ? patch.resumePrompt : base.resumePrompt;
   return {
     enabled: typeof patch?.enabled === "boolean" ? patch.enabled : base.enabled,
-    maxAttempts: clampInt(patch?.maxAttempts, 0, 10, base.maxAttempts),
+    maxAttempts: clampInt(patch?.maxAttempts, 0, 999, base.maxAttempts),
     baseDelaySec: clampInt(patch?.baseDelaySec, 1, 1200, base.baseDelaySec),
     maxDelaySec: clampInt(patch?.maxDelaySec, 1, 1200, base.maxDelaySec),
     backoff,
