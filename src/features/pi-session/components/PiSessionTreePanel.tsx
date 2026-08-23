@@ -232,6 +232,12 @@ export function PiSessionTreePanel({
   const forkLinks = useMemo(() => {
     const rowIndexById = new Map<string, number>();
     visibleNodes.forEach((node, index) => rowIndexById.set(node.entryId, index));
+    // 未过滤全图：lane-start 的直接父条目可能是被过滤的元数据条目
+    // （model_change / thinking_level_change 等，如 b1 分叉点的 parent 是
+    // model_change）——此时沿父子链向上找最近的可见祖先行作为曲线起点，
+    // 否则整条曲线被丢弃，分支画成没有连接线的「裸偏移列」。
+    const allById = new Map<string, PiLaneNode>();
+    (tree?.nodes ?? []).forEach((node) => allById.set(node.entryId, node));
     const links: {
       fromX: number;
       fromY: number;
@@ -245,8 +251,13 @@ export function PiSessionTreePanel({
       if (node.lane === 0 || !node.parentId) {
         return;
       }
-      const parentIndex = rowIndexById.get(node.parentId);
-      const parentLane = laneById.get(node.parentId);
+      // 最近可见祖先（通常就是直接父；父被过滤时向上走，带环保护）
+      let anchorId: string | null = node.parentId;
+      for (let guard = 0; anchorId && !rowIndexById.has(anchorId) && guard < 64; guard++) {
+        anchorId = allById.get(anchorId)?.parentId ?? null;
+      }
+      const parentIndex = anchorId ? rowIndexById.get(anchorId) : undefined;
+      const parentLane = anchorId ? laneById.get(anchorId) : undefined;
       if (parentIndex === undefined || parentLane === undefined) {
         return;
       }
@@ -272,7 +283,7 @@ export function PiSessionTreePanel({
       });
     });
     return links;
-  }, [visibleNodes, laneById]);
+  }, [visibleNodes, laneById, tree]);
 
   // 激活路径贯通染色：当前叶到根的整条祖先链可能跨越多条 lane（main →
   // 中间分支 → 当前分支）。每条 lane 上「首个 ~ 末个 on-path 节点」之间
