@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import {
   piFork,
   piGetForkMessages,
@@ -59,6 +60,7 @@ export function PiForkDialog({
   onCancel,
   onConfirm,
 }: PiForkDialogProps) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) {
       return;
@@ -79,11 +81,9 @@ export function PiForkDialog({
   if (success) {
     return createPortal(
       <div className="pi-overlay" role="presentation">
-        <div className="pi-dialog" role="alertdialog" aria-label="分叉已创建">
-          <h3>✓ 分叉已创建</h3>
-          <p>
-            新分支已出现在右侧<b>会话树</b>面板，源消息已填入它的输入框草稿，跳转即可继续。
-          </p>
+        <div className="pi-dialog" role="alertdialog" aria-label={t("piSession.fork.successTitle")}>
+          <h3>{t("piSession.fork.successTitle")}</h3>
+          <p>{t("piSession.fork.successBody")}</p>
         </div>
       </div>,
       document.body,
@@ -95,17 +95,14 @@ export function PiForkDialog({
         className="pi-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="分叉会话"
+        aria-label={t("piSession.fork.title")}
         onClick={(event) => event.stopPropagation()}
       >
         <h3>
-          ⑂ 从这条消息分叉
+          ⑂ {t("piSession.fork.title")}
           <span className="mono">pi RPC: fork</span>
         </h3>
-        <p>
-          将回到该消息<b>之前的点</b>创建<b>新会话文件</b>：以该消息为草稿重写，<b>源会话保持不动</b>。
-          新分支出现在会话树面板（不占侧栏），创建后自动跳转继续。
-        </p>
+        <p>{t("piSession.fork.description")}</p>
         <div className="quote">「{quote}」</div>
         {error ? <p className="pi-dialog-error">{error}</p> : null}
         <div className="pi-dialog-foot">
@@ -115,7 +112,7 @@ export function PiForkDialog({
             onClick={onCancel}
             disabled={busy}
           >
-            取消
+            {t("piSession.fork.cancel")}
           </button>
           <button
             type="button"
@@ -123,7 +120,7 @@ export function PiForkDialog({
             onClick={onConfirm}
             disabled={busy}
           >
-            {busy ? "分叉中…" : "创建分叉"}
+            {busy ? t("piSession.fork.confirming") : t("piSession.fork.confirm")}
           </button>
         </div>
       </div>
@@ -147,6 +144,7 @@ export function usePiForkFlow({
   threadId,
   onForked,
 }: UsePiForkFlowArgs) {
+  const { t } = useTranslation();
   const [state, setState] = useState<{
     entryId: string | null;
     quote: string;
@@ -194,7 +192,7 @@ export function usePiForkFlow({
         setState({
           ...state,
           busy: false,
-          error: "无法在 pi 会话中定位这条消息（可能已被压缩）。",
+          error: t("piSession.fork.errorEntryNotFound"),
         });
         return;
       }
@@ -221,14 +219,20 @@ export function usePiForkFlow({
       setState({ ...state, busy: false, error: null, success: true });
       successTimerRef.current = setTimeout(() => setState(null), 1600);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       setState({
         ...state,
         busy: false,
-        error: error instanceof Error ? error.message : String(error),
+        // pi RPC 的 "Invalid entry ID for forking" = 条目不在当前会话文件
+        // （他 lane 的消息 / 已被压缩）——正常系提示，映射为清晰的行动指引：
+        // 先在会话树跳转到该消息所在分支，再分叉。
+        error: /invalid entry id for forking/i.test(message)
+          ? t("piSession.fork.errorEntryNotForkable")
+          : message,
         success: false,
       });
     }
-  }, [state, workspaceId, threadId, onForked]);
+  }, [state, workspaceId, threadId, onForked, t]);
 
   const dialog = useMemo(
     () => (

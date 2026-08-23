@@ -385,7 +385,7 @@ export const TimelineRowRenderer = memo(function TimelineRowRenderer({
               <TooltipIconButton
                 className="ghost message-action-button pi-fork-action"
                 onClick={() => beginForkWithQuote(userCopyText)}
-                label="从这条消息分叉"
+                label={t("piSession.fork.title")}
                 tooltipSide="top"
               >
                 <GitBranch className="message-action-icon" size={12} />

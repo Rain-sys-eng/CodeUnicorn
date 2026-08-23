@@ -186,6 +186,7 @@
 - [x] 24.1 **live 窗口分支泄漏**：fork 跳转 / `thread/started` 新建的分支行没有 `parentThreadId`，而 pi list 刷新可能整局不跑（`includeEngineDiskLists` gate）→ 分支泄漏成顶层行直到重启（23.3 的 backfill 要等下轮刷新才生效）。修复：`piSessionStore` 新增进程内存级派生登记（① fork 成功即 `markPiDerivedThread`；② 树投影加载时登记全部 lane>0 的 laneSessionIds，lane 0 主线不登记），`useThreadRows` pi 过滤并列查询该集合。vitest 回归 ×2（live 窗口无 parent 也隐藏 / 权威 parent 路径 main 可见）
 - [x] 24.2 **「main 丢失」取证结论（无代码改动）**：用真实数据全层验证——index 行（parent/cwd/workspace 正确、未 tombstone）✓；live list cwd 匹配 ✓；真实数据跑 `sessionIndexRowsToThreadSummaries` + `mergePiSessionSummaries` + 派生过滤纯管线，三个疑似丢失 main 全部 `visible=true` ✓；折叠数学不成立（比它新的 root 仅 7 条，阈值 12）✓；Shared / archive / catalog `hiddenAutomaticSessionIds` 均无这些 id 的记录 ✓。结论：非过滤逻辑误杀，最可能为当时 app 会话的 index 快照时序 + first-paint 不跑 pi disk list 的暂态；如复现需加诊断日志再查
 - [x] 24.3 **分叉曲线丢失误画「裸偏移列」**：lane-start 的直接父条目是被过滤的元数据条目（`model_change` / `thinking_level_change`）时，`forkLinks` 按 parentId 查不到可见行 → 整条 S 曲线被丢弃，分支画成无连接线的平行列（用户目击「两种线性树画法」）。修复：沿未过滤父子链向上找最近可见祖先作为曲线起点（64 步环保护；同 lane 则跳过不画）。真实数据验证：b1「现在呢」的 parent 链（两级 model_change）正确解析到 lane 0 的 assistant 回复行
+- [x] 24.4 **fork 弹窗 i18n + 「Invalid entry ID for forking」正常系提示**：上游语义实证（`agent-session-runtime.js`：entry 不在当前 SessionManager 或非 user 消息即抛错）——用户在他 lane 的消息上分叉时必现。修复：`PiForkDialog` 全量接 i18n（新增 `piSession` locale 命名空间 ×10 语言 + parity 测试，5.5/10.4 的硬编码口径由此开始收敛），该错误映射为行动指引文案「先在会话树 ↪ 跳转到该消息所在分支，再分叉」；气泡 ⑂ 按钮 label 同 key 复用。其余 RPC 错误原样透传
 
 ## 25. 发送模型对账（2026-08-23，resident 模型漂移：选 kimi-coding/k3 实际回 MiniMax-M3）
 
