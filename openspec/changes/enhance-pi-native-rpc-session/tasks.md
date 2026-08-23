@@ -194,3 +194,11 @@
 - [x] 25.1 根因（三缺口叠加）：① resident model 只在 spawn 时经 `--model` 设定，`ensure_rpc` 复用存活进程时忽略传入 model；② `set_model` RPC 已实现但全仓零调用（死代码）；③ `rpc_client_for_commands`（tree/stats/fork/compact）经 `ensure_rpc(None, None)` 裸 spawn——打开会话树即在首次发送前把 resident 钉死到 pi 本地配置 `defaultModel`（本机 MiniMax-M3），之后切 k3 / k3-256k / deepseek-v4-flash 发送全部无效
 - [x] 25.2 修复：新 run 启动前 `reconcile_rpc_model` 对账——纯函数 `plan_rpc_model_reconcile` 判定四态（Skip=未显式指定 / Match / Set=`set_model` 纠正 / BareMismatch=裸 id 仅 warn）；`set_model` 成功后刷新缓存 state（fork/switch/new_session 同纪律）；失败回退 print-json（per-send 带 `--model`），不以漂移模型静默作答；steer attach 不中途换模型（warn，下个新 run 修正）；`split_provider_model` 只切首段（openrouter 嵌套斜杠模型 id 安全）
 - [x] 25.3 验证：`cargo check --lib` 绿；`cargo test --lib engine::pi` 35 全绿（新增 `split_provider_model_only_first_segment_is_provider` + `model_reconcile_plan_matrix` 六态矩阵）；spec delta 见 `specs/pi-rpc-session-runtime`「Resident 模型 MUST 与发送请求模型对齐」。ADR gate：未命中基石文档更新触发器（非 engine registry / Shared 支持集合 / provider binding / canonical fact schema / context compiler / terminal-ACK contract / recovery exit-abandon），无需回写
+
+## 26. 验收修复 round 8（2026-08-24，compact 链路 review 硬化）
+
+- [x] 26.1 **`compact` 独立长超时**：原走通用 `PI_RPC_REQUEST_TIMEOUT`（30s），而 compaction 是对整段会话文本的 LLM summarization——真正值得压缩的长会话极易超 30s；超时后 pi 侧仍继续跑完，UI 误报 `timed out` 且 late response 被丢弃 → 状态分裂。修复：新增 `PI_RPC_COMPACT_TIMEOUT`（500s，覆盖超大会话 + 慢模型），`compact()` 改走 `request_with_timeout`；spec「response 按 id 关联」场景同步标注例外
+- [x] 26.2 **`pi_compact` 补活跃 run 守卫**：pi `session.compact()` 内部第一步是 `abort()`，turn 进行中从 dialog 点压缩会无提示掐断当前流式（fork 早有守卫，compact 漏了）。修复：align 之后 `rpc_has_active_run()` 拦截，与 fork 同纪律；spec 新增「活跃 run 禁止 fork/compact（同会话亦拦截）」场景
+- [x] 26.3 **压缩成功零反馈修复**：手动 compact 无 active run，pump 的 `compaction_start/end` 拿不到 turn_id 静默丢弃，`onCompacted` 又是 no-op——成功后 dialog 直接关窗，用户无任何确认。修复：`PiCompactDialog` 成功后原地展示 `tokensBefore → estimatedTokensAfter` 并重拉 stats 三连，取消键变「关闭」，不再静默关窗
+- [x] 26.4 **「太短」提示补原因**：pi 默认 `keepRecentTokens = 20000`，短会话整体落在保留窗口内属预期拒绝；中性提示补明「pi 会完整保留最近约 20k tokens」，避免用户误判为故障。错误分类抽为 `compactErrorToNotice` 纯函数
+- [x] 26.5 验证：`cargo test --lib pi_rpc` 10 全绿（新增 `compact_command_trims_and_omits_blank_instructions` + `compact_timeout_exceeds_generic_request_budget` 纪律测试）；`PiCompactDialog.test.tsx` 2 全绿（分类映射 / 其它错误保持红色路径）；`tsc --noEmit` 0 错误

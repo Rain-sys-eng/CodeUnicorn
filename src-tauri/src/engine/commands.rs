@@ -4915,6 +4915,14 @@ pub async fn pi_compact(
     .await?;
     let client = session.rpc_client_for_commands().await?;
     session.align_rpc_session(&client, session_id.as_deref()).await?;
+    // pi 的 compact() 内部第一步是 abort()：turn 进行中压缩会无提示掐断
+    // 当前流式。与 fork 同纪律；守卫放在对齐之后，对齐会先清掉丢失
+    // settle 的僵尸 run，只挡真实流式。
+    if session.rpc_has_active_run().await {
+        return Err(
+            "当前 turn 仍在进行中，无法压缩；请等待完成或先停止。".to_string()
+        );
+    }
     client.compact(custom_instructions.as_deref()).await
 }
 
@@ -4967,11 +4975,23 @@ pub async fn pi_fork(
     // 「源会话不受污染」是硬约束——旧 thread 的后续发送必须落回旧文件，
     // 新文件以干净副本出现在侧栏（fork-to-new-file 语义）。
     let forked_state = client.get_state().await.ok();
-    let forked_session_id = forked_state
-        .as_ref()
-        .and_then(|state| state.get("sessionId"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    // 静默 no-op 防护：fork 未真正切换会话文件（pi 侧未分叉但未返回
+    // cancelled/未报错）时，get_state 拿到的是源会话身份——把它当
+    // forkedSessionId 返回会让前端把主线误登记为派生并整局隐藏
+    // （2026-08-24 侧栏主线丢失取证）。文件未变 ⇒ 视为未分叉。
+    let forked_session_id = resolve_pi_forked_session_id(
+        pre_session_file.as_deref(),
+        forked_state.as_ref(),
+    );
+    if forked_session_id.is_none()
+        && forked_state
+            .as_ref()
+            .and_then(|state| state.get("sessionId"))
+            .and_then(Value::as_str)
+            .is_some()
+    {
+        log::warn!("[pi/rpc] fork returned without switching session file; treating as no-op");
+    }
     if let Some(ref path) = pre_session_file {
         if let Err(error) = client.switch_session(path).await {
             log::warn!("[pi/rpc] switch back after fork failed: {error}");

@@ -26,6 +26,12 @@ use tokio::process::{Child, ChildStdin};
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 
 pub const PI_RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// Manual compaction runs an LLM summarization over the whole session text —
+/// far slower than local commands. With the generic 30s budget a worthwhile
+/// compact would time out on the UI while pi keeps running it to completion
+/// (state split: UI reports failure, session is actually compacted). 500s
+/// covers slow models on very large sessions.
+pub const PI_RPC_COMPACT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const PI_RPC_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// One line decoded from the RPC stdout pump.
@@ -360,14 +366,11 @@ impl PiRpcClient {
     }
 
     pub async fn compact(&self, custom_instructions: Option<&str>) -> Result<Value, String> {
-        let mut cmd = json!({"type":"compact"});
-        if let Some(instructions) = custom_instructions {
-            let trimmed = instructions.trim();
-            if !trimmed.is_empty() {
-                cmd["customInstructions"] = Value::String(trimmed.to_string());
-            }
-        }
-        self.request(cmd).await
+        self.request_with_timeout(
+            build_compact_command(custom_instructions),
+            PI_RPC_COMPACT_TIMEOUT,
+        )
+        .await
     }
 
     pub async fn fork(&self, entry_id: &str) -> Result<Value, String> {
@@ -503,6 +506,20 @@ pub(crate) fn flatten_pi_tree_for_ipc(nodes: &[Value]) -> Vec<Value> {
         }
     }
     out
+}
+
+/// Build the `compact` RPC command. `customInstructions` is omitted when
+/// absent/blank and trimmed otherwise (pi treats the key's presence as
+/// meaningful, so don't send empty strings).
+fn build_compact_command(custom_instructions: Option<&str>) -> Value {
+    let mut cmd = json!({"type":"compact"});
+    if let Some(instructions) = custom_instructions {
+        let trimmed = instructions.trim();
+        if !trimmed.is_empty() {
+            cmd["customInstructions"] = Value::String(trimmed.to_string());
+        }
+    }
+    cmd
 }
 
 /// JSON 行的最大括号嵌套深度（跳过字符串内容与转义）。用于分流解析策略。
@@ -667,6 +684,23 @@ mod tests {
         let shallow = parse_pi_rpc_json_line("{\"type\":\"agent_settled\"}")
             .expect("shallow json should parse");
         assert_eq!(shallow["type"], "agent_settled");
+    }
+
+    #[test]
+    fn compact_command_trims_and_omits_blank_instructions() {
+        assert_eq!(build_compact_command(None), json!({"type":"compact"}));
+        assert_eq!(build_compact_command(Some("   ")), json!({"type":"compact"}));
+        assert_eq!(
+            build_compact_command(Some("  保留根因结论  ")),
+            json!({"type":"compact","customInstructions":"保留根因结论"})
+        );
+    }
+
+    #[test]
+    fn compact_timeout_exceeds_generic_request_budget() {
+        // 纪律测试：compaction 是对整段会话的 LLM summarization，禁止回归为
+        // 30s 通用预算（UI 报超时但 pi 侧仍跑完 → 状态分裂）。
+        assert!(PI_RPC_COMPACT_TIMEOUT > PI_RPC_REQUEST_TIMEOUT);
     }
 
     #[test]

@@ -60,6 +60,18 @@ function formatTokens(value: number | null): string {
 }
 
 /**
+ * pi 的「会话太短无可压缩」是正常状态，不是故障——映射为中性提示而非
+ * 红色错误。pi 默认完整保留最近约 20k tokens（keepRecentTokens），短会话
+ * 整体落在保留窗口内时没有可压缩前缀。
+ */
+export function compactErrorToNotice(message: string): string | null {
+  if (/nothing to compact|too small/i.test(message)) {
+    return "会话还很短，没有可压缩的内容（pi 会完整保留最近约 20k tokens）。";
+  }
+  return null;
+}
+
+/**
  * Manual `/compact` dialog for PI RPC sessions: stats triple + optional
  * custom instructions (RPC `compact.customInstructions`).
  */
@@ -73,6 +85,7 @@ export function PiCompactDialog({
   const [stats, setStats] = useState<PiSessionStats | null>(null);
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -82,6 +95,7 @@ export function PiCompactDialog({
     }
     setError(null);
     setNotice(null);
+    setDone(false);
     void piGetSessionStats({
       workspaceId,
       sessionId: piSessionIdFromThreadId(threadId),
@@ -164,7 +178,7 @@ export function PiCompactDialog({
             onClick={onClose}
             disabled={busy}
           >
-            取消
+            {done ? "关闭" : "取消"}
           </button>
           <button
             type="button"
@@ -181,20 +195,33 @@ export function PiCompactDialog({
               })
                 .then((result) => {
                   setBusy(false);
+                  setDone(true);
+                  setInstructions("");
+                  // 成功后原地展示结果并重拉统计（手动压缩无 active run，
+                  // compaction_start/end 事件不会上屏，dialog 是唯一反馈面）。
+                  setNotice(
+                    `压缩完成：${formatTokens(result.tokensBefore)} → ${formatTokens(result.estimatedTokensAfter)}（估算）。`,
+                  );
                   onCompacted({
                     tokensBefore: result.tokensBefore,
                     estimatedTokensAfter: result.estimatedTokensAfter,
                   });
-                  onClose();
+                  void piGetSessionStats({
+                    workspaceId,
+                    sessionId: piSessionIdFromThreadId(threadId),
+                  })
+                    .then(setStats)
+                    .catch(() => {
+                      // 统计刷新失败不影响压缩结果本身
+                    });
                 })
                 .catch((err) => {
                   setBusy(false);
                   const message =
                     err instanceof Error ? err.message : String(err);
-                  // pi 的「会话太短无可压缩」是正常状态，不是故障——
-                  // 中性提示而非红色错误。
-                  if (/nothing to compact|too small/i.test(message)) {
-                    setNotice("会话还很短，没有可压缩的内容。");
+                  const neutral = compactErrorToNotice(message);
+                  if (neutral !== null) {
+                    setNotice(neutral);
                   } else {
                     setError(message);
                   }

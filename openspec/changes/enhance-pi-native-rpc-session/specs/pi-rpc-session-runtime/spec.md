@@ -43,7 +43,7 @@
 
 - **WHEN** 收到 `type=="response"` 且含 `id`
 - **THEN** 系统 MUST 结算对应该 id 的 pending request
-- **AND** 超时（30s）或迟到的响应 MUST 被丢弃且不 panic
+- **AND** 超时（30s；`compact` 因对整段会话做 LLM summarization，用独立 500s 预算——通用预算下 UI 会误报超时而 pi 侧仍跑完，造成状态分裂）或迟到的响应 MUST 被丢弃且不 panic
 - **AND** pending request MUST 在写 stdin 之前注册（response 走独立 stdout pump，先写后注册存在到达窗口，未注册的 response 会被丢弃导致调用方干等超时；写失败 MUST 回滚 pending）
 
 ### Requirement: Extension UI request MUST auto-cancel
@@ -77,6 +77,12 @@
 - **WHEN** 执行 `pi_get_session_tree` / `pi_get_session_stats` / `pi_compact` / `pi_fork` / `pi_get_fork_messages`
 - **THEN** 命令 MUST 携带调用方 thread 的 session id 并先完成对齐
 - **AND** 返回的数据 MUST 属于该 thread 的会话而非 resident 先前绑定的会话
+
+#### Scenario: 活跃 run 禁止 fork/compact（同会话亦拦截）
+
+- **WHEN** 存在未 settle 的 agent run 且调用 `pi_fork` / `pi_compact`
+- **THEN** 系统 MUST 拒绝并返回「turn 仍在进行中」——即使目标就是当前会话（fork 切换会话文件会与事件流互相破坏；pi `compact()` 内部第一步是 `abort()`，放行会无提示掐断当前流式）
+- **AND** 守卫 MUST 放在会话对齐之后（对齐会先清掉丢失 settle 的僵尸 run，只挡真实流式）
 
 ### Requirement: Resident 模型 MUST 与发送请求模型对齐
 
