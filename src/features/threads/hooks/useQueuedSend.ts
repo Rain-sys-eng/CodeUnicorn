@@ -839,9 +839,14 @@ export function useQueuedSend({
       sessionId: activeThreadId,
       activeRunId: activeTurnId,
     });
+    // capability 即准入：input.mid-turn=supported 的引擎（pi RPC steer、
+    // dsh）原生支持 same-run steer，不要求 experimental steer 总开关；
+    // compat-input 引擎（claude/codex cutover）仍走既有 steerEnabled 门。
+    const steerAllowed =
+      steerEnabled || decision.evidence.midTurnCapability === "supported";
     return {
       sameRun:
-        steerEnabled &&
+        steerAllowed &&
         decision.status !== "rejected" &&
         decision.route === "steer",
       cutover:
@@ -1838,8 +1843,10 @@ export function useQueuedSend({
           steeringDecision,
         ),
       );
+      // 同 activeFusionCapability：capability supported 即放行 same-run steer。
       const useSameRunContinuation =
-        steerEnabled &&
+        (steerEnabled ||
+          steeringDecision.evidence.midTurnCapability === "supported") &&
         steeringDecision.status !== "rejected" &&
         steeringDecision.route === "steer";
       const useSafeCutover =

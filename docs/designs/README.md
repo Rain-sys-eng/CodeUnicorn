@@ -23,7 +23,7 @@ status: active
 | [`shared-provider-retry/index.html`](shared-provider-retry/index.html) | Shared 供应商失败后同一家再发一轮：倒计时 / 立即再试 / 停止，可改次数、等待和话术 | 浏览器打开，点右侧失败类型和设置 |
 | [`runtime-model-identity/05-receipt-r-mark.html`](runtime-model-identity/05-receipt-r-mark.html) | 采纳稿 B：Shared turn badge 前半 picker 不动；后半高亮 `→` + 圆形 R + runtime 模型/窗口 | 浏览器打开，点回执下滑 |
 | [`prompt-enhancer-redesign/index.html`](prompt-enhancer-redesign/index.html) | Composer「增强提示词」方案 A 定稿：并排对照；引擎只显示供应商设置已启用 CLI（`disabledCliEngines`） | 浏览器打开，左侧模拟启停引擎，再点开始增强 |
-| [`pi-native-features/index.html`](pi-native-features/index.html) | Pi 接入设计稿（真壳 base：真实 CSS @import + 运行时 DOM dump）：4 共同分叉（mossx 级 fork UX）/ 1 侧栏树 / 2 沉浸树 / 3 内嵌分叉；跨引擎调研见 `docs/research/session-fork-tree-cross-engine-capability.md`；幕布不动 | 浏览器打开 gallery |
+| [`pi-native-features/index.html`](pi-native-features/index.html) | Pi 接入设计稿（真壳 base：真实 CSS @import + 运行时 DOM dump）：**★ `final-recommended.html` 最终推荐态**（2 全屏树 × 3 tab 分支 chip，pi native 独立增强）/ 4 共同分叉（mossx 级 fork UX）/ 1 侧栏树 / 2 沉浸树 / 3 内嵌分叉；跨引擎调研见 `docs/research/session-fork-tree-cross-engine-capability.md`；幕布不动 | 浏览器打开 gallery |
 | [`network-drive-files/index.html`](network-drive-files/index.html) | 网络盘工作区 Files 面板：添加项目 → 选网络挂载目录 → 修复前加载失败 / 修复后可浏览打开 | 浏览器打开，切「修复前/后」，点添加项目 |
 | [`qoder-distribution-options.html`](qoder-distribution-options.html) | Qoder CLI Global / CN 的客户端身份形态对照：A 双入口（推荐）与 C 单入口地区切换 | 浏览器打开，点击 Global / CN 对比会话身份 |
 | [`qoder-distribution-options-v2.html`](qoder-distribution-options-v2.html) | Qoder CLI 单父入口、双分发子入口：新建会话菜单子菜单 + 同页 Global / CN 供应商配置 | 浏览器打开，点击 Qoder CLI、Global / CN 或管理按钮 |

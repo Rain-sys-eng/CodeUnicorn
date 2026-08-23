@@ -49,6 +49,10 @@ pub struct PiSessionSummary {
     pub canonical_session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attribution_status: Option<String>,
+    /// Present when this file was created by fork/clone (`parentSession`
+    /// header): the SOURCE session id. Drives sidebar nesting + tree merge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +98,8 @@ struct SessionHeader {
     session_id: String,
     cwd: Option<String>,
     timestamp_ms: i64,
+    /// Fork-derived files record the source file in `parentSession`.
+    parent_session_id: Option<String>,
 }
 
 fn truncate_chars(value: &str, max_chars: usize) -> String {
@@ -373,6 +379,7 @@ fn header_from_file_name(file: &Path) -> Option<SessionHeader> {
         session_id,
         cwd: None,
         timestamp_ms: 0,
+        parent_session_id: None,
     })
 }
 
@@ -398,10 +405,25 @@ fn parse_header(value: &Value, file: &Path) -> Option<SessionHeader> {
         .and_then(Value::as_str)
         .map(parse_iso_millis)
         .unwrap_or(0);
+    let parent_session_id = value
+        .get("parentSession")
+        .and_then(Value::as_str)
+        .and_then(|path| {
+            let name = Path::new(path).file_name()?.to_string_lossy();
+            let stem = name.strip_suffix(".jsonl")?;
+            let underscore = stem.rfind('_')?;
+            let id = stem[underscore + 1..].trim();
+            if id.is_empty() {
+                None
+            } else {
+                Some(id.to_string())
+            }
+        });
     Some(SessionHeader {
         session_id,
         cwd,
         timestamp_ms,
+        parent_session_id,
     })
 }
 
@@ -504,6 +526,7 @@ async fn read_session_summary(file: &Path) -> Option<PiSessionSummary> {
         engine: Some("pi".to_string()),
         canonical_session_id: None,
         attribution_status: None,
+        parent_session_id: header.parent_session_id,
     })
 }
 
@@ -595,6 +618,226 @@ async fn resolve_session_file(
         }
     }
     Ok(fallback)
+}
+
+/// Resolve a session id to its JSONL file path (for RPC `switch_session`).
+/// Allows cwd-mismatch fallback: the resident must be able to align to any
+/// session of this workspace profile, even when cwd metadata drifts.
+pub async fn resolve_pi_session_file_by_id(
+    home_dir: Option<&str>,
+    session_id: &str,
+    workspace_path: &Path,
+) -> Result<Option<PathBuf>, String> {
+    let root = resolve_pi_sessions_root(home_dir);
+    resolve_session_file(&root, session_id, workspace_path, true).await
+}
+
+/// One entry of a fork-derived session file, projected for tree merge.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiDerivedLaneEntry {
+    pub id: String,
+    pub parent_id: Option<String>,
+    #[serde(rename = "type")]
+    pub entry_type: String,
+    pub timestamp: Option<String>,
+    pub role: Option<String>,
+    pub text: String,
+}
+
+/// A fork-derived session (`parentSession` == the viewed file): a lane of
+/// the conversation family that lives in its own file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiDerivedLane {
+    pub session_id: String,
+    pub session_file: String,
+    pub entries: Vec<PiDerivedLaneEntry>,
+}
+
+/// Parse all entries of a session file (skip the `session` header line).
+/// Read-only (红线 21); unparseable lines are skipped.
+pub async fn parse_pi_session_entries(file: &Path) -> Result<Vec<PiDerivedLaneEntry>, String> {
+    let handle = fs::File::open(file)
+        .await
+        .map_err(|error| format!("failed to open pi session file {}: {error}", file.display()))?;
+    let mut lines = AsyncBufReader::new(handle).lines();
+    let mut entries = Vec::new();
+    while let Ok(Some(line)) = lines.next_line().await {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let entry_type = value
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if entry_type == "session" {
+            continue;
+        }
+        let Some(id) = value
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let parent_id = value
+            .get("parentId")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let (role, text) = match value.get("message") {
+            Some(message) => (
+                message
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                extract_text_blocks(message.get("content")),
+            ),
+            None => (None, String::new()),
+        };
+        entries.push(PiDerivedLaneEntry {
+            id,
+            parent_id,
+            entry_type,
+            timestamp: value
+                .get("timestamp")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            role,
+            text,
+        });
+    }
+    Ok(entries)
+}
+
+/// One member of a fork/clone session family (`parentSession` chain).
+#[derive(Debug, Clone)]
+pub struct PiSessionFamilyMember {
+    pub session_id: String,
+    pub session_file: PathBuf,
+    pub is_root: bool,
+}
+
+/// Resolve the full fork family of `current_file`: walk the `parentSession`
+/// chain up to the root, then collect every file in the same directory whose
+/// own chain reaches that root. This powers the "family tree" view: after
+/// jumping into a branch, the main line stays visible (not truncated).
+pub async fn resolve_pi_session_family(
+    current_file: &Path,
+) -> Result<Vec<PiSessionFamilyMember>, String> {
+    let Some(dir) = current_file.parent() else {
+        return Ok(Vec::new());
+    };
+    let mut entries = match fs::read_dir(dir).await {
+        Ok(entries) => entries,
+        Err(_) => return Ok(Vec::new()),
+    };
+    // id → (file, parent_id)
+    let mut by_id: std::collections::HashMap<String, (PathBuf, Option<String>)> =
+        std::collections::HashMap::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        let is_jsonl = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext == "jsonl")
+            .unwrap_or(false);
+        if !is_jsonl {
+            continue;
+        }
+        let Ok(file) = fs::File::open(&path).await else {
+            continue;
+        };
+        let mut lines = AsyncBufReader::new(file).lines();
+        let Ok(Some(first_line)) = lines.next_line().await else {
+            continue;
+        };
+        let Ok(header_value) = serde_json::from_str::<Value>(first_line.trim()) else {
+            continue;
+        };
+        if header_value.get("type").and_then(Value::as_str) != Some("session") {
+            continue;
+        }
+        let Some(header) = parse_header(&header_value, &path) else {
+            continue;
+        };
+        by_id.insert(
+            header.session_id.clone(),
+            (path.clone(), header.parent_session_id),
+        );
+    }
+    // current file's own id
+    let Some((current_id, _)) = by_id
+        .iter()
+        .find(|(_, (path, _))| path == current_file)
+        .map(|(id, (path, parent))| (id.clone(), (path.clone(), parent.clone())))
+    else {
+        return Ok(Vec::new());
+    };
+    // walk up to root (guard against cycles)
+    let mut root_id = current_id.clone();
+    for _ in 0..64 {
+        let Some((_, Some(parent))) = by_id.get(&root_id) else {
+            break;
+        };
+        root_id = parent.clone();
+    }
+    // members: every id whose ancestor chain reaches root_id
+    let reaches_root = |start: &str| {
+        let mut id = start.to_string();
+        for _ in 0..64 {
+            if id == root_id {
+                return true;
+            }
+            let Some((_, Some(parent))) = by_id.get(&id) else {
+                return false;
+            };
+            id = parent.clone();
+        }
+        false
+    };
+    let mut members: Vec<PiSessionFamilyMember> = by_id
+        .iter()
+        .filter(|(id, _)| reaches_root(id))
+        .map(|(id, (path, _))| PiSessionFamilyMember {
+            session_id: id.clone(),
+            session_file: path.clone(),
+            is_root: *id == root_id,
+        })
+        .collect();
+    members.sort_by(|a, b| a.session_file.cmp(&b.session_file));
+    Ok(members)
+}
+
+/// List fork-derived session files of `current_session_file` and parse their
+/// entries for tree merge. Read-only (红线 21). Errors per-file are skipped:
+/// one corrupted derived file must not blank the whole tree.
+pub async fn list_pi_derived_lanes(
+    current_session_file: &Path,
+) -> Result<Vec<PiDerivedLane>, String> {
+    let family = resolve_pi_session_family(current_session_file).await?;
+    let mut lanes = Vec::new();
+    for member in family {
+        // 家族全图：除 root 外的所有成员都作为 lane 返回（含 current 自身
+        // ——跳入分支后 current 也是家族的一条 lane，主线来自 root）。
+        if member.is_root {
+            continue;
+        }
+        let Ok(entries) = parse_pi_session_entries(&member.session_file).await else {
+            continue;
+        };
+        lanes.push(PiDerivedLane {
+            session_id: member.session_id,
+            session_file: member.session_file.to_string_lossy().to_string(),
+            entries,
+        });
+    }
+    Ok(lanes)
 }
 
 pub async fn list_pi_sessions(

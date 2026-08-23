@@ -6,6 +6,7 @@ import ListTodo from "lucide-react/dist/esm/icons/list-todo";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import PanelTop from "lucide-react/dist/esm/icons/panel-top";
 import PanelTopClose from "lucide-react/dist/esm/icons/panel-top-close";
+import GitFork from "lucide-react/dist/esm/icons/git-fork";
 import type { LucideIcon } from "lucide-react";
 import type { TurnPlan } from "../../../../types";
 import { loadComposerRunStatusListStyles } from "../../../../styles/featureStyleLoaders";
@@ -31,6 +32,13 @@ export type ComposerRunStatusStripProps = ComposerRunStatusInput & {
   onRevertFile?: (path: string) => void | Promise<void>;
   /** 撤销已编辑列表中的多个文件（撤销全部） */
   onRevertAllFiles?: (paths: string[]) => void | Promise<void>;
+  /** pi 会话树 pill（native pi 专属）：与 todo/subagent/plan/edit 平级，
+   *  点击切换会话树 dock 开态，不是 section（无展开面板）。 */
+  piTree?: {
+    active: boolean;
+    laneCount: number | null;
+    onToggle: () => void;
+  };
 };
 
 type PillDef = {
@@ -132,6 +140,7 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
     onRevertAllFiles,
     isPlanMode,
     isProcessing,
+    piTree,
     ...statusInput
   } = props;
 
@@ -194,7 +203,7 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [chromeOpen, collapse, expandedSection]);
 
-  if (!model.visible) {
+  if (!model.visible && !piTree) {
     return null;
   }
 
@@ -323,6 +332,34 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
                 </button>
               );
             })}
+            {piTree ? (
+              <button
+                type="button"
+                className={`composer-run-status-pill${piTree.active ? " is-selected" : ""}`}
+                title={
+                  piTree.active
+                    ? "会话树 · 点击关闭"
+                    : "会话树 · 点击打开（pi RPC: get_tree）"
+                }
+                aria-pressed={piTree.active}
+                onClick={piTree.onToggle}
+              >
+                <GitFork
+                  size={14}
+                  strokeWidth={2.1}
+                  aria-hidden
+                  className="composer-run-status-pill-icon"
+                />
+                <span className="composer-run-status-pill-label">
+                  会话树
+                </span>
+                {piTree.laneCount !== null && piTree.laneCount > 1 ? (
+                  <span className="composer-run-status-pill-count">
+                    {piTree.laneCount} lane
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
           </div>
         ) : (
           <span className="composer-run-status-toolbar-spacer" aria-hidden />

@@ -136,6 +136,10 @@ import { useSharedProviderRetry } from "../../shared-session/provider-retry/useS
 import { resolveIsSharedSession } from "../../shared-session/utils/sharedSessionIdentity";
 import { useLayoutTopbarSessionTabs } from "./useLayoutTopbarSessionTabs";
 import {
+  consumePiThreadJump,
+  usePiThreadJumpRequest,
+} from "../../pi-session/store/piSessionStore";
+import {
   buildCompactEmptyNode,
   buildCompactGitBackNode,
   buildDebugPanelNodes,
@@ -309,6 +313,13 @@ export function collectCanvasChildSubagentThreads(
     ? (nativeThreadIds ?? []).filter((id) => id.trim().length > 0)
     : [];
   return threads.filter((thread) => {
+    // pi fork 派生会话不是子代理：pi 没有 subagent 概念，parentThreadId 在 pi
+    // 语义里是会话分支（fork-to-new-file），分支归属由会话树单独控制，
+    // 不计入子代理（capability-router-allow-engine-branch：pi 分域，见
+    // enhance-pi-native-rpc-session）。
+    if (thread.engineSource === "pi" || thread.id.startsWith("pi:")) {
+      return false;
+    }
     const parent =
       thread.parentThreadId ?? threadParentById[thread.id] ?? null;
     if (parent === activeId) {
@@ -481,6 +492,27 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
   const showRightActivityToolbar = clientUiVisibility.isPanelVisible(
     "rightActivityToolbar",
   );
+  const conversationEngine = useMemo(
+    () =>
+      resolveActiveConversationEngine(
+        activeThreadSummary,
+        options.activeThreadId,
+        options.selectedEngine,
+      ),
+    [activeThreadSummary, options.activeThreadId, options.selectedEngine],
+  );
+  // 树面板「↪ 跳转」请求消费（store 中转，panel 无布局上下文）。
+  const piThreadJumpRequest = usePiThreadJumpRequest();
+  const onSelectThread = options.onSelectThread;
+  useEffect(() => {
+    if (piThreadJumpRequest) {
+      onSelectThread(
+        piThreadJumpRequest.workspaceId,
+        piThreadJumpRequest.threadId,
+      );
+      consumePiThreadJump();
+    }
+  }, [piThreadJumpRequest, onSelectThread]);
   const rightToolbarVisibleTabs = useMemo(
     () => ({
       // Kill-switched: never show activity entry even if client UI visibility allows it.
@@ -524,15 +556,6 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       activeSurface: "editor" as const,
     }),
     [isThreadThinking, options.centerMode, options.isEditorFileMaximized],
-  );
-  const conversationEngine = useMemo(
-    () =>
-      resolveActiveConversationEngine(
-        activeThreadSummary,
-        options.activeThreadId,
-        options.selectedEngine,
-      ),
-    [activeThreadSummary, options.activeThreadId, options.selectedEngine],
   );
   // Keep heartbeatPulse in a ref so conversationState doesn't change
   // on every heartbeat tick — heartbeat only affects WorkingIndicator
@@ -2190,6 +2213,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           activeWorkspaceId={options.activeWorkspaceId}
           onSelectWorkspace={options.onSelectWorkspace}
           onOpenShortcutsSettings={options.onOpenShortcutsSettings}
+
         />
       ) : null,
     [

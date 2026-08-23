@@ -112,6 +112,7 @@ import {
   type GeminiSessionSummary,
   type GrokSessionSummary,
   type KimiSessionSummary,
+  type PiSessionSummary,
   type QoderSessionSummary,
   type DshSessionSummary,
 } from "./useThreadActions.helpers";
@@ -216,7 +217,7 @@ export function useThreadActions({
   >({});
   const kimiRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const piSessionCacheRef = useRef<
-    Record<string, { fetchedAt: number; sessions: KimiSessionSummary[] }>
+    Record<string, { fetchedAt: number; sessions: PiSessionSummary[] }>
   >({});
   const piRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const qoderSessionCacheRef = useRef<

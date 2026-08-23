@@ -58,6 +58,8 @@ pub(crate) mod opencode_provider_profile;
 pub mod pi;
 #[path = "../../engine/pi_auth.rs"]
 pub mod pi_auth;
+#[path = "../../engine/pi_rpc.rs"]
+pub mod pi_rpc;
 #[path = "../../engine/pi_history.rs"]
 pub mod pi_history;
 #[path = "../../engine/pi_provider_profile.rs"]

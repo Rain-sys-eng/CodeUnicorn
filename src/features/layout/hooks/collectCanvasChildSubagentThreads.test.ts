@@ -12,6 +12,29 @@ const thread = (id: string, parentThreadId?: string): ThreadSummary =>
   }) as ThreadSummary;
 
 describe("collectCanvasChildSubagentThreads", () => {
+  it("excludes pi fork-derived threads from subagent counting", () => {
+    const rows = [
+      {
+        ...thread("pi:parent-session"),
+        id: "pi:parent-session",
+      },
+      {
+        ...thread("pi:forked-branch", "pi:parent-session"),
+        engineSource: "pi" as const,
+      },
+      thread("grok:real-subagent", "pi:parent-session"),
+    ];
+    const result = collectCanvasChildSubagentThreads(
+      "pi:parent-session",
+      "ws-1",
+      rows,
+      {},
+      [],
+    );
+    // pi fork 分支不计入子代理（pi 分支归会话树单独控制）
+    expect(result.map((t) => t.id)).toEqual(["grok:real-subagent"]);
+  });
+
   it("includes threads whose parent is the active id", () => {
     const rows = [
       thread("grok:child-1", "shared:parent"),

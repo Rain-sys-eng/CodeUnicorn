@@ -14,15 +14,24 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 
 use super::events::EngineEvent;
+use super::pi_rpc::{PiRpcClient, PiRpcPumpEvent};
 use super::{EngineConfig, EngineType, SendMessageParams};
 
 const THINKING_LEVELS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// RPC resident path: a turn is settled by typed `agent_settled`, not process
+/// EOF, so a generous ceiling is enough (aborts/errors settle long before).
+const PI_RPC_TURN_TIMEOUT: Duration = Duration::from_secs(600);
+/// After `abort`, give pi this long to settle before killing the resident.
+const PI_RPC_ABORT_SETTLE_GRACE: Duration = Duration::from_secs(2);
 
 // ponytail: pi's NDJSON stream has no terminal "result" event, so turn end is
 // detected by stdout EOF. A lingering grandchild (e.g. a bash tool daemon)
@@ -172,6 +181,52 @@ pub struct PiSession {
     custom_args: Option<String>,
     active_processes: Mutex<HashMap<String, ActivePiChildProcess>>,
     interrupted_turns: Mutex<HashSet<String>>,
+    /// RPC resident client (`pi --mode rpc`); None until first use or after exit.
+    rpc: Arc<RwLock<Option<Arc<PiRpcClient>>>>,
+    /// The currently streaming RPC run (main turn + attached steer turns).
+    rpc_run: Arc<RwLock<Option<PiRpcRun>>>,
+    /// Sticky flag: once RPC spawn/handshake fails, stay on print-json fallback.
+    rpc_disabled: Arc<AtomicBool>,
+}
+
+/// State of one streaming RPC agent run. The main turn owns the content
+/// stream; steer turns attach and settle together with the run (empty text).
+struct PiRpcRun {
+    main_turn_id: String,
+    attached_turn_ids: Vec<String>,
+    waiters: Vec<(String, oneshot::Sender<Result<String, String>>)>,
+    response_text: String,
+    saw_tool_activity: bool,
+    tool_names_by_id: HashMap<String, String>,
+    tool_inputs_by_id: HashMap<String, Option<Value>>,
+    stream_error: Option<String>,
+    abort_requested: bool,
+}
+
+impl PiRpcRun {
+    fn new(main_turn_id: &str, waiter: oneshot::Sender<Result<String, String>>) -> Self {
+        Self {
+            main_turn_id: main_turn_id.to_string(),
+            attached_turn_ids: Vec::new(),
+            waiters: vec![(main_turn_id.to_string(), waiter)],
+            response_text: String::new(),
+            saw_tool_activity: false,
+            tool_names_by_id: HashMap::new(),
+            tool_inputs_by_id: HashMap::new(),
+            stream_error: None,
+            abort_requested: false,
+        }
+    }
+}
+
+/// RPC send outcome: `Fallback` means "use the print-json path instead".
+/// `Failed` = terminal error NOT yet emitted（send_message 统一发一次）；
+/// `Settled` = 错误已随 run 结算发过一次（turn timeout 时全 waiter 一起
+/// 结算），send_message 直接返回、禁止二次发 TurnError。
+enum PiRpcSendError {
+    Fallback(String),
+    Failed(String),
+    Settled(String),
 }
 
 #[allow(dead_code)]
@@ -224,6 +279,104 @@ fn unix_timestamp_ms_for_process_diagnostics() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// Settle an RPC run: main turn gets the accumulated text, attached steer
+/// turns settle with empty text (their content is part of the same run's
+/// stream). Failures settle every waiting turn with the same error.
+fn settle_rpc_run(
+    workspace_id: &str,
+    run: PiRpcRun,
+    fatal: Option<String>,
+    emit: &dyn Fn(&str, EngineEvent),
+) {
+    let failure = fatal
+        .or_else(|| {
+            if run.abort_requested {
+                Some("Session stopped.".to_string())
+            } else if run.stream_error.is_some()
+                && run.response_text.trim().is_empty()
+                && !run.saw_tool_activity
+            {
+                run.stream_error.clone()
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            if run.response_text.trim().is_empty() && !run.saw_tool_activity {
+                Some("PI exited without assistant output.".to_string())
+            } else {
+                None
+            }
+        });
+    for (index, (turn_id, waiter)) in run.waiters.into_iter().enumerate() {
+        let is_main = index == 0;
+        match &failure {
+            Some(error) => {
+                emit(
+                    &turn_id,
+                    EngineEvent::TurnError {
+                        workspace_id: workspace_id.to_string(),
+                        error: error.clone(),
+                        code: None,
+                    },
+                );
+                let _ = waiter.send(Err(error.clone()));
+            }
+            None => {
+                let text = if is_main {
+                    run.response_text.clone()
+                } else {
+                    String::new()
+                };
+                emit(
+                    &turn_id,
+                    EngineEvent::TurnCompleted {
+                        workspace_id: workspace_id.to_string(),
+                        result: Some(json!({ "text": text })),
+                    },
+                );
+                let _ = waiter.send(Ok(text));
+            }
+        }
+    }
+}
+
+/// RPC transport carries images inline as base64 ImageContent blocks (the
+/// print-json `@file` argv transport does not exist in RPC mode).
+fn encode_images_for_rpc(
+    images: Option<&[String]>,
+    workspace_path: &Path,
+) -> Result<Vec<Value>, String> {
+    use base64::Engine as _;
+    let files = crate::engine::cli_image_input::resolve_existing_image_files(
+        images,
+        workspace_path,
+    )?;
+    let mut out = Vec::new();
+    for file in files {
+        let bytes = std::fs::read(&file).map_err(|error| {
+            format!("failed to read image {}: {error}", file.display())
+        })?;
+        let ext = file
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let mime = match ext.as_str() {
+            "jpg" | "jpeg" => "image/jpeg",
+            "gif" => "image/gif",
+            "webp" => "image/webp",
+            _ => "image/png",
+        };
+        out.push(json!({
+            "type": "image",
+            "data": base64::engine::general_purpose::STANDARD.encode(bytes),
+            "mimeType": mime,
+        }));
+    }
+    Ok(out)
 }
 
 enum PiStreamLine {
@@ -458,6 +611,9 @@ impl PiSession {
             custom_args: config.custom_args,
             active_processes: Mutex::new(HashMap::new()),
             interrupted_turns: Mutex::new(HashSet::new()),
+            rpc: Arc::new(RwLock::new(None)),
+            rpc_run: Arc::new(RwLock::new(None)),
+            rpc_disabled: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -491,14 +647,534 @@ impl PiSession {
         );
     }
 
-    fn build_command(&self, params: &SendMessageParams) -> Result<Command, String> {
-        let bin = if let Some(ref custom) = self.bin_path {
+    fn resolve_bin_path(&self) -> String {
+        if let Some(ref custom) = self.bin_path {
             custom.clone()
         } else {
             crate::backend::app_server::find_cli_binary("pi", None)
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| "pi".to_string())
-        };
+        }
+    }
+
+    // ===== RPC resident path (`pi --mode rpc`) =====
+
+    /// Ensure a live RPC client. On spawn/handshake failure the sticky
+    /// `rpc_disabled` flag flips so subsequent sends go straight to fallback.
+    async fn ensure_rpc(
+        &self,
+        session_id_hint: Option<&str>,
+        model: Option<&str>,
+    ) -> Result<Arc<PiRpcClient>, String> {
+        if self.rpc_disabled.load(Ordering::SeqCst) {
+            return Err("pi rpc disabled after previous failure".to_string());
+        }
+        {
+            let guard = self.rpc.read().await;
+            if let Some(client) = guard.as_ref() {
+                if client.is_alive().await {
+                    return Ok(client.clone());
+                }
+            }
+        }
+        let mut guard = self.rpc.write().await;
+        if let Some(client) = guard.as_ref() {
+            if client.is_alive().await {
+                return Ok(client.clone());
+            }
+        }
+        let tracked = self.get_session_id().await;
+        let session_id = session_id_hint
+            .map(str::to_string)
+            .or(tracked)
+            .filter(|value| is_valid_pi_session_id_arg(value));
+        let spawn_result = PiRpcClient::spawn(
+            &self.resolve_bin_path(),
+            &self.workspace_path,
+            session_id.as_deref(),
+            model,
+            self.home_dir.as_deref(),
+            self.custom_args.as_deref(),
+        )
+        .await;
+        match spawn_result {
+            Ok(client) => {
+                if let Some(id) = client.session_id().await {
+                    self.set_session_id(Some(id)).await;
+                }
+                self.spawn_rpc_projection(client.clone());
+                *guard = Some(client.clone());
+                log::info!(
+                    "[pi/rpc] resident spawned workspace={} session={:?}",
+                    self.workspace_id,
+                    session_id
+                );
+                Ok(client)
+            }
+            Err(error) => {
+                self.rpc_disabled.store(true, Ordering::SeqCst);
+                Err(error)
+            }
+        }
+    }
+
+    /// Project raw RPC agent events onto EngineEvents routed to the active run.
+    fn spawn_rpc_projection(&self, client: Arc<PiRpcClient>) {
+        let mut receiver = client.subscribe();
+        let event_sender = self.event_sender.clone();
+        let rpc_run = self.rpc_run.clone();
+        let rpc_slot = self.rpc.clone();
+        let workspace_id = self.workspace_id.clone();
+        tokio::spawn(async move {
+            let emit = |turn_id: &str, event: EngineEvent| {
+                let _ = event_sender.send(PiTurnEvent {
+                    turn_id: turn_id.to_string(),
+                    event,
+                });
+            };
+            loop {
+                let pump_event = match receiver.recv().await {
+                    Ok(event) => event,
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        log::warn!("[pi/rpc] projection lagged; skipped {skipped} events");
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                };
+                match pump_event {
+                    PiRpcPumpEvent::Agent(value) => {
+                        let event_type = value
+                            .get("type")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        if event_type == "agent_settled" {
+                            let run = rpc_run.write().await.take();
+                            if let Some(run) = run {
+                                settle_rpc_run(&workspace_id, run, None, &emit);
+                            }
+                            continue;
+                        }
+                        if event_type == "compaction_start" || event_type == "compaction_end" {
+                            let turn_id = {
+                                let guard = rpc_run.read().await;
+                                guard.as_ref().map(|run| run.main_turn_id.clone())
+                            };
+                            if let Some(turn_id) = turn_id {
+                                let kind = if event_type == "compaction_start" {
+                                    "compaction_start"
+                                } else {
+                                    "compaction_end"
+                                };
+                                emit(
+                                    &turn_id,
+                                    EngineEvent::Raw {
+                                        workspace_id: workspace_id.clone(),
+                                        engine: EngineType::Pi,
+                                        data: json!({
+                                            "source": "pi_rpc",
+                                            "kind": kind,
+                                            "payload": value,
+                                        }),
+                                    },
+                                );
+                            }
+                            continue;
+                        }
+                        let mut guard = rpc_run.write().await;
+                        let Some(run) = guard.as_mut() else {
+                            continue;
+                        };
+                        let turn_id = run.main_turn_id.clone();
+                        match parse_pi_stream_line(&value) {
+                            PiStreamLine::TextDelta(delta) => {
+                                run.response_text.push_str(&delta);
+                                emit(
+                                    &turn_id,
+                                    EngineEvent::TextDelta {
+                                        workspace_id: workspace_id.clone(),
+                                        text: delta,
+                                    },
+                                );
+                            }
+                            PiStreamLine::ThinkingDelta(delta) => {
+                                emit(
+                                    &turn_id,
+                                    EngineEvent::ReasoningDelta {
+                                        workspace_id: workspace_id.clone(),
+                                        text: delta,
+                                    },
+                                );
+                            }
+                            PiStreamLine::ToolStart {
+                                tool_id,
+                                tool_name,
+                                args,
+                            } => {
+                                run.saw_tool_activity = true;
+                                run.tool_names_by_id
+                                    .insert(tool_id.clone(), tool_name.clone());
+                                run.tool_inputs_by_id.insert(tool_id.clone(), args.clone());
+                                emit(
+                                    &turn_id,
+                                    EngineEvent::ToolStarted {
+                                        workspace_id: workspace_id.clone(),
+                                        tool_id,
+                                        tool_name,
+                                        input: args,
+                                    },
+                                );
+                            }
+                            PiStreamLine::ToolEnd {
+                                tool_id,
+                                content,
+                                is_error,
+                            } => {
+                                run.saw_tool_activity = true;
+                                let tool_name = run.tool_names_by_id.get(&tool_id).cloned();
+                                let wrapped_output = match run
+                                    .tool_inputs_by_id
+                                    .get(&tool_id)
+                                    .cloned()
+                                {
+                                    Some(Some(input_value)) => Some(json!({
+                                        "_input": input_value,
+                                        "_output": content,
+                                    })),
+                                    _ => Some(Value::String(content.clone())),
+                                };
+                                emit(
+                                    &turn_id,
+                                    EngineEvent::ToolCompleted {
+                                        workspace_id: workspace_id.clone(),
+                                        tool_id,
+                                        tool_name,
+                                        output: wrapped_output,
+                                        error: is_error.then_some(content),
+                                    },
+                                );
+                            }
+                            PiStreamLine::AssistantError(error) => {
+                                run.stream_error = Some(error);
+                            }
+                            PiStreamLine::Usage(_) | PiStreamLine::SessionId(_) | PiStreamLine::Other => {}
+                        }
+                    }
+                    PiRpcPumpEvent::Exited(code) => {
+                        log::warn!(
+                            "[pi/rpc] resident exited workspace={} code={:?}",
+                            workspace_id,
+                            code
+                        );
+                        let run = rpc_run.write().await.take();
+                        if let Some(run) = run {
+                            settle_rpc_run(
+                                &workspace_id,
+                                run,
+                                Some("pi rpc process exited".to_string()),
+                                &emit,
+                            );
+                        }
+                        // Drop the dead handle so the next send respawns.
+                        let mut slot = rpc_slot.write().await;
+                        if slot
+                            .as_ref()
+                            .is_some_and(|current| Arc::ptr_eq(current, &client))
+                        {
+                            *slot = None;
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    /// RPC main path: idle -> `prompt` (new run), streaming -> `steer`
+    /// (attach to the active run; settles with it, empty text).
+    async fn try_send_message_rpc(
+        &self,
+        params: &SendMessageParams,
+        turn_id: &str,
+    ) -> Result<String, PiRpcSendError> {
+        let client = self
+            .ensure_rpc(
+                params.session_id.as_deref(),
+                resolve_model_flag(params.model.as_deref()).as_deref(),
+            )
+            .await
+            .map_err(PiRpcSendError::Fallback)?;
+        // Resident 对齐（仅在新 run 启动前）：发送必须落到调用方 thread 的
+        // 会话文件。活跃 run 期间 skip 对齐——run 的会话是权威；此时若目标
+        // 不同（另一 thread 发送/新会话），诚实拒绝，不跨会话 steer。
+        self.settle_stale_rpc_run_if_idle(&client).await;
+        if self.rpc_run.read().await.is_some() {
+            let target = params.session_id.as_deref().and_then(|value| {
+                is_valid_pi_session_id_arg(value).then_some(value)
+            });
+            let current = client.session_id().await;
+            let mismatched = match target {
+                Some(target) => current.as_deref() != Some(target),
+                // 新会话不能 steer 进既有 run（属于别的会话）。
+                None => true,
+            };
+            if mismatched {
+                // TurnError 由 send_message 的 Failed 臂统一发（禁止双发）。
+                let error =
+                    "另一 PI 会话的 turn 仍在进行中；请等待完成或先停止。".to_string();
+                return Err(PiRpcSendError::Failed(error));
+            }
+        } else if let Err(error) = self
+            .align_rpc_session(&client, params.session_id.as_deref())
+            .await
+        {
+            return Err(PiRpcSendError::Failed(error));
+        }
+        let images = encode_images_for_rpc(params.images.as_deref(), &self.workspace_path)
+            .map_err(PiRpcSendError::Failed)?;
+        if let Some(thinking) = resolve_thinking_flag(params.effort.as_deref()) {
+            // Best effort: level support is model-dependent; failure must not
+            // block the prompt itself.
+            if let Err(error) = client.set_thinking_level(&thinking).await {
+                log::warn!("[pi/rpc] set_thinking_level({thinking}) failed: {error}");
+            }
+        }
+
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut guard = self.rpc_run.write().await;
+            if let Some(run) = guard.as_mut() {
+                if let Err(error) = client.steer(&params.text, images).await {
+                    return Err(PiRpcSendError::Failed(format!(
+                        "pi rpc steer failed: {error}"
+                    )));
+                }
+                run.attached_turn_ids.push(turn_id.to_string());
+                run.waiters.push((turn_id.to_string(), tx));
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::TurnStarted {
+                        workspace_id: self.workspace_id.clone(),
+                        turn_id: turn_id.to_string(),
+                    },
+                );
+            } else {
+                if let Err(error) = client.prompt(&params.text, images).await {
+                    return Err(PiRpcSendError::Failed(format!(
+                        "pi rpc prompt failed: {error}"
+                    )));
+                }
+                *guard = Some(PiRpcRun::new(turn_id, tx));
+                let session_id = client
+                    .session_id()
+                    .await
+                    .unwrap_or_else(|| "pending".to_string());
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::SessionStarted {
+                        workspace_id: self.workspace_id.clone(),
+                        session_id,
+                        engine: EngineType::Pi,
+                        turn_id: Some(turn_id.to_string()),
+                    },
+                );
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::TurnStarted {
+                        workspace_id: self.workspace_id.clone(),
+                        turn_id: turn_id.to_string(),
+                    },
+                );
+            }
+        }
+
+        match tokio::time::timeout(PI_RPC_TURN_TIMEOUT, rx).await {
+            Ok(Ok(Ok(text))) => Ok(text),
+            Ok(Ok(Err(error))) => Err(PiRpcSendError::Failed(error)),
+            Ok(Err(_closed)) => Err(PiRpcSendError::Failed(
+                "pi rpc run waiter dropped".to_string(),
+            )),
+            Err(_elapsed) => {
+                // turn 超时 = 整个 run 失联：必须把 run 摘下、全部 waiter
+                // （main + attached steer）以同一错误结算——否则 agent_settled
+                // 迟到或 stale-settle 自愈时同一 turn 会收到第二次终态
+                // （TurnError 后又 TurnCompleted，双结算违反 terminal 纪律）。
+                let error = "pi rpc turn timed out".to_string();
+                let run = self.rpc_run.write().await.take();
+                if let Some(run) = run {
+                    let workspace_id = self.workspace_id.clone();
+                    let sender = self.event_sender.clone();
+                    settle_rpc_run(
+                        &workspace_id,
+                        run,
+                        Some(error.clone()),
+                        &|turn_id, event| {
+                            let _ = sender.send(PiTurnEvent {
+                                turn_id: turn_id.to_string(),
+                                event,
+                            });
+                        },
+                    );
+                } else {
+                    // run 已被投影侧结算（agent_settled 抢先）：补发本 turn 终态。
+                    self.emit_error(turn_id, error.clone());
+                }
+                let _ = client.abort().await;
+                Err(PiRpcSendError::Settled(error))
+            }
+        }
+    }
+
+    /// Public RPC accessors for Tauri commands. These never fall back: the
+    /// caller needs RPC-only state (stats / tree / fork), so failure is
+    /// surfaced as a command error.
+    pub async fn rpc_client_for_commands(&self) -> Result<Arc<PiRpcClient>, String> {
+        self.rpc_disabled.store(false, Ordering::SeqCst);
+        self.ensure_rpc(None, None).await
+    }
+
+    /// Whether an RPC agent run is currently streaming. Fork / session-file
+    /// switches MUST be rejected while this is true (the run's events and the
+    /// file switch would corrupt each other).
+    pub async fn rpc_has_active_run(&self) -> bool {
+        self.rpc_run.read().await.is_some()
+    }
+
+    /// Self-heal: `agent_settled` travels the broadcast channel; if it is ever
+    /// lost (lag/edge), the run entry would stay forever and every subsequent
+    /// fork/align/cross-session send would be rejected as "turn in progress".
+    /// The client is the ground truth: run entry present but RPC NOT
+    /// streaming = settlement was missed → settle as error and clear.
+    async fn settle_stale_rpc_run_if_idle(&self, client: &Arc<PiRpcClient>) {
+        {
+            let guard = self.rpc_run.read().await;
+            if guard.is_none() || client.is_streaming() {
+                return;
+            }
+        }
+        let run = self.rpc_run.write().await.take();
+        if let Some(run) = run {
+            log::warn!(
+                "[pi/rpc] settling stale run turn={} (settlement event missed)",
+                run.main_turn_id
+            );
+            let workspace_id = self.workspace_id.clone();
+            let sender = self.event_sender.clone();
+            settle_rpc_run(
+                &workspace_id,
+                run,
+                Some("PI turn lost its settlement event; settled defensively.".to_string()),
+                &|turn_id, event| {
+                    let _ = sender.send(PiTurnEvent {
+                        turn_id: turn_id.to_string(),
+                        event,
+                    });
+                },
+            );
+        }
+    }
+
+    /// Align the resident to the session the CALLER is looking at. A
+    /// workspace has one resident per runtime key but many pi threads; the
+    /// resident follows the last fork/switch, so every send / tree / stats /
+    /// fork command MUST align first, otherwise content lands in the wrong
+    /// session file (2026-08-23「会话树结构不对 / 幕布错乱」根因)。
+    ///
+    /// `target_session_id = None` means "fresh session": if the resident is
+    /// currently bound to an existing file, start a new one.
+    pub async fn align_rpc_session(
+        &self,
+        client: &Arc<PiRpcClient>,
+        target_session_id: Option<&str>,
+    ) -> Result<(), String> {
+        self.settle_stale_rpc_run_if_idle(client).await;
+        let target = target_session_id
+            .map(str::trim)
+            .filter(|value| is_valid_pi_session_id_arg(value));
+        let current = client.session_id().await;
+        match target {
+            Some(target) if current.as_deref() == Some(target) => Ok(()),
+            Some(target) => {
+                if self.rpc_has_active_run().await {
+                    return Err(
+                        "另一 PI 会话的 turn 仍在进行中；请等待完成或先停止。".to_string(),
+                    );
+                }
+                let file = match crate::engine::pi_history::resolve_pi_session_file_by_id(
+                    self.home_dir.as_deref(),
+                    target,
+                    &self.workspace_path,
+                )
+                .await?
+                {
+                    Some(file) => file,
+                    None => {
+                        // 目标 session 文件不存在（stale 绑定 / 文件被清理）：
+                        // 不硬失败（避免触发 recovery 卡片），降级为新会话。
+                        // 文件既然不存在，本来就没有可「继续」的历史。
+                        log::warn!(
+                            "[pi/rpc] session file not found for {}, starting fresh session (workspace={})",
+                            target,
+                            self.workspace_id
+                        );
+                        client.new_session().await?;
+                        if let Some(id) = client.session_id().await {
+                            self.set_session_id(Some(id)).await;
+                        }
+                        return Ok(());
+                    }
+                };
+                client.switch_session(&file.to_string_lossy()).await?;
+                self.set_session_id(Some(target.to_string())).await;
+                log::info!(
+                    "[pi/rpc] aligned resident to session {} workspace={}",
+                    target,
+                    self.workspace_id
+                );
+                Ok(())
+            }
+            None => {
+                // Fresh conversation requested while the resident is bound to
+                // an existing file: start a new session instead of appending
+                // to the old one.
+                if current.is_some() {
+                    if self.rpc_has_active_run().await {
+                        return Err(
+                            "另一 PI 会话的 turn 仍在进行中；请等待完成或先停止。".to_string(),
+                        );
+                    }
+                    client.new_session().await?;
+                    if let Some(id) = client.session_id().await {
+                        self.set_session_id(Some(id)).await;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// After a fork the resident is bound to a NEW session file; refresh the
+    /// tracked session id so the next send/resume follows it.
+    pub async fn rpc_resync_session_id(&self, client: &Arc<PiRpcClient>) -> Option<String> {
+        match client.get_state().await {
+            Ok(state) => {
+                let id = state
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                if let Some(ref id) = id {
+                    self.set_session_id(Some(id.clone())).await;
+                }
+                id
+            }
+            Err(error) => {
+                log::warn!("[pi/rpc] get_state after fork failed: {error}");
+                None
+            }
+        }
+    }
+
+    fn build_command(&self, params: &SendMessageParams) -> Result<Command, String> {
+        let bin = self.resolve_bin_path();
 
         let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
         cmd.current_dir(&self.workspace_path);
@@ -581,6 +1257,43 @@ impl PiSession {
     }
 
     pub async fn send_message(
+        &self,
+        params: SendMessageParams,
+        turn_id: &str,
+    ) -> Result<String, String> {
+        match self.try_send_message_rpc(&params, turn_id).await {
+            Ok(text) => return Ok(text),
+            Err(PiRpcSendError::Fallback(reason)) => {
+                log::warn!(
+                    "[pi/send] turn={} rpc unavailable, falling back to print-json: {}",
+                    turn_id,
+                    reason
+                );
+            }
+            Err(PiRpcSendError::Failed(error)) => {
+                self.emit_error(turn_id, error.clone());
+                return Err(error);
+            }
+            Err(PiRpcSendError::Settled(error)) => {
+                // 终态已随 run 结算发出（turn timeout 路径），禁止重发。
+                return Err(error);
+            }
+        }
+        // print-json fallback 是 spawn-per-turn：同会话并发进程会交叉写同一
+        // session JSONL。融合（fusion）在矩阵升 supported 后可能打到这条
+        // 路径——此时必须拒绝而不是假装 steer，让消息留在队列里。
+        {
+            let active = self.active_processes.lock().await;
+            if !active.is_empty() {
+                let error = "PI session is busy (rpc unavailable, print-json fallback cannot steer); the message stays queued.".to_string();
+                self.emit_error(turn_id, error.clone());
+                return Err(error);
+            }
+        }
+        self.send_message_print_json(params, turn_id).await
+    }
+
+    async fn send_message_print_json(
         &self,
         params: SendMessageParams,
         turn_id: &str,
@@ -927,6 +1640,26 @@ impl PiSession {
     }
 
     pub async fn interrupt(&self) -> Result<(), String> {
+        // RPC resident: typed abort first, kill only as the settle fallback.
+        // 仅在确有活跃 run 时才 abort + grace sleep——空闲时 Esc/stop 会走
+        // 到这里，无 run 还 abort 并睡 2s 是纯延迟（interrupt_turn 已有同款
+        // 守卫，这里对齐）。
+        let rpc_client = self.rpc.read().await.clone();
+        if let Some(client) = rpc_client {
+            if client.is_alive().await && self.rpc_run.read().await.is_some() {
+                if let Some(run) = self.rpc_run.write().await.as_mut() {
+                    run.abort_requested = true;
+                }
+                if let Err(error) = client.abort().await {
+                    log::warn!("[pi/rpc] abort command failed: {error}");
+                }
+                tokio::time::sleep(PI_RPC_ABORT_SETTLE_GRACE).await;
+                if self.rpc_run.read().await.is_some() {
+                    log::warn!("[pi/rpc] abort did not settle within grace; killing resident");
+                    client.kill().await;
+                }
+            }
+        }
         let mut active = self.active_processes.lock().await;
         let mut interrupted = self.interrupted_turns.lock().await;
         let mut killed_turn_ids = Vec::new();
@@ -956,6 +1689,25 @@ impl PiSession {
     }
 
     pub async fn interrupt_turn(&self, turn_id: &str) -> Result<(), String> {
+        // RPC resident: a turn interrupt = abort the shared run (the run owns
+        // the turn). Kill only when abort does not settle in time.
+        let rpc_client = self.rpc.read().await.clone();
+        if let Some(client) = rpc_client {
+            if client.is_alive().await && self.rpc_run.read().await.is_some() {
+                if let Some(run) = self.rpc_run.write().await.as_mut() {
+                    run.abort_requested = true;
+                }
+                if let Err(error) = client.abort().await {
+                    log::warn!("[pi/rpc] abort command failed: {error}");
+                }
+                tokio::time::sleep(PI_RPC_ABORT_SETTLE_GRACE).await;
+                if self.rpc_run.read().await.is_some() {
+                    client.kill().await;
+                }
+                self.interrupted_turns.lock().await.insert(turn_id.to_string());
+                return Ok(());
+            }
+        }
         let mut active = self.active_processes.lock().await;
         let Some(process) = active.get_mut(turn_id) else {
             return Ok(());
@@ -984,6 +1736,14 @@ impl PiSession {
 
 impl Drop for PiSession {
     fn drop(&mut self) {
+        if let Ok(mut slot) = self.rpc.try_write() {
+            if let Some(client) = slot.take() {
+                let client = client.clone();
+                tokio::spawn(async move {
+                    client.kill().await;
+                });
+            }
+        }
         let Ok(mut active) = self.active_processes.try_lock() else {
             log::warn!(
                 "[pi] dropping session workspace={} while active_processes is locked",

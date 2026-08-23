@@ -142,12 +142,12 @@ export const GENERATED_ENGINE_CAPABILITY_MATRIX: Readonly<
     "collaboration.mode": "unsupported",
     "session.continuation": "supported",
     "image.input": "supported",
-    "input.mid-turn": "unsupported",
+    "input.mid-turn": "supported",
     "session.resume": "supported",
-    "session.fork": "unknown",
+    "session.fork": "supported",
     "session.switch": "unknown",
-    "session.tree": "unknown",
-    "rpc.server": "unsupported"
+    "session.tree": "supported",
+    "rpc.server": "supported"
   },
   "dsh": {
     "streaming.text": "supported",

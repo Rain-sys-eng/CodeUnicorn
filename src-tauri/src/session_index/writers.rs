@@ -1665,7 +1665,7 @@ pub(crate) fn rows_from_pi_summaries(
                 cwd: Some(workspace_key.clone()),
                 workspace_path: Some(workspace_key.clone()),
                 physical_path: None,
-                parent_session_id: None,
+                parent_session_id: session.parent_session_id.clone(),
                 size_bytes: session.file_size_bytes,
                 provider_profile_id: None,
                 provider_profile_name: None,
@@ -1898,6 +1898,7 @@ mod tests {
                 engine: Some("pi".into()),
                 canonical_session_id: None,
                 attribution_status: None,
+                parent_session_id: None,
             }],
         );
         assert_eq!(rows.len(), 1);

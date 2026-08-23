@@ -48,6 +48,7 @@ pub(crate) mod opencode_native_artifact;
 pub(crate) mod opencode_provider_profile;
 pub mod pi;
 pub mod pi_auth;
+pub mod pi_rpc;
 pub(crate) mod pi_history;
 pub(crate) mod pi_provider_profile;
 pub mod qoder;

@@ -15,6 +15,7 @@ import type { EngineType, ThreadSummary } from "../../../types";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { EngineIcon } from "../../engine/components/EngineIcon";
+import { PiThreadBranchBadge } from "../../pi-session/components/PiThreadBranchBadge";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
 import { resolveIsSharedSession } from "../../shared-session/utils/sharedSessionIdentity";
 import { resolveEngineProviderLabel } from "../utils/codexProviderLabel";
@@ -479,6 +480,12 @@ const ThreadRowItem = memo(function ThreadRowItem({
         ) : null}
         {relativeTime && !runtimeIndicator ? (
           <span className="thread-time">{relativeTime}</span>
+        ) : null}
+        {engineSource === "pi" && isActiveThread ? (
+          <PiThreadBranchBadge
+            workspaceId={nestedWorkspaceId}
+            threadId={thread.id}
+          />
         ) : null}
       </div>
     </FloatingTooltipButton>

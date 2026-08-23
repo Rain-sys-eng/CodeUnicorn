@@ -1,0 +1,246 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  piFork,
+  piGetForkMessages,
+  piSessionIdFromThreadId,
+  type PiForkMessage,
+} from "../api/piSessionRpc";
+import { requestPiThreadJump } from "../store/piSessionStore";
+
+/**
+ * Shared fork-entry resolution: the RPC `fork` command needs an entryId,
+ * which the timeline does not carry — resolve it by matching the bubble
+ * text against `get_fork_messages`.
+ */
+export async function resolvePiForkEntryId(
+  workspaceId: string,
+  sessionId: string | null,
+  messageText: string,
+): Promise<PiForkMessage | null> {
+  const messages = await piGetForkMessages({ workspaceId, sessionId });
+  const needle = messageText.trim();
+  if (!needle) {
+    return null;
+  }
+  return (
+    messages.find((m) => m.text.trim() === needle) ??
+    messages.find(
+      (m) =>
+        m.text.trim().startsWith(needle.slice(0, 80)) ||
+        needle.startsWith(m.text.trim().slice(0, 80)),
+    ) ??
+    null
+  );
+}
+
+type PiForkDialogProps = {
+  open: boolean;
+  quote: string;
+  busy: boolean;
+  error: string | null;
+  /** 成功后的短暂确认态（自动关闭前展示新会话去向）。 */
+  success: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+/**
+ * Fork confirmation dialog. Copy deliberately states the real RPC semantics:
+ * fork creates a NEW session file — it is NOT an in-tree lane (pi RPC has no
+ * leaf-move command; see change design §2).
+ */
+export function PiForkDialog({
+  open,
+  quote,
+  busy,
+  error,
+  success,
+  onCancel,
+  onConfirm,
+}: PiForkDialogProps) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, onCancel]);
+
+  if (!open) {
+    return null;
+  }
+  if (success) {
+    return createPortal(
+      <div className="pi-overlay" role="presentation">
+        <div className="pi-dialog" role="alertdialog" aria-label="分叉已创建">
+          <h3>✓ 分叉已创建</h3>
+          <p>
+            新分支已出现在右侧<b>会话树</b>面板，源消息已填入它的输入框草稿，跳转即可继续。
+          </p>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+  return createPortal(
+    <div className="pi-overlay" onClick={onCancel} role="presentation">
+      <div
+        className="pi-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="分叉会话"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h3>
+          ⑂ 从这条消息分叉
+          <span className="mono">pi RPC: fork</span>
+        </h3>
+        <p>
+          将回到该消息<b>之前的点</b>创建<b>新会话文件</b>：以该消息为草稿重写，<b>源会话保持不动</b>。
+          新分支出现在会话树面板（不占侧栏），创建后自动跳转继续。
+        </p>
+        <div className="quote">「{quote}」</div>
+        {error ? <p className="pi-dialog-error">{error}</p> : null}
+        <div className="pi-dialog-foot">
+          <button
+            type="button"
+            className="pi-btn-plain"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="pi-btn-primary"
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy ? "分叉中…" : "创建分叉"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+type UsePiForkFlowArgs = {
+  workspaceId: string;
+  threadId: string;
+  onForked: (forkedText: string, forkedSessionId: string | null) => void;
+};
+
+/**
+ * Fork flow controller used by both the bubble ⑂ action (text → entryId
+ * resolution) and the tree overlay (entryId already known).
+ */
+export function usePiForkFlow({
+  workspaceId,
+  threadId,
+  onForked,
+}: UsePiForkFlowArgs) {
+  const [state, setState] = useState<{
+    entryId: string | null;
+    quote: string;
+    busy: boolean;
+    error: string | null;
+    success: boolean;
+  } | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const beginForkWithQuote = useCallback((quote: string) => {
+    setState({ entryId: null, quote, busy: false, error: null, success: false });
+  }, []);
+
+  const beginForkWithEntryId = useCallback(
+    (entryId: string, quote: string) => {
+      setState({ entryId, quote, busy: false, error: null, success: false });
+    },
+    [],
+  );
+
+  const cancel = useCallback(() => setState(null), []);
+
+  const confirm = useCallback(async () => {
+    if (!state) {
+      return;
+    }
+    setState({ ...state, busy: true, error: null });
+    try {
+      const sessionId = piSessionIdFromThreadId(threadId);
+      const entryId =
+        state.entryId ??
+        (await resolvePiForkEntryId(workspaceId, sessionId, state.quote))
+          ?.entryId ??
+        null;
+      if (!entryId) {
+        setState({
+          ...state,
+          busy: false,
+          error: "无法在 pi 会话中定位这条消息（可能已被压缩）。",
+        });
+        return;
+      }
+      const result = await piFork({ workspaceId, sessionId, entryId });
+      if (result.cancelled) {
+        setState(null);
+        return;
+      }
+      const forkedText = result.text ?? state.quote;
+      onForked(forkedText, result.forkedSessionId);
+      if (result.forkedSessionId) {
+        // fork 成功 = 用户明确的「去新分支继续」意图：跳转分叉幕布（草稿
+        // 已在新会话 composer）；同时保留成功确认态——跳转若因会话索引
+        // 延迟尚未生效，用户也有明确去向反馈，不会「没有反应」。
+        requestPiThreadJump(workspaceId, `pi:${result.forkedSessionId}`);
+        setState({ ...state, busy: false, error: null, success: true });
+        successTimerRef.current = setTimeout(() => setState(null), 1600);
+        return;
+      }
+      // forkedSessionId 缺失的退化路径：给成功确认态告知去向。
+      setState({ ...state, busy: false, error: null, success: true });
+      successTimerRef.current = setTimeout(() => setState(null), 1600);
+    } catch (error) {
+      setState({
+        ...state,
+        busy: false,
+        error: error instanceof Error ? error.message : String(error),
+        success: false,
+      });
+    }
+  }, [state, workspaceId, threadId, onForked]);
+
+  const dialog = useMemo(
+    () => (
+      <PiForkDialog
+        open={state !== null}
+        quote={state?.quote ?? ""}
+        busy={state?.busy ?? false}
+        error={state?.error ?? null}
+        success={state?.success ?? false}
+        onCancel={cancel}
+        onConfirm={() => void confirm()}
+      />
+    ),
+    [state, cancel, confirm],
+  );
+
+  return { beginForkWithQuote, beginForkWithEntryId, forkDialog: dialog };
+}

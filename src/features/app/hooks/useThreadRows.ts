@@ -92,6 +92,15 @@ export function useThreadRows(threadParentById: Record<string, string>) {
         if (isSharedSidebarHiddenPup(thread, parentId, sharedHiddenParentKeys)) {
           return;
         }
+        // pi fork 派生会话：不占侧栏（顶层或嵌套都不渲染）——分支线路由
+        // 右侧面板「会话树」统一控制；thread 本体仍在 store，树内跳转经
+        // onSelectThread 直达（与 Shared pup 同款的侧栏级隐藏，不污染数据）。
+        if (
+          (thread.engineSource === "pi" || thread.id.startsWith("pi:")) &&
+          parentId
+        ) {
+          return;
+        }
         const visibleParentId = resolveVisibleParentThreadId(
           parentId,
           thread.id,

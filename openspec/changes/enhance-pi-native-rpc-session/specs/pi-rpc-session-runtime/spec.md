@@ -1,0 +1,129 @@
+# pi-rpc-session-runtime Specification
+
+## Purpose
+
+定义 PI 引擎经 `pi --mode rpc` 长驻进程的运行时契约：resident process 生命周期、strict JSONL framing、request/response 关联、steer/follow-up/abort/compact/fork/tree 命令面，以及 print-json fallback 纪律。
+
+## Requirements
+
+## ADDED Requirements
+
+### Requirement: PI 会话 MUST 以 RPC 长驻进程为主路径
+
+系统 MUST 为每个 native PI 会话维护一个 `pi --mode rpc` resident process（per workspace × session），并在进程退出后于下一次发送时惰性重建。
+
+#### Scenario: 首次发送惰性 spawn
+
+- **WHEN** native PI thread 发起首次发送且无存活 RPC 进程
+- **THEN** 系统 MUST spawn `pi --mode rpc`（带 `--session-id <id>`（如有）、home/custom args）
+- **AND** spawn 后 MUST 以 `get_state` 完成握手再受理 prompt
+
+#### Scenario: 进程死亡后重建
+
+- **WHEN** RPC 进程已退出（try_wait 检测到退出态）
+- **THEN** 下一次发送 MUST 丢弃旧句柄并重新 spawn
+- **AND** 当前受影响 turn MUST 以 TurnError 结算，不静默成功
+
+#### Scenario: RPC 不可用时回退 print-json
+
+- **WHEN** RPC spawn 或握手失败
+- **THEN** 系统 MUST log warn 并回退既有 `pi --print --mode json` spawn-per-turn 路径
+- **AND** 用户发送 MUST NOT 因此失败
+
+### Requirement: RPC framing MUST 遵循 strict JSONL
+
+系统 MUST 仅以 `\n` 作为记录分隔符解析 RPC stdout，并容忍 `\r\n`（strip 尾部 `\r`）。
+
+#### Scenario: U+2028/U+2029 不分割记录
+
+- **WHEN** stdout 内容包含 U+2028 或 U+2029
+- **THEN** 系统 MUST NOT 将其视为记录边界
+
+#### Scenario: response 按 id 关联
+
+- **WHEN** 收到 `type=="response"` 且含 `id`
+- **THEN** 系统 MUST 结算对应该 id 的 pending request
+- **AND** 超时（30s）或迟到的响应 MUST 被丢弃且不 panic
+- **AND** pending request MUST 在写 stdin 之前注册（response 走独立 stdout pump，先写后注册存在到达窗口，未注册的 response 会被丢弃导致调用方干等超时；写失败 MUST 回滚 pending）
+
+### Requirement: Extension UI request MUST auto-cancel
+
+在 mossx headless 宿主中，RPC 进程的 extension UI 交互请求 MUST 一律以 `cancelled` 应答。
+
+#### Scenario: select/confirm/input/editor 请求
+
+- **WHEN** stdout 出现 extension UI request
+- **THEN** 系统 MUST 立即写入 `{"type":"extension_ui_response","id":<同 id>,"cancelled":true}`
+- **AND** MUST NOT 桥接 mossx elicitation UI（v1 边界）
+
+### Requirement: Resident MUST 对齐调用方会话文件
+
+一个 workspace 可有多个 pi thread，但 resident 每个 runtime key 只有一个且跟随最近一次 fork/switch。系统 MUST 在每次发送与每个 RPC 命令前对齐 resident 到调用方 thread 的会话文件，禁止内容落错会话。
+
+#### Scenario: 发送前对齐
+
+- **WHEN** 发起发送且目标 session 与 resident 当前绑定不一致
+- **THEN** 系统 MUST 先 `switch_session` 到目标会话文件（经 pi_history 解析 id→file）
+- **AND** 目标为新会话（无 session id）时 MUST `new_session`，禁止附加到旧文件
+
+#### Scenario: 活跃 run 禁止跨会话操作
+
+- **WHEN** 存在未 settle 的 agent run 且操作目标会话与 run 所属会话不同
+- **THEN** 系统 MUST 拒绝并返回「另一 PI 会话的 turn 仍在进行中」
+- **AND** MUST NOT 跨会话 steer 或切换文件
+
+#### Scenario: 树/统计/compact/fork 命令对齐
+
+- **WHEN** 执行 `pi_get_session_tree` / `pi_get_session_stats` / `pi_compact` / `pi_fork` / `pi_get_fork_messages`
+- **THEN** 命令 MUST 携带调用方 thread 的 session id 并先完成对齐
+- **AND** 返回的数据 MUST 属于该 thread 的会话而非 resident 先前绑定的会话
+
+### Requirement: 发送语义 MUST 区分 idle prompt 与 streaming steer
+
+系统 MUST 按 RPC 会话的 streaming 状态选择 `prompt` 或 `steer` 命令，并以 typed 事件而非进程生命周期判定 turn 终态。
+
+#### Scenario: idle 时发送
+
+- **WHEN** RPC 会话 `isStreaming == false`
+- **THEN** 系统 MUST 发送 `prompt` 命令
+- **AND** turn 终态 MUST 以 typed `agent_settled` 为准，进程退出只算 cleanup
+
+#### Scenario: streaming 时融合发送
+
+- **WHEN** RPC 会话 `isStreaming == true` 且 delivery decision 为 same-run steer
+- **THEN** 系统 MUST 发送 `steer` 命令
+- **AND** steered user message MUST 由前端乐观气泡上幕布（`wasProcessing && steerEnabled` 既有链路）
+- **AND** 后端 MUST NOT 重复投影 user echo（避免双气泡）
+
+#### Scenario: 中断
+
+- **WHEN** 用户中断当前 turn
+- **THEN** 系统 MUST 发送 `abort` 命令
+- **AND** 2s 内未 settle MUST kill 进程兜底
+- **AND** 无活跃 run 时 MUST NOT abort 或等待 grace（空闲中断零延迟）
+
+#### Scenario: turn 超时一次结算
+
+- **WHEN** RPC turn 超过 10min 未 settle
+- **THEN** 系统 MUST 摘下 run 并以同一错误结算全部 waiter（main + attached steer），随后 abort
+- **AND** 同一 turn MUST NOT 收到第二次终态（迟到 `agent_settled` 或 stale-settle 自愈面对空 run 直接跳过；已结算路径 MUST NOT 被外层重发 TurnError）
+
+### Requirement: 图片输入 MUST 走 base64 images 字段
+
+RPC 路径下系统 MUST 以 `images` 字段（base64 ImageContent）传输图片，禁止复用 print 模式的 `@file` argv 传输。
+
+#### Scenario: RPC 路径携带图片
+
+- **WHEN** 发送参数包含图片文件
+- **THEN** 系统 MUST 读取文件并编码为 `images: [{type:"image",data,mimeType}]`
+- **AND** MUST NOT 使用 print 模式的 `@file` argv 传输
+
+### Requirement: ACK 分级 MUST 不假装
+
+系统 MUST 区分 command acceptance 与 turn settlement：response.success 仅代表受理，终态只能来自 typed 事件流。
+
+#### Scenario: command response 不是 turn 终态
+
+- **WHEN** `prompt`/`steer` 的 response 返回 `success: true`
+- **THEN** 系统 MUST 仅将其视为 accepted/queued
+- **AND** turn 结算 MUST 等待 `agent_settled` 或 typed error 事件

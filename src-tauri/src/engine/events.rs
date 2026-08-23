@@ -1020,6 +1020,80 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                         "params": Value::Object(params),
                     })
                 }
+            } else if matches!(engine, EngineType::Pi) {
+                // PI RPC compaction events → canonical thread/compaction methods
+                // (same surface Claude uses, so curtain rendering is shared).
+                let kind = data.get("kind").and_then(Value::as_str).unwrap_or("");
+                let payload = data.get("payload").cloned().unwrap_or(Value::Null);
+                match kind {
+                    "compaction_start" => {
+                        let reason = payload
+                            .get("reason")
+                            .and_then(Value::as_str)
+                            .unwrap_or("manual")
+                            .to_string();
+                        json!({
+                            "method": "thread/compacting",
+                            "params": {
+                                "threadId": thread_id,
+                                "reason": reason,
+                            }
+                        })
+                    }
+                    "compaction_end" => {
+                        let aborted = payload
+                            .get("aborted")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false);
+                        let error_message = payload
+                            .get("errorMessage")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                        if aborted || payload.get("result").is_none() || error_message.is_some() {
+                            json!({
+                                "method": "thread/compactionFailed",
+                                "params": {
+                                    "threadId": thread_id,
+                                    "reason": error_message.unwrap_or_else(|| {
+                                        if aborted {
+                                            "Compaction aborted".to_string()
+                                        } else {
+                                            "Compaction failed".to_string()
+                                        }
+                                    }),
+                                }
+                            })
+                        } else {
+                            let result = payload.get("result").cloned().unwrap_or(Value::Null);
+                            json!({
+                                "method": "thread/compacted",
+                                "params": {
+                                    "threadId": thread_id,
+                                    "tokensBefore": result.get("tokensBefore").cloned().unwrap_or(Value::Null),
+                                    "estimatedTokensAfter": result.get("estimatedTokensAfter").cloned().unwrap_or(Value::Null),
+                                    "firstKeptEntryId": result.get("firstKeptEntryId").cloned().unwrap_or(Value::Null),
+                                }
+                            })
+                        }
+                    }
+                    _ => {
+                        let mut params = match data {
+                            Value::Object(map) => map.clone(),
+                            _ => {
+                                let mut map = serde_json::Map::new();
+                                map.insert("data".to_string(), data.clone());
+                                map
+                            }
+                        };
+                        params
+                            .entry("threadId".to_string())
+                            .or_insert_with(|| Value::String(thread_id.to_string()));
+                        json!({
+                            "method": format!("{}/raw", engine.icon()),
+                            "params": Value::Object(params),
+                        })
+                    }
+                }
             } else {
                 let mut params = match data {
                     Value::Object(map) => map.clone(),
@@ -1050,6 +1124,76 @@ pub fn engine_event_to_app_server_event_with_turn_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pi_rpc_compaction_events_map_to_canonical_thread_methods() {
+        let start = EngineEvent::Raw {
+            workspace_id: "ws".to_string(),
+            engine: EngineType::Pi,
+            data: json!({
+                "source": "pi_rpc",
+                "kind": "compaction_start",
+                "payload": {"type": "compaction_start", "reason": "manual"},
+            }),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &start,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("compaction_start should map");
+        assert_eq!(event.message["method"], "thread/compacting");
+        assert_eq!(event.message["params"]["reason"], "manual");
+
+        let end = EngineEvent::Raw {
+            workspace_id: "ws".to_string(),
+            engine: EngineType::Pi,
+            data: json!({
+                "source": "pi_rpc",
+                "kind": "compaction_end",
+                "payload": {
+                    "type": "compaction_end",
+                    "reason": "manual",
+                    "aborted": false,
+                    "result": {"tokensBefore": 150000, "estimatedTokensAfter": 32000},
+                },
+            }),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &end,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("compaction_end should map");
+        assert_eq!(event.message["method"], "thread/compacted");
+        assert_eq!(event.message["params"]["tokensBefore"], 150000);
+
+        let failed = EngineEvent::Raw {
+            workspace_id: "ws".to_string(),
+            engine: EngineType::Pi,
+            data: json!({
+                "source": "pi_rpc",
+                "kind": "compaction_end",
+                "payload": {
+                    "type": "compaction_end",
+                    "aborted": false,
+                    "errorMessage": "quota exceeded",
+                    "result": null,
+                },
+            }),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &failed,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("compaction failure should map");
+        assert_eq!(event.message["method"], "thread/compactionFailed");
+        assert_eq!(event.message["params"]["reason"], "quota exceeded");
+    }
 
     #[test]
     fn event_serialization() {

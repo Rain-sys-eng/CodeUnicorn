@@ -207,6 +207,12 @@ import {
   MultiAgentComposerToggle,
 } from "../../multi-agent/components/ComposerToggle";
 import { SharedProviderRetryToggle } from "../../shared-session/provider-retry/SharedProviderRetryToggle";
+import { PiCompactEntry } from "../../pi-session/components/PiCompactDialog";
+import {
+  openPiTreeOverlay,
+  usePiSessionTree,
+  usePiTreeOverlayKey,
+} from "../../pi-session/store/piSessionStore";
 
 
 type RewindExecutionOptions = {
@@ -1605,6 +1611,9 @@ function ComposerImpl({
     if (activeId) {
       for (const [childId, parentId] of Object.entries(parentMap)) {
         if (parentId !== activeId || !childId || childId === activeId) continue;
+        // pi fork 派生会话不是子代理（分支归会话树控制，不计子代理条）
+        // capability-router-allow-engine-branch: pi 分域，见 enhance-pi-native-rpc-session
+        if (childId.startsWith("pi:")) continue;
         if (byId.has(childId)) continue;
         byId.set(childId, {
           id: childId,
@@ -1692,6 +1701,38 @@ function ComposerImpl({
     childSubagentThreadIds: stripChildThreads.map((thread) => thread.id),
     deferSummary: shouldDeferStatusSummary,
   });
+  // pi 会话树 pill（native pi 专属）：run-status 条上与 todo/subagent/plan/edit 平级
+  const piTreeOverlayKey = usePiTreeOverlayKey();
+  const piSessionTree = usePiSessionTree(
+    activeWorkspaceId ?? "",
+    activeThreadId ?? "",
+  );
+  const piTreePill = useMemo(() => {
+    // native pi 专属：shared 会话（含 pi 作为 Shared target）不显示 pill，
+    // 避免把 Shared-owned binding 拉进会话树（隔离纪律）
+    if (
+      selectedEngine !== "pi" || // capability-router-allow-engine-branch: pi-only 会话树 pill, 见 enhance-pi-native-rpc-session
+      isSharedSessionResolved ||
+      !activeWorkspaceId ||
+      !activeThreadId
+    ) {
+      return undefined;
+    }
+    const key = `${activeWorkspaceId}:${activeThreadId}`;
+    return {
+      active: piTreeOverlayKey === key,
+      laneCount: piSessionTree?.laneCount ?? null,
+      onToggle: () => openPiTreeOverlay(activeWorkspaceId, activeThreadId),
+    };
+  }, [
+    selectedEngine,
+    isSharedSessionResolved,
+    activeWorkspaceId,
+    activeThreadId,
+    piTreeOverlayKey,
+    piSessionTree,
+  ]);
+
   const statusTodos = useMemo(() => {
     if (selectedEngine !== "dsh") {
       return scannedStatusTodos;
@@ -3624,6 +3665,7 @@ function ComposerImpl({
               mergePlanIntoTodos={mergePlanIntoTodos}
               sessionFileChanges={sessionFileChanges}
               sessionScopeKey={activeThreadId ?? null}
+              piTree={piTreePill}
               isCodexEngine={isCodexEngine}
               onOpenDiffPath={onOpenDiffPath}
               onRevertFile={
@@ -3872,6 +3914,14 @@ function ComposerImpl({
                             }
                           />
                         )}
+                        {selectedEngine === "pi" && // capability-router-allow-engine-branch: pi-only /compact entry, 见 enhance-pi-native-rpc-session
+                        activeWorkspaceId &&
+                        activeThreadId ? (
+                          <PiCompactEntry
+                            workspaceId={activeWorkspaceId}
+                            threadId={activeThreadId}
+                          />
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

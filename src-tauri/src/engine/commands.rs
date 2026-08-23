@@ -4813,3 +4813,274 @@ pub async fn engine_interrupt_turn(
 #[cfg(test)]
 #[path = "commands_tests.rs"]
 mod commands_tests;
+
+// ===== PI RPC session commands (`pi --mode rpc` resident) =====
+//
+// These expose the RPC-only command surface (stats / compact / fork / tree).
+// They never fall back to print-json: the data only exists on the resident.
+
+async fn resolve_pi_session_for_rpc_commands(
+    state: &State<'_, AppState>,
+    workspace_id: &str,
+    provider_profile_id: Option<&str>,
+) -> Result<std::sync::Arc<super::pi::PiSession>, String> {
+    let workspace_path = {
+        let workspaces = state.workspaces.lock().await;
+        workspaces
+            .get(workspace_id)
+            .map(|w| std::path::PathBuf::from(&w.path))
+            .ok_or_else(|| "Workspace not found".to_string())?
+    };
+    let effective_provider_profile_id =
+        crate::session_management::resolve_engine_provider_profile_id(
+            state.storage_path.as_path(),
+            workspace_id,
+            None,
+            "pi",
+            provider_profile_id,
+        )?;
+    let provider_launch_profile =
+        crate::engine::pi_provider_profile::resolve_pi_provider_launch_profile(
+            workspace_id,
+            effective_provider_profile_id.as_deref(),
+            None,
+        )?;
+    let manager = &state.engine_manager;
+    Ok(manager
+        .get_or_create_pi_session_for_runtime(
+            workspace_id,
+            &workspace_path,
+            &provider_launch_profile.runtime_key,
+            provider_launch_profile.home_dir.as_deref(),
+        )
+        .await)
+}
+
+#[tauri::command]
+pub async fn pi_get_session_stats(
+    workspace_id: String,
+    session_id: Option<String>,
+    provider_profile_id: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "pi_get_session_stats",
+            json!({ "workspaceId": workspace_id, "sessionId": session_id, "providerProfileId": provider_profile_id }),
+        )
+        .await;
+    }
+    let session = resolve_pi_session_for_rpc_commands(
+        &state,
+        &workspace_id,
+        provider_profile_id.as_deref(),
+    )
+    .await?;
+    let client = session.rpc_client_for_commands().await?;
+    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    client.get_session_stats().await
+}
+
+#[tauri::command]
+pub async fn pi_compact(
+    workspace_id: String,
+    session_id: Option<String>,
+    custom_instructions: Option<String>,
+    provider_profile_id: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "pi_compact",
+            json!({
+                "workspaceId": workspace_id,
+                "sessionId": session_id,
+                "customInstructions": custom_instructions,
+                "providerProfileId": provider_profile_id,
+            }),
+        )
+        .await;
+    }
+    let session = resolve_pi_session_for_rpc_commands(
+        &state,
+        &workspace_id,
+        provider_profile_id.as_deref(),
+    )
+    .await?;
+    let client = session.rpc_client_for_commands().await?;
+    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    client.compact(custom_instructions.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn pi_fork(
+    workspace_id: String,
+    session_id: Option<String>,
+    entry_id: String,
+    provider_profile_id: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "pi_fork",
+            json!({
+                "workspaceId": workspace_id,
+                "sessionId": session_id,
+                "entryId": entry_id,
+                "providerProfileId": provider_profile_id,
+            }),
+        )
+        .await;
+    }
+    let session = resolve_pi_session_for_rpc_commands(
+        &state,
+        &workspace_id,
+        provider_profile_id.as_deref(),
+    )
+    .await?;
+    let client = session.rpc_client_for_commands().await?;
+    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    // Fork 会切换 resident 的会话文件：turn 进行中禁止（事件流与文件切换
+    // 会互相破坏；历史教训 = 「会话已停止 + 时间线错乱」）。守卫放在对齐
+    // 之后：对齐会先清掉丢失 settle 的僵尸 run，只挡真实流式。
+    if session.rpc_has_active_run().await {
+        return Err(
+            "当前 turn 仍在进行中，无法分叉；请等待完成或先停止。".to_string()
+        );
+    }
+    let pre_state = client.get_state().await?;
+    let pre_session_file = pre_state
+        .get("sessionFile")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let data = client.fork(&entry_id).await?;
+    // fork 成功后 resident 处于新文件：先取新会话身份，再 switch 回原文件。
+    // 「源会话不受污染」是硬约束——旧 thread 的后续发送必须落回旧文件，
+    // 新文件以干净副本出现在侧栏（fork-to-new-file 语义）。
+    let forked_state = client.get_state().await.ok();
+    let forked_session_id = forked_state
+        .as_ref()
+        .and_then(|state| state.get("sessionId"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    if let Some(ref path) = pre_session_file {
+        if let Err(error) = client.switch_session(path).await {
+            log::warn!("[pi/rpc] switch back after fork failed: {error}");
+        }
+    }
+    let current_session_id = session.rpc_resync_session_id(&client).await;
+    Ok(json!({
+        "text": data.get("text").cloned().unwrap_or(Value::Null),
+        "cancelled": data.get("cancelled").and_then(Value::as_bool).unwrap_or(false),
+        "sessionId": current_session_id,
+        "forkedSessionId": forked_session_id,
+    }))
+}
+
+#[tauri::command]
+pub async fn pi_get_session_tree(
+    workspace_id: String,
+    session_id: Option<String>,
+    provider_profile_id: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "pi_get_session_tree",
+            json!({ "workspaceId": workspace_id, "sessionId": session_id, "providerProfileId": provider_profile_id }),
+        )
+        .await;
+    }
+    let session = resolve_pi_session_for_rpc_commands(
+        &state,
+        &workspace_id,
+        provider_profile_id.as_deref(),
+    )
+    .await?;
+    let client = session.rpc_client_for_commands().await?;
+    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    let tree = client.get_tree().await?;
+    // 会话族全图：跳入分支后树仍展示 root 主线 + 所有派生 lane（不截断）。
+    // fork 产生独立文件（parentSession 头指向源文件）；root 不是当前文件
+    // 时，主线从磁盘只读解析（红线 21），当前 lane 仍由 RPC get_tree 提供。
+    let session_file = client.get_state().await.ok().and_then(|state| {
+        state
+            .get("sessionFile")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    let (root_session_id, root_entries, derived_lanes) = match session_file {
+        Some(ref file) => {
+            let path = std::path::Path::new(file);
+            let family = crate::engine::pi_history::resolve_pi_session_family(path)
+                .await
+                .unwrap_or_default();
+            let root = family.iter().find(|member| member.is_root);
+            let root_id = root.map(|member| member.session_id.clone());
+            let root_path = root.map(|member| member.session_file.clone());
+            let root_entries = match root_path.as_ref().filter(|p| **p != path) {
+                Some(root_file) => crate::engine::pi_history::parse_pi_session_entries(
+                    root_file,
+                )
+                .await
+                .unwrap_or_default(),
+                None => Vec::new(),
+            };
+            let derived = crate::engine::pi_history::list_pi_derived_lanes(path)
+                .await
+                .unwrap_or_else(|error| {
+                    log::warn!("[pi/rpc] list derived lanes failed: {error}");
+                    Vec::new()
+                });
+            (root_id, root_entries, derived)
+        }
+        None => (None, Vec::new(), Vec::new()),
+    };
+    Ok(json!({
+        "tree": tree.get("tree").cloned().unwrap_or(Value::Null),
+        "leafId": tree.get("leafId").cloned().unwrap_or(Value::Null),
+        "derivedLanes": derived_lanes,
+        "rootSessionId": root_session_id,
+        "rootEntries": root_entries,
+    }))
+}
+
+#[tauri::command]
+pub async fn pi_get_fork_messages(
+    workspace_id: String,
+    session_id: Option<String>,
+    provider_profile_id: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "pi_get_fork_messages",
+            json!({ "workspaceId": workspace_id, "sessionId": session_id, "providerProfileId": provider_profile_id }),
+        )
+        .await;
+    }
+    let session = resolve_pi_session_for_rpc_commands(
+        &state,
+        &workspace_id,
+        provider_profile_id.as_deref(),
+    )
+    .await?;
+    let client = session.rpc_client_for_commands().await?;
+    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    client.get_fork_messages().await
+}
