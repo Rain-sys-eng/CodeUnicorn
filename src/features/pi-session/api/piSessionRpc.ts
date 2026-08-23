@@ -213,36 +213,6 @@ function extractEntryText(message: unknown): string {
   return "";
 }
 
-function parseTreeNode(raw: unknown): PiTreeNode | null {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
-  const record = raw as Record<string, unknown>;
-  const entry = record.entry as Record<string, unknown> | undefined;
-  const id = asString(entry?.id);
-  if (!entry || !id) {
-    return null;
-  }
-  const message = entry.message as Record<string, unknown> | undefined;
-  const children = Array.isArray(record.children)
-    ? record.children
-        .map(parseTreeNode)
-        .filter((node): node is PiTreeNode => node !== null)
-    : [];
-  return {
-    entry: {
-      id,
-      parentId: asString(entry.parentId),
-      type: asString(entry.type) ?? "message",
-      timestamp: asString(entry.timestamp) ?? undefined,
-      role: asString(message?.role),
-      text: extractEntryText(message),
-    },
-    label: asString(record.label),
-    children,
-  };
-}
-
 export async function piGetSessionTree(
   options: CommandOptions,
 ): Promise<PiSessionTree> {
@@ -251,7 +221,41 @@ export async function piGetSessionTree(
     sessionId: options.sessionId ?? null,
     providerProfileId: options.providerProfileId ?? null,
   });
-  const tree = Array.isArray(raw?.tree) ? raw.tree : [];
+  // 后端摊平 + 瘦身后的浅层 entries（嵌套树在深会话下会撞 serde_json
+  // 递归限制且载荷巨大）；按 parentId 重建森林，保持兄弟顺序。
+  const byId = new Map<string, PiTreeNode>();
+  const nodes: PiTreeNode[] = [];
+  const rawEntries = Array.isArray(raw?.entries) ? raw.entries : [];
+  for (const item of rawEntries) {
+    const record = item as Record<string, unknown>;
+    const entry = record.entry as Record<string, unknown> | undefined;
+    const id = asString(entry?.id);
+    if (!entry || !id) {
+      continue;
+    }
+    const message = entry.message as Record<string, unknown> | undefined;
+    byId.set(id, {
+      entry: {
+        id,
+        parentId: asString(entry.parentId),
+        type: asString(entry.type) ?? "message",
+        timestamp: asString(entry.timestamp) ?? undefined,
+        role: asString(message?.role),
+        text: extractEntryText(message),
+      },
+      label: asString(record.label),
+      children: [],
+    });
+  }
+  byId.forEach((node) => {
+    const parentId = node.entry.parentId;
+    const parent = parentId ? byId.get(parentId) : undefined;
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      nodes.push(node);
+    }
+  });
   const derivedLanes: PiDerivedLane[] = [];
   if (Array.isArray(raw?.derivedLanes)) {
     for (const laneRaw of raw.derivedLanes as Record<string, unknown>[]) {
@@ -298,9 +302,7 @@ export async function piGetSessionTree(
     }
   }
   return {
-    nodes: tree
-      .map(parseTreeNode)
-      .filter((node): node is PiTreeNode => node !== null),
+    nodes,
     leafId: asString(raw?.leafId),
     derivedLanes,
     rootSessionId: asString(raw?.rootSessionId),

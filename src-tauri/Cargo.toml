@@ -28,7 +28,9 @@ tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "uns
 tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# unbounded_depth 只开放 API（crate 级默认 128 层递归限制不变）：pi RPC 的
+# get_tree 响应是深嵌套树（线性会话 ~2000 层），由解析点显式放开。
+serde_json = { version = "1", features = ["unbounded_depth"] }
 serde_yaml = "0.9"
 log = "0.4"
 tokio = { version = "1", features = ["fs", "net", "io-util", "process", "rt", "sync", "time", "macros", "signal"] }

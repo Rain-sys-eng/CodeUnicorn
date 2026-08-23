@@ -5011,7 +5011,14 @@ pub async fn pi_get_session_tree(
     .await?;
     let client = session.rpc_client_for_commands().await?;
     session.align_rpc_session(&client, session_id.as_deref()).await?;
+    // get_tree 对外统一为浅层 entries（摊平+瘦身在 pi_rpc 内完成：深会话在
+    // pump 的大栈线程，浅会话在 get_tree 内），这里只需透传。
     let tree = client.get_tree().await?;
+    let flattened_entries = tree
+        .get("entries")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     // 会话族全图：跳入分支后树仍展示 root 主线 + 所有派生 lane（不截断）。
     // fork 产生独立文件（parentSession 头指向源文件）；root 不是当前文件
     // 时，主线从磁盘只读解析（红线 21），当前 lane 仍由 RPC get_tree 提供。
@@ -5049,7 +5056,7 @@ pub async fn pi_get_session_tree(
         None => (None, Vec::new(), Vec::new()),
     };
     Ok(json!({
-        "tree": tree.get("tree").cloned().unwrap_or(Value::Null),
+        "entries": flattened_entries,
         "leafId": tree.get("leafId").cloned().unwrap_or(Value::Null),
         "derivedLanes": derived_lanes,
         "rootSessionId": root_session_id,

@@ -139,6 +139,23 @@ RPC resident 的模型只在 spawn 时经 `--model` 设定一次；进程复用�
 - **THEN** 系统 MUST 摘下 run 并以同一错误结算全部 waiter（main + attached steer），随后 abort
 - **AND** 同一 turn MUST NOT 收到第二次终态（迟到 `agent_settled` 或 stale-settle 自愈面对空 run 直接跳过；已结算路径 MUST NOT 被外层重发 TurnError）
 
+### Requirement: 深会话树响应 MUST 摊平且瘦身
+
+线性长会话的 get_tree 嵌套树可达数千层 / 数十 MB（粘贴截图的 base64 图片）。系统 MUST 在过 IPC 前把树摊平为浅层 entries 并瘦身，禁止嵌套树直接跨进程边界。
+
+#### Scenario: 嵌套深度不撞递归限制也不爆栈
+
+- **WHEN** 会话条目数使树嵌套超过 serde_json 默认 128 层递归限制（~130 条的线性会话即触发）
+- **THEN** RPC pump MUST 按行嵌套深度分流解析：浅行走默认解析器（护栏保留）；深行挪到大栈线程解析（禁止在 2MB tokio worker 上直接放开递归限制——递归下降解析器实测 ~1008 层即 SIGABRT 爆栈）
+- **AND** 深层 `Value` MUST NOT 离开大栈线程（其递归 drop 同样爆栈）：get_tree 响应在大栈线程内摊平为浅层 `entries` 后才跨线程传递
+- **AND** `pi_get_session_tree` MUST 返回浅层 `entries`（parentId 表达结构，前端重建森林），MUST NOT 返回嵌套树（Tauri IPC 序列化同样受递归限制）
+
+#### Scenario: 载荷瘦身
+
+- **WHEN** 树响应包含 base64 图片块或超长文本（工具输出/长正文）
+- **THEN** 后端 MUST 剥除图片数据字段并把文本截断为单行预览上限（500 字符，char 安全）
+- **AND** 磁盘解析的 derivedLanes / rootEntries 同样截断（红线 21 只读，不改 vendor 文件）
+
 ### Requirement: 图片输入 MUST 走 base64 images 字段
 
 RPC 路径下系统 MUST 以 `images` 字段（base64 ImageContent）传输图片，禁止复用 print 模式的 `@file` argv 传输。

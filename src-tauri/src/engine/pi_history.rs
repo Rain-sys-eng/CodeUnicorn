@@ -696,7 +696,9 @@ pub async fn parse_pi_session_entries(file: &Path) -> Result<Vec<PiDerivedLaneEn
                     .get("role")
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                extract_text_blocks(message.get("content")),
+                // 树行只展示单行预览：长工具输出/长正文截断，防止会话族
+                // 合并响应过 IPC 时膨胀（红线 21 只读，不改 vendor 文件）。
+                truncate_chars(&extract_text_blocks(message.get("content")), 500),
             ),
             None => (None, String::new()),
         };

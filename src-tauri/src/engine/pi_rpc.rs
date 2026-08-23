@@ -13,6 +13,7 @@
 //! - Extension UI requests are auto-cancelled: mossx is a headless host and
 //!   MUST NOT surface vendor extension dialogs (v1 boundary).
 
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
@@ -136,7 +137,7 @@ impl PiRpcClient {
                             if trimmed.is_empty() {
                                 continue;
                             }
-                            let value = match serde_json::from_str::<Value>(trimmed) {
+                            let value = match parse_pi_rpc_json_line(trimmed) {
                                 Ok(value) => value,
                                 Err(error) => {
                                     log::warn!("[pi/rpc] dropping unparseable line: {error}");
@@ -393,7 +394,22 @@ impl PiRpcClient {
     }
 
     pub async fn get_tree(&self) -> Result<Value, String> {
-        self.request(json!({"type":"get_tree"})).await
+        let mut data = self.request(json!({"type":"get_tree"})).await?;
+        // 统一对外输出浅层 entries：深会话响应已被 pump 在大栈线程摊平
+        // （data.entries）；浅会话仍是嵌套 data.tree，就地摊平（浅，安全）。
+        if let Some(obj) = data.as_object_mut() {
+            if obj.contains_key("entries") {
+                return Ok(data);
+            }
+            if let Some(tree) = obj.remove("tree") {
+                let entries = tree
+                    .as_array()
+                    .map(|nodes| flatten_pi_tree_for_ipc(nodes))
+                    .unwrap_or_default();
+                obj.insert("entries".to_string(), Value::Array(entries));
+            }
+        }
+        Ok(data)
     }
 
     pub async fn get_fork_messages(&self) -> Result<Value, String> {
@@ -417,6 +433,167 @@ impl PiRpcClient {
     }
 }
 
+/// 会话树响应过 IPC 前的文本预览上限（字符）。树行只展示单行预览；长会话
+/// 含大量粘贴截图（base64 图片）与长工具输出时，get_tree 原始响应可达
+/// 数十 MB，Tauri IPC 序列化 + 前端 JSON.parse 会直接卡死面板。
+pub(crate) const PI_TREE_PREVIEW_MAX_CHARS: usize = 500;
+
+pub(crate) fn truncate_pi_tree_preview(text: &str) -> String {
+    if text.chars().count() <= PI_TREE_PREVIEW_MAX_CHARS {
+        return text.to_string();
+    }
+    text.chars().take(PI_TREE_PREVIEW_MAX_CHARS).collect()
+}
+
+/// 就地精简单条 message content：剥除 base64 图片载荷、截断超长字符串字段。
+pub(crate) fn slim_pi_message_content_for_ipc(content: &mut Value) {
+    match content {
+        Value::String(text) => {
+            *text = truncate_pi_tree_preview(text);
+        }
+        Value::Array(blocks) => {
+            for block in blocks.iter_mut() {
+                let Some(map) = block.as_object_mut() else {
+                    continue;
+                };
+                if map.get("type").and_then(Value::as_str) == Some("image") {
+                    // 图片载荷对树零价值：剥除 data / source.data
+                    map.remove("data");
+                    if let Some(source) = map.get_mut("source").and_then(Value::as_object_mut)
+                    {
+                        source.remove("data");
+                    }
+                    continue;
+                }
+                for value in map.values_mut() {
+                    if let Some(text) = value.as_str() {
+                        if text.chars().count() > PI_TREE_PREVIEW_MAX_CHARS {
+                            *value = Value::String(truncate_pi_tree_preview(text));
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 把 get_tree 的嵌套树摊平成浅层 entry 列表（含 label），同时瘦身正文。
+/// 两个目的：① 载荷瘦身（base64 图片 / 长文本）；② 消灭嵌套深度——线性
+/// 会话的树是 ~2000 层深链，serde_json 默认 128 层递归限制连序列化都会
+/// 失败（Tauri IPC 返回前必须序列化）。结构关系由 entry.parentId 表达，
+/// 前端负责重建森林（面板本来就要摊平）。迭代 DFS 保序：兄弟顺序不变。
+pub(crate) fn flatten_pi_tree_for_ipc(nodes: &[Value]) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut stack: Vec<&Value> = nodes.iter().rev().collect();
+    while let Some(node) = stack.pop() {
+        let mut entry = node.get("entry").cloned().unwrap_or(Value::Null);
+        if let Some(content) = entry
+            .get_mut("message")
+            .and_then(|message| message.get_mut("content"))
+        {
+            slim_pi_message_content_for_ipc(content);
+        }
+        out.push(json!({
+            "entry": entry,
+            "label": node.get("label").cloned().unwrap_or(Value::Null),
+        }));
+        if let Some(children) = node.get("children").and_then(Value::as_array) {
+            stack.extend(children.iter().rev());
+        }
+    }
+    out
+}
+
+/// JSON 行的最大括号嵌套深度（跳过字符串内容与转义）。用于分流解析策略。
+fn json_nesting_depth(line: &str) -> usize {
+    let mut depth = 0usize;
+    let mut max_depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for byte in line.bytes() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'{' | b'[' => {
+                depth += 1;
+                if depth > max_depth {
+                    max_depth = depth;
+                }
+            }
+            b'}' | b']' => {
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+    max_depth
+}
+
+/// 浅行阈值：低于它走默认解析器（128 层护栏仍在，且栈占用安全）。
+const PI_RPC_SHALLOW_PARSE_MAX_DEPTH: usize = 100;
+
+/// 解析 RPC stdout 的一行 JSON。线性长会话的 get_tree 响应是 ~2000 层深链：
+/// 默认 128 层递归限制会拒收；放开限制递归下降解析器又会在 tokio worker
+///（2MB 栈）上爆栈（实测 ~1008 层 SIGABRT 崩溃）。因此按深度分流：浅行走
+/// 默认解析器；深行（仅 get_tree 这类树响应）挪到 32MB 大栈线程解析。
+fn parse_pi_rpc_json_line(line: &str) -> Result<Value, String> {
+    if json_nesting_depth(line) <= PI_RPC_SHALLOW_PARSE_MAX_DEPTH {
+        return serde_json::from_str(line).map_err(|error| error.to_string());
+    }
+    let owned = line.to_string();
+    std::thread::Builder::new()
+        .name("pi-rpc-deep-json".to_string())
+        .stack_size(32 * 1024 * 1024)
+        .spawn(move || {
+            let value = {
+                let mut deserializer = serde_json::Deserializer::from_str(&owned);
+                deserializer.disable_recursion_limit();
+                Value::deserialize(&mut deserializer).map_err(|error| error.to_string())?
+            };
+            // 深值不出大栈线程：get_tree 响应在此摊平+瘦身，深层 Value 在本
+            // 线程内 drop——跨线程只传浅层结果（Value 的递归 drop 在 2MB
+            // worker 上同样爆栈：崩溃报告实证）。
+            Ok(flatten_deep_tree_response(value))
+        })
+        .map_err(|error| format!("spawn deep-json parser failed: {error}"))?
+        .join()
+        .map_err(|_| "deep-json parser thread panicked".to_string())?
+}
+
+/// 深响应后处理（仅在大栈线程内调用）：get_tree 的嵌套 `data.tree` 就地换成
+/// 浅层 `data.entries`（摊平+瘦身），深层 Value 随函数返回 drop。其他深
+/// 响应原样返回。
+fn flatten_deep_tree_response(mut value: Value) -> Value {
+    let is_tree_response = value.get("type").and_then(Value::as_str) == Some("response")
+        && value.pointer("/data/tree").and_then(Value::as_array).is_some();
+    if !is_tree_response {
+        return value;
+    }
+    let tree = value
+        .get_mut("data")
+        .and_then(Value::as_object_mut)
+        .and_then(|data| data.remove("tree"))
+        .unwrap_or(Value::Null);
+    let entries = match tree.as_array() {
+        Some(nodes) => flatten_pi_tree_for_ipc(nodes),
+        None => Vec::new(),
+    };
+    if let Some(data) = value.get_mut("data").and_then(Value::as_object_mut) {
+        data.insert("entries".to_string(), Value::Array(entries));
+    }
+    value
+}
+
 async fn write_json_line(stdin: &mut ChildStdin, value: &Value) -> Result<(), String> {
     let mut line = serde_json::to_string(value)
         .map_err(|error| format!("failed to serialize pi rpc command: {error}"))?;
@@ -434,6 +611,63 @@ async fn write_json_line(stdin: &mut ChildStdin, value: &Value) -> Result<(), St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nesting_depth_skips_strings_and_escapes() {
+        assert_eq!(json_nesting_depth("{}"), 1);
+        assert_eq!(json_nesting_depth("{\"a\":[{\"b\":1}]}"), 3);
+        // 字符串里的括号不计深度
+        assert_eq!(json_nesting_depth("{\"a\":\"[[[\"}"), 1);
+        assert_eq!(json_nesting_depth("{\"a\":\"\\\"}\"}"), 1);
+    }
+
+    #[test]
+    fn flatten_deep_tree_response_only_transforms_tree_responses() {
+        // get_tree 响应：data.tree → data.entries（摊平 + 瘦身）
+        let response = json!({
+            "type": "response",
+            "id": "mossx-1",
+            "success": true,
+            "data": {
+                "leafId": "b",
+                "tree": [{
+                    "entry": { "id": "a", "parentId": null, "message": { "role": "user", "content": "hi" } },
+                    "label": null,
+                    "children": [{
+                        "entry": { "id": "b", "parentId": "a", "message": { "role": "assistant", "content": "hello" } },
+                        "label": null,
+                        "children": [],
+                    }],
+                }],
+            },
+        });
+        let out = flatten_deep_tree_response(response);
+        let data = &out["data"];
+        assert!(data.get("tree").is_none());
+        assert_eq!(data["leafId"], "b");
+        let entries = data["entries"].as_array().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["entry"]["id"], "a");
+        assert_eq!(entries[1]["entry"]["parentId"], "a");
+        // 非树响应原样不动
+        let other = json!({"type": "response", "data": {"foo": [1, 2, 3]}});
+        assert_eq!(flatten_deep_tree_response(other.clone()), other);
+    }
+
+    #[test]
+    fn parse_line_handles_deep_nesting_beyond_default_recursion_limit() {
+        // get_tree 响应是深链嵌套：默认 128 层限制必拒；深行走大栈线程后必须
+        // 能解析（2MB tokio worker 栈上直接放开限制会爆栈，勿回归为单线程直解）
+        let deep = format!("{}1{}", "[".repeat(500), "]".repeat(500));
+        let parsed = parse_pi_rpc_json_line(&deep).expect("deep json should parse");
+        assert!(parsed.is_array());
+        // 未放开的默认解析器必须失败（守护测试前提）
+        assert!(serde_json::from_str::<Value>(&deep).is_err());
+        // 浅行走默认快速路径
+        let shallow = parse_pi_rpc_json_line("{\"type\":\"agent_settled\"}")
+            .expect("shallow json should parse");
+        assert_eq!(shallow["type"], "agent_settled");
+    }
 
     #[test]
     fn serialize_prompt_with_images() {

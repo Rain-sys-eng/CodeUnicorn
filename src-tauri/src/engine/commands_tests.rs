@@ -1624,3 +1624,47 @@ fn send_message_params_default_keeps_claude_thinking_enabled() {
 
     assert!(!params.disable_thinking);
 }
+
+#[test]
+fn flatten_pi_tree_for_ipc_strips_images_truncates_text_and_preserves_order() {
+    use crate::engine::pi_rpc::flatten_pi_tree_for_ipc;
+    let long_text = "a".repeat(2000);
+    let nodes = vec![json!({
+        "entry": {
+            "id": "root",
+            "parentId": null,
+            "type": "message",
+            "timestamp": "2026-08-24T00:00:00Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": long_text},
+                    {"type": "image", "source": {"type": "base64", "data": "QUJD".repeat(1000)}},
+                ],
+            },
+        },
+        "label": "书签A",
+        "children": [
+            { "entry": { "id": "c1", "parentId": "root", "message": { "role": "assistant", "content": "first" } }, "label": null, "children": [] },
+            { "entry": { "id": "c2", "parentId": "root", "message": { "role": "user", "content": "second" } }, "label": null, "children": [] },
+        ],
+    })];
+    let flat = flatten_pi_tree_for_ipc(&nodes);
+    assert_eq!(flat.len(), 3);
+    // DFS 保序：root → c1 → c2；parentId 表达结构；label 保留
+    assert_eq!(flat[0]["entry"]["id"], "root");
+    assert_eq!(flat[0]["label"], "书签A");
+    assert_eq!(flat[1]["entry"]["id"], "c1");
+    assert_eq!(flat[1]["entry"]["parentId"], "root");
+    assert_eq!(flat[2]["entry"]["id"], "c2");
+    // 长文本截断（char 安全）+ 图片载荷剥除
+    let content = flat[0]["entry"]["message"]["content"].as_array().unwrap();
+    assert_eq!(content[0]["text"].as_str().unwrap().chars().count(), 500);
+    assert_eq!(content[1]["type"], "image");
+    assert!(content[1]["source"].get("data").is_none());
+    // 短文本不动
+    assert_eq!(flat[1]["entry"]["message"]["content"], "first");
+    // 输出是浅层（无 children 嵌套）——深会话不再撞 serde_json 递归限制
+    assert!(flat.iter().all(|item| item.get("children").is_none()));
+}
+

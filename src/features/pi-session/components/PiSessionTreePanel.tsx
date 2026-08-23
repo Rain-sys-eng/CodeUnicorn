@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   refreshPiSessionTree,
   requestPiThreadJump,
@@ -207,19 +207,29 @@ export function PiSessionTreePanel({
   }, [visibleNodes]);
 
   const railCells = useMemo(() => {
+    // O(n·lanes)：先一次扫出每条 lane 的首/末行号，格子判定退化为比较
+    // （原实现每格两次 some 全扫，1000+ 行大会话是 O(n²·lanes) 百万级）。
+    const firstIdx = new Map<number, number>();
+    const lastIdx = new Map<number, number>();
+    visibleNodes.forEach((node, index) => {
+      if (!firstIdx.has(node.lane)) {
+        firstIdx.set(node.lane, index);
+      }
+      lastIdx.set(node.lane, index);
+    });
     return visibleNodes.map((node, index) => {
       const cells: ("node" | "line" | "empty")[] = [];
       for (let lane = 0; lane <= maxLane; lane++) {
         if (node.lane === lane) {
           cells.push("node");
         } else {
-          const before = visibleNodes.some(
-            (n, j) => j < index && n.lane === lane,
+          const first = firstIdx.get(lane);
+          const last = lastIdx.get(lane);
+          cells.push(
+            first !== undefined && last !== undefined && first < index && last > index
+              ? "line"
+              : "empty",
           );
-          const after = visibleNodes.some(
-            (n, j) => j > index && n.lane === lane,
-          );
-          cells.push(before && after ? "line" : "empty");
         }
       }
       return cells;
@@ -247,8 +257,13 @@ export function PiSessionTreePanel({
       toLane: number;
       key: string;
     }[] = [];
+    const seenLanes = new Set<number>();
     visibleNodes.forEach((node, index) => {
-      if (node.lane === 0 || !node.parentId) {
+      // 按行序首个即该 lane 首行：无论其连接是否可画都必须登记，
+      // 否则后续行会被误判为首行而画出错误曲线（O(1) 替代原 some 全扫）
+      const firstOfLane = !seenLanes.has(node.lane);
+      seenLanes.add(node.lane);
+      if (node.lane === 0 || !node.parentId || !firstOfLane) {
         return;
       }
       // 最近可见祖先（通常就是直接父；父被过滤时向上走，带环保护）
@@ -263,12 +278,6 @@ export function PiSessionTreePanel({
       }
       // 仅 lane 首行（其父在不同 lane）需要跨 lane 连接
       if (parentLane === node.lane) {
-        return;
-      }
-      const firstOfLane = !visibleNodes.some(
-        (n, j) => j < index && n.lane === node.lane,
-      );
-      if (!firstOfLane) {
         return;
       }
       links.push({
@@ -307,9 +316,71 @@ export function PiSessionTreePanel({
     return ranges;
   }, [visibleNodes]);
 
+  // 大行数 DOM 窗口化：1000+ 行大会话全量渲染会挂死面板。行高固定
+  // 34px（与 forkLinks 坐标假设一致），只渲染视口 ±overscan 的行，
+  // 上下用 spacer 撑起总高；分叉 SVG 仍按全高绝对定位（path 数量极少）。
+  const VIRTUALIZE_THRESHOLD = 300;
+  const OVERSCAN_ROWS = 20;
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef(0);
+  const [viewRange, setViewRange] = useState({ start: 0, end: 80 });
+  const virtualized = visibleNodes.length > VIRTUALIZE_THRESHOLD;
+
+  useEffect(() => {
+    if (!virtualized) {
+      return;
+    }
+    const body = bodyRef.current;
+    if (!body) {
+      return;
+    }
+    const update = () => {
+      const total = visibleNodes.length;
+      const start = Math.min(
+        total,
+        Math.max(0, Math.floor(body.scrollTop / ROW_H) - OVERSCAN_ROWS),
+      );
+      const end = Math.min(
+        total,
+        Math.max(
+          start,
+          Math.ceil((body.scrollTop + body.clientHeight) / ROW_H) +
+            OVERSCAN_ROWS,
+        ),
+      );
+      setViewRange((prev) =>
+        prev.start === start && prev.end === end ? prev : { start, end },
+      );
+    };
+    const onScroll = () => {
+      if (scrollRafRef.current) {
+        return;
+      }
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = 0;
+        update();
+      });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(body);
+    body.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      observer.disconnect();
+      body.removeEventListener("scroll", onScroll);
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
+      }
+    };
+  }, [virtualized, visibleNodes.length]);
+
+  const renderStart = virtualized ? viewRange.start : 0;
+  const renderEnd = virtualized ? viewRange.end : visibleNodes.length;
+
   return (
     <div className="pi-tree-panel" role="region" aria-label="会话树">
-      <div className="pi-fs-body">
+      <div className="pi-fs-body" ref={bodyRef}>
         {tree === null ? (
           <div className="pi-fs-empty">加载中…</div>
         ) : visibleNodes.length === 0 ? (
@@ -342,7 +413,11 @@ export function PiSessionTreePanel({
                 })}
               </svg>
             ) : null}
-            {visibleNodes.map((node, rowIndex) => {
+            {virtualized && renderStart > 0 ? (
+              <div aria-hidden="true" style={{ height: renderStart * ROW_H }} />
+            ) : null}
+            {visibleNodes.slice(renderStart, renderEnd).map((node, sliceIndex) => {
+              const rowIndex = renderStart + sliceIndex;
               const isCurrent = node.entryId === tree.leafId;
               const laneLabel = laneFirstSeen.get(node.entryId);
               const jumpSessionId =
@@ -483,6 +558,12 @@ export function PiSessionTreePanel({
                 </div>
               );
             })}
+            {virtualized && renderEnd < visibleNodes.length ? (
+              <div
+                aria-hidden="true"
+                style={{ height: (visibleNodes.length - renderEnd) * ROW_H }}
+              />
+            ) : null}
           </div>
         )}
       </div>
