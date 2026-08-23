@@ -30,6 +30,8 @@ import {
 import {
   DEFAULT_OPEN_APP_ID,
   DEFAULT_OPEN_APP_TARGETS,
+  DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+  normalizeGlobalVisibleThreadRootCount,
 } from "../../app/constants";
 import { getClientStoreSync } from "../../../services/clientStorage";
 import { normalizeComposerEnginePrefsRecord } from "../../../app-shell-parts/composerEnginePrefs";
@@ -326,6 +328,7 @@ const defaultSettings: AppSettings = {
   usageShowRemaining: false,
   showMessageAnchors: true,
   showSidebarProviderLabels: false,
+  defaultVisibleThreadRootCount: DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
   performanceCompatibilityModeEnabled: false,
   uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
@@ -591,6 +594,9 @@ function normalizeAppSettings(
     detachedExternalChangeWatcherEnabled:
       settings.detachedExternalChangeWatcherEnabled !== false,
     showSidebarProviderLabels: settings.showSidebarProviderLabels === true,
+    defaultVisibleThreadRootCount: normalizeGlobalVisibleThreadRootCount(
+      settings.defaultVisibleThreadRootCount,
+    ),
     codexModeEnforcementEnabled: settings.codexModeEnforcementEnabled !== false,
     // Conversation curtain convergence now depends on the normalized realtime adapters.
     // Keep it enabled even for older persisted settings that still store false.

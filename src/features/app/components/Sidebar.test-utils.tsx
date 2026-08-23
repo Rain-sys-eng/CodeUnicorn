@@ -25,6 +25,14 @@ vi.mock("react-i18next", () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         "sidebar.addWorkspace": "Add workspace",
+        "sidebar.workspaceSettings": "Workspace settings",
+        "sidebar.workspaceSettingsTitle": "Workspace settings",
+        "sidebar.workspaceSettingsDescription":
+          "These preferences apply to every project.",
+        "sidebar.workspaceSettingsVisibleCountLabel":
+          "Default visible sessions",
+        "sidebar.workspaceSettingsVisibleCountHint":
+          "Default {{defaultCount}}, range {{min}}-{{max}}.",
         "common.cancel": "Cancel",
         "common.delete": "Delete",
         "sidebar.sessionActionsGroup": "New Session",

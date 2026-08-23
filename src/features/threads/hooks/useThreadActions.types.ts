@@ -45,4 +45,5 @@ export type UseThreadActionsOptions = {
   resolveWorkspacePath?: (workspaceId: string) => string | null;
   useUnifiedHistoryLoader?: boolean;
   sessionAttributionMode?: WorkspaceSessionAttributionMode;
+  defaultVisibleThreadRootCount?: number | null;
 };

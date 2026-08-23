@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "高信賴度",
     "sessionManagementAttributionConfidenceMedium": "中信賴度",
     "sessionManagementThreadVisibilityLabel": "側邊欄預設工作階段數",
-    "sessionManagementThreadVisibilityHint": "控制此工作區在側邊欄收合時預設顯示多少個根工作階段。預設 {{defaultCount}}，支援範圍 {{min}}-{{max}}；目前生效值 {{count}}。",
+    "sessionManagementThreadVisibilityHint": "覆寫此專案在側邊欄收合時顯示的根工作階段數。未覆寫時跟隨工作區設定（目前 {{defaultCount}}）。範圍 {{min}}-{{max}}；目前生效值 {{count}}。",
     "sessionManagementThreadVisibilitySaved": "已將側邊欄預設工作階段數更新為 {{count}}。",
     "sessionManagementThreadVisibilitySaving": "正在儲存…",
     "sessionManagementLoadMore": "載入更多",

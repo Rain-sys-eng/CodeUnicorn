@@ -5,15 +5,15 @@ import type {
 } from "../../../services/tauri";
 import {
   DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
-  normalizeVisibleThreadRootCount,
+  resolveVisibleThreadRootPageSize,
 } from "../../app/constants";
 import type { CodexCatalogSessionSummary } from "./useThreadActions.helpers";
 import { compareThreadSummariesByCreatedAtDesc } from "../utils/threadSummarySort";
 
 /**
  * First-paint / startup hydration: expose N = fetch N.
- * Aligns with DEFAULT_VISIBLE_THREAD_ROOT_COUNT (12). Sidebar「更多」
- * raises the visible cap by one page (12, 24, 36…) and only then
+ * Aligns with DEFAULT_VISIBLE_THREAD_ROOT_COUNT (5). Sidebar「更多」
+ * raises the visible cap by one page (5, 10, 15…) and only then
  * fetches the next Index/runtime page of the same size.
  */
 export const THREAD_LIST_INITIAL_TARGET_COUNT = DEFAULT_VISIBLE_THREAD_ROOT_COUNT;
@@ -188,23 +188,23 @@ export function decodeThreadListCursorState(
 
 export function resolveNativeSessionListLimit(
   workspace: WorkspaceInfo,
+  globalDefault?: number | null,
 ): number {
-  const visibleRootCount = normalizeVisibleThreadRootCount(
+  const visibleRootCount = resolveVisibleThreadRootPageSize(
     workspace.settings.visibleThreadRootCount,
+    globalDefault,
   );
-  // First-paint: expose N = fetch N (default 12).
-  // Sidebar「更多」fetches SESSION_INDEX_PAGE_SIZE after the in-memory page.
-  return Math.min(
-    THREAD_LIST_INITIAL_TARGET_COUNT,
-    Math.max(MIN_NATIVE_SESSION_LIST_LIMIT, visibleRootCount),
-  );
+  // First-paint: expose N = fetch N (default 5).
+  // Sidebar「更多」fetches the same page size after the in-memory page.
+  return Math.max(MIN_NATIVE_SESSION_LIST_LIMIT, visibleRootCount);
 }
 
-/** First-page target for a workspace (settings-aware, default 12). */
+/** First-page target for a workspace (settings-aware, default 5). */
 export function resolveInitialThreadListTargetCount(
   workspace: WorkspaceInfo,
+  globalDefault?: number | null,
 ): number {
-  return resolveNativeSessionListLimit(workspace);
+  return resolveNativeSessionListLimit(workspace, globalDefault);
 }
 
 export function resolveThreadListCursorForDisplay(params: {

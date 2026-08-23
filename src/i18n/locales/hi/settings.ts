@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "उच्च विश्वास",
     "sessionManagementAttributionConfidenceMedium": "मध्यम विश्वास",
     "sessionManagementThreadVisibilityLabel": "साइडबार डिफ़ॉल्ट सत्र गिनती",
-    "sessionManagementThreadVisibilityHint": "नियंत्रित करता है कि साइडबार संकुचित रहते हुए यह वर्कस्पेस डिफ़ॉल्ट रूप से कितने रूट सत्र दिखाता है। डिफ़ॉल्ट {{defaultCount}}, समर्थित सीमा {{min}}-{{max}}; प्रभावी मान {{count}}।",
+    "sessionManagementThreadVisibilityHint": "संकुचित साइडबार में यह प्रोजेक्ट कितने रूट सत्र दिखाए, इसे ओवरराइड करता है। बिना ओवरराइड के वर्कस्पेस सेटिंग (वर्तमान {{defaultCount}}) लागू होती है। सीमा {{min}}-{{max}}; प्रभावी मान {{count}}।",
     "sessionManagementThreadVisibilitySaved": "साइडबार डिफ़ॉल्ट सत्र गिनती को {{count}} पर अपडेट किया गया।",
     "sessionManagementThreadVisibilitySaving": "सहेजा जा रहा है...",
     "sessionManagementLoadMore": "और लोड करें",

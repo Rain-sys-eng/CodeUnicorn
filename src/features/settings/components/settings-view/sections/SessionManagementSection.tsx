@@ -41,7 +41,9 @@ import {
   DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
   MAX_VISIBLE_THREAD_ROOT_COUNT,
   MIN_VISIBLE_THREAD_ROOT_COUNT,
+  normalizeGlobalVisibleThreadRootCount,
   normalizeVisibleThreadRootCount,
+  resolveVisibleThreadRootPageSize,
 } from "../../../../app/constants";
 import { EngineIcon } from "../../../../engine/components/EngineIcon";
 import type {
@@ -1347,12 +1349,19 @@ export function SessionManagementSection({
     () => workspaces.find((entry) => entry.id === workspaceId) ?? null,
     [workspaceId, workspaces],
   );
+  const globalVisibleThreadRootCount = normalizeGlobalVisibleThreadRootCount(
+    resolvedAppSettings.defaultVisibleThreadRootCount,
+  );
   const effectiveVisibleThreadRootCount = useMemo(
     () =>
-      normalizeVisibleThreadRootCount(
+      resolveVisibleThreadRootPageSize(
         selectedWorkspace?.settings.visibleThreadRootCount,
+        globalVisibleThreadRootCount,
       ),
-    [selectedWorkspace?.settings.visibleThreadRootCount],
+    [
+      globalVisibleThreadRootCount,
+      selectedWorkspace?.settings.visibleThreadRootCount,
+    ],
   );
   const normalizedVisibleThreadRootCountDraft = useMemo(
     () =>
@@ -1943,7 +1952,7 @@ export function SessionManagementSection({
                       <div className="settings-project-sessions-advanced-body">
                         <div className="settings-project-sessions-advanced-copy">
                           {t("settings.sessionManagementThreadVisibilityHint", {
-                            defaultCount: DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+                            defaultCount: globalVisibleThreadRootCount,
                             min: MIN_VISIBLE_THREAD_ROOT_COUNT,
                             max: MAX_VISIBLE_THREAD_ROOT_COUNT,
                             count: effectiveVisibleThreadRootCount,

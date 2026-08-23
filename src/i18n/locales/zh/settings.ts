@@ -1096,7 +1096,7 @@ const settings = {
     sessionManagementAttributionConfidenceMedium: "中置信",
     sessionManagementThreadVisibilityLabel: "侧栏默认显示会话数",
     sessionManagementThreadVisibilityHint:
-      "控制当前项目在侧栏折叠态下默认显示多少条 root 会话。默认 {{defaultCount}}，支持 {{min}}-{{max}}；当前生效 {{count}}。",
+      "覆盖当前项目在侧栏折叠态下显示的 root 会话数。未覆盖时跟随工作区设置（当前 {{defaultCount}}）。本项范围 {{min}}-{{max}}；当前生效 {{count}}。",
     sessionManagementThreadVisibilitySaved:
       "已更新侧栏默认显示数量为 {{count}}。",
     sessionManagementThreadVisibilitySaving: "保存中...",

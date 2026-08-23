@@ -68,7 +68,7 @@ export async function listSessionIndexForWorkspace(
   return invoke<SessionIndexListPage>("list_session_index_for_workspace", {
     workspaceId,
     // Keep in sync with DEFAULT_VISIBLE_THREAD_ROOT_COUNT / DEFAULT_SIDEBAR_INDEX_LIMIT.
-    limit: options?.limit ?? 12,
+    limit: options?.limit ?? 5,
     syncIfNeeded: options?.syncIfNeeded ?? true,
     forceSync: options?.forceSync ?? false,
     beforeUpdatedAt: options?.beforeUpdatedAt ?? null,

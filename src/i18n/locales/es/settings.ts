@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Confianza alta",
     "sessionManagementAttributionConfidenceMedium": "Confianza media",
     "sessionManagementThreadVisibilityLabel": "Recuento de sesiones predeterminado de la barra lateral",
-    "sessionManagementThreadVisibilityHint": "Controla cuántas sesiones raíz muestra este espacio de trabajo de forma predeterminada mientras la barra lateral permanece contraída. Predeterminado {{defaultCount}}, rango admitido {{min}}-{{max}}; valor efectivo {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Anula cuántas sesiones raíz muestra este proyecto con la barra lateral contraída. Sin anulación sigue los ajustes del espacio de trabajo (actualmente {{defaultCount}}). Rango {{min}}-{{max}}; valor efectivo {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Se actualizó el recuento de sesiones predeterminado de la barra lateral a {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Guardando...",
     "sessionManagementLoadMore": "Cargar más",
