@@ -78,6 +78,37 @@
 - **THEN** 命令 MUST 携带调用方 thread 的 session id 并先完成对齐
 - **AND** 返回的数据 MUST 属于该 thread 的会话而非 resident 先前绑定的会话
 
+### Requirement: Resident 模型 MUST 与发送请求模型对齐
+
+RPC resident 的模型只在 spawn 时经 `--model` 设定一次；进程复用期间（含 tree/stats/fork 命令不带 model 裸 spawn 出的 resident）系统 MUST 在每次新 run 启动前将 resident 模型与本次发送请求的 model 对账，禁止以漂移后的模型静默作答。
+
+#### Scenario: spawn 携带请求模型
+
+- **WHEN** 惰性 spawn resident 且请求携带显式 model
+- **THEN** spawn MUST 传 `--model <model>`；握手后 resident 模型即请求模型，后续对账为 no-op
+
+#### Scenario: 新 run 启动前对账
+
+- **WHEN** 新 run 启动前 resident 已存活，且请求 model 为 `provider/modelId` 并与 resident 当前 model（get_state 缓存）不一致
+- **THEN** 系统 MUST 先 `set_model(provider, modelId)` 成功后再 prompt
+- **AND** `set_model` 成功后 MUST 刷新缓存 state（与 fork/switch_session/new_session 同纪律）
+
+#### Scenario: set_model 失败回退 print-json
+
+- **WHEN** `set_model` 返回失败
+- **THEN** 该 turn MUST 回退 `pi --print --mode json` 路径（spawn-per-turn 且每次携带 `--model`）
+- **AND** MUST NOT 以漂移后的 resident 模型静默作答
+
+#### Scenario: 裸 model id 无法精确对账
+
+- **WHEN** 请求 model 无 provider 前缀且与 resident 当前 model id 不同
+- **THEN** 系统 MUST log warn 并保留 resident 模型（`set_model` 需要显式 provider，裸 id 不可安全解析）
+
+#### Scenario: 活跃 run steer 不中途换模型
+
+- **WHEN** steer 附加到进行中的 run 且请求 model 与 resident 不一致
+- **THEN** 系统 MUST 保留 run 启动时的模型并 log warn，MUST NOT 在 run 中途 `set_model`
+
 ### Requirement: 发送语义 MUST 区分 idle prompt 与 streaming steer
 
 系统 MUST 按 RPC 会话的 streaming 状态选择 `prompt` 或 `steer` 命令，并以 typed 事件而非进程生命周期判定 turn 终态。

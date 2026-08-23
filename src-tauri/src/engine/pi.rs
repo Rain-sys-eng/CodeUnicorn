@@ -417,6 +417,57 @@ fn resolve_model_flag(model: Option<&str>) -> Option<String> {
     Some(trimmed.to_string())
 }
 
+/// Split a `provider/modelId` catalog id. Model ids may themselves contain
+/// slashes (e.g. openrouter `openai/gpt-4o` → `openrouter/openai/gpt-4o`),
+/// so only the FIRST segment is the provider.
+fn split_provider_model(value: &str) -> Option<(String, String)> {
+    let (provider, model_id) = value.split_once('/')?;
+    let provider = provider.trim();
+    let model_id = model_id.trim();
+    if provider.is_empty() || model_id.is_empty() {
+        return None;
+    }
+    Some((provider.to_string(), model_id.to_string()))
+}
+
+/// Reconcile plan for the resident's model vs the requested model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RpcModelReconcile {
+    /// No explicit model requested (auto/default): resident keeps whatever
+    /// the pi config default resolved to.
+    Skip,
+    /// Resident already runs the requested model.
+    Match,
+    /// Resident runs a different model: `set_model` before prompting.
+    Set { provider: String, model_id: String },
+    /// Bare model id (no provider prefix) that does not match the resident:
+    /// `set_model` needs an explicit provider, so we cannot reconcile
+    /// precisely — warn and keep the resident model.
+    BareMismatch(String),
+}
+
+fn plan_rpc_model_reconcile(
+    desired: Option<&str>,
+    current: Option<(&str, &str)>,
+) -> RpcModelReconcile {
+    let Some(desired) = desired else {
+        return RpcModelReconcile::Skip;
+    };
+    match split_provider_model(desired) {
+        Some((provider, model_id)) => {
+            if current == Some((provider.as_str(), model_id.as_str())) {
+                RpcModelReconcile::Match
+            } else {
+                RpcModelReconcile::Set { provider, model_id }
+            }
+        }
+        None => match current {
+            Some((_, model_id)) if model_id == desired => RpcModelReconcile::Match,
+            _ => RpcModelReconcile::BareMismatch(desired.to_string()),
+        },
+    }
+}
+
 // Session ids are passed as a CLI flag value; restrict to a conservative
 // charset so a hostile or corrupted id (e.g. "-x") is never parsed as a flag.
 fn is_valid_pi_session_id_arg(value: &str) -> bool {
@@ -661,6 +712,11 @@ impl PiSession {
 
     /// Ensure a live RPC client. On spawn/handshake failure the sticky
     /// `rpc_disabled` flag flips so subsequent sends go straight to fallback.
+    ///
+    /// `model` only applies at SPAWN time: a reused resident ignores it.
+    /// Sends MUST reconcile the resident model afterwards via
+    /// `reconcile_rpc_model` (tree/stats commands spawn model-less residents
+    /// pinned to the pi config default — 2026-08-23 model drift incident).
     async fn ensure_rpc(
         &self,
         session_id_hint: Option<&str>,
@@ -923,11 +979,34 @@ impl PiSession {
                     "另一 PI 会话的 turn 仍在进行中；请等待完成或先停止。".to_string();
                 return Err(PiRpcSendError::Failed(error));
             }
-        } else if let Err(error) = self
-            .align_rpc_session(&client, params.session_id.as_deref())
-            .await
-        {
-            return Err(PiRpcSendError::Failed(error));
+            // steer 附加不中途换模型：run 的模型在启动时确定。漂移只记日志，
+            // 下一个新 run 启动前由 reconcile_rpc_model 修正。
+            if let Some(desired) = resolve_model_flag(params.model.as_deref()) {
+                let current = client.current_model_identity().await;
+                let current_ref = current.as_ref().map(|(p, m)| (p.as_str(), m.as_str()));
+                if plan_rpc_model_reconcile(Some(desired.as_str()), current_ref)
+                    != RpcModelReconcile::Match
+                {
+                    log::warn!(
+                        "[pi/rpc] steer attach keeps active run model; requested {} differs (workspace={})",
+                        desired,
+                        self.workspace_id
+                    );
+                }
+            }
+        } else {
+            if let Err(error) = self
+                .align_rpc_session(&client, params.session_id.as_deref())
+                .await
+            {
+                return Err(PiRpcSendError::Failed(error));
+            }
+            // Resident 复用 / 裸 spawn（tree/stats 命令经 ensure_rpc(None, None)
+            // 拉起，钉死 pi 本地配置默认模型）时模型可能漂移；新 run 启动前
+            // MUST 与本次请求的 model 对账（2026-08-23「选 kimi-coding/k3 实际
+            // 回 MiniMax-M3」根因）。
+            self.reconcile_rpc_model(&client, params.model.as_deref())
+                .await?;
         }
         let images = encode_images_for_rpc(params.images.as_deref(), &self.workspace_path)
             .map_err(PiRpcSendError::Failed)?;
@@ -1147,6 +1226,46 @@ impl PiSession {
                         self.set_session_id(Some(id)).await;
                     }
                 }
+                Ok(())
+            }
+        }
+    }
+
+    /// Reconcile the resident's model with the requested model before a new
+    /// run starts. `set_model` failure degrades to the print-json fallback
+    /// (which honors `--model` per send) instead of failing the turn.
+    async fn reconcile_rpc_model(
+        &self,
+        client: &Arc<PiRpcClient>,
+        requested_model: Option<&str>,
+    ) -> Result<(), PiRpcSendError> {
+        let desired = resolve_model_flag(requested_model);
+        let current = client.current_model_identity().await;
+        let current_ref = current.as_ref().map(|(p, m)| (p.as_str(), m.as_str()));
+        match plan_rpc_model_reconcile(desired.as_deref(), current_ref) {
+            RpcModelReconcile::Skip | RpcModelReconcile::Match => Ok(()),
+            RpcModelReconcile::Set { provider, model_id } => {
+                log::info!(
+                    "[pi/rpc] reconciling resident model {:?} -> {provider}/{model_id} (workspace={})",
+                    current,
+                    self.workspace_id
+                );
+                client
+                    .set_model(&provider, &model_id)
+                    .await
+                    .map(|_| ())
+                    .map_err(|error| {
+                        PiRpcSendError::Fallback(format!(
+                            "pi rpc set_model({provider}/{model_id}) failed: {error}"
+                        ))
+                    })
+            }
+            RpcModelReconcile::BareMismatch(bare) => {
+                log::warn!(
+                    "[pi/rpc] bare model id {bare:?} cannot be reconciled (no provider prefix); resident stays on {:?} (workspace={})",
+                    current,
+                    self.workspace_id
+                );
                 Ok(())
             }
         }
@@ -1918,6 +2037,72 @@ mod tests {
             Some("high".to_string())
         );
         assert_eq!(resolve_thinking_flag(Some("nope")), None);
+    }
+
+    #[test]
+    fn split_provider_model_only_first_segment_is_provider() {
+        assert_eq!(
+            split_provider_model("kimi-coding/k3"),
+            Some(("kimi-coding".to_string(), "k3".to_string()))
+        );
+        // openrouter 等模型 id 自带斜杠：只有首段是 provider。
+        assert_eq!(
+            split_provider_model("openrouter/openai/gpt-4o"),
+            Some(("openrouter".to_string(), "openai/gpt-4o".to_string()))
+        );
+        assert_eq!(split_provider_model("k3"), None);
+        assert_eq!(split_provider_model("/k3"), None);
+        assert_eq!(split_provider_model("kimi-coding/"), None);
+    }
+
+    #[test]
+    fn model_reconcile_plan_matrix() {
+        // 未显式指定（auto/default）：不动 resident。
+        assert_eq!(plan_rpc_model_reconcile(None, None), RpcModelReconcile::Skip);
+        assert_eq!(
+            plan_rpc_model_reconcile(None, Some(("minimax-cn", "MiniMax-M3"))),
+            RpcModelReconcile::Skip
+        );
+        // resident 已是目标模型：no-op。
+        assert_eq!(
+            plan_rpc_model_reconcile(
+                Some("kimi-coding/k3"),
+                Some(("kimi-coding", "k3"))
+            ),
+            RpcModelReconcile::Match
+        );
+        // 漂移（裸 spawn 钉死 config 默认模型 / 用户切模型）：set_model。
+        assert_eq!(
+            plan_rpc_model_reconcile(
+                Some("kimi-coding/k3"),
+                Some(("minimax-cn", "MiniMax-M3"))
+            ),
+            RpcModelReconcile::Set {
+                provider: "kimi-coding".to_string(),
+                model_id: "k3".to_string()
+            }
+        );
+        // resident state 缺 model（未刷新）：也要 set_model 纠正。
+        assert_eq!(
+            plan_rpc_model_reconcile(Some("deepseek/deepseek-v4-flash"), None),
+            RpcModelReconcile::Set {
+                provider: "deepseek".to_string(),
+                model_id: "deepseek-v4-flash".to_string()
+            }
+        );
+        // 裸 id：与 resident 同 id 即匹配；不同则无法精确对账，仅 warn。
+        assert_eq!(
+            plan_rpc_model_reconcile(Some("k3"), Some(("kimi-coding", "k3"))),
+            RpcModelReconcile::Match
+        );
+        assert_eq!(
+            plan_rpc_model_reconcile(Some("k3"), Some(("minimax-cn", "MiniMax-M3"))),
+            RpcModelReconcile::BareMismatch("k3".to_string())
+        );
+        assert_eq!(
+            plan_rpc_model_reconcile(Some("k3"), None),
+            RpcModelReconcile::BareMismatch("k3".to_string())
+        );
     }
 
     fn command_args(cmd: &Command) -> Vec<String> {

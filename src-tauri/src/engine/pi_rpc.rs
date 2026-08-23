@@ -269,6 +269,16 @@ impl PiRpcClient {
             .map(str::to_string)
     }
 
+    /// Current model identity from the cached state: `(provider, modelId)`.
+    /// None when the state predates a refresh or carries `model: null`.
+    pub async fn current_model_identity(&self) -> Option<(String, String)> {
+        let state = self.state.read().await;
+        let model = state.get("model")?;
+        let provider = model.get("provider")?.as_str()?.to_string();
+        let id = model.get("id")?.as_str()?.to_string();
+        Some((provider, id))
+    }
+
     pub async fn kill(&self) {
         let mut child = self.child.lock().await;
         let _ = child.start_kill();
@@ -391,8 +401,13 @@ impl PiRpcClient {
     }
 
     pub async fn set_model(&self, provider: &str, model_id: &str) -> Result<Value, String> {
-        self.request(json!({"type":"set_model","provider":provider,"modelId":model_id}))
-            .await
+        let result = self
+            .request(json!({"type":"set_model","provider":provider,"modelId":model_id}))
+            .await?;
+        // 与 fork/switch_session/new_session 同纪律：成功后刷新缓存 state，
+        // 否则下一轮模型对账读到切换前的 stale model 会重复 set_model。
+        let _ = self.get_state().await;
+        Ok(result)
     }
 
     pub async fn set_thinking_level(&self, level: &str) -> Result<(), String> {
