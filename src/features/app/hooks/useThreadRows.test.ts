@@ -3,6 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ThreadSummary } from "../../../types";
+import { markPiDerivedThread } from "../../pi-session/store/piSessionStore";
 import {
   rememberVerifiedSharedHide,
   resetSharedNativeVisibilityMemory,
@@ -43,6 +44,64 @@ describe("useThreadRows", () => {
     expect(rows.unpinnedRows.map((row) => [row.thread.id, row.depth])).toEqual([
       ["parent-session", 0],
       ["child-session", 1],
+    ]);
+  });
+
+  it("hides live-window pi fork branch rows via derived mark (parentThreadId 未就位)", () => {
+    // live 窗口：fork 跳转 / thread/started 新建的分支行还没有 parentThreadId，
+    // list 刷新可能整局不跑——fork 成功时的派生登记必须立刻隐藏它。
+    const main: ThreadSummary = {
+      id: "pi:main-livewindow",
+      name: "99+22",
+      updatedAt: 100,
+      engineSource: "pi",
+    };
+    const branch: ThreadSummary = {
+      id: "pi:branch-livewindow",
+      name: "99+22",
+      updatedAt: 200,
+      engineSource: "pi",
+    };
+    markPiDerivedThread("pi:branch-livewindow");
+
+    const { result } = renderHook(() => useThreadRows({}));
+    const rows = result.current.getThreadRows(
+      [main, branch],
+      false,
+      "ws-1",
+      getPinTimestamp,
+    );
+
+    expect(rows.unpinnedRows.map((row) => row.thread.id)).toEqual([
+      "pi:main-livewindow",
+    ]);
+  });
+
+  it("keeps pi main visible while hiding parented pi branch (权威 parent 路径)", () => {
+    const main: ThreadSummary = {
+      id: "pi:main-parented",
+      name: "1+1",
+      updatedAt: 100,
+      engineSource: "pi",
+    };
+    const branch: ThreadSummary = {
+      id: "pi:branch-parented",
+      name: "1+1",
+      parentThreadId: "pi:main-parented",
+      updatedAt: 200,
+      engineSource: "pi",
+    };
+
+    const { result } = renderHook(() => useThreadRows({}));
+    const rows = result.current.getThreadRows(
+      [main, branch],
+      false,
+      "ws-1",
+      getPinTimestamp,
+    );
+
+    expect(rows.unpinnedRows.map((row) => row.thread.id)).toEqual([
+      "pi:main-parented",
     ]);
   });
 

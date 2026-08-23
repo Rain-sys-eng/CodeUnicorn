@@ -36,6 +36,28 @@ let state: PiSessionFeatureState = {
   jumpRequest: null,
 };
 
+/**
+ * 本会话内已确证的 fork 派生 thread id 集合（侧栏隐藏补助）：
+ * live 窗口内产生的分支行（fork 跳转 / thread/started）没有 parentThreadId，
+ * 而 list 刷新可能整局不跑——没这个集合，分支会泄漏成顶层行直到重启。
+ * 数据源：① fork 成功时登记（markPiDerivedThread）；② 树投影加载时登记
+ * 全部派生 lane（lane>0 的 laneSessionIds；lane 0 是主线 root，必须可见）。
+ * 进程内存级：重启后由 index / live list 的 parentSessionId 接管（权威）。
+ */
+const derivedThreadIds = new Set<string>();
+
+export function markPiDerivedThread(threadId: string): void {
+  const trimmed = threadId.trim();
+  if (trimmed) {
+    derivedThreadIds.add(trimmed);
+  }
+}
+
+/** 侧栏过滤用：该 pi thread 是否已确证为 fork 派生（应隐藏）。 */
+export function isPiDerivedThreadHidden(threadId: string): boolean {
+  return derivedThreadIds.has(threadId.trim());
+}
+
 const listeners = new Set<() => void>();
 
 function notify(): void {
@@ -69,6 +91,13 @@ export async function refreshPiSessionTree(
       sessionId: piSessionIdFromThreadId(threadId),
     });
     const projection = projectPiSessionTree(tree);
+    // 树投影是派生血缘的权威快照：lane>0 的 laneSessionIds 全部是派生会话
+    // （lane 0 = 主线 root），登记进侧栏隐藏集合——覆盖 live 窗口。
+    for (const [lane, sessionId] of Object.entries(projection.laneSessionIds)) {
+      if (Number(lane) > 0 && sessionId) {
+        derivedThreadIds.add(`pi:${sessionId}`);
+      }
+    }
     setState({ treeByKey: { ...state.treeByKey, [key]: projection } });
   } catch (error) {
     // RPC unavailable (print-json fallback / old pi): keep last-good snapshot.

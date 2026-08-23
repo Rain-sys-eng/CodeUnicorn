@@ -6,7 +6,7 @@ import {
   piSessionIdFromThreadId,
   type PiForkMessage,
 } from "../api/piSessionRpc";
-import { requestPiThreadJump } from "../store/piSessionStore";
+import { requestPiThreadJump, markPiDerivedThread } from "../store/piSessionStore";
 
 /**
  * Shared fork-entry resolution: the RPC `fork` command needs an entryId,
@@ -209,6 +209,9 @@ export function usePiForkFlow({
         // fork 成功 = 用户明确的「去新分支继续」意图：跳转分叉幕布（草稿
         // 已在新会话 composer）；同时保留成功确认态——跳转若因会话索引
         // 延迟尚未生效，用户也有明确去向反馈，不会「没有反应」。
+        // 同时立刻登记派生血缘：live 窗口内分支行没有 parentThreadId，
+        // 不登记会泄漏成侧栏顶层行直到下一次 list 刷新/重启。
+        markPiDerivedThread(`pi:${result.forkedSessionId}`);
         requestPiThreadJump(workspaceId, `pi:${result.forkedSessionId}`);
         setState({ ...state, busy: false, error: null, success: true });
         successTimerRef.current = setTimeout(() => setState(null), 1600);

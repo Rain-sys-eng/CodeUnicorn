@@ -180,3 +180,8 @@
 - [x] 23.6 **review 修复 ③（turn timeout 双结算）**：600s 超时原只 emit error + abort，run 与 waiter 残留——`agent_settled` 迟到或 stale-settle 自愈时同一 turn 收第二次终态（TurnError 后又 TurnCompleted）。修复：超时即摘下 run、全 waiter（main + attached steer）以同一错误一次结算，再 abort；新增 `PiRpcSendError::Settled` 臂告知 send_message 不再重发
 - [x] 23.7 **review 修复 ④（interrupt 空闲 2s 惩罚）**：`interrupt()` 原只要 RPC client 存活就 abort + 2s grace sleep——空闲时 Esc/stop 纯延迟。修复：与 `interrupt_turn` 对齐，仅活跃 run 存在时才 abort + grace
 - [x] 23.8 验证：`cargo check --lib` 绿；`cargo test --lib engine::pi::`（16）/ `engine::pi_rpc`（4）/ `engine::pi_history`（3）/ `engine::events`（35）全绿（`pi_auth::list_missing_file_is_all_none` 失败为环境依赖既有问题——本机 shell 有 API key 环境变量使 provider 状态非 none，与本 change 无关）；前端 `tsc --noEmit` 0 错误；pi-session / useThreadActions.helpers vitest 全绿
+
+## 24. 验收修复 round 7（2026-08-23，侧栏 live 窗口分支泄漏 + 「main 丢失」取证）
+
+- [x] 24.1 **live 窗口分支泄漏**：fork 跳转 / `thread/started` 新建的分支行没有 `parentThreadId`，而 pi list 刷新可能整局不跑（`includeEngineDiskLists` gate）→ 分支泄漏成顶层行直到重启（23.3 的 backfill 要等下轮刷新才生效）。修复：`piSessionStore` 新增进程内存级派生登记（① fork 成功即 `markPiDerivedThread`；② 树投影加载时登记全部 lane>0 的 laneSessionIds，lane 0 主线不登记），`useThreadRows` pi 过滤并列查询该集合。vitest 回归 ×2（live 窗口无 parent 也隐藏 / 权威 parent 路径 main 可见）
+- [x] 24.2 **「main 丢失」取证结论（无代码改动）**：用真实数据全层验证——index 行（parent/cwd/workspace 正确、未 tombstone）✓；live list cwd 匹配 ✓；真实数据跑 `sessionIndexRowsToThreadSummaries` + `mergePiSessionSummaries` + 派生过滤纯管线，三个疑似丢失 main 全部 `visible=true` ✓；折叠数学不成立（比它新的 root 仅 7 条，阈值 12）✓；Shared / archive / catalog `hiddenAutomaticSessionIds` 均无这些 id 的记录 ✓。结论：非过滤逻辑误杀，最可能为当时 app 会话的 index 快照时序 + first-paint 不跑 pi disk list 的暂态；如复现需加诊断日志再查

@@ -7,6 +7,7 @@ import {
   buildSharedSidebarHiddenParentKeys,
   isSharedSidebarHiddenPup,
 } from "../../shared-session/runtime/sharedSessionSummaries";
+import { isPiDerivedThreadHidden } from "../../pi-session/store/piSessionStore";
 import { lastVerifiedSharedHide } from "../../threads/hooks/sharedNativeVisibility";
 import { compareThreadSummariesByCreatedAtDesc } from "../../threads/utils/threadSummarySort";
 
@@ -95,9 +96,12 @@ export function useThreadRows(threadParentById: Record<string, string>) {
         // pi fork 派生会话：不占侧栏（顶层或嵌套都不渲染）——分支线路由
         // 右侧面板「会话树」统一控制；thread 本体仍在 store，树内跳转经
         // onSelectThread 直达（与 Shared pup 同款的侧栏级隐藏，不污染数据）。
+        // isPiDerivedThreadHidden 补助：live 窗口内（fork 跳转 / thread/started
+        // 新建的分支行）parentThreadId 尚未就位时，靠 fork/树投影登记的派生
+        // 集合即时隐藏，不等 list 刷新（否则泄漏到重启才消失）。
         if (
           (thread.engineSource === "pi" || thread.id.startsWith("pi:")) &&
-          parentId
+          (parentId || isPiDerivedThreadHidden(thread.id))
         ) {
           return;
         }
