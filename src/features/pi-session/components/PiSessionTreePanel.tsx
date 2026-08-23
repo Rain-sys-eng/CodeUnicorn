@@ -309,13 +309,6 @@ export function PiSessionTreePanel({
 
   return (
     <div className="pi-tree-panel" role="region" aria-label="会话树">
-      <div className="pi-fs-head">
-        <div className="t">
-          ⑂ 会话树
-          <span className="mono">pi RPC: get_tree</span>
-        </div>
-
-      </div>
       <div className="pi-fs-body">
         {tree === null ? (
           <div className="pi-fs-empty">加载中…</div>
@@ -494,6 +487,10 @@ export function PiSessionTreePanel({
         )}
       </div>
       <div className="pi-fs-foot">
+        <span className="pi-badge" title="Pi 会话树（pi RPC: get_tree）">
+          <GitFork size={11} aria-hidden />
+          PI 会话树
+        </span>
         <span className="stats">
           {tree
             ? `${tree.nodes.length} 节点 · ${tree.laneCount} lane · 当前 ${laneChipLabel(tree.activeLane)}`

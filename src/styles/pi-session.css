@@ -223,34 +223,6 @@ body.pi-tree-dock-resizing * {
   min-height: 0;
   background: var(--surface-messages);
 }
-.pi-fs-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  flex-wrap: nowrap;
-  overflow: hidden;
-}
-.pi-fs-head .t {
-  flex: none;
-  white-space: nowrap;
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--text-strong);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.pi-fs-head .mono {
-  font-size: 10px;
-  font-weight: 400;
-  color: var(--text-fainter);
-  font-family: var(--code-font-family, "SF Mono", Menlo, monospace);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .pi-fs-body {
   flex: 1;
   overflow: auto;
@@ -423,13 +395,33 @@ body.pi-tree-dock-resizing * {
   gap: 10px;
   padding: 8px 12px;
   border-top: 1px solid var(--border-subtle);
-  font-size: 10.5px;
-  color: var(--text-fainter);
+  font-size: 11px;
+  color: var(--text-faint);
   flex-wrap: wrap;
+}
+.pi-fs-foot .pi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+  font-family: var(--code-font-family, "SF Mono", Menlo, monospace);
+  letter-spacing: 0.02em;
+  color: #4d99ff;
+  background: rgba(77, 153, 255, 0.12);
+  border: 1px solid rgba(77, 153, 255, 0.32);
+  white-space: nowrap;
+}
+.pi-fs-foot .pi-badge svg {
+  display: block;
 }
 .pi-fs-foot .stats {
   font-family: var(--code-font-family, "SF Mono", Menlo, monospace);
   white-space: nowrap;
+  color: var(--text-muted);
 }
 .pi-fs-foot .hints {
   line-height: 1.6;
