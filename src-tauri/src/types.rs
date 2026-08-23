@@ -1200,6 +1200,11 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) show_sidebar_provider_labels: bool,
     #[serde(
+        default = "default_visible_thread_root_count",
+        rename = "defaultVisibleThreadRootCount"
+    )]
+    pub(crate) default_visible_thread_root_count: u32,
+    #[serde(
         default = "default_performance_compatibility_mode_enabled",
         rename = "performanceCompatibilityModeEnabled"
     )]
@@ -1493,6 +1498,10 @@ fn default_show_message_anchors() -> bool {
 
 fn default_show_sidebar_provider_labels() -> bool {
     false
+}
+
+fn default_visible_thread_root_count() -> u32 {
+    5
 }
 
 fn default_performance_compatibility_mode_enabled() -> bool {
@@ -2001,6 +2010,8 @@ impl AppSettings {
         self.codex_max_hot_runtimes = self.codex_max_hot_runtimes.clamp(0, 8);
         self.codex_max_warm_runtimes = self.codex_max_warm_runtimes.clamp(0, 16);
         self.codex_warm_ttl_seconds = self.codex_warm_ttl_seconds.clamp(15, 14400);
+        self.default_visible_thread_root_count =
+            self.default_visible_thread_root_count.clamp(1, 20);
         if !is_allowed_codex_auto_compaction_threshold_percent(
             self.codex_auto_compaction_threshold_percent,
         ) {
@@ -2133,6 +2144,7 @@ impl Default for AppSettings {
             usage_show_remaining: default_usage_show_remaining(),
             show_message_anchors: default_show_message_anchors(),
             show_sidebar_provider_labels: default_show_sidebar_provider_labels(),
+            default_visible_thread_root_count: default_visible_thread_root_count(),
             performance_compatibility_mode_enabled: default_performance_compatibility_mode_enabled(
             ),
             canvas_width_mode: default_canvas_width_mode(),
@@ -2609,6 +2621,7 @@ mod tests {
         assert!(!settings.usage_show_remaining);
         assert!(settings.show_message_anchors);
         assert!(!settings.show_sidebar_provider_labels);
+        assert_eq!(settings.default_visible_thread_root_count, 5);
         assert!(!settings.performance_compatibility_mode_enabled);
         assert_eq!(settings.canvas_width_mode, "narrow");
         assert_eq!(settings.layout_mode, "default");
@@ -2721,6 +2734,7 @@ mod tests {
         settings.codex_max_warm_runtimes = 99;
         settings.codex_warm_ttl_seconds = 20_000;
         settings.codex_auto_compaction_threshold_percent = 93;
+        settings.default_visible_thread_root_count = 99;
 
         settings.sanitize_runtime_pool_settings();
 
@@ -2728,6 +2742,7 @@ mod tests {
         assert_eq!(settings.codex_max_warm_runtimes, 16);
         assert_eq!(settings.codex_warm_ttl_seconds, 14_400);
         assert_eq!(settings.codex_auto_compaction_threshold_percent, 92);
+        assert_eq!(settings.default_visible_thread_root_count, 20);
     }
 
     #[test]

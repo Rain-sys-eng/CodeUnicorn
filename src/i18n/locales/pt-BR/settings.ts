@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Alta confiança",
     "sessionManagementAttributionConfidenceMedium": "Confiança média",
     "sessionManagementThreadVisibilityLabel": "Contagem padrão de sessões na barra lateral",
-    "sessionManagementThreadVisibilityHint": "Controla quantas sessões raiz este workspace mostra por padrão enquanto a barra lateral permanece recolhida. Padrão {{defaultCount}}, faixa suportada {{min}}-{{max}}; valor efetivo {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Substitui quantas sessões raiz este projeto mostra com a barra lateral recolhida. Sem substituição, segue as configurações do workspace (atualmente {{defaultCount}}). Faixa {{min}}-{{max}}; valor efetivo {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Contagem padrão de sessões da barra lateral atualizada para {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Salvando...",
     "sessionManagementLoadMore": "Carregar mais",

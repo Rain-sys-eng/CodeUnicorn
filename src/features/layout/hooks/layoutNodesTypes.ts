@@ -166,6 +166,8 @@ export type LayoutNodesFlatOptions = {
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
   showSidebarProviderLabels: boolean;
+  defaultVisibleThreadRootCount: number;
+  onChangeDefaultVisibleThreadRootCount: (count: number) => void | Promise<unknown>;
   onRefreshAccountRateLimits?: () => Promise<void> | void;
   showMessageAnchors: boolean;
   accountInfo: AccountSnapshot | null;
@@ -808,6 +810,8 @@ export type RuntimeLayoutNodesOptions = Pick<
   | "activeRateLimits"
   | "usageShowRemaining"
   | "showSidebarProviderLabels"
+  | "defaultVisibleThreadRootCount"
+  | "onChangeDefaultVisibleThreadRootCount"
   | "onRefreshAccountRateLimits"
   | "showMessageAnchors"
   | "accountInfo"

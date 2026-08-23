@@ -234,6 +234,8 @@ export type AppSettings = {
   usageShowRemaining: boolean;
   showMessageAnchors: boolean;
   showSidebarProviderLabels: boolean;
+  /** Sidebar collapsed-state default unpinned root count for all projects. */
+  defaultVisibleThreadRootCount: number;
   performanceCompatibilityModeEnabled: boolean;
   uiFontFamily: string;
   codeFontFamily: string;

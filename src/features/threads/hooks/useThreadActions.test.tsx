@@ -2442,7 +2442,7 @@ describe("useThreadActions", () => {
         scanQuality: "preview",
       },
       cursor: null,
-      limit: 12,
+      limit: 5,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
@@ -2564,7 +2564,7 @@ describe("useThreadActions", () => {
       );
     });
 
-    expect(listClaudeSessions).toHaveBeenCalledWith("/tmp/codex", 12);
+    expect(listClaudeSessions).toHaveBeenCalledWith("/tmp/codex", 200);
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
         id: "claude:claude-visible-200",
@@ -2646,7 +2646,7 @@ describe("useThreadActions", () => {
         scanQuality: "preview",
       },
       cursor: null,
-      limit: 12,
+      limit: 5,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {

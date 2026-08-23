@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "高い信頼度",
     "sessionManagementAttributionConfidenceMedium": "中程度の信頼度",
     "sessionManagementThreadVisibilityLabel": "サイドバーの既定セッション数",
-    "sessionManagementThreadVisibilityHint": "サイドバーが折りたたまれている間に、このワークスペースが既定で表示するルートセッションの数を制御します。既定は {{defaultCount}}、対応範囲は {{min}}-{{max}}、有効値は {{count}} です。",
+    "sessionManagementThreadVisibilityHint": "サイドバー折りたたみ時にこのプロジェクトが表示するルートセッション数を上書きします。未設定時はワークスペース設定（現在 {{defaultCount}}）に従います。範囲 {{min}}-{{max}}、有効値 {{count}}。",
     "sessionManagementThreadVisibilitySaved": "サイドバーの既定セッション数を {{count}} に更新しました。",
     "sessionManagementThreadVisibilitySaving": "保存中...",
     "sessionManagementLoadMore": "さらに読み込む",

@@ -1791,6 +1791,14 @@ export function useAppShellLayoutNodesSection(
       }
     },
   );
+  const handleChangeDefaultVisibleThreadRootCount = useEventCallback(
+    async (count: number) => {
+      await queueSaveSettings({
+        ...appSettings,
+        defaultVisibleThreadRootCount: count,
+      });
+    },
+  );
   const handleCodexAutoCompactionSettingsChange = useEventCallback(
     async (patch: { enabled?: boolean; thresholdPercent?: number }) => {
       await queueSaveSettings({
@@ -1953,6 +1961,9 @@ export function useAppShellLayoutNodesSection(
       activeRateLimits,
       usageShowRemaining: appSettings.usageShowRemaining,
       showSidebarProviderLabels: appSettings.showSidebarProviderLabels,
+      defaultVisibleThreadRootCount: appSettings.defaultVisibleThreadRootCount,
+      onChangeDefaultVisibleThreadRootCount:
+        handleChangeDefaultVisibleThreadRootCount,
       onRefreshAccountRateLimits: handleRefreshAccountRateLimits,
       showMessageAnchors: appSettings.showMessageAnchors,
       accountInfo: activeAccount,

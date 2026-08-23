@@ -28,6 +28,7 @@ import { WorkspaceCard } from "./WorkspaceCard";
 import type { WorkspaceRowPinnedAction } from "./WorkspaceCard";
 import { WorkspaceGroup } from "./WorkspaceGroup";
 import { WorkspaceSessionFolderTree } from "./WorkspaceSessionFolderTree";
+import { WorkspaceSettingsDialog } from "./WorkspaceSettingsDialog";
 import { SidebarFolderMovePicker } from "./SidebarFolderMovePicker";
 import { SidebarSearchBox } from "./SidebarSearchBox";
 import { SidebarSettingsMenu } from "./SidebarSettingsMenu";
@@ -86,6 +87,7 @@ import {
 } from "./sidebarInternals";
 import { shouldHidePlaceholderNativeDraftFromSidebar } from "../../threads/hooks/sessionIndexThreadSummaries";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
+import Settings from "lucide-react/dist/esm/icons/settings";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import EyeOff from "lucide-react/dist/esm/icons/eye-off";
@@ -104,9 +106,10 @@ import {
   getWorkspaceSidebarLabel,
 } from "../utils/workspaceSidebarLabel";
 import {
-  normalizeVisibleThreadRootCount,
+  normalizeGlobalVisibleThreadRootCount,
   planThreadListPageAdvance,
   resolveVisibleThreadRootLimit,
+  resolveVisibleThreadRootPageSize,
 } from "../constants";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 import {
@@ -166,6 +169,8 @@ type SidebarProps = {
   accountRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
   showProviderLabels?: boolean;
+  defaultVisibleThreadRootCount?: number;
+  onChangeDefaultVisibleThreadRootCount?: (count: number) => void | Promise<unknown>;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
   onCancelSwitchAccount: () => void;
@@ -309,6 +314,8 @@ function SidebarImpl({
   systemProxyEnabled = false,
   systemProxyUrl = null,
   showProviderLabels = false,
+  defaultVisibleThreadRootCount,
+  onChangeDefaultVisibleThreadRootCount,
   accountInfo: _accountInfo,
   onSwitchAccount: _onSwitchAccount,
   onCancelSwitchAccount: _onCancelSwitchAccount,
@@ -418,6 +425,9 @@ function SidebarImpl({
     [globalSearchShortcut, isMac],
   );
 
+  const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
+  const resolvedDefaultVisibleThreadRootCount =
+    normalizeGlobalVisibleThreadRootCount(defaultVisibleThreadRootCount);
   const [threadListPageByWorkspace, setThreadListPageByWorkspace] = useState<
     Record<string, number>
   >({});
@@ -1007,6 +1017,7 @@ function SidebarImpl({
       const visibleThreadRootCount = resolveVisibleThreadRootLimit(
         workspace.settings.visibleThreadRootCount,
         threadListPageByWorkspace[workspace.id],
+        resolvedDefaultVisibleThreadRootCount,
       );
       const { unpinnedRows } = getThreadRows(
         threads,
@@ -1031,6 +1042,7 @@ function SidebarImpl({
       getProjectedThreads,
       getThreadRows,
       isExitedSessionsHidden,
+      resolvedDefaultVisibleThreadRootCount,
       threadStatusById,
     ],
   );
@@ -1375,6 +1387,7 @@ function SidebarImpl({
         const visibleThreadRootCount = resolveVisibleThreadRootLimit(
           workspace.settings.visibleThreadRootCount,
           threadListPageByWorkspace[workspace.id],
+          resolvedDefaultVisibleThreadRootCount,
         );
         const { unpinnedRows, totalRoots } = getThreadRows(
           threads,
@@ -1394,6 +1407,7 @@ function SidebarImpl({
     getPinTimestamp,
     getThreadRows,
     getProjectedThreads,
+    resolvedDefaultVisibleThreadRootCount,
   ]);
 
   useEffect(() => {
@@ -1510,14 +1524,19 @@ function SidebarImpl({
     (workspaceId: string) => {
       const workspace =
         workspaces.find((entry) => entry.id === workspaceId) ?? null;
-      const pageSize = normalizeVisibleThreadRootCount(
+      const pageSize = resolveVisibleThreadRootPageSize(
         workspace?.settings.visibleThreadRootCount,
+        resolvedDefaultVisibleThreadRootCount,
       );
       const currentPage = Math.max(
         1,
         threadListPageByWorkspace[workspaceId] ?? 1,
       );
-      const currentLimit = resolveVisibleThreadRootLimit(pageSize, currentPage);
+      const currentLimit = resolveVisibleThreadRootLimit(
+        pageSize,
+        currentPage,
+        resolvedDefaultVisibleThreadRootCount,
+      );
       const isWorktree = (workspace?.kind ?? "main") === "worktree";
       const threads = isWorktree
         ? (threadsByWorkspace[workspaceId] ?? [])
@@ -1551,6 +1570,7 @@ function SidebarImpl({
       getProjectedThreads,
       getThreadRows,
       onLoadOlderThreads,
+      resolvedDefaultVisibleThreadRootCount,
       threadListCursorByWorkspace,
       threadListPageByWorkspace,
       threadListPagingByWorkspace,
@@ -1994,6 +2014,7 @@ function SidebarImpl({
     const visibleThreadRootCount = resolveVisibleThreadRootLimit(
       entry.settings.visibleThreadRootCount,
       threadListPage,
+      resolvedDefaultVisibleThreadRootCount,
     );
     const hideExitedSessions = isExitedSessionsHidden(entry.path);
     const sessionFolders = sessionFoldersByWorkspaceId[entry.id] ?? EMPTY_SESSION_FOLDERS;
@@ -2048,6 +2069,7 @@ function SidebarImpl({
             systemProxyEnabled={systemProxyEnabled}
             systemProxyUrl={systemProxyUrl}
             showProviderLabels={showProviderLabels}
+            defaultVisibleThreadRootCount={resolvedDefaultVisibleThreadRootCount}
             moveFolderTargetsByWorkspaceId={moveFolderTargetsByWorkspaceId}
             getThreadRows={getThreadRows}
             getThreadTime={getThreadTime}
@@ -2226,6 +2248,7 @@ function SidebarImpl({
     systemProxyEnabled,
     systemProxyUrl,
     showProviderLabels,
+    resolvedDefaultVisibleThreadRootCount,
     onToggleWorkspaceCollapse,
     renderHighlightedName,
     hydratedThreadListWorkspaceIds,
@@ -2440,6 +2463,15 @@ function SidebarImpl({
                   style={{ fontSize: "16px" }}
                 />
               </TooltipIconButton>
+              <TooltipIconButton
+                className="sidebar-title-add"
+                onClick={() => setWorkspaceSettingsOpen(true)}
+                data-tauri-drag-region="false"
+                data-testid="workspace-settings-button"
+                label={t("sidebar.workspaceSettings")}
+              >
+                <Settings size={14} aria-hidden />
+              </TooltipIconButton>
             </div>
             <div className="workspace-list">
           {defaultWorkspaceEntries.map((entry) => renderWorkspaceEntry(entry))}
@@ -2546,6 +2578,14 @@ function SidebarImpl({
           className="renderer-context-menu sidebar-renderer-context-menu"
         />
       ) : null}
+      <WorkspaceSettingsDialog
+        open={workspaceSettingsOpen}
+        defaultVisibleThreadRootCount={resolvedDefaultVisibleThreadRootCount}
+        onOpenChange={setWorkspaceSettingsOpen}
+        onSaveDefaultVisibleThreadRootCount={async (count) => {
+          await onChangeDefaultVisibleThreadRootCount?.(count);
+        }}
+      />
       <ProviderContinuationDialog
         state={providerContinuationDialogState}
         onCancel={closeProviderContinuationDialog}

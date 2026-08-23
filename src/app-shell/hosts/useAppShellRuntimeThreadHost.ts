@@ -73,6 +73,7 @@ export function useAppShellRuntimeThreadHost() {
     useNormalizedRealtimeAdapters: appSettings.chatCanvasUseNormalizedRealtime,
     useUnifiedHistoryLoader: appSettings.chatCanvasUseUnifiedHistoryLoader,
     sessionAttributionMode: appSettings.sessionAttributionMode,
+    defaultVisibleThreadRootCount: appSettings.defaultVisibleThreadRootCount,
     resolveOpenCodeAgent: resolveOpenCodeAgentForThread,
     resolveOpenCodeVariant: resolveOpenCodeVariantForThread,
     resolveCollaborationUiMode,

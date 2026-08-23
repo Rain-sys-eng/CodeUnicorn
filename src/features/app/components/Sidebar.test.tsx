@@ -62,6 +62,28 @@ describe("sidebarInternals", () => {
 });
 
 describe("Sidebar", () => {
+  it("places workspace settings after add project and opens the dialog", async () => {
+    const onChangeDefaultVisibleThreadRootCount = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        onChangeDefaultVisibleThreadRootCount={
+          onChangeDefaultVisibleThreadRootCount
+        }
+      />,
+    );
+
+    const addButton = screen.getByRole("button", { name: "Add workspace" });
+    const settingsButton = screen.getByTestId("workspace-settings-button");
+    expect(settingsButton.getAttribute("aria-label")).toBe(
+      "Workspace settings",
+    );
+    expect(addButton.nextElementSibling).toBe(settingsButton);
+
+    fireEvent.click(settingsButton);
+    expect(await screen.findByTestId("workspace-settings-dialog")).toBeTruthy();
+  });
+
   it("loads Claude, Codex, and Kimi provider catalogs once on mount", async () => {
     render(<Sidebar {...baseProps} />);
 

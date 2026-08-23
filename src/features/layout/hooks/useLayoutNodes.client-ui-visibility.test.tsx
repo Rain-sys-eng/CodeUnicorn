@@ -592,6 +592,8 @@ function createLayoutOptions(
     activeRateLimits: null,
     usageShowRemaining: false,
     showSidebarProviderLabels: false,
+    defaultVisibleThreadRootCount: 5,
+    onChangeDefaultVisibleThreadRootCount: noop,
     showMessageAnchors: true,
     accountInfo: null,
     onSwitchAccount: noop,

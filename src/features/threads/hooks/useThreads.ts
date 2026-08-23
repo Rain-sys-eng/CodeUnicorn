@@ -183,6 +183,7 @@ type UseThreadsOptions = {
   useNormalizedRealtimeAdapters?: boolean;
   useUnifiedHistoryLoader?: boolean;
   sessionAttributionMode?: WorkspaceSessionAttributionMode;
+  defaultVisibleThreadRootCount?: number | null;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
   resolveOpenCodeVariant?: (threadId: string | null) => string | null;
   resolveCollaborationUiMode?: (threadId: string) => "plan" | "code" | null;
@@ -233,6 +234,7 @@ export function useThreads({
   useNormalizedRealtimeAdapters = true,
   useUnifiedHistoryLoader = false,
   sessionAttributionMode = "related",
+  defaultVisibleThreadRootCount = null,
   resolveOpenCodeAgent,
   resolveOpenCodeVariant,
   resolveCollaborationUiMode,
@@ -1084,6 +1086,7 @@ export function useThreads({
     },
     onCodexPendingThreadFinalized: handleCodexPendingThreadFinalized,
     sessionAttributionMode,
+    defaultVisibleThreadRootCount,
     useUnifiedHistoryLoader,
   });
   useEffect(() => {

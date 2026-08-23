@@ -546,3 +546,48 @@
   border-color: color-mix(in srgb, var(--border-accent) 48%, transparent);
   color: var(--text-strong);
 }
+
+.workspace-settings-dialog {
+  background: var(--surface-card-strong);
+}
+
+.workspace-settings-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspace-settings-pref-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  align-items: center;
+  padding: 12px 0 4px;
+}
+
+.workspace-settings-pref-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workspace-settings-pref-title {
+  color: var(--text-strong);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.workspace-settings-pref-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 44ch;
+}
+
+.workspace-settings-pref-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}

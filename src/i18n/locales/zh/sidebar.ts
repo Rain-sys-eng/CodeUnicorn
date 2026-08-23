@@ -45,6 +45,12 @@ const sidebar = {
     cliComingSoon: "即将推出",
     cliNotInstalled: "cli未安装，请先安装",
     addWorkspace: "添加项目",
+    workspaceSettings: "工作区设置",
+    workspaceSettingsTitle: "工作区设置",
+    workspaceSettingsDescription: "这些偏好对所有项目生效。",
+    workspaceSettingsVisibleCountLabel: "默认显示会话数",
+    workspaceSettingsVisibleCountHint:
+      "控制侧栏折叠态下默认露出多少条 root 会话。出厂 {{defaultCount}}，可调 {{min}}-{{max}}。单个项目仍可在会话管理中覆盖。",
     openHome: "打开首页",
     toggleSearch: "切换搜索",
     searchProjects: "搜索项目",

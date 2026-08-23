@@ -800,6 +800,10 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           accountRateLimits={options.activeRateLimits}
           usageShowRemaining={options.usageShowRemaining}
           showProviderLabels={options.showSidebarProviderLabels}
+          defaultVisibleThreadRootCount={options.defaultVisibleThreadRootCount}
+          onChangeDefaultVisibleThreadRootCount={
+            options.onChangeDefaultVisibleThreadRootCount
+          }
           accountInfo={options.accountInfo}
           onSwitchAccount={options.onSwitchAccount}
           onCancelSwitchAccount={options.onCancelSwitchAccount}
@@ -986,6 +990,8 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       options.showDebugButton,
       options.showLoadingProgressDialog,
       options.showSidebarProviderLabels,
+      options.defaultVisibleThreadRootCount,
+      options.onChangeDefaultVisibleThreadRootCount,
       options.showTerminalButton,
       options.systemProxyEnabled,
       options.systemProxyUrl,

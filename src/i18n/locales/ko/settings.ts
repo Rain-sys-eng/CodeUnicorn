@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "높은 신뢰도",
     "sessionManagementAttributionConfidenceMedium": "중간 신뢰도",
     "sessionManagementThreadVisibilityLabel": "사이드바 기본 세션 개수",
-    "sessionManagementThreadVisibilityHint": "사이드바가 접힌 상태에서 이 워크스페이스가 기본으로 표시하는 루트 세션 수를 조정합니다. 기본값 {{defaultCount}}, 지원 범위 {{min}}-{{max}}; 적용 값 {{count}}.",
+    "sessionManagementThreadVisibilityHint": "사이드바가 접힌 상태에서 이 프로젝트가 표시하는 루트 세션 수를 덮어씁니다. 미설정 시 워크스페이스 설정(현재 {{defaultCount}})을 따릅니다. 범위 {{min}}-{{max}}; 적용 값 {{count}}.",
     "sessionManagementThreadVisibilitySaved": "사이드바 기본 세션 개수를 {{count}}개로 업데이트했습니다.",
     "sessionManagementThreadVisibilitySaving": "저장 중...",
     "sessionManagementLoadMore": "더 불러오기",

@@ -45,6 +45,12 @@ const sidebar = {
     cliComingSoon: "Coming Soon",
     cliNotInstalled: "Not Installed",
     addWorkspace: "Add Project",
+    workspaceSettings: "Workspace settings",
+    workspaceSettingsTitle: "Workspace settings",
+    workspaceSettingsDescription: "These preferences apply to every project.",
+    workspaceSettingsVisibleCountLabel: "Default visible sessions",
+    workspaceSettingsVisibleCountHint:
+      "How many root sessions the collapsed sidebar shows by default. Factory {{defaultCount}}, range {{min}}-{{max}}. A project can still override this in Session Management.",
     openHome: "Open home",
     toggleSearch: "Toggle search",
     searchProjects: "Search projects",

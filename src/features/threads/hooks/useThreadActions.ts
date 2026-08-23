@@ -198,6 +198,7 @@ export function useThreadActions({
   resolveWorkspacePath,
   useUnifiedHistoryLoader = false,
   sessionAttributionMode = "related",
+  defaultVisibleThreadRootCount = null,
 }: UseThreadActionsOptions) {
   const {
     historyLoadingByThreadId,
@@ -262,6 +263,7 @@ export function useThreadActions({
       canListWorkspaceSessions,
       listWorkspaceSessionsService,
       listWorkspaceSessionArchiveEvidenceService,
+      defaultVisibleThreadRootCount,
     });
   const {
     beginAutomaticRuntimeRecovery,
@@ -520,7 +522,10 @@ export function useThreadActions({
         // stuck on stale sidebarSnapshot for seconds (user: old list → late correct).
         // One display page (20) per engine feeds the mixed top-20 view; older
         // rows arrive via keyset paging (sidebar 更多).
-        const sessionIndexLimit = resolveInitialThreadListTargetCount(workspace);
+        const sessionIndexLimit = resolveInitialThreadListTargetCount(
+          workspace,
+          defaultVisibleThreadRootCount,
+        );
         // Only explicit soft re-sync forces writers; cold first-paint must hit
         // warm SQLite (ms) so stale sidebarSnapshot is replaced immediately.
         const forceIndexSync = Boolean(options?.forceSessionIndexSync);
@@ -811,7 +816,10 @@ export function useThreadActions({
         const hasKnownActivity = Object.keys(knownActivityByThread).length > 0;
         const matchingThreads: Record<string, unknown>[] = [];
         // First paint: only the visible root budget (default 5). More via Load older.
-        const targetCount = resolveInitialThreadListTargetCount(workspace);
+        const targetCount = resolveInitialThreadListTargetCount(
+          workspace,
+          defaultVisibleThreadRootCount,
+        );
         const pageSize = Math.max(THREAD_LIST_PAGE_SIZE, targetCount);
         const maxPagesWithoutMatch = hasKnownActivity
           ? THREAD_LIST_MAX_EMPTY_PAGES_WITH_ACTIVITY
@@ -1124,7 +1132,10 @@ export function useThreadActions({
         const lastGoodThreadSummaries = getLastGoodThreadSummaries(
           workspace.id,
         );
-        const nativeSessionListLimit = resolveNativeSessionListLimit(workspace);
+        const nativeSessionListLimit = resolveNativeSessionListLimit(
+          workspace,
+          defaultVisibleThreadRootCount,
+        );
 
         // Merge Session Index into live codex page (titles now available).
         // Early paint already showed index; this enrich names + keep live identity.
@@ -2807,6 +2818,7 @@ export function useThreadActions({
       rememberLastGoodThreadSummariesByEngine,
       removeThreadFromCachedSummaries,
       sessionAttributionMode,
+      defaultVisibleThreadRootCount,
       activeThreadIdByWorkspace,
       threadActivityRef,
       threadsByWorkspace,
@@ -2817,6 +2829,7 @@ export function useThreadActions({
     activeThreadIdByWorkspace,
     applySessionArchiveState,
     canListWorkspaceSessions,
+    defaultVisibleThreadRootCount,
     dispatch,
     getCustomName,
     latestThreadsByWorkspaceRef,

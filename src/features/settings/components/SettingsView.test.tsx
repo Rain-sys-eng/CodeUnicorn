@@ -319,6 +319,7 @@ const baseSettings: AppSettings = {
   usageShowRemaining: false,
   showMessageAnchors: true,
   showSidebarProviderLabels: false,
+  defaultVisibleThreadRootCount: 5,
   performanceCompatibilityModeEnabled: false,
   uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   codeFontFamily: 'Monaco, "SF Mono", "SFMono-Regular", Menlo, monospace',

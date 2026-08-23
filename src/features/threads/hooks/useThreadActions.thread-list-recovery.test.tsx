@@ -331,7 +331,7 @@ describe("useThreadActions thread list recovery and pagination", () => {
       await result.current.loadOlderThreadsForWorkspace(workspace);
     });
 
-    expect(listThreads).toHaveBeenCalledWith("ws-1", "codex-unified:50", 12);
+    expect(listThreads).toHaveBeenCalledWith("ws-1", "codex-unified:50", 5);
     expectSetThreadsDispatched(dispatch, "ws-1", [
       { id: "thread-1", name: "Agent 1", updatedAt: 6000 },
       { id: "thread-2", name: "Older runtime preview", updatedAt: 4000 },
@@ -406,7 +406,7 @@ describe("useThreadActions thread list recovery and pagination", () => {
       },
       cursor: "offset:200",
       // Sidebar paging uses the same page size as first-paint / Index.
-      limit: 12,
+      limit: 5,
     });
     expect(listThreads).not.toHaveBeenCalled();
     expectSetThreadsDispatched(dispatch, "ws-1", [

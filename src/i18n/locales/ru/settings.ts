@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Высокая уверенность",
     "sessionManagementAttributionConfidenceMedium": "Средняя уверенность",
     "sessionManagementThreadVisibilityLabel": "Число сессий на боковой панели по умолчанию",
-    "sessionManagementThreadVisibilityHint": "Управляет тем, сколько корневых сессий эта рабочая область показывает по умолчанию, пока боковая панель свёрнута. По умолчанию {{defaultCount}}, поддерживаемый диапазон {{min}}-{{max}}; действующее значение {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Переопределяет, сколько корневых сессий этот проект показывает в свёрнутой боковой панели. Без переопределения используется настройка рабочей области (сейчас {{defaultCount}}). Диапазон {{min}}-{{max}}; действующее значение {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Число сессий на боковой панели по умолчанию обновлено до {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Сохранение...",
     "sessionManagementLoadMore": "Загрузить ещё",

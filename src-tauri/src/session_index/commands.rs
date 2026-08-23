@@ -24,9 +24,7 @@ use crate::engine::gemini_history::list_gemini_sessions;
 use crate::engine::grok_history::list_grok_sessions;
 use crate::engine::opencode_session_list_core;
 use crate::engine::pi_history::list_pi_sessions;
-use crate::engine::qoder_history::{
-    list_qoder_sessions_for_launch_profile, QoderSessionSummary,
-};
+use crate::engine::qoder_history::{list_qoder_sessions_for_launch_profile, QoderSessionSummary};
 use crate::engine::qoder_provider_profile::{
     resolve_qoder_provider_launch_profile, QoderDistributionSettings, QoderProviderLaunchProfile,
     QODER_CN_PROVIDER_PROFILE_ID, QODER_GLOBAL_PROVIDER_PROFILE_ID,
@@ -34,7 +32,7 @@ use crate::engine::qoder_provider_profile::{
 use crate::local_usage::resolve_sessions_roots;
 use crate::state::AppState;
 
-const DEFAULT_SIDEBAR_INDEX_LIMIT: usize = 12;
+const DEFAULT_SIDEBAR_INDEX_LIMIT: usize = 5;
 const ASYNC_ENGINE_LIST_TIMEOUT: Duration = Duration::from_secs(3);
 const OPENCODE_INDEX_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -81,16 +79,18 @@ async fn list_qoder_index_sessions(
             Ok(Ok(mut distribution_sessions)) => sessions.append(&mut distribution_sessions),
             Ok(Err(error)) => {
                 let message = error.to_ascii_lowercase();
-                failure = Some(if message.contains("not found")
-                    || message.contains("not installed")
-                    || message.contains("no such file")
-                    || message.contains("timed out")
-                    || message.contains("timeout")
-                {
-                    "qoder-unavailable".to_string()
-                } else {
-                    format!("qoder-sync-error:{}", truncate_error(&error))
-                });
+                failure = Some(
+                    if message.contains("not found")
+                        || message.contains("not installed")
+                        || message.contains("no such file")
+                        || message.contains("timed out")
+                        || message.contains("timeout")
+                    {
+                        "qoder-unavailable".to_string()
+                    } else {
+                        format!("qoder-sync-error:{}", truncate_error(&error))
+                    },
+                );
             }
             Err(_) => failure = Some("qoder-sync-timeout".to_string()),
         }
@@ -483,8 +483,12 @@ async fn sync_qoder_engine(
         let settings = state.engine_manager.qoder_distribution_settings().await;
         match resolve_qoder_index_profiles(&workspace_path, &settings) {
             Ok(profiles) => {
-                let (sessions, partial) = list_qoder_index_sessions(&workspace_path, limit, profiles).await;
-                (rows_from_qoder_summaries(&workspace_path, &sessions), partial)
+                let (sessions, partial) =
+                    list_qoder_index_sessions(&workspace_path, limit, profiles).await;
+                (
+                    rows_from_qoder_summaries(&workspace_path, &sessions),
+                    partial,
+                )
             }
             Err(error) => (
                 Vec::new(),
@@ -881,18 +885,16 @@ pub(crate) async fn backfill_session_index_core(
                         return Ok(Vec::new());
                     };
                     let (global_result, cn_result) = tokio::join!(
-                        list_qoder_sessions_for_launch_profile(
-                            &path,
-                            Some(limit),
-                            &global_profile,
-                        ),
+                        list_qoder_sessions_for_launch_profile(&path, Some(limit), &global_profile,),
                         list_qoder_sessions_for_launch_profile(&path, Some(limit), &cn_profile),
                     );
                     let mut sessions = Vec::new();
                     let mut errors = Vec::new();
                     for result in [global_result, cn_result] {
                         match result {
-                            Ok(mut distribution_sessions) => sessions.append(&mut distribution_sessions),
+                            Ok(mut distribution_sessions) => {
+                                sessions.append(&mut distribution_sessions)
+                            }
                             Err(error) => errors.push(error),
                         }
                     }

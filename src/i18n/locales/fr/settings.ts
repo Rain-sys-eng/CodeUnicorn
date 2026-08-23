@@ -941,7 +941,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Confiance élevée",
     "sessionManagementAttributionConfidenceMedium": "Confiance moyenne",
     "sessionManagementThreadVisibilityLabel": "Nombre de sessions affichées par défaut dans la barre latérale",
-    "sessionManagementThreadVisibilityHint": "Contrôle combien de sessions racines cet espace de travail affiche par défaut lorsque la barre latérale reste réduite. Par défaut {{defaultCount}}, plage prise en charge {{min}}-{{max}} ; valeur effective {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Remplace le nombre de sessions racines affichées pour ce projet lorsque la barre latérale est repliée. Sans remplacement, suit les paramètres de l'espace de travail (actuellement {{defaultCount}}). Plage {{min}}-{{max}} ; valeur effective {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Nombre de sessions affichées par défaut dans la barre latérale mis à jour à {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Enregistrement...",
     "sessionManagementLoadMore": "Charger plus",

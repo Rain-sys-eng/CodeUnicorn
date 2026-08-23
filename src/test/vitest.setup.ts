@@ -201,6 +201,14 @@ const mockTranslate = (key: string, params?: Record<string, unknown>) => {
         "sidebar.newCloneAgent": "New clone agent",
         "sidebar.noProjectsMatch": "No projects match your search.",
         "sidebar.addWorkspaceToStart": "Add a workspace to start.",
+        "sidebar.workspaceSettings": "Workspace settings",
+        "sidebar.workspaceSettingsTitle": "Workspace settings",
+        "sidebar.workspaceSettingsDescription":
+          "These preferences apply to every project.",
+        "sidebar.workspaceSettingsVisibleCountLabel":
+          "Default visible sessions",
+        "sidebar.workspaceSettingsVisibleCountHint":
+          "Default {{defaultCount}}, range {{min}}-{{max}}.",
         "sidebar.quickNewThread": "Home",
         "sidebar.quickAutomation": "Automation",
         "sidebar.quickSearch": "Search",

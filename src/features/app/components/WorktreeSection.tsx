@@ -42,6 +42,7 @@ type WorktreeSectionProps = {
   systemProxyEnabled?: boolean;
   systemProxyUrl?: string | null;
   showProviderLabels?: boolean;
+  defaultVisibleThreadRootCount?: number;
   moveFolderTargetsByWorkspaceId?: Record<string, ThreadMoveFolderTarget[]>;
   getThreadRows: (
     threads: ThreadSummary[],
@@ -108,6 +109,7 @@ export function WorktreeSection({
   systemProxyEnabled = false,
   systemProxyUrl = null,
   showProviderLabels = false,
+  defaultVisibleThreadRootCount,
   moveFolderTargetsByWorkspaceId = EMPTY_MOVE_FOLDER_TARGETS_BY_WORKSPACE_ID,
   getThreadRows,
   getThreadTime,
@@ -163,6 +165,7 @@ export function WorktreeSection({
       const visibleThreadRootCount = resolveVisibleThreadRootLimit(
         worktree.settings.visibleThreadRootCount,
         threadListPageByWorkspace[worktree.id],
+        defaultVisibleThreadRootCount,
       );
       const { unpinnedRows, totalRoots } = getThreadRows(
         worktreeThreads,
@@ -181,6 +184,7 @@ export function WorktreeSection({
     isSectionCollapsed,
     threadsByWorkspace,
     worktrees,
+    defaultVisibleThreadRootCount,
   ]);
 
   if (!worktrees.length) {
@@ -251,6 +255,7 @@ export function WorktreeSection({
             const visibleThreadRootCount = resolveVisibleThreadRootLimit(
               worktree.settings.visibleThreadRootCount,
               worktreePage,
+              defaultVisibleThreadRootCount,
             );
             const hideExitedSessions = isExitedSessionsHidden(worktree.path);
             const exitedSessionVisibility = getExitedSessionRowVisibility(

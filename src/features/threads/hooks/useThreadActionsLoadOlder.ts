@@ -37,10 +37,10 @@ import {
   shouldIncludeWorkspaceThreadEntry,
   withTimeout,
 } from "./useThreadActions.helpers";
+import { resolveVisibleThreadRootPageSize } from "../../app/constants";
 import {
   CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
   SESSION_INDEX_LOAD_OLDER_TIMEOUT_MS,
-  SESSION_INDEX_PAGE_SIZE,
   THREAD_LIST_MAX_EMPTY_PAGES_LOAD_OLDER,
   THREAD_LIST_MAX_FETCH_DURATION_MS,
   THREAD_LIST_MAX_TOTAL_PAGES,
@@ -80,6 +80,7 @@ type UseLoadOlderThreadsForWorkspaceOptions = {
     titles: Record<string, string>,
   ) => void;
   sessionAttributionMode: WorkspaceSessionAttributionMode;
+  defaultVisibleThreadRootCount?: number | null;
   threadListCursorByWorkspace: ThreadState["threadListCursorByWorkspace"];
   threadsByWorkspace: ThreadState["threadsByWorkspace"];
   workspacePathsByIdRef: MutableRefObject<Record<string, string>>;
@@ -97,6 +98,7 @@ export function useLoadOlderThreadsForWorkspace({
   onDebug,
   onThreadTitleMappingsLoaded,
   sessionAttributionMode,
+  defaultVisibleThreadRootCount = null,
   threadListCursorByWorkspace,
   threadsByWorkspace,
   workspacePathsByIdRef,
@@ -104,6 +106,10 @@ export function useLoadOlderThreadsForWorkspace({
   return useCallback(
     async (workspace: WorkspaceInfo) => {
       workspacePathsByIdRef.current[workspace.id] = workspace.path;
+      const pageSize = resolveVisibleThreadRootPageSize(
+        workspace.settings.visibleThreadRootCount,
+        defaultVisibleThreadRootCount,
+      );
       const encodedNextCursor =
         threadListCursorByWorkspace[workspace.id] ?? null;
       if (!encodedNextCursor) {
@@ -154,7 +160,7 @@ export function useLoadOlderThreadsForWorkspace({
           }
           const page = await withTimeout(
             listSessionIndexForWorkspaceService(workspace.id, {
-              limit: SESSION_INDEX_PAGE_SIZE + 1,
+              limit: pageSize + 1,
               syncIfNeeded: false,
               forceSync: false,
               beforeUpdatedAt: keyset.updatedAt,
@@ -165,9 +171,9 @@ export function useLoadOlderThreadsForWorkspace({
             SESSION_INDEX_LOAD_OLDER_TIMEOUT_MS,
           );
           if (page && Array.isArray(page.data)) {
-            const hasMore = page.data.length > SESSION_INDEX_PAGE_SIZE;
+            const hasMore = page.data.length > pageSize;
             const pageRows = hasMore
-              ? page.data.slice(0, SESSION_INDEX_PAGE_SIZE)
+              ? page.data.slice(0, pageSize)
               : page.data;
             const visibility = page.visibility ?? null;
             const hideSet = unionHideSets(
@@ -264,7 +270,7 @@ export function useLoadOlderThreadsForWorkspace({
                   scanQuality: "preview",
                 },
                 cursor: cursorState.cursor,
-                limit: SESSION_INDEX_PAGE_SIZE,
+                limit: pageSize,
               }),
               CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
             );
@@ -282,8 +288,7 @@ export function useLoadOlderThreadsForWorkspace({
           }
         }
         const matchingThreads: Record<string, unknown>[] = [];
-        const targetCount = SESSION_INDEX_PAGE_SIZE;
-        const pageSize = SESSION_INDEX_PAGE_SIZE;
+        const targetCount = pageSize;
         const maxPagesWithoutMatch = THREAD_LIST_MAX_EMPTY_PAGES_LOAD_OLDER;
         let pagesFetched = 0;
         const fetchStartedAt = Date.now();
@@ -475,6 +480,7 @@ export function useLoadOlderThreadsForWorkspace({
       onDebug,
       onThreadTitleMappingsLoaded,
       sessionAttributionMode,
+      defaultVisibleThreadRootCount,
       threadListCursorByWorkspace,
       threadsByWorkspace,
       workspacePathsByIdRef,

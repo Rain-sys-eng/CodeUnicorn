@@ -1163,7 +1163,7 @@ const settings = {
     sessionManagementAttributionConfidenceMedium: "Medium confidence",
     sessionManagementThreadVisibilityLabel: "Sidebar default session count",
     sessionManagementThreadVisibilityHint:
-      "Controls how many root sessions this workspace shows by default while the sidebar stays collapsed. Default {{defaultCount}}, supported range {{min}}-{{max}}; effective value {{count}}.",
+      "Overrides how many root sessions this project shows while the sidebar stays collapsed. Without an override it follows Workspace settings (currently {{defaultCount}}). Range {{min}}-{{max}}; effective value {{count}}.",
     sessionManagementThreadVisibilitySaved:
       "Updated the sidebar default session count to {{count}}.",
     sessionManagementThreadVisibilitySaving: "Saving...",
