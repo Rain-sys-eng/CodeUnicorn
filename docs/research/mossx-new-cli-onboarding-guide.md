@@ -15,7 +15,7 @@ status: active
 > 最近校准：2026-08-24 · mossx `0.9.3` · HEAD `d387afce4`（Qoder 双分发 identity + PI RPC resident 收口批次实证回写）
 > 上游契约：[`mossx-multi-cli-provider-session-foundation-design.md`](./mossx-multi-cli-provider-session-foundation-design.md)（下称**基石设计**）
 > 适用读者：要为 mossx 接入新 Agent CLI（如 Auggie、未来任意 CLI）的工程师
-> 核心结论：接入一个新 CLI = **一次 Capability Spike + 按 §0 核对矩阵逐层勾选 + 15 项 Contract Tests**。矩阵中标注 ⚠ 的点**不会编译报错、不会测试失败，只会静默缺功能**——历史接入事故（幕布缺 streaming 态、provider 图标错位、Shared 目标被静默改写）全部出自这组点；2026-08 Qoder / PI 接入又补齐一批新形态（跨分发身份撞车、stored 凭据被 env 遮蔽、resident 进程误伤并行、进程退出码误判终态、中文路径附件 panic、fork 派生行挤占侧栏），已回写为 A7 / B11 / B12 / D11 / G8 五行。
+> 核心结论：接入一个新 CLI = **一次 Capability Spike + 按 §0 核对矩阵逐层勾选 + 15 项 Contract Tests**。矩阵中标注 ⚠ 的点**不会编译报错、不会测试失败，只会静默缺功能**——历史接入事故（幕布缺 streaming 态、provider 图标错位、Shared 目标被静默改写）全部出自这组点；2026-08 Qoder / PI 接入又补齐一批新形态（跨分发身份撞车、stored 凭据被 env 遮蔽、resident 进程误伤并行、进程退出码误判终态、中文路径附件 panic、fork 派生行挤占侧栏），已回写为 A7 / B11 / B12 / B13 / D11 / G8 六行，并新增「事故 → 自动化闸门」转化纪律（矩阵使用纪律第 4 条）——文档行只兜底无法自动化的部分。
 
 ---
 
@@ -54,7 +54,8 @@ status: active
 | B9 🔵 | `src-tauri/src/engine_policy.rs` | 若新引擎要默认禁用：仿 `GEMINI_RUNTIME_ENABLED` 加编译期常量，并接线 `engine_enabled_in_settings` / `sanitize_engine_gates` / `resolve_engine_type` / manager / commands | 编译期开关是多点短路，只改一处会行为不一致 |
 | B10 🔴 | `src-tauri/src/engine/<name>.rs` + `<name>_history.rs` + `<name>_provider_profile.rs` | 最小三件套：进程/session 管理 + 历史 + provider profile（参照 `kimi.rs`/`grok.rs` 布局；复杂引擎参照 `claude/` 目录模式或 `codex/` 顶级模块模式） | — |
 | B11 ⚠ | `<name>_auth.rs` / spawn env 组装处 | **凭据注入优先级**：mossx stored 凭证（设置页保存）必须**优先于**进程环境变量；auth status 命令暴露 `envPresent` 共存态，让 UI 提示「env 被忽略」 | env 优先会遮蔽用户新存凭证：Windows 持久环境变量下「换新 token 仍被要求重新认证」（Qoder PAT 2026-08-25 实证，`fix-qoder-pat-env-precedence`） |
-| B12 ⚠ | `<name>.rs` + `<name>_rpc.rs`（若 CLI 有长驻/RPC 控制面） | **长驻进程生命周期纪律**：resident 作用域 = workspace × session（禁止 workspace 单飞 + `switch_session` 互斥——PI 实证误伤同 workspace 并行会话）；发送前对账 resident 配置（模型选型漂移不生效实证）；typed settle 迟到用**看门狗对账**（进程活性 + 事件推进），禁止固定 timeout 一刀切（长任务误杀实证）；RPC pending **先注册后写**（response 早到竞态）；typed terminal 优先于进程退出码 | 并行误伤、选型漂移、长任务误杀、TurnError 双发——全部只在真实多会话长任务下暴露，单测抓不到（PI RPC 收口批次，`enhance-pi-native-rpc-session`） |
+| B12 ⚠ | `<name>.rs` + `<name>_rpc.rs`（若 CLI 有长驻/RPC 控制面） | **长驻进程生命周期纪律**：resident 作用域 = workspace × session（禁止 workspace 单飞 + `switch_session` 互斥——PI 实证误伤同 workspace 并行会话）；发送前对账 resident 配置（模型选型漂移不生效实证）；typed settle 迟到用**看门狗对账**（进程活性 + 事件推进），禁止固定 timeout 一刀切（长任务误杀实证）；RPC pending **先注册后写**（response 早到竞态）；typed terminal 优先于进程退出码；控制面长操作（compact 等）配独立超时 + 活跃 run 守卫，不借用 turn 超时 | 并行误伤、选型漂移、长任务误杀、TurnError 双发——全部只在真实多会话长任务下暴露，单测抓不到（PI RPC 收口批次，`enhance-pi-native-rpc-session`） |
+| B13 ⚠ | `<name>.rs` 的 stdout pump / stream 消费处 | **流消费完整性与规模护栏**：typed response/result ≠ 流结束——result 与 event 交错时必须 drain 到 idle / typed 终止信号再收口（Qoder ACP：response 后停读丢 thought/tool/后半段正文，历史截断实证）；深嵌套响应（千级链）会撞 serde_json 默认 128 层递归限制，解析失败**禁止当垃圾行静默丢弃**（→ 请求干等超时），须分流大栈线程解析且深层 Value 不出该线程（递归 drop 同样爆栈）；大 payload 过 IPC 前瘦身（剥 base64 / 文本截断 / 摊平） | 历史截断、会话树永远「加载中」、SIGABRT 崩溃——小 payload 单测全绿也抓不到（Qoder `af9372f78` / PI `4c56cefe3` 实证） |
 
 ### C. Capability 治理层（SSOT → codegen → CI）
 
@@ -142,6 +143,7 @@ status: active
 1. **逐行勾选，🔵 项写决策记录**："不需要"也是结论，写在 PR 描述里，防止后人以为漏了。
 2. ⚠ 行全部人工核对——**它们没有编译器/测试兜底**，是历次"缺东少西"事故的全部来源。
 3. 完整接入样例参照 `openspec/changes/archive/2026-07-24-add-kimi-engine/`（proposal/design/tasks/specs 四件套）；2026-08 新样例：`add-qoder-engine`（新协议族 `acp-stdio`）、`add-qoder-dual-distribution`（多分发 identity）、`enable-qoder-shared-target`（Shared 后置准入）、`enhance-pi-native-rpc-session`（spawn-per-turn → RPC 长驻迁移）。
+4. **事故必须转化为可执行闸门，文档行只是兜底**：每修一个接入事故，先落成测试 / CI 断言（参照 `37885cf82`：resident 并行碰撞 + 大图落盘单测；`af9372f78`：回放尾包 parser 测试），无法自动化的才仅靠 ⚠ 行 + 目视验收。接入 PR 描述必须附矩阵完成度说明与渲染层目视验收结果（`AGENTS.md`「Engine Onboarding Gate」强制项）——矩阵不被执行等于没有矩阵。
 
 ---
 
@@ -196,6 +198,7 @@ status: active
 - [ ] 协议版本获取方式：`--help`、握手响应、schema 文件？
 - [ ] Schema fingerprint 可计算吗（用于 §14.3.1 的 Capability Cache Key）
 - [ ] **控制面形态**：除 spawn-per-turn 外有多轮长驻模式吗（RPC / server / daemon）？长驻模式独有命令面是什么（mid-turn steer / compact / fork / session tree）？——PI 的一等能力全在 `pi --mode rpc`，spawn-per-turn 永远拿不到；发现即记录，哪怕首期不接
+- [ ] **响应规模与嵌套深度**：单个响应/事件可能多深（千级嵌套链？）多大（base64 内联图片？）？解析器默认递归/体积护栏会被撞穿吗——撞穿时是显式报错还是被当垃圾行静默丢弃后干等超时（PI 会话树 2000 层 / 24MB 实证，B13）？
 
 #### B. Session 生命周期
 
@@ -223,6 +226,7 @@ status: active
 - [ ] **Cancel**：能取消一个已投递但未确认的 delivery 吗？取消有 ACK 吗？（→ `pendingCancel` 枚举）
 - [ ] **长 turn 存活**：>5min 任务的终态证据何时到达？固定 timeout 会误杀吗？看门狗如何与进程活性 / 事件推进对账？
 - [ ] **长驻进程语义**（若有）：进程作用域 = workspace 还是 session？配置（模型 / 凭据）变更后旧 resident 如何对账？进程退出码与 typed terminal 冲突时谁为准（必须 typed 优先——退出码误判已完成 turn 曾引发 Shared 续跑死循环）？
+- [ ] **response 与 stream 交错**：JSON-RPC 的 result 会插在 update 流中间吗？拿到 result 后还有尾包（thought / tool / 正文后半段）吗？——读到 response 即停读会静默丢尾部，live 与 history 回放都要实测（Qoder ACP 实证，B13）
 
 #### E. History 能力
 
@@ -358,7 +362,9 @@ status: active
 - **存量 fixture 回归**：跑 Claude/Codex/Kimi 的 golden fixtures（`src-tauri/tests/fixtures/session-foundation/`）与 live/history parity 测试（`realtimeAdapters.test.ts`、`historyLoaders*.test.ts`、`realtimeHistoryParity.test.ts`），证明新 CLI 的接入对存量引擎零影响；
 - **附件往返验收**（D11）：带图 / 带附件发送 → 历史 reload → 侧栏标题三跳一致；非 ASCII（中文）路径实测不 panic；
 - **长 turn 与并行验收**（B12，仅长驻形态）：>5min 任务不被误杀；同 workspace 两会话并行发送互不串线；resident 配置漂移后发送前对账生效；
-- **多分发 identity 验收**（A7，仅多分发形态）：两个分发各跑一个 turn，durable identity、hide 集合、Shared 认主互不串台。
+- **多分发 identity 验收**（A7，仅多分发形态）：两个分发各跑一个 turn，durable identity、hide 集合、Shared 认主互不串台；
+- **凭据遮蔽验收**（B11）：设置页保存新凭证后，在存在同名持久系统环境变量的环境（Windows 必测）验证新凭证生效、`envPresent` 共存提示出现；
+- **长会话规模验收**（B13）：千级条目 / 数十 MB 历史下 reload、会话树、侧栏不卡死不爆栈；深嵌套响应走大栈线程解析，worker 默认递归护栏不放开。
 
 **渲染层目视验收（D 层补充，无自动化兜底）**：用新引擎跑一个真实会话，目视确认 ① streaming 光标/进行态 ② reasoning 块折叠 ③ tool 块渲染 ④ usage 收尾 ⑤ 历史 reload 后与 live 一致 ⑥ 带图提问 reload 后用户气泡独立、不与助手尾巴粘连 ⑦ 侧栏标题无附件包装 tag 泄漏。七项缺任意一项，回 §0 D 组找漏掉的白名单。
 
@@ -456,6 +462,7 @@ Phase S Spike 实测（假想结论）:
 21. **"侧栏标题直接取首条用户消息原文"** → 附件包装 `<file name="...">` tag 会泄漏进标题；投影前必须剥离包装（PI 实证）。
 22. **"fork 失败静默 no-op"** → 主线被误藏、用户以为会话丢了；fork 必须显式报错并让派生隐藏可自愈（PI 实证）。
 23. **"daemon 只同步 EngineType 枚举"** → daemon 侧 payload struct（如 `ModelInfo.reasoning`）字段缺失不报错；A5 核对必须包含 struct 字段对齐。
+24. **"拿到 JSON-RPC result 就是流结束了"** → result 与 update 交错时，尾部 thought / tool / 正文被静默丢弃、历史截断；必须 drain 到 idle / typed 终止信号（Qoder ACP 尾包实证 `af9372f78`）。深嵌套响应同理：解析失败当垃圾行丢弃 = 请求方干等超时（PI 会话树实证 `4c56cefe3`）。
 
 ---
 
