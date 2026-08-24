@@ -229,3 +229,10 @@
 - [x] 30.3 **「点更多也到不了」根因**：首页 per-engine 5 槽 × 9 引擎 ≈ 55 行一次性进内存，`totalRoots` 远大于 visible cap——「更多」点击只扩内存页，`planThreadListPageAdvance` 的 fetch 分支（cap > totalRoots 且有 cursor）永远到不了，index 第 2 页（pi main position 6~9）永远取不到（thread/list older 日志零条佐证）
 - [x] 30.4 **修复**：新增 `includePiDiskList` 选项（只放行 pi 单引擎盘扫，不 fan-out 其它引擎），`shouldRefreshPiSessions` 改用它判定；首刷后后台软刷（`runPostFirstPaintIndexSoftResync`）传 `includePiDiskList: true`——独立 main 全部经磁盘 list 合并进内存（Shared 认领行 / fork 派生行仍按契约隐藏，reconcile 自愈不受影响）。首刷性能路径不变（first-paint 仍不扫盘）
 - [x] 30.5 验证：`tsc --noEmit` 0 错误；threadList + native-session-bridges + hydration vitest 47 绿（2 个 unhandled errors 为基线既有，stash 对照同数）；spec 补「独立 main MUST 全部可达」契约
+
+## 31. 大 bug 修复（2026-08-24 中午，er-qi 两条 pi 会话打不开：中文路径附件切片 panic 杀 command）
+
+- [x] 31.1 **取证（真实文件直调）**：er-qi `在吗`(01a031b4) / `<file…>`(01a031a2) 打不开卡「快照 12%」（= load() IPC 永不返回）。文件结构与正常会话完全一致（排除特殊数据）；用真实文件直调 `pi_history::load_pi_session` 复现 panic：`byte index 159 is not a char boundary; it is inside '发'`
+- [x] 31.2 **根因（结构性，非数据）**：`cli_image_input::split_pi_file_attachments_for_display` 的 `open_tag_end` 相对 `after_open`（已去 `<file name="` 前缀）计算，却直接用于切完整 `rest`（少算 `start+12` 字节）。附件在串首且 ASCII 路径时两处偏移恰好抵消（既有测试因此全绿）；**路径含多字节字符（中文目录名）时 `rest[quote_end+1..]` 落在汉字 UTF-8 字节中间 → panic** → Tauri command 任务被杀 → invoke 永不 resolve → 前端永远卡「快照 12%」。两条打不开的会话首条用户消息都带中文路径 `<file name="...">` 附件
+- [x] 31.3 **修复**：`inner_start` 换算为 rest 绝对位置（`start + 前缀长 + open_tag_end + 1`）；新增回归 `split_pi_file_attachments_multibyte_path_does_not_panic`（中文路径单附件 + 前缀文本多附件混合）；真实文件直调两条会话 0.06s 加载成功。cli_image_input 16 绿 / pi_history 3 绿 / commands 65 绿 / check 0 错误
+- [x] 31.4 附注（另案，未动）：排查中发现 er-qi turn 曾零 delta 挂起 ~1h（upstream-pending ×5），600s turn 超时的兜底是进程死亡 settle——turn 超时未生效的机理（调用方 future 被弃时 timeout 不求值）留作后续；与本 bug 无关

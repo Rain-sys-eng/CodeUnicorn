@@ -364,7 +364,11 @@ pub(crate) fn split_pi_file_attachments_for_display(text: &str) -> (String, Vec<
             rest = "";
             break;
         };
-        let inner_start = open_tag_end + 1;
+        // open_tag_end 相对 after_open（已去掉 `<file name="` 前缀）；切 rest
+        // 必须换算回绝对位置——直接用相对索引在多字节路径（中文目录名）下
+        // 会切进 UTF-8 字符中间 panic（2026-08-24 er-qi 中文路径附件实测：
+        // panic 杀 command 任务，invoke 永不 resolve，前端永远卡加载）。
+        let inner_start = start + "<file name=\"".len() + open_tag_end + 1;
         if let Some(close_at) = rest[inner_start..].find("</file>") {
             rest = &rest[inner_start + close_at + "</file>".len()..];
         } else {
@@ -572,6 +576,27 @@ mod tests {
             split_pi_file_attachments_for_display("before <file name=\"/a/broken.png after");
         assert_eq!(visible, "before <file name=\"/a/broken.png after");
         assert!(images.is_empty());
+    }
+
+    #[test]
+    fn split_pi_file_attachments_multibyte_path_does_not_panic() {
+        // 回归（2026-08-24 er-qi 实测 panic）：中文路径附件的 open_tag_end 相对
+        // after_open 计算，修复前直接拿去切 rest，字节落在「发」的 UTF-8
+        // 中间 → panic 杀 command 任务，会话永远打不开。
+        let (visible, images) = split_pi_file_attachments_for_display(
+            "<file name=\"/Users/me/二期文档/车辆健康报告接口文档/SP4驾驶分析-存储介质设计报告.md\"></file>\n分析这份文档",
+        );
+        assert_eq!(visible, "分析这份文档");
+        assert_eq!(
+            images,
+            vec!["/Users/me/二期文档/车辆健康报告接口文档/SP4驾驶分析-存储介质设计报告.md"]
+        );
+        // 前缀文本 + 多附件 + 中文路径混合
+        let (visible2, images2) = split_pi_file_attachments_for_display(
+            "看一下 <file name=\"/a/one.png\"></file> 和 <file name=\"/b/中文二.png\"></file> 的区别",
+        );
+        assert_eq!(visible2, "看一下  和  的区别");
+        assert_eq!(images2, vec!["/a/one.png", "/b/中文二.png"]);
     }
 
     #[test]
