@@ -1589,6 +1589,29 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn large_rpc_image_spills_to_temp_file_small_stays_data_url() {
+        let small = image_display_ref("image/png", "AAAA").expect("small");
+        assert!(
+            small.starts_with("data:image/png;base64,"),
+            "tiny payload stays inline: {small}"
+        );
+        let encoded = {
+            use base64::Engine as _;
+            base64::engine::general_purpose::STANDARD.encode(vec![0u8; 7000])
+        };
+        assert!(encoded.len() > 8 * 1024);
+        let spilled = image_display_ref("image/png", &encoded).expect("large");
+        assert!(
+            !spilled.starts_with("data:"),
+            "large payload must not be a data URL: {spilled}"
+        );
+        assert!(
+            std::path::Path::new(&spilled).exists(),
+            "spilled path must exist: {spilled}"
+        );
+    }
 }
 
 #[cfg(test)]

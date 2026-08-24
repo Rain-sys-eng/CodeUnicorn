@@ -2192,6 +2192,51 @@ mod tests {
     }
 
     #[test]
+    fn parallel_sends_do_not_share_resident_keys() {
+        let a = pi_resident_map_key(Some("sess-a"), "turn-1");
+        let b = pi_resident_map_key(Some("sess-b"), "turn-1");
+        let new_1 = pi_resident_map_key(None, "turn-1");
+        let new_2 = pi_resident_map_key(None, "turn-2");
+        assert_ne!(a, b);
+        assert_ne!(new_1, new_2);
+        assert_ne!(a, new_1);
+        // same session + different turns still share the process (steer, not spawn)
+        assert_eq!(
+            pi_resident_map_key(Some("sess-a"), "turn-1"),
+            pi_resident_map_key(Some("sess-a"), "turn-9")
+        );
+    }
+
+    #[test]
+    fn rpc_prompt_expands_at_file_text_and_images_without_colliding() {
+        let dir = std::env::temp_dir().join(format!(
+            "pi-rpc-at-file-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let notes = dir.join("notes.md");
+        let shot = dir.join("shot.png");
+        std::fs::write(&notes, "hello from notes").unwrap();
+        std::fs::write(&shot, [0x89, b'P', b'N', b'G']).unwrap();
+        let prompt = format!("@{} 总结 @{}", notes.display(), shot.display());
+        let expanded = expand_rpc_prompt_attachments(&prompt, None, &dir).expect("expand");
+        assert!(
+            expanded.text.contains("hello from notes"),
+            "text attachment must be inlined: {}",
+            expanded.text
+        );
+        assert!(
+            expanded.images.iter().any(|p| p.ends_with("shot.png")),
+            "image @file must join images[]: {:?}",
+            expanded.images
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn turn_watchdog_silence_budget_covers_compact_and_tick() {
         // auto-compaction 在 turn 收尾可能长时无流式事件：静默预算必须
         // 覆盖 compact 预算，否则 compact 中的 turn 会被误判超时。
