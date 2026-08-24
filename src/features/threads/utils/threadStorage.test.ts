@@ -20,6 +20,7 @@ import {
   pruneCustomNames,
   resolveCanonicalThreadAlias,
   saveCustomName,
+  saveCustomNamesBatch,
   saveThreadAliases,
 } from "./threadStorage";
 
@@ -234,5 +235,37 @@ describe("threadStorage customNames pruning", () => {
       string
     >;
     expect(Object.keys(written)).toEqual(["ws:thread-2", "ws:thread-1"]);
+  });
+
+  it("batches title mapping writes into a single pruned store update", () => {
+    clientStorageMocks.getClientStoreSync.mockReturnValue({
+      "ws:old": "Old",
+    });
+
+    saveCustomNamesBatch("ws", {
+      "thread-1": "First",
+      "thread-2": "Second",
+      " ": "ignored",
+    });
+
+    expect(clientStorageMocks.writeClientStoreValue).toHaveBeenCalledTimes(1);
+    expect(clientStorageMocks.writeClientStoreValue).toHaveBeenCalledWith(
+      "threads",
+      "customNames",
+      {
+        "ws:old": "Old",
+        "ws:thread-1": "First",
+        "ws:thread-2": "Second",
+      },
+    );
+  });
+
+  it("skips the disk write when batch titles are already current", () => {
+    clientStorageMocks.getClientStoreSync.mockReturnValue({
+      "ws:thread-1": "First",
+    });
+
+    saveCustomNamesBatch("ws", { "thread-1": "First" });
+    expect(clientStorageMocks.writeClientStoreValue).not.toHaveBeenCalled();
   });
 });

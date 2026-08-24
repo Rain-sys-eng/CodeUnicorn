@@ -320,6 +320,7 @@ describe("rendererDiagnostics", () => {
           contentLength: "private output disguised as a length",
           filenameHash: "private path disguised as a hash",
           reasonCode: "renderer-crash",
+          errorClass: "react-maximum-update-depth",
           nested: {
             generatedHtml: "<script>private output</script>",
           },
@@ -349,6 +350,7 @@ describe("rendererDiagnostics", () => {
       contentLength: "[redacted]",
       filenameHash: "[redacted]",
       reasonCode: "renderer-crash",
+      errorClass: "react-maximum-update-depth",
       nested: {
         generatedHtml: "[redacted]",
       },
@@ -1155,6 +1157,26 @@ describe("rendererDiagnostics", () => {
     });
     expect(entry.payload).not.toHaveProperty("rawMarkdown");
     expect(entry.payload).not.toHaveProperty("assistantText");
+  });
+
+  it("drops below-threshold unsupported markdown precompute diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendMarkdownPrecomputeDiagnostic({
+      mode: "main",
+      durationMs: 0,
+      contentLength: 1,
+      contentHash: "jdd",
+      thresholdReason: "below-threshold",
+      cacheState: "unsupported",
+      fallbackReason: "below-threshold",
+      evidenceClass: "unsupported",
+    });
+    diagnostics.flushRendererDiagnosticsBuffer();
+
+    expect(clientStorageMocks.writeClientStoreValue).not.toHaveBeenCalled();
   });
 
   it("records content-safe workspace file listing budget diagnostics", async () => {

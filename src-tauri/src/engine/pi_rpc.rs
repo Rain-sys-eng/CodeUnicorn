@@ -70,6 +70,8 @@ pub struct PiRpcClient {
     child: Mutex<Child>,
     pump_sender: broadcast::Sender<PiRpcPumpEvent>,
     state: RwLock<Value>,
+    /// Last successful `get_available_thinking_levels` for the current model.
+    thinking_levels: RwLock<Option<Vec<String>>>,
 }
 
 impl PiRpcClient {
@@ -251,6 +253,7 @@ impl PiRpcClient {
             child: Mutex::new(child),
             pump_sender,
             state: RwLock::new(Value::Null),
+            thinking_levels: RwLock::new(None),
         });
 
         // Handshake: proves the binary actually speaks RPC (older pi without
@@ -261,6 +264,7 @@ impl PiRpcClient {
             .await
             .map_err(|error| format!("pi rpc handshake failed (get_state): {error}"))?;
         *client.state.write().await = state;
+        let _ = client.refresh_thinking_levels().await;
         Ok(client)
     }
 
@@ -463,6 +467,7 @@ impl PiRpcClient {
         // 与 fork/switch_session/new_session 同纪律：成功后刷新缓存 state，
         // 否则下一轮模型对账读到切换前的 stale model 会重复 set_model。
         let _ = self.get_state().await;
+        let _ = self.refresh_thinking_levels().await;
         Ok(result)
     }
 
@@ -471,6 +476,46 @@ impl PiRpcClient {
             .await
             .map(|_| ())
     }
+
+    pub async fn available_thinking_levels(&self) -> Option<Vec<String>> {
+        self.thinking_levels.read().await.clone()
+    }
+
+    /// Best-effort: older pi without this command must not fail the turn.
+    /// On failure, clear the cache so send falls back to the static CLI list
+    /// instead of a stale previous-model allowlist.
+    pub async fn refresh_thinking_levels(&self) -> Result<(), String> {
+        match self
+            .request(json!({"type":"get_available_thinking_levels"}))
+            .await
+        {
+            Ok(data) => {
+                let levels = parse_available_thinking_levels(&data);
+                *self.thinking_levels.write().await = if levels.is_empty() {
+                    None
+                } else {
+                    Some(levels)
+                };
+                Ok(())
+            }
+            Err(error) => {
+                *self.thinking_levels.write().await = None;
+                Err(error)
+            }
+        }
+    }
+}
+
+pub(crate) fn parse_available_thinking_levels(data: &Value) -> Vec<String> {
+    data.get("levels")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
+        .collect()
 }
 
 /// 会话树响应过 IPC 前的文本预览上限（字符）。树行只展示单行预览；长会话
@@ -755,6 +800,16 @@ mod tests {
         assert!(line.contains("\"type\":\"prompt\""));
         assert!(line.contains("\"mimeType\":\"image/png\""));
         assert!(!line.contains('\u{2028}'));
+    }
+
+    #[test]
+    fn parse_available_thinking_levels_reads_levels_array() {
+        let data = json!({"levels": ["off", " High ", ""]});
+        assert_eq!(
+            parse_available_thinking_levels(&data),
+            vec!["off".to_string(), "high".to_string()]
+        );
+        assert!(parse_available_thinking_levels(&json!({})).is_empty());
     }
 
     #[test]

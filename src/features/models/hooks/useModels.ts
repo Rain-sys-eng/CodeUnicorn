@@ -19,6 +19,7 @@ import {
   CUSTOM_MODEL_DEFAULT_REASONING_EFFORT,
   CUSTOM_MODEL_SUPPORTED_REASONING_OPTIONS,
 } from "../customModelReasoning";
+import { buildSelectionApplyEpochKey } from "./modelSelectionApplyCircuit";
 
 type UseModelsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -588,9 +589,13 @@ export function useModels({
         return;
       }
 
-      const epochKey = `${modelsFingerprint}\0${snapshot.preferredModelId ?? ""}\0${
-        snapshot.preferredEffort ?? ""
-      }\0${snapshot.preferredSelectionReady ? "1" : "0"}`;
+      const epochKey = buildSelectionApplyEpochKey({
+        preferredModelId: snapshot.preferredModelId,
+        preferredEffort: snapshot.preferredEffort,
+        preferredSelectionReady: snapshot.preferredSelectionReady,
+        nextModelId,
+        nextEffort,
+      });
       if (selectionApplyEpochRef.current !== epochKey) {
         selectionApplyEpochRef.current = epochKey;
         selectionApplyCountRef.current = 0;
@@ -958,6 +963,10 @@ export function useModels({
             workspaceId: requestedWorkspaceId,
             error: staleCatalog.error,
             entryCount: staleCatalog.entries.length,
+            reasonCode:
+              staleCatalog.entries.length > 0
+                ? "using-stale-cache"
+                : "empty-cache",
           },
         });
       }

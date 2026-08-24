@@ -23,6 +23,8 @@ status: active
 - [React #185 / ErrorBoundary Crash playbook](./react-185-maximum-update-depth-playbook.md) — Active troubleshooting runbook；主线 `#185` + 并列家族 `RangeError` 栈溢出（AP-08）；最新 case `C-20260811-01`（0.8.6 Markdown table row count / #1066；前案 C-20260805-01 等）。
 - [Windows cold-start click freeze（版本记录 + 权限选择 + first-click）](./windows-cold-start-click-freeze-release-notes-and-composer-2026-08-14.md) — Active incident analysis；2026-08-14 P0。执行禁令见 `dev-guidelines/guides/windows-cold-start-click-freeze-pitfall.md`。
 - [DSH k3 超长 goal 客户端假死](./dsh-k3-long-goal-client-stall-2026-08-21.md) — Active incident analysis；2026-08-21。DSH host 仍活、mossx 被 token 级 delta 灌满；修复仅 DSH mux 50ms/4KB coalesce，不改公共队列。
+- [PI 发送改 RPC 内联回归漏点](./pi-rpc-inline-regression-gap-analysis-2026-08-24.md) — Active 对照验收基线；RPC 长驻迁移的 G1-G25 回归漏点与修复登记。
+- [PI CLI 功能差距分析](./pi-cli-feature-parity-gap-2026-08-24.md) — Active；v3 推翻按 RPC 清单做功能。现行只保留 hygiene（capability 口径 / 死控件 / thinking 夹紧 / PI 技能目录）。
 - [PR #1092 性能复盘](../perf/pr-1092-performance-retrospective.md) — 流式 / AppShell / 长历史 / 冷启动的主因、解法与防再犯；冷启只是其中一条战线。
 
 ## Resolved incidents and closure evidence

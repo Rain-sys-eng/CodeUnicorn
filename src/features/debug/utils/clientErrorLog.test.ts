@@ -3,7 +3,9 @@ import {
   buildClientErrorLogSignature,
   buildClientErrorLogEntry,
   classifyClientStderr,
+  createKnownSafeStderrDailyBudget,
   shouldPersistClientErrorLogEntry,
+  shouldPersistKnownSafeStderrAggregate,
 } from "./clientErrorLog";
 import type { DebugEntry } from "../../../types";
 
@@ -311,5 +313,56 @@ describe("clientErrorLog", () => {
         }),
       ),
     ).toBe(false);
+  });
+
+  it("keeps unclassified stderr aggregates fully persistable", () => {
+    expect(
+      shouldPersistKnownSafeStderrAggregate({
+        reasonCode: "unclassified-stderr",
+        rawCountTodayBefore: 500,
+        incomingCount: 4,
+      }),
+    ).toBe(true);
+  });
+
+  it("persists the first known-safe model-refresh timeout, then only every 100 raw counts", () => {
+    expect(
+      shouldPersistKnownSafeStderrAggregate({
+        reasonCode: "codex-model-refresh-child-exit-timeout",
+        rawCountTodayBefore: 0,
+        incomingCount: 12,
+      }),
+    ).toBe(true);
+    expect(
+      shouldPersistKnownSafeStderrAggregate({
+        reasonCode: "codex-model-refresh-child-exit-timeout",
+        rawCountTodayBefore: 12,
+        incomingCount: 20,
+      }),
+    ).toBe(false);
+    expect(
+      shouldPersistKnownSafeStderrAggregate({
+        reasonCode: "codex-model-refresh-child-exit-timeout",
+        rawCountTodayBefore: 90,
+        incomingCount: 20,
+      }),
+    ).toBe(true);
+  });
+
+  it("resets the known-safe stderr daily budget at local midnight", () => {
+    let nowMs = new Date(2026, 7, 24, 15, 0, 0).getTime();
+    const budget = createKnownSafeStderrDailyBudget(() => nowMs);
+
+    expect(
+      budget.consume("codex-model-refresh-child-exit-timeout", 8),
+    ).toBe(true);
+    expect(
+      budget.consume("codex-model-refresh-child-exit-timeout", 8),
+    ).toBe(false);
+
+    nowMs = new Date(2026, 7, 25, 1, 0, 0).getTime();
+    expect(
+      budget.consume("codex-model-refresh-child-exit-timeout", 8),
+    ).toBe(true);
   });
 });

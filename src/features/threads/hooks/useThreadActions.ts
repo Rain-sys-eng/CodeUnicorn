@@ -973,6 +973,7 @@ export function useThreadActions({
                   workspaceId: workspace.id,
                   cursor,
                   timeoutMs: THREAD_LIST_LIVE_REQUEST_TIMEOUT_MS,
+                  reasonCode: "thread-list-live-timeout",
                 },
               });
               break;

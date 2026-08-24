@@ -671,6 +671,86 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(mockState.renderCount).toBe(1);
   });
 
+  it('avoids rerendering ChatInputBox when catalog and target props are structurally unchanged', async () => {
+    const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
+      text: '',
+      isProcessing: false,
+      canStop: false,
+      selectedModelId: 'claude-sonnet-4-6',
+      onSend: () => {},
+      onStop: () => {},
+      onTextChange: () => {},
+      selectedEngine: 'claude',
+      models: [{ id: 'claude-sonnet-4-6', displayName: 'Sonnet', model: 'claude-sonnet-4-6' }],
+      engines: [{ type: 'claude', installed: true, version: '1.0.0' }],
+      providerModelCatalogs: {
+        claude: [{ id: 'claude-sonnet-4-6', displayName: 'Sonnet', model: 'claude-sonnet-4-6' }],
+      },
+      executionTarget: {
+        engine: 'claude',
+        model: 'claude-sonnet-4-6',
+        modelCatalogEntryId: 'claude-sonnet-4-6',
+        reasoning: { effort: 'medium' },
+      },
+      reasoningOptions: ['low', 'medium', 'high'],
+      files: ['src/a.ts', 'src/b.ts'],
+      directories: ['src', 'docs'],
+    };
+
+    const view = render(<ChatInputBoxAdapter {...stableProps} />);
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+    expect(mockState.renderCount).toBe(1);
+
+    view.rerender(
+      <ChatInputBoxAdapter
+        {...stableProps}
+        models={[{ id: 'claude-sonnet-4-6', displayName: 'Sonnet', model: 'claude-sonnet-4-6' }]}
+        engines={[{ type: 'claude', installed: true, version: '1.0.0' }]}
+        providerModelCatalogs={{
+          claude: [{ id: 'claude-sonnet-4-6', displayName: 'Sonnet', model: 'claude-sonnet-4-6' }],
+        }}
+        executionTarget={{
+          engine: 'claude',
+          model: 'claude-sonnet-4-6',
+          modelCatalogEntryId: 'claude-sonnet-4-6',
+          reasoning: { effort: 'medium' },
+        }}
+        reasoningOptions={['low', 'medium', 'high']}
+        files={['src/a.ts', 'src/b.ts']}
+        directories={['src', 'docs']}
+      />,
+    );
+
+    expect(mockState.renderCount).toBe(1);
+  });
+
+  it('rerenders ChatInputBox when catalog content actually changes', async () => {
+    const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
+      text: '',
+      isProcessing: false,
+      canStop: false,
+      selectedModelId: 'claude-sonnet-4-6',
+      onSend: () => {},
+      onStop: () => {},
+      onTextChange: () => {},
+      selectedEngine: 'claude',
+      models: [{ id: 'claude-sonnet-4-6', displayName: 'Sonnet' }],
+    };
+
+    const view = render(<ChatInputBoxAdapter {...stableProps} />);
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+    expect(mockState.renderCount).toBe(1);
+
+    view.rerender(
+      <ChatInputBoxAdapter
+        {...stableProps}
+        models={[{ id: 'claude-opus-4-6', displayName: 'Opus' }]}
+      />,
+    );
+
+    expect(mockState.renderCount).toBe(2);
+  });
+
   it('rerenders ChatInputBox when advisory list content changes', async () => {
     const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
       text: '',

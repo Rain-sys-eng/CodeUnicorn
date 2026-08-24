@@ -68,6 +68,12 @@ export function loadCustomNames(): CustomNamesMap {
   return getClientStoreSync<CustomNamesMap>("threads", "customNames") ?? {};
 }
 
+export function persistCustomNames(names: CustomNamesMap): CustomNamesMap {
+  const pruned = pruneCustomNames(names);
+  writeClientStoreValue("threads", "customNames", pruned);
+  return pruned;
+}
+
 export function saveCustomName(workspaceId: string, threadId: string, name: string): void {
   const current = loadCustomNames();
   const key = makeCustomNameKey(workspaceId, threadId);
@@ -75,7 +81,35 @@ export function saveCustomName(workspaceId: string, threadId: string, name: stri
   const updated: CustomNamesMap = { ...current };
   delete updated[key];
   updated[key] = name;
-  writeClientStoreValue("threads", "customNames", pruneCustomNames(updated));
+  persistCustomNames(updated);
+}
+
+/** 一次 hydrate / list 映射只写盘一次，避免 N 次全量 customNames IPC（frame-drop hotspot）。 */
+export function saveCustomNamesBatch(
+  workspaceId: string,
+  titles: Record<string, string>,
+): CustomNamesMap {
+  const current = loadCustomNames();
+  const updated: CustomNamesMap = { ...current };
+  let changed = false;
+  for (const [threadId, title] of Object.entries(titles)) {
+    const trimmedId = threadId.trim();
+    const trimmedTitle = title.trim();
+    if (!trimmedId || !trimmedTitle) {
+      continue;
+    }
+    const key = makeCustomNameKey(workspaceId, trimmedId);
+    if (updated[key] === trimmedTitle) {
+      continue;
+    }
+    delete updated[key];
+    updated[key] = trimmedTitle;
+    changed = true;
+  }
+  if (!changed) {
+    return current;
+  }
+  return persistCustomNames(updated);
 }
 
 export function loadAutoTitlePending(): AutoTitlePendingMap {

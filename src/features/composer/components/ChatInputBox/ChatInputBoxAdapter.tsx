@@ -371,6 +371,106 @@ function areAccountRateLimitsEqual(
   );
 }
 
+function areAdapterModelOptionsEqual(
+  left: readonly AdapterModelOption[] | undefined,
+  right: readonly AdapterModelOption[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftModel = left[index];
+    const rightModel = right[index];
+    if (
+      leftModel?.id !== rightModel?.id ||
+      leftModel?.displayName !== rightModel?.displayName ||
+      leftModel?.model !== rightModel?.model ||
+      leftModel?.description !== rightModel?.description ||
+      leftModel?.source !== rightModel?.source ||
+      leftModel?.provider !== rightModel?.provider
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areAdapterEnginesEqual(
+  left: readonly AdapterEngineInfo[] | undefined,
+  right: readonly AdapterEngineInfo[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftEngine = left[index];
+    const rightEngine = right[index];
+    if (
+      leftEngine?.type !== rightEngine?.type ||
+      leftEngine?.installed !== rightEngine?.installed ||
+      leftEngine?.version !== rightEngine?.version ||
+      leftEngine?.availabilityState !== rightEngine?.availabilityState ||
+      leftEngine?.availabilityLabelKey !== rightEngine?.availabilityLabelKey
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areProviderModelCatalogsEqual(
+  left: ChatInputBoxAdapterProps['providerModelCatalogs'],
+  right: ChatInputBoxAdapterProps['providerModelCatalogs'],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  const leftKeys = Object.keys(left) as EngineType[];
+  const rightKeys = Object.keys(right) as EngineType[];
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  for (const engineType of leftKeys) {
+    if (!Object.prototype.hasOwnProperty.call(right, engineType)) {
+      return false;
+    }
+    if (!areAdapterModelOptionsEqual(left[engineType], right[engineType])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areExecutionTargetsEqual(
+  left: ExecutionTarget | null | undefined,
+  right: ExecutionTarget | null | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.engine === right.engine &&
+    left.providerProfileId === right.providerProfileId &&
+    left.modelCatalogEntryId === right.modelCatalogEntryId &&
+    left.model === right.model &&
+    left.reasoning?.effort === right.reasoning?.effort &&
+    left.providerProfileNameSnapshot === right.providerProfileNameSnapshot &&
+    left.providerProfileSource === right.providerProfileSource
+  );
+}
+
 function areChatInputBoxAdapterPropsEqual(
   previousProps: Readonly<ChatInputBoxAdapterProps>,
   nextProps: Readonly<ChatInputBoxAdapterProps>,
@@ -405,6 +505,40 @@ function areChatInputBoxAdapterPropsEqual(
       }
       continue;
     }
+    if (propKey === 'models') {
+      if (!areAdapterModelOptionsEqual(previousProps.models, nextProps.models)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'engines') {
+      if (!areAdapterEnginesEqual(previousProps.engines, nextProps.engines)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'providerModelCatalogs') {
+      if (
+        !areProviderModelCatalogsEqual(
+          previousProps.providerModelCatalogs,
+          nextProps.providerModelCatalogs,
+        )
+      ) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'executionTarget') {
+      if (
+        !areExecutionTargetsEqual(
+          previousProps.executionTarget,
+          nextProps.executionTarget,
+        )
+      ) {
+        return false;
+      }
+      continue;
+    }
     if (propKey === 'commands') {
       if (!areCustomCommandsEqual(previousProps.commands, nextProps.commands)) {
         return false;
@@ -421,7 +555,10 @@ function areChatInputBoxAdapterPropsEqual(
       propKey === 'attachments' ||
       propKey === 'selectedManualMemoryIds' ||
       propKey === 'selectedNoteCardIds' ||
-      propKey === 'customSkillDirectories'
+      propKey === 'customSkillDirectories' ||
+      propKey === 'files' ||
+      propKey === 'directories' ||
+      propKey === 'reasoningOptions'
     ) {
       const previousArray = previousProps[propKey];
       const nextArray = nextProps[propKey];

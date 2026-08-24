@@ -139,6 +139,23 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(screen.getByTestId("reasoning-default").textContent).toBe("Default");
   });
 
+  it("does not render permission ModeSelect for PI", () => {
+    render(
+      <ButtonArea
+        currentProvider="pi"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    openToolDock();
+
+    expect(screen.queryByTestId("mode-select")).toBeNull();
+  });
+
   it("does not render reasoning selector for Gemini", () => {
     render(
       <ButtonArea

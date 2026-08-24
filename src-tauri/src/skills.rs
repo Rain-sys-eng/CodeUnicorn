@@ -27,6 +27,8 @@ const SKILL_SOURCE_GLOBAL_CLAUDE_PLUGIN: &str = "global_claude_plugin";
 const SKILL_SOURCE_GLOBAL_CODEX: &str = "global_codex";
 const SKILL_SOURCE_GLOBAL_AGENTS: &str = "global_agents";
 const SKILL_SOURCE_GLOBAL_GEMINI: &str = "global_gemini";
+const SKILL_SOURCE_PROJECT_PI: &str = "project_pi";
+const SKILL_SOURCE_GLOBAL_PI: &str = "global_pi";
 
 #[derive(Serialize, Clone, Debug)]
 pub(crate) struct SkillEntry {
@@ -218,6 +220,23 @@ fn project_agents_skills_dir(entry: &WorkspaceEntry) -> PathBuf {
     PathBuf::from(&entry.path).join(".agents").join("skills")
 }
 
+fn project_pi_skills_dir(entry: &WorkspaceEntry) -> PathBuf {
+    PathBuf::from(&entry.path).join(".pi").join("skills")
+}
+
+fn resolve_default_pi_agent_dir() -> Option<PathBuf> {
+    if let Ok(value) = env::var("PI_CODING_AGENT_DIR") {
+        if let Some(path) = normalize_home_path(&value) {
+            return Some(path);
+        }
+    }
+    dirs::home_dir().map(|home| home.join(".pi").join("agent"))
+}
+
+fn default_pi_skills_dir() -> Option<PathBuf> {
+    resolve_default_pi_agent_dir().map(|dir| dir.join("skills"))
+}
+
 fn normalize_skill_name(name: &str) -> String {
     name.trim().to_ascii_lowercase()
 }
@@ -228,6 +247,7 @@ fn is_global_source(source: &str) -> bool {
         || source == SKILL_SOURCE_GLOBAL_CODEX
         || source == SKILL_SOURCE_GLOBAL_AGENTS
         || source == SKILL_SOURCE_GLOBAL_GEMINI
+        || source == SKILL_SOURCE_GLOBAL_PI
         || source == SKILL_SOURCE_CUSTOM
 }
 
@@ -555,11 +575,13 @@ pub(crate) async fn skills_list_local_core_with_settings(
         project_codex_dir,
         project_agents_dir,
         project_gemini_dir,
+        project_pi_dir,
         claude_global_dir,
         claude_plugin_global_dirs,
         codex_global_dir,
         agents_global_dir,
         gemini_global_dir,
+        pi_global_dir,
     ) = {
         let entry = workspaces
             .get(workspace_id)
@@ -569,22 +591,26 @@ pub(crate) async fn skills_list_local_core_with_settings(
         let project_codex_dir = project_codex_skills_dir(entry);
         let project_agents_dir = project_agents_skills_dir(entry);
         let project_gemini_dir = PathBuf::from(&entry.path).join(".gemini").join("skills");
+        let project_pi_dir = project_pi_skills_dir(entry);
         let codex_dir = default_skills_dir_for_workspace(workspaces, entry);
         let claude_dir = default_claude_skills_dir();
         let claude_plugin_dirs = default_claude_plugin_skills_roots();
         let agents_dir = default_agents_skills_dir();
         let gemini_dir = default_gemini_skills_dir();
+        let pi_dir = default_pi_skills_dir();
         (
             ws_dir,
             Some(project_claude_dir),
             Some(project_codex_dir),
             Some(project_agents_dir),
             Some(project_gemini_dir),
+            Some(project_pi_dir),
             claude_dir,
             claude_plugin_dirs,
             codex_dir,
             agents_dir,
             gemini_dir,
+            pi_dir,
         )
     };
 
@@ -625,6 +651,10 @@ pub(crate) async fn skills_list_local_core_with_settings(
             Some(dir) => safe_discover(dir, SKILL_SOURCE_PROJECT_GEMINI),
             None => Vec::new(),
         };
+        let project_pi_skills = match &project_pi_dir {
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_PROJECT_PI),
+            None => Vec::new(),
+        };
 
         let claude_skills = match &claude_global_dir {
             Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_CLAUDE),
@@ -649,6 +679,10 @@ pub(crate) async fn skills_list_local_core_with_settings(
             Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_GEMINI),
             None => Vec::new(),
         };
+        let pi_skills = match &pi_global_dir {
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_PI),
+            None => Vec::new(),
+        };
 
         let custom_skills = match discover_custom_skills_in_roots(custom_skill_roots) {
             Ok(entries) => entries,
@@ -669,12 +703,14 @@ pub(crate) async fn skills_list_local_core_with_settings(
             project_codex_skills,
             project_agents_skills,
             project_gemini_skills,
+            project_pi_skills,
             custom_skills,
             claude_skills,
             claude_plugin_skills,
             codex_skills,
             agents_skills,
             gemini_skills,
+            pi_skills,
             curated_skills,
         ]))
     })
@@ -814,6 +850,24 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(target_root);
+    }
+
+    #[test]
+    fn project_pi_skills_dir_is_dot_pi_skills() {
+        let entry = WorkspaceEntry {
+            id: "ws-1".to_string(),
+            name: "demo".to_string(),
+            path: "/tmp/demo".to_string(),
+            codex_bin: None,
+            kind: Default::default(),
+            parent_id: None,
+            worktree: None,
+            settings: Default::default(),
+        };
+        assert_eq!(
+            project_pi_skills_dir(&entry),
+            PathBuf::from("/tmp/demo/.pi/skills")
+        );
     }
 
     #[test]

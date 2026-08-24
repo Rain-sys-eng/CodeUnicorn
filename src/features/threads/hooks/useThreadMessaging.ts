@@ -259,6 +259,7 @@ import {
   isLikelyForeignModelForGemini,
   isRecoverableCodexThreadBindingError,
   isUnknownEngineInterruptTurnMethodError,
+  classifyTurnStartReasonCode,
   mapNetworkErrorToUserMessage,
   normalizeAccessMode,
   collectOccupiedGrokSessionIds,
@@ -3472,6 +3473,7 @@ export function useThreadMessaging({
           label: "turn/start error",
           payload: {
             rawMessage,
+            reasonCode: classifyTurnStartReasonCode(rawMessage),
             category: stabilityDiagnostic?.category ?? null,
             recoveryReason: stabilityDiagnostic?.reconnectReason ?? null,
           },
