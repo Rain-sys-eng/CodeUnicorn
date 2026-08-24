@@ -25,6 +25,7 @@ import {
   shouldRememberHideUnreadiness,
 } from "./useThreadActions.nativeIndexProjection";
 import { reconcilePiDerivedHideWithAuthoritativeRows } from "../../pi-session/store/piSessionStore";
+import { debugPiSummaryLayerDrops } from "../../pi-session/store/piSidebarDropDiagnostics";
 import {
   expandVisibilityHideSet,
   isFullyVerifiedSharedNativeVisibility,
@@ -617,6 +618,17 @@ export function useThreadActions({
             lastGood: getLastGoodThreadSummariesWithoutDeleted(),
             hideReady: canProjectIndexNatives,
           });
+          debugPiSummaryLayerDrops(
+            "index-early-paint",
+            sessionIndexPage.data,
+            new Set(earlyIndexSummaries.map((summary) => summary.id)),
+            (threadId) =>
+              canProjectIndexNatives
+                ? threadIdInHiddenSharedBindingSet(threadId, earlyPaintHideSet)
+                  ? "shared/collab-hide-set"
+                  : "title-gate"
+                : "hide-not-ready-deferral",
+          );
           if (earlyIndexSummaries.length > 0) {
             // Urgent early paint still yields one macrotask when a click is
             // pending — WebView2 hit-test starvation freezes harder than a
@@ -1173,6 +1185,15 @@ export function useThreadActions({
               getCustomName,
               hiddenSharedBindingIds,
             },
+          );
+          debugPiSummaryLayerDrops(
+            "index-merge",
+            sessionIndexPage.data ?? [],
+            new Set(indexSummaries.map((summary) => summary.id)),
+            (threadId) =>
+              threadIdInHiddenSharedBindingSet(threadId, hiddenSharedBindingIds)
+                ? "shared/collab-hide-set"
+                : "title-gate-or-deferral",
           );
           // Index is list authority for first-paint multi-engine membership:
           // seed missing engines and prefer newer timestamps.
@@ -1749,7 +1770,7 @@ export function useThreadActions({
         }
         if (hasFreshPiCache && cachedPi.sessions.length > 0) {
           reconcilePiDerivedHideWithAuthoritativeRows(cachedPi.sessions);
-          allSummaries = mergePiSessionSummaries(
+          const mergedFromCache = mergePiSessionSummaries(
             allSummaries,
             cachedPi.sessions.filter(
               (session) =>
@@ -1763,6 +1784,12 @@ export function useThreadActions({
             getCustomName,
             hiddenSharedBindingIds,
           );
+          debugPiSummaryLayerDrops(
+            "pi-disk-cache-merge",
+            cachedPi.sessions,
+            new Set(mergedFromCache.map((summary) => summary.id)),
+          );
+          allSummaries = mergedFromCache;
         }
         if (hasFreshQoderCache && cachedQoder.sessions.length > 0) {
           allSummaries = mergeQoderSessionSummaries(
@@ -2591,6 +2618,11 @@ export function useThreadActions({
               mappedTitles,
               getCustomName,
               freshHiddenSharedBindingIds,
+            );
+            debugPiSummaryLayerDrops(
+              "pi-disk-list-merge",
+              normalizedPiSessions,
+              new Set(nextSummaries.map((summary) => summary.id)),
             );
             const visibleNextSummaries = applySessionArchiveState(
               stripHiddenSharedBindingSummaries(

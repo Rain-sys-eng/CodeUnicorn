@@ -15,6 +15,8 @@ import {
 import { sessionIndexRowsToThreadSummaries } from "./sessionIndexThreadSummaries";
 import { reconcilePiDerivedHideWithAuthoritativeRows } from "../../pi-session/store/piSessionStore";
 import { expandHiddenSharedBindingIds } from "../../shared-session/runtime/sharedSessionSummaries";
+import { threadIdInHiddenSharedBindingSet } from "./useThreadActions.helpers";
+import { debugPiSummaryLayerDrops } from "../../pi-session/store/piSidebarDropDiagnostics";
 import { getCollabWorkerNativeHideIds } from "../../multi-agent/runtime/collabNativeHideRegistry";
 import {
   expandVisibilityHideSet,
@@ -194,6 +196,15 @@ export function useLoadOlderThreadsForWorkspace({
               getCustomName,
               hiddenSharedBindingIds: hideSet,
             });
+            debugPiSummaryLayerDrops(
+              "index-load-older",
+              pageRows,
+              new Set(indexSummaries.map((summary) => summary.id)),
+              (threadId) =>
+                threadIdInHiddenSharedBindingSet(threadId, hideSet)
+                  ? "shared/collab-hide-set"
+                  : "title-gate",
+            );
             const existingIds = new Set(existing.map((thread) => thread.id));
             const additions = indexSummaries.filter(
               (summary) => !existingIds.has(summary.id),

@@ -8,6 +8,7 @@ import {
   isSharedSidebarHiddenPup,
 } from "../../shared-session/runtime/sharedSessionSummaries";
 import { isPiDerivedThreadHidden } from "../../pi-session/store/piSessionStore";
+import { debugPiSidebarDrop } from "../../pi-session/store/piSidebarDropDiagnostics";
 import { lastVerifiedSharedHide } from "../../threads/hooks/sharedNativeVisibility";
 import { compareThreadSummariesByCreatedAtDesc } from "../../threads/utils/threadSummarySort";
 
@@ -103,6 +104,13 @@ export function useThreadRows(threadParentById: Record<string, string>) {
           (thread.engineSource === "pi" || thread.id.startsWith("pi:")) &&
           (parentId || isPiDerivedThreadHidden(thread.id))
         ) {
+          // 诊断：渲染层隐藏的每条 pi 行必须能说出原因（parent 通道还是
+          // 内存派生集合）——多轮「main 丢失」取证的可观测性沉淀。
+          debugPiSidebarDrop(
+            "render-filter",
+            thread.id,
+            parentId ? `parent:${parentId}` : "derived-set",
+          );
           return;
         }
         const visibleParentId = resolveVisibleParentThreadId(

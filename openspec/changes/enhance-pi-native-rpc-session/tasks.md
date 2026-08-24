@@ -216,3 +216,8 @@
 - [x] 28.2 **根因（三因子叠加）**：① cfce6da7a 把首页/分页窗口 12→5；② c4b4fba57 起 fork 派生行渲染层隐藏（设计），但 index 分页照抓——fork 密集工作区里每页 5 槽大半被「抓了也不显示」的 fork 吃掉；③ 「更多」先扩内存页（last-good/catalog 的非 pi 行填充），内存页不耗尽不发 index 下一页 IPC——main 永远到不了。老逻辑看起来「全」是因为窗口 12 + fork 以嵌套子行形式占屏
 - [x] 28.3 **修复（SQL 层，只影响侧栏分页）**：`store.rs` 新增 `for_sidebar` 口径——per-engine 首页切片、keyset `_before` 页、`hasMore` 基数、路径等价 merge 四处统一排除 `engine='pi' AND parent_session_id 非空` 的行；`empty_prune` GC 与 `index_empty` 检查传 `false` 行为不变。渲染层 `useThreadRows` pi 过滤保留为兜底。效果（真实库验证）：pi 首页 5 槽全部 main（`怎么了在吗`/`你是什么模型看一下`/`看一下你是什么模型`/`99+22`/`1+1`），与老逻辑可见集合一致
 - [x] 28.4 验证：`cargo test --lib session_index` 74 全绿（新增 `sidebar_pages_exclude_pi_derived_rows_but_keep_mains`：首页/keyset/hasMore 排除 fork、全量路径不变四断言）；`cargo check --lib` 0 错误；openspec validate --strict 通过；spec 补「派生行 MUST NOT 占分页槽位」契约
+
+## 29. 侧栏 pi 丢失可观测性（2026-08-24 上午，兑现 24.2「复现则加诊断日志」）
+
+- [x] 29.1 三轮取证（codemoss 25 main / ai-reach 9 main+30 fork / 真实库 SQL 模拟）证明静态层全部清白，round 9/10 修复后仍有运行时残留缺失（可见集合 = 今早在 app 内打开/恢复过的 live 会话）——剩余通道（collab worker hide 注册表 / verified shared hide / deferral 时序 / 渲染层 parent）离线无法还原组合时序。按 24.2 承诺落地诊断：`piSidebarDropDiagnostics`（同 stage+id 每进程只打一次防刷屏），埋点覆盖 render-filter（parent vs derived-set 带原因）/ placeholder-filter / index early-paint（hide-not-ready-deferral vs hide-set vs title-gate）/ index merge / index load-older / pi 磁盘 list + 缓存 merge（掉行 diff + shared/collab-hide-set 归因）。console.debug `[pi-sidebar-drop]` 一次复现即可定位层级与规则
+- [x] 29.2 验证：tsc 0 错误；eslint 干净；useThreadRows + Sidebar.subagent-tree 14 绿；Sidebar.session-folders 3 败为基线既有失败（stash 对照同数）

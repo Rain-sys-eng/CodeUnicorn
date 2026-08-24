@@ -55,6 +55,7 @@ import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
+import { debugPiSidebarDrop } from "../../pi-session/store/piSidebarDropDiagnostics";
 import { isDefaultWorkspacePath } from "../../workspaces/utils/defaultWorkspace";
 import { formatShortcutForPlatform, isMacPlatform } from "../../../utils/shortcuts";
 import { isMacPlatform as isMacDesktopHost } from "../../../utils/platform";
@@ -604,18 +605,29 @@ function SidebarImpl({
   const getProjectedThreads = useCallback(
     (workspaceId: string) =>
       buildClaudeLiveSubagentRows(
-        (threadsByWorkspace[workspaceId] ?? []).filter(
-          (thread) =>
-            !shouldHidePlaceholderNativeDraftFromSidebar({
-              engine: thread.engineSource,
-              threadId: thread.id,
-              displayName: thread.name,
-              isActive:
-                workspaceId === activeWorkspaceId &&
-                thread.id === activeThreadId,
-              isChildSession: Boolean(thread.parentThreadId?.trim()),
-            }),
-        ),
+        (threadsByWorkspace[workspaceId] ?? []).filter((thread) => {
+          const hidePlaceholder = shouldHidePlaceholderNativeDraftFromSidebar({
+            engine: thread.engineSource,
+            threadId: thread.id,
+            displayName: thread.name,
+            isActive:
+              workspaceId === activeWorkspaceId &&
+              thread.id === activeThreadId,
+            isChildSession: Boolean(thread.parentThreadId?.trim()),
+          });
+          // 诊断：placeholder 闸藏掉的 pi 行（多轮「main 丢失」取证沉淀）。
+          if (
+            hidePlaceholder &&
+            (thread.engineSource === "pi" || thread.id.startsWith("pi:"))
+          ) {
+            debugPiSidebarDrop(
+              "placeholder-filter",
+              thread.id,
+              `name:${String(thread.name ?? "").slice(0, 30)}`,
+            );
+          }
+          return !hidePlaceholder;
+        }),
         workspaceId,
         activeWorkspaceId,
         activeThreadId,
