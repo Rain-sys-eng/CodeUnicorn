@@ -9,6 +9,8 @@
  * 防刷屏：同一 (stage, id) 每次进程运行只打一次（模块级 Set）。
  */
 
+import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
+
 const loggedOnce = new Set<string>();
 
 export function debugPiSidebarDrop(
@@ -22,6 +24,9 @@ export function debugPiSidebarDrop(
   }
   loggedOnce.add(key);
   console.debug(`[pi-sidebar-drop] stage=${stage} id=${threadId} reason=${reason}`);
+  // 同步落 renderer 诊断存储（~/.ccgui/client/diagnostics.json）——
+  // webview console 不落盘，运维/取证只能读持久化通道。
+  appendRendererDiagnostic("pi-sidebar-drop", { stage, threadId, reason });
 }
 
 /**

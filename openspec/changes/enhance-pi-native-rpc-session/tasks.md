@@ -221,3 +221,11 @@
 
 - [x] 29.1 三轮取证（codemoss 25 main / ai-reach 9 main+30 fork / 真实库 SQL 模拟）证明静态层全部清白，round 9/10 修复后仍有运行时残留缺失（可见集合 = 今早在 app 内打开/恢复过的 live 会话）——剩余通道（collab worker hide 注册表 / verified shared hide / deferral 时序 / 渲染层 parent）离线无法还原组合时序。按 24.2 承诺落地诊断：`piSidebarDropDiagnostics`（同 stage+id 每进程只打一次防刷屏），埋点覆盖 render-filter（parent vs derived-set 带原因）/ placeholder-filter / index early-paint（hide-not-ready-deferral vs hide-set vs title-gate）/ index merge / index load-older / pi 磁盘 list + 缓存 merge（掉行 diff + shared/collab-hide-set 归因）。console.debug `[pi-sidebar-drop]` 一次复现即可定位层级与规则
 - [x] 29.2 验证：tsc 0 错误；eslint 干净；useThreadRows + Sidebar.subagent-tree 14 绿；Sidebar.session-folders 3 败为基线既有失败（stash 对照同数）
+
+## 30. 验收修复 round 11（2026-08-24 中午，诊断实锤 + 独立 main 可达性 + Shared 契约确认）
+
+- [x] 30.1 **诊断实锤（掉点日志 + V2 数据互证）**：`pi-sidebar-drop` 落盘诊断显示——early-paint 的 5 个首页 pi main 全部 hide-not-ready-deferral（暂态，full merge 补回）；**index-merge 阶段 codemoss `01a02fd6` / ai-reach `01a02f50-b8cc` 被永久排除**——二者在 `shared_binding_state` 里有活跃 V2 binding（被 Shared 会话 `0c82de34` / `ca9ab2e8` 以 pi target 认领，含 turnAccepted 事件）。结论：这不是 pi 藏匿逻辑 bug，是 Shared 契约生效
+- [x] 30.2 **用户契约决策**：被 Shared 认领的 native pi 行 MUST 继续隐藏（shared pi 一定要隐藏）；只有独立的 native pi main 展示。当前行为与契约一致，不改
+- [x] 30.3 **「点更多也到不了」根因**：首页 per-engine 5 槽 × 9 引擎 ≈ 55 行一次性进内存，`totalRoots` 远大于 visible cap——「更多」点击只扩内存页，`planThreadListPageAdvance` 的 fetch 分支（cap > totalRoots 且有 cursor）永远到不了，index 第 2 页（pi main position 6~9）永远取不到（thread/list older 日志零条佐证）
+- [x] 30.4 **修复**：新增 `includePiDiskList` 选项（只放行 pi 单引擎盘扫，不 fan-out 其它引擎），`shouldRefreshPiSessions` 改用它判定；首刷后后台软刷（`runPostFirstPaintIndexSoftResync`）传 `includePiDiskList: true`——独立 main 全部经磁盘 list 合并进内存（Shared 认领行 / fork 派生行仍按契约隐藏，reconcile 自愈不受影响）。首刷性能路径不变（first-paint 仍不扫盘）
+- [x] 30.5 验证：`tsc --noEmit` 0 错误；threadList + native-session-bridges + hydration vitest 47 绿（2 个 unhandled errors 为基线既有，stash 对照同数）；spec 补「独立 main MUST 全部可达」契约

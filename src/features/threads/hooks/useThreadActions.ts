@@ -390,6 +390,14 @@ export function useThreadActions({
          * Default false: sidebar hydrate uses Session Index.
          */
         includeEngineDiskLists?: boolean;
+        /**
+         * 只补 pi 单引擎盘扫（首刷后后台软刷用）：独立 native pi main 在
+         * index 首页 5 槽之外也必须可达（2026-08-24 用户验收——首页 per-engine
+         * 预算 + 「更多」先扩内存页导致 position 6+ 的 pi main 永远到不了）。
+         * pi 盘扫是单目录 header 读，远比 opencode/claude 全量清单便宜；
+         * 其它引擎仍只在 full-catalog 才扫。
+         */
+        includePiDiskList?: boolean;
         deletedThreadIds?: string[];
         recoverySource?: AutomaticRuntimeRecoverySource;
         allowRuntimeReconnect?: boolean;
@@ -428,6 +436,9 @@ export function useThreadActions({
       // management may still pass includeEngineDiskLists: true.
       const includeEngineDiskLists =
         !isFirstPaintHydration && options?.includeEngineDiskLists === true;
+      // pi 盘扫可被独立允许（后台软刷补全独立 main），不等 full-catalog。
+      const includePiDiskList =
+        includeEngineDiskLists || options?.includePiDiskList === true;
       const deletedThreadIds = [
         ...new Set(
           (options?.deletedThreadIds ?? [])
@@ -2553,7 +2564,7 @@ export function useThreadActions({
         // Same as DSH: first-paint never probes PI disk. Index is the read layer.
         const shouldRefreshPiSessions =
           isLatestThreadListRequest() &&
-          includeEngineDiskLists &&
+          includePiDiskList &&
           (hasPiSignal || !!cachedPi || !hasAttemptedPiRefresh);
         if (shouldRefreshPiSessions) {
           void (async () => {

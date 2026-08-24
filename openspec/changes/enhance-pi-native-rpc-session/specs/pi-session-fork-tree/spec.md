@@ -45,6 +45,7 @@
 - **AND** 已泄漏的 live 行 MUST 在下轮 list 刷新时经 merge backfill 补回 parent 并重新隐藏
 - **AND** 派生会话 MUST NOT 使用 subagent 嵌套视觉、MUST NOT 计入子代理数（`collectCanvasChildSubagentThreads` / `Composer.stripChildThreads` / `useStatusPanelData.seedSubagentsFromChildTree` 三处分域）
 - **AND** 分支线路 MUST 由会话树面板统一控制
+- **AND** 独立（未被 Shared 认领、非 fork 派生）的 native pi main MUST 全部可达：首刷后后台软刷 MUST 补一次 pi 单引擎盘扫合并（`includePiDiskList`，不 fan-out 其它引擎）——index 首页 per-engine 5 槽 + 「更多」先扩内存页的组合会让 position 6+ 的独立 main 永远到不了（2026-08-24 用户验收）；Shared 认领的 native pi 行（V2 binding）与 fork 派生行仍 MUST 隐藏
 
 #### Scenario: 会话树 MUST 为中间对话区右侧 dock
 
