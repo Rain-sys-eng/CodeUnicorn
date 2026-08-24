@@ -4,12 +4,13 @@ import { mergeThreadItemsPreservingOptimisticUsers } from "./threadReducerOptimi
 
 type UserMessage = Extract<ConversationItem, { kind: "message" }> & { role: "user" };
 
-function userMessage(id: string, text: string): UserMessage {
+function userMessage(id: string, text: string, images?: string[]): UserMessage {
   return {
     id,
     kind: "message",
     role: "user",
     text,
+    ...(images && images.length > 0 ? { images } : {}),
   };
 }
 
@@ -186,6 +187,28 @@ describe("mergeThreadItemsPreservingOptimisticUsers leftover order", () => {
       "same-session-explore",
       "hist-1",
       "a-1",
+    ]);
+  });
+
+  it("does not collapse a new typed question onto the previous image-only user", () => {
+    const local: ConversationItem[] = [
+      userMessage("hist-shot", "", ["/tmp/prev.png"]),
+      assistantMessage("a-shot", "上一张图看完了"),
+      userMessage("optimistic-user-next", "再问一句纯文本"),
+    ];
+    const incoming: ConversationItem[] = [
+      userMessage("hist-shot", "", ["/tmp/prev.png"]),
+      assistantMessage("a-shot", "上一张图看完了"),
+    ];
+
+    const merged = mergeThreadItemsPreservingOptimisticUsers(local, incoming, {
+      isProcessing: true,
+    });
+
+    expect(merged.map((item) => item.id)).toEqual([
+      "hist-shot",
+      "a-shot",
+      "optimistic-user-next",
     ]);
   });
 

@@ -79,6 +79,14 @@ P0 Bug A（Claude 磁盘尾窗 80 接到幕布芯片）已独立落地。本 cha
 
 **B3 follow-up（Grok leftover Exploring）**：当 `firstMatchedIncomingIndex < 0`（incoming 完全对不上）时，`explore`（任意 status）与 in-progress `commandExecution` leftover **不得**插到结果开头。这类项是别的会话残留，不是「迟到更早窗」。user / assistant leftover 仍按原 D2 插到开头，B3 既有 fully-unmatched older-window 用例不得回退。有 matched neighbor 时 explore 仍相对插入。
 
+**B3 follow-up（带图提问尾巴回归）**：`insertUnmatchedIncomingByNeighbor` 合同不变。回归出在 replacement map 没把「当前回合 optimistic」标成已被 history 替换：hydrate 后 leftover 助手 + 空 text 附图 user 按邻居插完，optimistic 仍留在最新尾巴，幕布上看就是用户图卡贴在响应中条右下。
+
+修法：
+
+1. merge 用已有 `buildOptimisticUserReplacementMap` 决定是否保留 optimistic，不再只靠 `findMatchingRealUserMessage`。
+2. 当前回合 1:1：local 最后一条真实 user 之后恰好一条 unmatched optimistic，incoming 在对应位置之后恰好一条 **新 id** unmatched real user，且 `isPlausibleSameTurnUserPayload` 为真（同文案，或一侧可见文案为空但两侧都有图 / deferred 图）。两条非空且不同的可见文案禁止折叠，以保住 B2「hello 与 hello world 并存」。
+3. 被替换的 history user 若 text 归一化后为空，回写 optimistic caption，避免位置对了、问句丢了。
+
 配套两层，禁止只靠一层：
 
 1. **Presentation**：Grok 用 `suppressOrphanExploringItemsBeforeLatestUserTurn` 隐藏 latest user 之前的 `exploring`，保留其后的当前轮 Exploring。不要求 `isThinking`。禁止把 Grok 改成 Codex/Claude 那种全藏 `exploring`。

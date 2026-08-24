@@ -38,6 +38,11 @@
 - [x] 7.3 [P1] Grok presentation 隐藏 latest user 之前的 orphan `exploring`，保留其后的当前轮 Exploring。Input: `messagesLiveWindow.ts`、`MessagesCore.tsx`、`Messages.explore.test.tsx`。Output: `suppressOrphanExploringItemsBeforeLatestUserTurn`；Grok 不要求 `isThinking`。Validation: live-window 单测 + Messages explore 组件测转绿；Codex/Claude hide-all exploring 不回退。
 - [x] 7.4 [P1] `pickLikelyGrokSessionId` 跳过已被其他 mossx thread 占用的 session；另一 `grok-pending-*` 已有 items 时跳过 list fallback。Input: `threadMessagingHelpers.ts`、`useThreadMessaging.ts`。Output: occupied set + `hasOtherPendingWithItems`。Validation: helper 单测覆盖 occupied / unoccupied / 旧 `grok:` 不误杀。
 
+## 8. B3 follow-up：带图提问 hydrate 不得把 optimistic 接到助手尾巴
+
+- [x] 8.1 [P1] 失败用例：caption + 图的 optimistic 与空 text / 不同 image URL 的 history user 不得出现在 assistant 之后；上一轮 image-only 不得吞掉后一条纯文本 optimistic。Input: `threadReducerOptimisticItemMerge.user-images.test.ts`、`threadReducerOptimisticItemMerge.merge-order.test.ts`。Output: 红灯指向 replacement map 未绑定当前回合。Validation: B3 迟到尾窗 / hello vs hello world 用例仍绿。
+- [x] 8.2 [P1][depends:8.1] `buildOptimisticUserReplacementMap` 增加当前回合 1:1（两侧都有图、且不是两条非空不同文案）；merge 用 replacement map 决定是否保留 optimistic；history text 为空时回写 optimistic caption。Input: `threadReducerOptimisticUserReconciliation.ts`、`threadReducerOptimisticItemMerge.ts`。Output: 单气泡在助手上方；caption 保留。Validation: 8.1 转绿；既有 leftover 相对插入用例不回退。
+
 ## 明确不做
 
 - 不按 `timestamp` 全局 sort。
