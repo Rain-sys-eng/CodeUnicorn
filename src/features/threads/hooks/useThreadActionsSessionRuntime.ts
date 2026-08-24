@@ -25,6 +25,7 @@ import {
   startThread as startThreadService,
   writeClientCreatedSessionIndex,
 } from "../../../services/tauri";
+import { deleteSessionViaV2IfEnabled } from "../utils/sessionDeleteV2";
 import { parseClaudeHistoryMessagesWithShadowRecovery } from "../loaders/claudeHistoryLoader";
 import {
   applyClaudeRewindWorkspaceRestore,
@@ -937,7 +938,20 @@ export function useThreadActionsSessionRuntime({
           firstHistoryMessageId &&
           resolvedMessageId === firstHistoryMessageId
         ) {
-          await deleteClaudeSessionService(workspacePath, sessionId);
+          // rewind 归零 = 删除会话：v2 开启时走 marker-first（tombstone +
+          // 元数据清理 + 残留重试），失败保持 throw 语义
+          const v2Result = await deleteSessionViaV2IfEnabled(
+            workspaceId,
+            threadId,
+            { engine: "claude" },
+          );
+          if (v2Result) {
+            if (!v2Result.ok) {
+              throw new Error(v2Result.message ?? "Failed to delete session");
+            }
+          } else {
+            await deleteClaudeSessionService(workspacePath, sessionId);
+          }
           delete loadedThreadsRef.current[threadId];
           dispatch({
             type: "removeThread",
@@ -1035,16 +1049,36 @@ export function useThreadActionsSessionRuntime({
         delete loadedThreadsRef.current[threadId];
         loadedThreadsRef.current[forkedThreadId] = false;
         await resumeThreadForWorkspace(workspaceId, forkedThreadId, true, true);
-        try {
-          await deleteClaudeSessionService(workspacePath, sessionId);
-        } catch (error) {
-          onDebug?.({
-            id: `${Date.now()}-client-thread-fork-from-message-delete-source-error`,
-            timestamp: Date.now(),
-            source: "error",
-            label: "thread/fork from message delete source error",
-            payload: error instanceof Error ? error.message : String(error),
-          });
+        // fork 删源会话：v2 开启时走 marker-first——物理删除失败 =
+        // MARKED_DELETED（源已隐藏，残留后台重试），根治「源会话复活」；
+        // 失败仍按原语义 log 后继续返回 forkedThreadId
+        const v2DeleteSource = await deleteSessionViaV2IfEnabled(
+          workspaceId,
+          threadId,
+          { engine: "claude" },
+        );
+        if (v2DeleteSource) {
+          if (!v2DeleteSource.ok) {
+            onDebug?.({
+              id: `${Date.now()}-client-thread-fork-from-message-delete-source-error`,
+              timestamp: Date.now(),
+              source: "error",
+              label: "thread/fork from message delete source error",
+              payload: v2DeleteSource.message ?? "Failed to delete session",
+            });
+          }
+        } else {
+          try {
+            await deleteClaudeSessionService(workspacePath, sessionId);
+          } catch (error) {
+            onDebug?.({
+              id: `${Date.now()}-client-thread-fork-from-message-delete-source-error`,
+              timestamp: Date.now(),
+              source: "error",
+              label: "thread/fork from message delete source error",
+              payload: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
         return forkedThreadId;
       } catch (error) {
@@ -1293,7 +1327,20 @@ export function useThreadActionsSessionRuntime({
         }
 
         if (targetUserTurnIndex === 0) {
-          await deleteCodexSessionService(workspaceId, canonicalThreadId);
+          // codex rewind 归零 = 删除会话：v2 开启时走 marker-first
+          // （裸 id 需 engine 定向），失败保持 throw 语义
+          const v2Result = await deleteSessionViaV2IfEnabled(
+            workspaceId,
+            canonicalThreadId,
+            { engine: "codex" },
+          );
+          if (v2Result) {
+            if (!v2Result.ok) {
+              throw new Error(v2Result.message ?? "Failed to delete session");
+            }
+          } else {
+            await deleteCodexSessionService(workspaceId, canonicalThreadId);
+          }
           delete loadedThreadsRef.current[canonicalThreadId];
           dispatch({
             type: "removeThread",

@@ -12,6 +12,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import {
+  deleteSessionViaV2IfEnabled,
   isSessionDeleteSuccessCode,
   isSessionDeleteV2Enabled,
   requestSessionDelete,
@@ -129,5 +130,81 @@ describe("sessionDeleteV2", () => {
     await expect(
       requestSessionDelete("ws-1", ["thread-1"], { timeoutMs: 20 }),
     ).rejects.toThrow("session delete request timeout");
+  });
+
+  it("engine 选项透传到删除目标（codex 裸 id 定向）", async () => {
+    invokeMock.mockResolvedValue({ requestId: "req-engine" });
+    listenMock.mockResolvedValue(() => {});
+
+    const promise = requestSessionDelete("ws-1", ["bare-uuid"], {
+      engine: "codex",
+      timeoutMs: 20,
+    });
+    // 立即挂上 reject 断言，避免 20ms 超时先于 handler 触发 unhandled rejection
+    const assertion = expect(promise).rejects.toThrow(
+      "session delete request timeout",
+    );
+    await vi.waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("delete_workspace_sessions_v2", {
+        request: {
+          workspaceId: "ws-1",
+          targets: [{ threadId: "bare-uuid", engine: "codex" }],
+        },
+      });
+    });
+    await assertion;
+  });
+
+  describe("deleteSessionViaV2IfEnabled（内部生命周期删除）", () => {
+    it("flag off 返回 null（调用方回退 legacy 直删）", async () => {
+      window.localStorage.setItem(SESSION_DELETE_V2_FLAG_KEY, "off");
+      const result = await deleteSessionViaV2IfEnabled("ws-1", "thread-1");
+      expect(result).toBeNull();
+      expect(invokeMock).not.toHaveBeenCalled();
+    });
+
+    it("MARKED_DELETED 等幂等成功码归一为 ok", async () => {
+      window.localStorage.setItem(SESSION_DELETE_V2_FLAG_KEY, "on");
+      let settledHandler: ((event: { payload: unknown }) => void) | undefined;
+      listenMock.mockImplementation(
+        (_event: string, handler: (event: { payload: unknown }) => void) => {
+          settledHandler = handler;
+          return Promise.resolve(() => {});
+        },
+      );
+      invokeMock.mockImplementation(async () => {
+        settledHandler?.({
+          payload: {
+            requestId: "req-lifecycle",
+            results: [{ sessionId: "thread-1", ok: true, code: "MARKED_DELETED" }],
+          },
+        });
+        return { requestId: "req-lifecycle" };
+      });
+
+      const result = await deleteSessionViaV2IfEnabled("ws-1", "thread-1", {
+        engine: "claude",
+      });
+      expect(result).toEqual({ ok: true, message: null });
+    });
+
+    it("失败结果与异常都归一为 { ok: false, message }", async () => {
+      window.localStorage.setItem(SESSION_DELETE_V2_FLAG_KEY, "on");
+      listenMock.mockResolvedValue(() => {});
+      // 后端返回失败码
+      invokeMock.mockResolvedValueOnce({ requestId: "req-fail" });
+      const failPromise = deleteSessionViaV2IfEnabled("ws-1", "thread-1", {
+        timeoutMs: 20,
+      });
+      // 无 settled → 超时 → { ok: false }
+      await expect(failPromise).resolves.toEqual({
+        ok: false,
+        message: "session delete request timeout",
+      });
+      // invoke 异常
+      invokeMock.mockRejectedValueOnce(new Error("ipc down"));
+      const ipcResult = await deleteSessionViaV2IfEnabled("ws-1", "thread-1");
+      expect(ipcResult).toEqual({ ok: false, message: "ipc down" });
+    });
   });
 });

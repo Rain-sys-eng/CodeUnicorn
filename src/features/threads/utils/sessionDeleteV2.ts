@@ -126,12 +126,15 @@ function ensureSettledListener(): Promise<boolean> {
 export async function requestSessionDelete(
   workspaceId: string,
   threadIds: string[],
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; engine?: string },
 ): Promise<SessionDeleteV2Result[]> {
   // 先建 listener 再发请求：快删除（ghost / index hit）在 invoke 返回前
   // 就可能 emit settled，listener 必须先就位。
   await ensureSettledListener();
-  const targets = threadIds.map((threadId) => ({ threadId }));
+  const targets = threadIds.map((threadId) => ({
+    threadId,
+    engine: options?.engine,
+  }));
   const { requestId } = await deleteWorkspaceSessionsV2(workspaceId, targets);
   // settled 可能先于 pending 注册到达：先查 early buffer
   const early = earlySettledByRequestId.get(requestId);
@@ -151,6 +154,42 @@ export async function requestSessionDelete(
     }, timeoutMs);
     pendingByRequestId.set(requestId, { resolve, timer });
   });
+}
+
+/**
+ * 内部生命周期删除（rewind 归零 / fork 删源会话）的 v2 入口。
+ * - v2 开启：走 marker-first 通道（tombstone + 元数据清理 + 残留重试），
+ *   返回归一化结果（MARKED_DELETED 等幂等成功码归一为 ok）；
+ * - v2 关闭：返回 null，调用方回退各自的 legacy 直删。
+ */
+export async function deleteSessionViaV2IfEnabled(
+  workspaceId: string,
+  threadId: string,
+  options?: { engine?: string; timeoutMs?: number },
+): Promise<{ ok: boolean; message: string | null } | null> {
+  if (!isSessionDeleteV2Enabled()) {
+    return null;
+  }
+  try {
+    const results = await requestSessionDelete(workspaceId, [threadId], {
+      engine: options?.engine,
+      timeoutMs: options?.timeoutMs,
+    });
+    const result =
+      results.find((item) => item.sessionId === threadId) ?? results[0] ?? null;
+    if (result && (result.ok || isSessionDeleteSuccessCode(result.code))) {
+      return { ok: true, message: null };
+    }
+    return {
+      ok: false,
+      message: result?.error?.trim() || "Failed to delete session",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /** 测试专用：清空挂起请求、early buffer 与 listener 缓存。 */

@@ -71,7 +71,6 @@ import {
   type AutomaticRuntimeRecoverySource,
 } from "./useAutomaticRuntimeRecovery";
 import {
-  createArchiveClaudeThreadAction,
   createArchiveThreadAction,
   createDeleteThreadForWorkspaceAction,
   createRenameThreadTitleMappingAction,
@@ -2906,11 +2905,6 @@ export function useThreadActions({
     [onDebug],
   );
 
-  const archiveClaudeThread = useMemo(
-    () => createArchiveClaudeThreadAction({ onDebug, workspacePathsByIdRef }),
-    [onDebug, workspacePathsByIdRef],
-  );
-
   const deleteThreadForWorkspace = useMemo(() => {
     const deleteThread = createDeleteThreadForWorkspaceAction({
       threadsByWorkspace,
@@ -2954,7 +2948,6 @@ export function useThreadActions({
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
     archiveThread,
-    archiveClaudeThread,
     deleteThreadForWorkspace,
     deleteThreadForWorkspaceV2,
     renameThreadTitleMapping,

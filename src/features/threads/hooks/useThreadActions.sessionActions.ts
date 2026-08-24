@@ -3,7 +3,6 @@ import type { Dispatch, MutableRefObject } from "react";
 import type { DebugEntry, ThreadSummary } from "../../../types";
 import {
   archiveThread as archiveThreadService,
-  deleteClaudeSession as deleteClaudeSessionService,
   deleteWorkspaceSessions as deleteWorkspaceSessionsService,
   renameThreadTitleKey as renameThreadTitleKeyService,
   setThreadTitle as setThreadTitleService,
@@ -143,35 +142,6 @@ export function createArchiveThreadAction(params: { onDebug?: OnDebug }) {
         timestamp: Date.now(),
         source: "error",
         label: "thread/archive error",
-        payload: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  };
-}
-
-export function createArchiveClaudeThreadAction(params: {
-  onDebug?: OnDebug;
-  workspacePathsByIdRef: MutableRefObject<Record<string, string>>;
-}) {
-  const { onDebug, workspacePathsByIdRef } = params;
-
-  return async (workspaceId: string, threadId: string) => {
-    const sessionId = threadId.startsWith("claude:")
-      ? threadId.slice("claude:".length)
-      : threadId;
-    const workspacePath = workspacePathsByIdRef.current[workspaceId];
-    if (!workspacePath) {
-      throw new Error("workspace not connected");
-    }
-    try {
-      await deleteClaudeSessionService(workspacePath, sessionId);
-    } catch (error) {
-      onDebug?.({
-        id: `${Date.now()}-client-claude-archive-error`,
-        timestamp: Date.now(),
-        source: "error",
-        label: "claude/archive error",
         payload: error instanceof Error ? error.message : String(error),
       });
       throw error;
