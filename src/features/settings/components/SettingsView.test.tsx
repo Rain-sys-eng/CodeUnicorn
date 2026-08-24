@@ -937,7 +937,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Run doctor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run doctor" }));
 
     await waitFor(() => {
       expect(onRunDoctor).toHaveBeenCalled();
@@ -997,7 +997,7 @@ describe("SettingsView Display", () => {
 
     // Radix Tabs uses focus-based automatic activation; jsdom fireEvent.click
     // does not focus the trigger, so focus it to actually switch panels.
-    fireEvent.focus(screen.getByRole("tab", { name: "Claude Code" }));
+    fireEvent.focus(await screen.findByRole("tab", { name: "Claude Code" }));
     fireEvent.click(screen.getByRole("tab", { name: "Claude Code" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Claude Doctor" }));
 
@@ -1046,7 +1046,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Run doctor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run doctor" }));
 
     await waitFor(() => {
       expect(onRunDoctor).toHaveBeenCalled();
@@ -1093,7 +1093,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    expect(screen.getByText("Execution backend")).toBeTruthy();
+    expect(await screen.findByText("Execution backend")).toBeTruthy();
     expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Claude Code" }));
@@ -1111,7 +1111,7 @@ describe("SettingsView Display", () => {
     });
   });
 
-  it("hides the deprecated Gemini entry inside CLI validation tabs", () => {
+  it("hides the deprecated Gemini entry inside CLI validation tabs", async () => {
     cleanup();
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     render(
@@ -1146,7 +1146,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "Codex" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Claude Code" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "OpenCode CLI" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "PI CLI" })).toBeTruthy();
@@ -1195,7 +1195,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    fireEvent.focus(screen.getByRole("tab", { name: "PI CLI" }));
+    fireEvent.focus(await screen.findByRole("tab", { name: "PI CLI" }));
     fireEvent.click(screen.getByRole("tab", { name: "PI CLI" }));
     fireEvent.click(screen.getByRole("button", { name: "Run PI Doctor" }));
 
@@ -1208,7 +1208,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -1392,7 +1392,7 @@ describe("SettingsView Display", () => {
       },
     });
 
-    fireEvent.change(screen.getByLabelText("Theme Palette"), {
+    fireEvent.change(await screen.findByLabelText("Theme Palette"), {
       target: { value: "vscode-dark-plus" },
     });
 
@@ -1417,7 +1417,7 @@ describe("SettingsView Display", () => {
       },
     });
 
-    fireEvent.change(screen.getByLabelText("Theme Palette"), {
+    fireEvent.change(await screen.findByLabelText("Theme Palette"), {
       target: { value: "vscode-light-plus" },
     });
 
@@ -1446,7 +1446,7 @@ describe("SettingsView Display", () => {
       },
     });
 
-    const select = screen.getByLabelText("Theme Palette");
+    const select = await screen.findByLabelText("Theme Palette");
     const options = within(select).getAllByRole("option");
 
     expect(options.map((option) => option.getAttribute("value"))).toEqual([
@@ -1479,7 +1479,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Wide canvas" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Wide canvas" }));
     });
 
     await waitFor(() => {
@@ -1497,7 +1497,7 @@ describe("SettingsView Display", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Narrow canvas" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Narrow canvas" }));
     });
 
     await waitFor(() => {
@@ -1512,7 +1512,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Left on right" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Left on right" }));
     });
 
     await waitFor(() => {
@@ -1530,7 +1530,7 @@ describe("SettingsView Display", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Default layout" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Default layout" }));
     });
 
     await waitFor(() => {
@@ -2586,16 +2586,16 @@ describe("SettingsView Shortcuts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Web Service" }));
     await flushSettingsViewEffects();
-    expect(screen.getAllByText("Web Service").length).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByText("Web Service")).length).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getByLabelText("settings.webServicePortAriaLabel"),
+      await screen.findByLabelText("settings.webServicePortAriaLabel"),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Email" }));
     await flushSettingsViewEffects();
     expect(screen.getAllByText("Email").length).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getByRole("switch", { name: "settings.emailEnableTitle" }),
+      await screen.findByRole("switch", { name: "settings.emailEnableTitle" }),
     ).toBeTruthy();
   });
 
