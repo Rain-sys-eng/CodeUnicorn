@@ -112,10 +112,6 @@ export function WorktreePrompt({
     inputRef.current?.select();
   }, []);
 
-  if (!stylesReady) {
-    return null;
-  }
-
   const normalizedBaseRef = baseRef.trim();
   const groupedBaseRefs: Record<WorktreeBaseRefOption["group"], WorktreeBaseRefOption[]> = {
     local: [],
@@ -268,6 +264,11 @@ export function WorktreePrompt({
       return availableBaseRefGroups[0] ?? null;
     });
   }, [availableBaseRefGroups, availableBaseRefGroupsKey, isBaseRefDropdownOpen, selectedBaseRef?.group]);
+
+  // 样式未就绪时不渲染；guard 必须放在所有 hooks 之后，避免条件调用 hooks。
+  if (!stylesReady) {
+    return null;
+  }
 
   return (
     <div className="worktree-modal" role="dialog" aria-modal="true">

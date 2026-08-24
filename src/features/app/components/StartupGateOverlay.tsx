@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getStartupTraceSnapshot,
@@ -404,7 +404,10 @@ export function StartupGateOverlay() {
     }, STARTUP_GATE_FORCE_DISMISS_MS);
 
     const refreshSummary = () => {
-      setTaskStats(readStartupGateSummary(nowMs() - mountedAtRef.current));
+      // 秒级刷新走 transition，避免 gate 期间与首帧渲染/首次点击争抢主线程。
+      startTransition(() => {
+        setTaskStats(readStartupGateSummary(nowMs() - mountedAtRef.current));
+      });
     };
     const summaryTimer = window.setInterval(
       refreshSummary,

@@ -1,4 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+  type LazyExoticComponent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -89,18 +100,70 @@ import { ProjectsSection } from "./settings-view/sections/ProjectsSection";
 import { ComposerSection } from "./settings-view/sections/ComposerSection";
 import { ShortcutsSection } from "./settings-view/sections/ShortcutsSection";
 import { OpenAppsSection } from "./settings-view/sections/OpenAppsSection";
-import { BasicAppearanceSection } from "./settings-view/sections/BasicAppearanceSection";
-import { CodexSection } from "./settings-view/sections/CodexSection";
 import { OtherSection } from "./settings-view/sections/OtherSection";
-import { SessionManagementSection } from "./settings-view/sections/SessionManagementSection";
-import {
-  RuntimePoolSection,
-  type RuntimeSessionEngine,
-  type RuntimeSessionEngineCount,
+
+// 重 section 按需加载：仅在用户切到对应 tab 时才拉取代码，
+// 避免打开设置页即加载全部 section（SettingsView chunk 减重）。
+// withSectionSuspense 让每个 lazy section 自带 Suspense 壳，渲染点零改动。
+function withSectionSuspense<P extends object>(
+  LazySection: LazyExoticComponent<ComponentType<P>>,
+) {
+  return function SettingsLazySection(props: ComponentProps<ComponentType<P>>) {
+    return (
+      <Suspense fallback={null}>
+        <LazySection {...props} />
+      </Suspense>
+    );
+  };
+}
+
+const BasicAppearanceSection = withSectionSuspense(
+  lazy(() =>
+    import("./settings-view/sections/BasicAppearanceSection").then((m) => ({
+      default: m.BasicAppearanceSection,
+    })),
+  ),
+);
+const CodexSection = withSectionSuspense(
+  lazy(() =>
+    import("./settings-view/sections/CodexSection").then((m) => ({
+      default: m.CodexSection,
+    })),
+  ),
+);
+const SessionManagementSection = withSectionSuspense(
+  lazy(() =>
+    import("./settings-view/sections/SessionManagementSection").then((m) => ({
+      default: m.SessionManagementSection,
+    })),
+  ),
+);
+import type {
+  RuntimeSessionEngine,
+  RuntimeSessionEngineCount,
 } from "./settings-view/sections/RuntimePoolSection";
+const RuntimePoolSection = withSectionSuspense(
+  lazy(() =>
+    import("./settings-view/sections/RuntimePoolSection").then((m) => ({
+      default: m.RuntimePoolSection,
+    })),
+  ),
+);
 import { DetachedExternalChangeToggles } from "./settings-view/sections/DetachedExternalChangeToggles";
-import { WebServiceSettings } from "./settings-view/sections/WebServiceSettings";
-import { EmailSenderSettings } from "./settings-view/sections/EmailSenderSettings";
+const WebServiceSettings = withSectionSuspense(
+  lazy(() =>
+    import("./settings-view/sections/WebServiceSettings").then((m) => ({
+      default: m.WebServiceSettings,
+    })),
+  ),
+);
+const EmailSenderSettings = withSectionSuspense(
+  lazy(() =>
+    import("./settings-view/sections/EmailSenderSettings").then((m) => ({
+      default: m.EmailSenderSettings,
+    })),
+  ),
+);
 import { EmbedModelSection } from "./settings-view/sections/EmbedModelSection";
 import { ExperimentalToggleRow } from "./settings-view/components/ExperimentalToggleRow";
 import { BasicBehaviorSection } from "./settings-view/sections/BasicBehaviorSection";

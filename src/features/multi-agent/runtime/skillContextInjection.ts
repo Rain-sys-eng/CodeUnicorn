@@ -5,6 +5,8 @@
  * `/skill-name` 埋在中间时常失效。因此首段改为读 SKILL.md 正文塞进 prompt。
  */
 
+import { truncateChars } from "@/utils/text";
+
 export const SKILL_CONTEXT_PREFIX = "【技能上下文】";
 const MAX_SKILL_BODY_CHARS = 12_000;
 const MAX_TOTAL_SKILL_CHARS = 24_000;
@@ -24,10 +26,7 @@ export type SkillContextInjectionResult = {
   injectedNames: string[];
 };
 
-function clampChars(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  return `${value.slice(0, maxChars)}…`;
-}
+const clampChars = truncateChars;
 
 function normalizeSkillName(name: string): string {
   return name.trim().replace(/^\/+/, "").replace(/\s+/g, "-");

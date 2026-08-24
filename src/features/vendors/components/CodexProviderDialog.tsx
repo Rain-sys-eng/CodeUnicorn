@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { createId } from "@/utils/id";
 import Shield from "lucide-react/dist/esm/icons/shield";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import type { CodexProviderConfig, CodexCustomModel } from "../types";
@@ -146,7 +147,7 @@ export function CodexProviderDialog({
     }
 
     const providerData: CodexProviderConfig = {
-      id: provider?.id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
+      id: provider?.id || createId(),
       name: providerName.trim(),
       remark: remark.trim() || undefined,
       createdAt: provider?.createdAt,

@@ -98,7 +98,6 @@ function shouldSkip(relativePath) {
     relativePath === "CHANGELOG.md" ||
     relativePath.includes("/docs/research/") ||
     relativePath.includes("/docs/plans/archived/") ||
-    relativePath.includes("/translations-additions-") ||
     /\.test\.(ts|tsx|rs)$/.test(relativePath) ||
     /(?:^|\/)(?:tests|.*_tests)\.rs$/.test(relativePath)
   ) {

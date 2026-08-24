@@ -1,6 +1,8 @@
 import {
   createContext,
   use,
+  useCallback,
+  useMemo,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -102,37 +104,71 @@ export function CliLifecycleProvider({
         showUninstall: false,
       };
 
-  const value: CliLifecycleContextValue = {
-    engine,
-    hasStatus: statusForEngine != null,
-    installed,
-    localVersion,
-    latestVersion,
-    updateAvailable,
-    loading,
-    error,
-    details: statusForEngine?.details ?? null,
-    // Keep install/update actions disabled until we have a definitive status.
-    disableActions: isBusy || loading || !statusForEngine || !nodeOk,
-    isBusy,
-    showInstall: visibility.showInstall,
-    showUpgrade: visibility.showUpgrade,
-    requestInstall: () => {
-      void requestInstallPlan(engine, "installLatest");
-    },
-    requestUpdate: () => {
-      void requestInstallPlan(engine, "updateLatest");
-    },
-    refresh: () => {
-      void refresh();
-    },
-    installerState,
-    installerNowMs,
-    confirmInstallRun: () => {
-      void confirmInstallRun();
-    },
-    cancelInstaller,
-  };
+  const hasStatus = statusForEngine != null;
+  const details = statusForEngine?.details ?? null;
+  // Keep install/update actions disabled until we have a definitive status.
+  const disableActions = isBusy || loading || !statusForEngine || !nodeOk;
+  const { showInstall, showUpgrade } = visibility;
+
+  const requestInstall = useCallback(() => {
+    void requestInstallPlan(engine, "installLatest");
+  }, [engine, requestInstallPlan]);
+  const requestUpdate = useCallback(() => {
+    void requestInstallPlan(engine, "updateLatest");
+  }, [engine, requestInstallPlan]);
+  const handleRefresh = useCallback(() => {
+    void refresh();
+  }, [refresh]);
+  const handleConfirmInstallRun = useCallback(() => {
+    void confirmInstallRun();
+  }, [confirmInstallRun]);
+
+  const value = useMemo<CliLifecycleContextValue>(
+    () => ({
+      engine,
+      hasStatus,
+      installed,
+      localVersion,
+      latestVersion,
+      updateAvailable,
+      loading,
+      error,
+      details,
+      disableActions,
+      isBusy,
+      showInstall,
+      showUpgrade,
+      requestInstall,
+      requestUpdate,
+      refresh: handleRefresh,
+      installerState,
+      installerNowMs,
+      confirmInstallRun: handleConfirmInstallRun,
+      cancelInstaller,
+    }),
+    [
+      engine,
+      hasStatus,
+      installed,
+      localVersion,
+      latestVersion,
+      updateAvailable,
+      loading,
+      error,
+      details,
+      disableActions,
+      isBusy,
+      showInstall,
+      showUpgrade,
+      requestInstall,
+      requestUpdate,
+      handleRefresh,
+      installerState,
+      installerNowMs,
+      handleConfirmInstallRun,
+      cancelInstaller,
+    ],
+  );
 
   return (
     <CliLifecycleContext value={value}>{children}</CliLifecycleContext>

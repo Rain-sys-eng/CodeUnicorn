@@ -10,6 +10,7 @@ import {
   stripCollabInternalPrompt,
 } from "../utils/collabPrompt";
 import { isMultiAgentHistFoldItemId } from "../utils/canvasItems";
+import { truncateChars } from "@/utils/text";
 
 export const MAIN_CANVAS_CONTEXT_PREFIX = "【主幕对话上下文】";
 
@@ -23,10 +24,7 @@ export type MainCanvasContextInjectionResult = {
   injectedChars: number;
 };
 
-function clampChars(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  return `${value.slice(0, maxChars)}…`;
-}
+const clampChars = truncateChars;
 
 function normalizeMessageText(
   item: Extract<ConversationItem, { kind: "message" }>,

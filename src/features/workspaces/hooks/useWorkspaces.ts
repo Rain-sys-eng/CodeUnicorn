@@ -10,6 +10,7 @@ import type {
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import i18n from "../../../i18n";
 import { pushErrorToast } from "../../../services/toasts";
+import { createId } from "@/utils/id";
 import {
   addClone as addCloneService,
   addWorkspace as addWorkspaceService,
@@ -40,7 +41,6 @@ import {
   subscribeClientStoreHydrated,
 } from "../../../services/clientStorage";
 
-const GROUP_ID_RANDOM_MODULUS = 1_000_000;
 const RESERVED_GROUP_NAME = "Ungrouped";
 const RESERVED_GROUP_NAME_NORMALIZED = RESERVED_GROUP_NAME.toLowerCase();
 const SORT_ORDER_FALLBACK = Number.MAX_SAFE_INTEGER;
@@ -84,10 +84,7 @@ function isDuplicateGroupName(
 }
 
 function createGroupId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.floor(Math.random() * GROUP_ID_RANDOM_MODULUS)}`;
+  return createId();
 }
 
 function resolveDefaultBaseRefFromList(

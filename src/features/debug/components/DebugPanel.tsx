@@ -39,9 +39,6 @@ export function DebugPanel({
   const { t } = useTranslation();
   const isVisible = variant === "full" || isOpen;
   const stylesReady = useFeatureStylesReady(loadDebugStyles, isVisible);
-  if (!stylesReady && isVisible) {
-    return null;
-  }
 
   type FormattedDebugEntry = DebugEntry & {
     timeLabel: string;
@@ -90,6 +87,11 @@ export function DebugPanel({
 
     return nextFormatted;
   }, [entries, isVisible]);
+
+  // guard 必须放在所有 hooks 之后，避免条件调用 hooks。
+  if (!stylesReady && isVisible) {
+    return null;
+  }
 
   if (!isVisible) {
     return null;
