@@ -2,6 +2,160 @@
 
 ---
 
+### **2026年8月24日（v0.9.3）**
+
+中文：
+
+这一版将应用升到 **0.9.3**，主线是「PI 迁入 RPC 长驻会话、删除与归档走 Index First」：PI 引擎从 spawn-per-turn 迁到 `pi --mode rpc` 长驻进程主路径，拿到 upstream 一等命令面——原生分叉、会话树、融合、压缩全部落地，失败自动回退 print-json；会话删除与归档重构为 v2 架构，session index 点查 O(1) 定位、确认即 tombstone，不再全量 catalog 扫描。另收口侧栏默认可见会话数全局设置、provider 重试上限放宽到 999、PI 长会话树爆栈与中文路径 panic、回合终稿正文丢失竞态，以及 Windows pill 滚动数字错位。
+
+✨ Features
+- **PI RPC 长驻会话 + 原生分叉 / 会话树 / 融合 / 压缩**：主路径迁到 `pi --mode rpc` 长驻进程；strict JSONL framing、request/response id 关联（oneshot + 30s 超时 + 迟到丢弃）、pending 先注册后写消除早到竞态；事件泵三分流（response 按 id 结算 / `extension_ui_request` 一律 auto-cancel / agent event 投影 EngineEvent）；idle→prompt、streaming→steer；图片改 base64 `images[]` 传输；abort + 2s grace 未 settle 才 kill；resident 会话经 `pi_history` id→file + `switch_session` 对齐调用方 thread；spawn/handshake 失败自动回退 print-json，其余 8 个引擎零影响
+- **PI 分叉体验**：fork 弹窗接 i18n，不可分叉报错映射为行动指引；会话树隐藏头部栏并精修底部状态栏
+- **会话删除链路 v2（Index First 标记优先）**：`delete_workspace_sessions_v2` 点查定位 + engine 前缀定向 + ghost 短路，禁止全量 catalog 扫描；确认即 tombstone（占位行 + ON CONFLICT 守卫），物理删除失败返回 MARKED_DELETED 不影响侧栏隐藏，残留进有界重试队列；受控并发 Semaphore(4) + 单条超时，dsh pre-flight 5s 报 ENGINE_BUSY，codex 按 physical_path 直接删文件；命令即返 requestId，`session-delete:progress/settled` 事件回推；前端乐观删除、settled 对账、失败单动作回滚归位；批量恒为一次 IPC；右键菜单新增「在会话管理中批量删除…」直达；逃生舱 `ccgui.delete.v2=off` 回退旧链路
+- **会话归档 Index First 快路径**：`archive/unarchive_workspace_sessions_v2` 点查 owner、metadata-only 幂等结算（ALREADY_ARCHIVED / NOT_ARCHIVED），Codex thread/archive RPC 后台 fire-and-forget；侧栏归档后 localRemovalOnly 本地摘行，不再 force full-catalog 重扫；`archiveThread` 快捷键语义从「归档之名走删除之实」修正为真实归档；旧全量扫描链路与 daemon 死分支移除
+- **侧栏默认可见会话数全局设置**：工作区头部新增设置入口，全局默认 5（可调 1..20），`WorkspaceSettings.visibleThreadRootCount` 保留为 per-workspace override（override ?? global default，不静默改写已存值）；first-paint fetch、Session Index limit 与「更多」分页对齐同一 pageSize（5 / 10 / 15…）
+- **Provider 重试上限放宽**：自动续跑次数上限从 10 提高到 999
+
+🔧 Improvements
+- 将应用版本号提升到 `0.9.3`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 patch 发版对齐 SemVer 与打包元数据
+- **PI compact 链路硬化**：500s 独立超时、活跃 run 守卫、成功原地反馈
+- **PI 首刷后后台补盘扫**：首屏之后后台补 pi 盘扫描，让独立 main 会话全部可达
+- **终端工具输出字节预算**：live ingest 加字节预算，大输出不再无界进 store
+- **工作区别名弹窗重写**：样式重写并补齐按需加载，热路径不拉全量 settings 样式
+- **PI 侧栏会话丢失诊断埋点**：全链路掉点埋点，便于定位会话在 index / 投影 / 渲染哪一环丢失
+
+🐛 Fixes
+- **PI 长会话会话树画不出来**：递归限制 + 爆栈修复并全链路瘦身
+- **PI fork 派生行治理**：fork 静默 no-op 误藏主线防护、派生隐藏可自愈；侧栏 index 分页排除 fork 派生行以免挤占 main 槽位；live 窗口内 fork 分支不再泄漏为顶层行；分叉父条目被过滤时会话树保持连接曲线
+- **PI 中文路径附件 panic**：附件切片按字节边界处理，中文路径会话不再永远打不开
+- **PI 侧栏标题泄漏原始 tag**：标题剥离附件包装，不再露出 `<file name="...">`
+- **PI 选型漂移不生效**：发送前对账 resident 模型
+- **回合终稿正文丢失**：修复回合结束 terminal 提交竞态
+- **关闭最后页签回落首页**：关闭最后一个会话 Tab 清空会话选择并落 workspace 首页
+- **Qoder PAT 注入优先级**：stored 覆盖进程环境变量
+- **Windows pill 滚动数字错位**：`RollingStat` 从 `@number-flow/react`（shadow DOM 依赖 mask / mix-blend-mode / will-change）改为自实现 odometer（逐位 0-9 滚动条 + translateY 纯 CSS transition），WebView2 上前缀符号与首位数字不再重叠；保留从 0 起滚、reduced-motion 跳变与 aria 契约，并移除该依赖
+- **Files 面板网络盘加载失败**：容忍 canonicalize 失败
+
+English:
+
+This release moves the app to **0.9.3**. The headline is PI moving onto a resident RPC session and delete / archive going Index First: the PI engine migrates from spawn-per-turn to a `pi --mode rpc` resident process, gaining the first-class upstream command surface — native fork, session tree, fusion, and compaction all land, with automatic fallback to print-json on failure; session delete and archive are rebuilt as a v2 architecture with O(1) session-index point lookups and mark-first tombstones, no more exhaustive catalog scans. Also closed: a global default for visible sidebar sessions, provider retry cap raised to 999, PI long-session tree stack overflow and Chinese-path panics, a turn-final text-loss race, and the Windows pill rolling-digit misalignment.
+
+✨ Features
+- **PI resident RPC session + native fork / session tree / fusion / compaction**: main path migrates to a `pi --mode rpc` resident process; strict JSONL framing, request/response id correlation (oneshot + 30s timeout + late-drop), pending registered before write to kill the early-response race; three-way event pump (responses settle by id / `extension_ui_request` always auto-cancelled / agent events projected as EngineEvents); idle→prompt, streaming→steer; images go base64 `images[]`; abort + 2s grace before kill; resident sessions align via `pi_history` id→file + `switch_session`; spawn/handshake failure falls back to print-json with zero impact on the other 8 engines
+- **PI fork experience**: fork dialog localized, non-forkable errors mapped to actionable guidance; session tree hides its header bar and polishes the bottom status bar
+- **Session delete v2 (Index First, mark-first)**: `delete_workspace_sessions_v2` point lookup + engine-prefix targeting + ghost short-circuit, no exhaustive catalog scan; confirm writes a tombstone immediately (placeholder row + ON CONFLICT guard), physical-delete failure returns MARKED_DELETED without un-hiding the sidebar row, leftovers enter a bounded retry queue; bounded concurrency Semaphore(4) + per-item timeout, dsh pre-flight reports ENGINE_BUSY in 5s, codex deletes files directly by physical_path; command returns a requestId immediately with `session-delete:progress/settled` events; optimistic frontend delete, settled reconciliation, single-action rollback on failure; batch is always one IPC; context menu gains "Delete in Session Management…"; escape hatch `ccgui.delete.v2=off` restores the old path
+- **Index First archive fast path**: `archive/unarchive_workspace_sessions_v2` locate the owner by point lookup with metadata-only idempotent settlement (ALREADY_ARCHIVED / NOT_ARCHIVED), Codex thread/archive RPC fires in the background; sidebar archive removes the row locally (localRemovalOnly) instead of forcing a full-catalog rescan; the `archiveThread` shortcut now truly archives instead of deleting under an archive name; the old exhaustive path and daemon dead branches are removed
+- **Global default for visible sidebar sessions**: a settings entry on the Workspace header; global default 5 (adjustable 1..20), with `WorkspaceSettings.visibleThreadRootCount` kept as a per-workspace override (override ?? global default, saved values never silently rewritten); first-paint fetch, Session Index limit, and More pagination align to the same pageSize (5 / 10 / 15…)
+- **Provider retry cap raised**: auto-continue retry limit goes from 10 to 999
+
+🔧 Improvements
+- Bump the app version to `0.9.3` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship aligns SemVer and packaging metadata
+- **PI compaction hardened**: 500s dedicated timeout, active-run guard, in-place success feedback
+- **PI background disk scan after first paint**: independent main sessions all become reachable
+- **Terminal tool-output byte budget**: live ingest is bounded so large outputs no longer enter the store unbounded
+- **Workspace alias dialog rewrite**: restyled with on-demand loading so the hot path skips the full settings stylesheet
+- **PI sidebar session-loss diagnostics**: end-to-end drop-point instrumentation across index / projection / render
+
+🐛 Fixes
+- **PI long-session tree not rendering**: recursion limit + stack overflow fixed, with a full-chain slim-down
+- **PI fork derived-row governance**: silent no-op fork no longer hides the main line and derived hiding self-heals; sidebar index paging excludes fork-derived rows so they don't crowd out main slots; fork branches in the live window no longer leak as top-level rows; the tree keeps its connective curve when a fork parent is filtered out
+- **PI Chinese-path attachment panic**: attachment slicing respects byte boundaries so Chinese-path sessions open again
+- **PI sidebar title leaking raw tags**: attachment wrappers are stripped so `<file name="...">` no longer shows
+- **PI model selection drift**: reconcile the resident model before send
+- **Turn-final text loss**: fix the terminal commit race at turn end
+- **Closing the last tab returns Home**: closing the final session tab clears the selection and lands on the workspace home
+- **Qoder PAT injection priority**: stored credentials override process environment variables
+- **Windows pill rolling-digit misalignment**: `RollingStat` replaces `@number-flow/react` (whose shadow DOM relies on mask / mix-blend-mode / will-change) with a self-built odometer (per-digit 0-9 reel + translateY, pure CSS transition), so the prefix sign and first digit no longer overlap on WebView2; keeps roll-from-zero, reduced-motion jump, and the aria contract, and drops the dependency
+- **Files panel failure on network drives**: tolerate canonicalize failure
+
+---
+
+### **2026年8月22日（v0.9.2）**
+
+中文：
+
+这一版将应用升到 **0.9.2**，主线是「Qoder 成为第九个一等引擎、工作台壁纸可逛市场、Shared 供应商失败自动续跑」：Qoder CLI 经第四条协议族 acp-stdio 接入，Global 与 CN 双分发、profile 限定会话身份贯穿 index / catalog / Shared，并进入 Shared Session 执行目标；自定义壁纸升级为本地图库 + Wallhaven 在线市场，支持视频与播放 / 模糊 / 压暗效果；Shared 号池在 401 / 403 / 429 / 超时 / 过载后按结果论同一家自动续跑，幕布气泡标注次数与时间。DSH 侧按供应商分组模型菜单、接通官方套餐额度与 DeepSeek 思考强度；另收口协作模板选择器卡死、Shared 下崽隐藏、暗色主题石墨化与设置卡片毛玻璃。
+
+✨ Features
+- **Qoder CLI 第九个 Native 引擎**：新增第四条协议族 acp-stdio——每轮 spawn `qodercli --acp`，initialize → session/new 或 session/resume → 可选 set_model / set_config_option → set_mode bypassPermissions 后发 session/prompt，JSON-RPC 响应为 typed terminal；thread 身份 `qoder:<sessionId>` / `qoder-pending-<uuid>`，pending 晋升合并不伪造 id；覆盖对话发送 / 流式 / 中断、ACP session/list|load|delete 历史、create-session 模型选择、Settings doctor 与自定义路径、侧栏新建入口与 10 语言文案；PAT 存 `~/.ccgui/qoder-auth.json` 注入 `QODER_PERSONAL_ACCESS_TOKEN`，不写 `~/.qoder`；模型目录走 ACP availableModels（runtime-only，不进静态 fallback roster）；detect 只认 qodercli，拒绝 IDE launcher 与 CN 版
+- **Qoder Global / CN 双分发 + profile 限定身份**：双分发接入；session index 行迁移为 profile-qualified identity 并贯穿写入链路；catalog 与 provider binding 全面携带 Qoder 分发归属；前端发送 / 恢复 / 历史链路适配 canonical 身份；Windows 补官方安装目录检测；本地优先读取会话历史；收齐 ACP 回放尾包以免历史截断
+- **Qoder 进入 Shared Session 执行目标**：Shared 链路按 profile-qualified identity 认主与隐藏，写路径 `assertSharedSessionWriteEngine` 拒绝把 qoder 静默改写成 claude 落盘
+- **工作台壁纸图库 + Wallhaven 市场**：自定义壁纸从单个本地路径升级为 managed library + 在线 SFW 市场；导入复制进 `~/.ccgui/wallpapers/<uuid>.<ext>`（png / jpg / webp / gif / bmp / mp4），软删除隐藏、按 sourcePath 去重，删除只动 managed 目录内文件；新增 wallpaperBlur / wallpaperDarken / playbackRate / flip / objectFit / paused / rotation 效果；选中丢失时回退首个可见项再到 legacy customImagePath，不改写 mode
+- **Shared 供应商失败自动续跑**：号池 403 / 429 / 超时 / 过载落账后按结果论再开一轮续跑指令，不改发送九态、不换供应商；401 无效 Key 纳入号池重试；405 / 424 / 429 / 502 错误码纳入自动续跑；Claude 静默进程退出同样纳入；自动续跑标记收进气泡并标注次数与时间，协作旁提供按会话×CLI 的内存设置
+- **Shared 回合徽章 runtime 回执**：回合徽章展示 runtime 回执信息
+- **DSH 模型菜单按供应商分组**：官方供应商模型选择走 host catalog；按供应商补齐官方套餐额度查询；为 DeepSeek 模型接入思考强度选择
+- **响应中条实时显示本轮 token**
+- **Browser Dock 面板关闭按钮**：内嵌浏览器面板可直接关闭
+- **增强提示词弹窗重做**：并修复 DSH catalog 发送
+
+🔧 Improvements
+- 将应用版本号提升到 `0.9.2`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 patch 发版对齐 SemVer 与打包元数据
+- **暗色主题石墨化**：dark surfaces 重铸为无彩色石墨；提升 dark secondary ink 可读性；隔离 wallpaper picker 表面；invert-fill primary 标签在浅色主题保持可读
+- **设置卡片毛玻璃**：所有设置卡片在工作台壁纸之上统一 frost；frost 默认 0px 让壁纸保持清晰
+- **PI 模型菜单按供应商分组展示**
+- **Session HUD 图标 tooltip 不再被裁切**：overflow 保持 visible
+- **DSH 自动模式接 danger-full-access**：并折叠审批调试字段
+- **DSH 超长会话流式合并**：token 级流式 delta 合并，超长会话不再逐 token 打根
+- **Daemon ModelInfo 补 reasoning 字段**
+- **rustfmt 闸门钉死**：避免整仓重排
+
+🐛 Fixes
+- **协作模板选择器卡在加载中**
+- **Shared 下崽会话隐藏**：按 Target 认主并隐藏 Shared 子会话；保留 Codex Shared 协议行以免侧栏漏崽；收住 Codex native 子代理侧栏升顶
+- **Shared 上下文投影与重试分类修复**
+- **共享待确认队列卡死**
+- **Qoder Native runtime 契约收口**
+- **DSH 修复群**：适配 v1 credentials refs 修复额度查询；补齐 `commands/execute` 必填 images 字段；暴露 plugin tree 内层启动失败原因；切回 DSH 会话时还原引擎与模型绑定；接通对话框已编辑文件变更列表
+- **Git unstaged discard 从 index 恢复**：不再误用 HEAD
+- **OpenCode 隔离 Bun 临时原生产物**
+- **删除供应商时回退新建菜单记忆**
+- **空幕布不再漏出 leftover Exploring**
+- **Composer 队列删除 fallback 与 onRemove 签名对齐**；首页 create-session 跳过空 DSH branch row
+- **消化存量测试欠账**：codex 目录漂移 + app-shell bridge 白名单
+
+English:
+
+This release moves the app to **0.9.2**. The headline is Qoder as the ninth first-class engine, a browsable wallpaper market, and Shared auto-continue on vendor failure: Qoder CLI lands via a fourth protocol family (acp-stdio) with Global / CN dual distribution and a profile-qualified session identity carried through index / catalog / Shared, plus a Shared Session execution target; custom wallpaper upgrades to a managed local library plus the Wallhaven online market with video and playback / blur / darken effects; the Shared key pool auto-continues with the same vendor after 401 / 403 / 429 / timeout / overload, with retry count and time annotated in the bubble. On the DSH side, the model menu groups by vendor, official plan quota lands, and DeepSeek models gain reasoning effort. Also closed: the collab template picker stuck on loading, Shared spawn hiding, an achromatic-graphite dark theme, and frosted settings cards.
+
+✨ Features
+- **Qoder CLI as the 9th Native engine**: a fourth protocol family, acp-stdio — each turn spawns `qodercli --acp`, runs initialize → session/new or session/resume → optional set_model / set_config_option → set_mode bypassPermissions, then session/prompt, with typed-terminal JSON-RPC responses; thread identity is `qoder:<sessionId>` / `qoder-pending-<uuid>` with pending promotion and no forged ids; covers send / streaming / interrupt, ACP session/list|load|delete history, create-session model selection, Settings doctor and custom paths, the sidebar entry, and 10-locale copy; the PAT lives in `~/.ccgui/qoder-auth.json` injected as `QODER_PERSONAL_ACCESS_TOKEN` without writing `~/.qoder`; the model catalog comes from ACP availableModels (runtime-only, no static fallback roster); detect accepts only qodercli, rejecting the IDE launcher and the CN build
+- **Qoder Global / CN dual distribution + profile-qualified identity**: dual distribution onboarded; session-index rows migrate to a profile-qualified identity carried through the write path; catalog and provider binding carry the Qoder distribution attribution; frontend send / resume / history adapt to the canonical identity; Windows official install-dir detection; local-first history reads; ACP replay tail packets fully collected so history is not truncated
+- **Qoder as a Shared Session execution target**: the Shared chain owns and hides by profile-qualified identity, and `assertSharedSessionWriteEngine` refuses to silently rewrite qoder as claude on disk
+- **Wallpaper library + Wallhaven market**: custom wallpaper upgrades from a single local path to a managed library plus an online SFW market; imports copy into `~/.ccgui/wallpapers/<uuid>.<ext>` (png / jpg / webp / gif / bmp / mp4) with soft-delete hiding, sourcePath dedupe, and deletes scoped to the managed directory; new wallpaperBlur / wallpaperDarken / playbackRate / flip / objectFit / paused / rotation effects; a missing selection falls back to the first visible item then the legacy customImagePath without rewriting mode
+- **Shared auto-continue on vendor failure**: after 403 / 429 / timeout / overload is recorded, a continuation instruction runs by outcome — the send nine-state is unchanged and the vendor is not switched; 401 invalid keys join key-pool retry; 405 / 424 / 429 / 502 join auto-continue; silent Claude process exits count too; the auto-continue marker folds into the bubble with retry count and time, with a per-session×CLI in-memory setting beside collaboration
+- **Runtime receipt on Shared turn badges**
+- **DSH model menu grouped by vendor**: official-vendor model selection goes through the host catalog; official plan quota per vendor; reasoning-effort selection for DeepSeek models
+- **Live per-turn token count in the responding bar**
+- **Close control for the embedded Browser Dock panel**
+- **Prompt Enhancer dialog rework**, plus the DSH catalog send fix
+
+🔧 Improvements
+- Bump the app version to `0.9.2` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship aligns SemVer and packaging metadata
+- **Achromatic-graphite dark theme**: dark surfaces recast to neutral graphite; lifted dark secondary ink; isolated wallpaper-picker surfaces; invert-fill primary labels stay readable on light themes
+- **Frosted settings cards**: all settings cards frost over the workspace wallpaper; frost defaults to 0px so wallpapers stay sharp
+- **PI model menu grouped by vendor**
+- **Session HUD icon tooltips no longer clipped**: overflow stays visible
+- **DSH auto mode wired to danger-full-access**, with approval debug fields folded
+- **DSH long-session streaming merge**: token-level delta merging so long sessions no longer hit the root per token
+- **Daemon ModelInfo gains the reasoning field**
+- **rustfmt gate pinned** to avoid whole-tree reformatting
+
+🐛 Fixes
+- **Collab template picker stuck on loading**
+- **Shared spawn hiding**: own and hide Shared child sessions by Target; keep Codex Shared protocol rows so the sidebar doesn't leak spawns; stop Codex native subagents from promoting to the sidebar top level
+- **Shared context projection and retry classification fixes**
+- **Shared pending-confirmation queue deadlock**
+- **Qoder Native runtime contract closeout**
+- **DSH fix cluster**: adapt to v1 credentials refs to repair quota queries; supply the required images field on `commands/execute`; surface inner plugin-tree startup failure reasons; restore engine and model binding when switching back to a DSH session; wire the edited-files change list into the dialog
+- **Git unstaged discard restores from the index**, not HEAD
+- **OpenCode isolates Bun temp native artifacts**
+- **New-session menu memory falls back when a vendor is deleted**
+- **Blank canvas no longer leaks leftover Exploring**
+- **Composer queue-delete fallback and widened onRemove signature aligned**; home create-session skips the empty DSH branch row
+- **Test debt paydown**: codex directory drift + app-shell bridge whitelist
+
+---
+
 ### **2026年8月19日（v0.9.1）**
 
 中文：
