@@ -32,6 +32,9 @@ pub const PI_RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// (state split: UI reports failure, session is actually compacted). 500s
 /// covers slow models on very large sessions.
 pub const PI_RPC_COMPACT_TIMEOUT: Duration = Duration::from_secs(500);
+/// Fork copies the active path into a new session file; deep sessions with
+/// inline images can exceed the generic 30s request budget.
+pub const PI_RPC_FORK_TIMEOUT: Duration = Duration::from_secs(120);
 pub const PI_RPC_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// One line decoded from the RPC stdout pump.
@@ -128,7 +131,7 @@ impl PiRpcClient {
             streaming: AtomicBool::new(false),
             last_event_ms: AtomicU64::new(0),
         });
-        let (pump_sender, _) = broadcast::channel(1024);
+        let (pump_sender, _) = broadcast::channel(8192);
 
         // stderr drain (diagnostics only).
         tokio::spawn(async move {
@@ -164,16 +167,11 @@ impl PiRpcClient {
                             };
                             // 任何一行解码成功都证明 resident 活着且在说话。
                             shared.last_event_ms.store(unix_time_ms(), Ordering::SeqCst);
-                            let kind = value
-                                .get("type")
-                                .and_then(Value::as_str)
-                                .unwrap_or("");
+                            let kind = value.get("type").and_then(Value::as_str).unwrap_or("");
                             match kind {
                                 "response" => {
-                                    let id = value
-                                        .get("id")
-                                        .and_then(Value::as_str)
-                                        .map(str::to_string);
+                                    let id =
+                                        value.get("id").and_then(Value::as_str).map(str::to_string);
                                     if let Some(id) = id {
                                         let success = value
                                             .get("success")
@@ -205,8 +203,7 @@ impl PiRpcClient {
                                     if let Some(id) =
                                         value.get("id").and_then(Value::as_str).map(str::to_string)
                                     {
-                                        let cancel =
-                                            json!({"type":"extension_ui_response","id":id,"cancelled":true});
+                                        let cancel = json!({"type":"extension_ui_response","id":id,"cancelled":true});
                                         let mut stdin = shared.stdin.lock().await;
                                         if let Err(error) =
                                             write_json_line(&mut stdin, &cancel).await
@@ -258,13 +255,11 @@ impl PiRpcClient {
 
         // Handshake: proves the binary actually speaks RPC (older pi without
         // `--mode rpc` exits or prints text; both surface as handshake errors).
-        let state = client.request_with_timeout(
-            json!({"type":"get_state"}),
-            PI_RPC_HANDSHAKE_TIMEOUT,
-        );
-        let state = state.await.map_err(|error| {
-            format!("pi rpc handshake failed (get_state): {error}")
-        })?;
+        let state =
+            client.request_with_timeout(json!({"type":"get_state"}), PI_RPC_HANDSHAKE_TIMEOUT);
+        let state = state
+            .await
+            .map_err(|error| format!("pi rpc handshake failed (get_state): {error}"))?;
         *client.state.write().await = state;
         Ok(client)
     }
@@ -398,9 +393,27 @@ impl PiRpcClient {
     }
 
     pub async fn fork(&self, entry_id: &str) -> Result<Value, String> {
-        let result = self.request(json!({"type":"fork","entryId":entry_id})).await?;
+        let result = self
+            .request_with_timeout(
+                json!({"type":"fork","entryId":entry_id}),
+                PI_RPC_FORK_TIMEOUT,
+            )
+            .await?;
         let _ = self.get_state().await;
         Ok(result)
+    }
+
+    pub async fn get_last_assistant_text(&self) -> Result<String, String> {
+        let data = self
+            .request(json!({"type":"get_last_assistant_text"}))
+            .await?;
+        if let Some(text) = data.as_str() {
+            return Ok(text.to_string());
+        }
+        if let Some(text) = data.get("text").and_then(Value::as_str) {
+            return Ok(text.to_string());
+        }
+        Err("get_last_assistant_text returned no text".to_string())
     }
 
     pub async fn switch_session(&self, session_path: &str) -> Result<Value, String> {
@@ -486,8 +499,7 @@ pub(crate) fn slim_pi_message_content_for_ipc(content: &mut Value) {
                 if map.get("type").and_then(Value::as_str) == Some("image") {
                     // 图片载荷对树零价值：剥除 data / source.data
                     map.remove("data");
-                    if let Some(source) = map.get_mut("source").and_then(Value::as_object_mut)
-                    {
+                    if let Some(source) = map.get_mut("source").and_then(Value::as_object_mut) {
                         source.remove("data");
                     }
                     continue;
@@ -616,7 +628,10 @@ fn parse_pi_rpc_json_line(line: &str) -> Result<Value, String> {
 /// 响应原样返回。
 fn flatten_deep_tree_response(mut value: Value) -> Value {
     let is_tree_response = value.get("type").and_then(Value::as_str) == Some("response")
-        && value.pointer("/data/tree").and_then(Value::as_array).is_some();
+        && value
+            .pointer("/data/tree")
+            .and_then(Value::as_array)
+            .is_some();
     if !is_tree_response {
         return value;
     }
@@ -713,7 +728,10 @@ mod tests {
     #[test]
     fn compact_command_trims_and_omits_blank_instructions() {
         assert_eq!(build_compact_command(None), json!({"type":"compact"}));
-        assert_eq!(build_compact_command(Some("   ")), json!({"type":"compact"}));
+        assert_eq!(
+            build_compact_command(Some("   ")),
+            json!({"type":"compact"})
+        );
         assert_eq!(
             build_compact_command(Some("  保留根因结论  ")),
             json!({"type":"compact","customInstructions":"保留根因结论"})
@@ -725,6 +743,8 @@ mod tests {
         // 纪律测试：compaction 是对整段会话的 LLM summarization，禁止回归为
         // 30s 通用预算（UI 报超时但 pi 侧仍跑完 → 状态分裂）。
         assert!(PI_RPC_COMPACT_TIMEOUT > PI_RPC_REQUEST_TIMEOUT);
+        assert!(PI_RPC_FORK_TIMEOUT > PI_RPC_REQUEST_TIMEOUT);
+        assert!(PI_RPC_FORK_TIMEOUT < PI_RPC_COMPACT_TIMEOUT);
     }
 
     #[test]

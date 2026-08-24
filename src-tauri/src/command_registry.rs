@@ -166,6 +166,8 @@ pub(crate) fn invoke_handler(
         crate::engine::pi_auth::pi_auth_list_providers,
         crate::engine::pi_auth::pi_auth_set_api_key,
         crate::engine::pi_auth::pi_auth_delete_credential,
+        crate::engine::pi_models_config::pi_models_config_read,
+        crate::engine::pi_models_config::pi_models_config_write,
         crate::engine::qoder_auth::qoder_auth_status,
         crate::engine::qoder_auth::qoder_auth_set_pat,
         crate::engine::qoder_auth::qoder_auth_delete_pat,

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   openPiTreeOverlay,
   usePiSessionTree,
@@ -15,6 +16,7 @@ export function PiThreadBranchBadge({
   workspaceId: string;
   threadId: string;
 }) {
+  const { t } = useTranslation();
   const tree = usePiSessionTree(workspaceId, threadId);
 
   if (!tree || tree.laneCount < 2) {
@@ -23,7 +25,7 @@ export function PiThreadBranchBadge({
   return (
     <span
       className="thread-branch-count"
-      title={`会话树含 ${tree.laneCount} 条分支 · 点击查看`}
+      title={t("piSession.tree.sidebarBadgeTitle", { count: tree.laneCount })}
       onClick={(event) => {
         event.stopPropagation();
         openPiTreeOverlay(workspaceId, threadId);

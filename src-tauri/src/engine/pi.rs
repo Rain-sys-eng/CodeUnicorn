@@ -208,6 +208,11 @@ pub struct PiSession {
 struct PiResident {
     client: Arc<PiRpcClient>,
     run: Arc<RwLock<Option<PiRpcRun>>>,
+    /// Serializes send-start vs fork/compact on this session (TOCTOU).
+    op_lock: Arc<Mutex<()>>,
+    /// True while prompt() is in flight and the run is not registered yet.
+    in_flight: Arc<AtomicBool>,
+    in_flight_turn: Arc<Mutex<Option<String>>>,
 }
 
 /// Map key: established sessions share a process; each new send without a
@@ -387,6 +392,14 @@ fn encode_images_for_rpc(
     for file in files {
         let bytes = std::fs::read(&file)
             .map_err(|error| format!("failed to read image {}: {error}", file.display()))?;
+        const MAX_RPC_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+        if bytes.len() > MAX_RPC_IMAGE_BYTES {
+            return Err(format!(
+                "image {} is too large for RPC inline ({} bytes, max {MAX_RPC_IMAGE_BYTES})",
+                file.display(),
+                bytes.len()
+            ));
+        }
         let ext = file
             .extension()
             .and_then(|value| value.to_str())
@@ -405,6 +418,69 @@ fn encode_images_for_rpc(
         }));
     }
     Ok(out)
+}
+
+struct RpcPromptExpansion {
+    text: String,
+    images: Vec<String>,
+}
+
+fn is_image_path(path: &str) -> bool {
+    matches!(
+        Path::new(path)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp"
+    )
+}
+
+fn expand_rpc_prompt_attachments(
+    text: &str,
+    images: Option<&[String]>,
+    workspace_path: &Path,
+) -> Result<RpcPromptExpansion, String> {
+    let extraction = extract_at_file_references(text, workspace_path);
+    let mut image_paths = crate::engine::cli_image_input::collect_non_empty_image_paths(images);
+    let mut extras = String::new();
+    const MAX_INJECT_CHARS: usize = 128 * 1024;
+    for arg in extraction.file_args {
+        let path = arg.trim_start_matches('@');
+        if is_image_path(path) {
+            if !image_paths.iter().any(|existing| existing == path) {
+                image_paths.push(path.to_string());
+            }
+            continue;
+        }
+        match std::fs::read_to_string(path) {
+            Ok(contents) => {
+                let clipped = if contents.len() > MAX_INJECT_CHARS {
+                    format!(
+                        "{}\n…(truncated {} chars)",
+                        &contents[..MAX_INJECT_CHARS],
+                        contents.len() - MAX_INJECT_CHARS
+                    )
+                } else {
+                    contents
+                };
+                extras.push_str(&format!("\n\n<file path=\"{path}\">\n{clipped}\n</file>"));
+            }
+            Err(error) => {
+                log::warn!("[pi/rpc] @file {path} not readable: {error}");
+            }
+        }
+    }
+    let text = if extras.is_empty() {
+        extraction.text
+    } else {
+        format!("{}{extras}", extraction.text)
+    };
+    Ok(RpcPromptExpansion {
+        text,
+        images: image_paths,
+    })
 }
 
 enum PiStreamLine {
@@ -784,6 +860,9 @@ impl PiSession {
                 let resident = PiResident {
                     client: client.clone(),
                     run: run.clone(),
+                    op_lock: Arc::new(Mutex::new(())),
+                    in_flight: Arc::new(AtomicBool::new(false)),
+                    in_flight_turn: Arc::new(Mutex::new(None)),
                 };
                 self.spawn_rpc_projection(client, run);
                 guard.insert(key.clone(), resident.clone());
@@ -843,7 +922,14 @@ impl PiSession {
                         let event_type = value.get("type").and_then(Value::as_str).unwrap_or("");
                         if event_type == "agent_settled" {
                             let run = rpc_run.write().await.take();
-                            if let Some(run) = run {
+                            if let Some(mut run) = run {
+                                if run.response_text.trim().is_empty() && !run.saw_tool_activity {
+                                    if let Ok(text) = client.get_last_assistant_text().await {
+                                        if !text.trim().is_empty() {
+                                            run.response_text = text;
+                                        }
+                                    }
+                                }
                                 settle_rpc_run(&workspace_id, run, None, &emit);
                             }
                             continue;
@@ -853,6 +939,8 @@ impl PiSession {
                                 let guard = rpc_run.read().await;
                                 guard.as_ref().map(|run| run.main_turn_id.clone())
                             };
+                            let turn_id =
+                                turn_id.or_else(|| Some(format!("pi-compact-{}", workspace_id)));
                             if let Some(turn_id) = turn_id {
                                 let kind = if event_type == "compaction_start" {
                                     "compaction_start"
@@ -1021,7 +1109,13 @@ impl PiSession {
             self.reconcile_rpc_model(&client, params.model.as_deref())
                 .await?;
         }
-        let images = encode_images_for_rpc(params.images.as_deref(), &self.workspace_path)
+        let expanded = expand_rpc_prompt_attachments(
+            &params.text,
+            params.images.as_deref(),
+            &self.workspace_path,
+        )
+        .map_err(PiRpcSendError::Failed)?;
+        let images = encode_images_for_rpc(Some(expanded.images.as_slice()), &self.workspace_path)
             .map_err(PiRpcSendError::Failed)?;
         if let Some(thinking) = resolve_thinking_flag(params.effort.as_deref()) {
             // Best effort: level support is model-dependent; failure must not
@@ -1032,14 +1126,18 @@ impl PiSession {
         }
 
         let (tx, rx) = oneshot::channel();
-        {
+        let steering = {
+            let _op = resident.op_lock.lock().await;
+            resident.run.read().await.is_some()
+        };
+        if steering {
+            if let Err(error) = client.steer(&expanded.text, images).await {
+                return Err(PiRpcSendError::Failed(format!(
+                    "pi rpc steer failed: {error}"
+                )));
+            }
             let mut guard = resident.run.write().await;
             if let Some(run) = guard.as_mut() {
-                if let Err(error) = client.steer(&params.text, images).await {
-                    return Err(PiRpcSendError::Failed(format!(
-                        "pi rpc steer failed: {error}"
-                    )));
-                }
                 run.attached_turn_ids.push(turn_id.to_string());
                 run.waiters.push((turn_id.to_string(), tx));
                 self.emit_turn_event(
@@ -1050,38 +1148,49 @@ impl PiSession {
                     },
                 );
             } else {
-                if let Err(error) = client.prompt(&params.text, images).await {
-                    return Err(PiRpcSendError::Failed(format!(
-                        "pi rpc prompt failed: {error}"
-                    )));
-                }
-                *guard = Some(PiRpcRun::new(turn_id, tx));
-                let session_id = client
-                    .session_id()
-                    .await
-                    .unwrap_or_else(|| "pending".to_string());
-                if is_valid_pi_session_id_arg(&session_id) {
-                    self.rekey_resident(&scratch_key, &format!("session:{session_id}"))
-                        .await;
-                    self.set_session_id(Some(session_id.clone())).await;
-                }
-                self.emit_turn_event(
-                    turn_id,
-                    EngineEvent::SessionStarted {
-                        workspace_id: self.workspace_id.clone(),
-                        session_id,
-                        engine: EngineType::Pi,
-                        turn_id: Some(turn_id.to_string()),
-                    },
-                );
-                self.emit_turn_event(
-                    turn_id,
-                    EngineEvent::TurnStarted {
-                        workspace_id: self.workspace_id.clone(),
-                        turn_id: turn_id.to_string(),
-                    },
-                );
+                return Err(PiRpcSendError::Failed(
+                    "pi rpc steer lost the active run before attach".to_string(),
+                ));
             }
+        } else {
+            resident.in_flight.store(true, Ordering::SeqCst);
+            *resident.in_flight_turn.lock().await = Some(turn_id.to_string());
+            let prompt_result = client.prompt(&expanded.text, images).await;
+            resident.in_flight.store(false, Ordering::SeqCst);
+            *resident.in_flight_turn.lock().await = None;
+            if let Err(error) = prompt_result {
+                return Err(PiRpcSendError::Failed(format!(
+                    "pi rpc prompt failed: {error}"
+                )));
+            }
+            let mut guard = resident.run.write().await;
+            *guard = Some(PiRpcRun::new(turn_id, tx));
+            drop(guard);
+            let session_id = client
+                .session_id()
+                .await
+                .unwrap_or_else(|| "pending".to_string());
+            if is_valid_pi_session_id_arg(&session_id) {
+                self.rekey_resident(&scratch_key, &format!("session:{session_id}"))
+                    .await;
+                self.set_session_id(Some(session_id.clone())).await;
+            }
+            self.emit_turn_event(
+                turn_id,
+                EngineEvent::SessionStarted {
+                    workspace_id: self.workspace_id.clone(),
+                    session_id,
+                    engine: EngineType::Pi,
+                    turn_id: Some(turn_id.to_string()),
+                },
+            );
+            self.emit_turn_event(
+                turn_id,
+                EngineEvent::TurnStarted {
+                    workspace_id: self.workspace_id.clone(),
+                    turn_id: turn_id.to_string(),
+                },
+            );
         }
 
         // Turn 结算看门狗：不按墙钟杀 turn，每个 tick 与 resident 实况对账——
@@ -1095,7 +1204,7 @@ impl PiSession {
         loop {
             match tokio::time::timeout(PI_RPC_TURN_WATCHDOG_TICK, &mut rx).await {
                 Ok(Ok(Ok(text))) => return Ok(text),
-                Ok(Ok(Err(error))) => return Err(PiRpcSendError::Failed(error)),
+                Ok(Ok(Err(error))) => return Err(PiRpcSendError::Settled(error)),
                 Ok(Err(_closed)) => {
                     return Err(PiRpcSendError::Failed(
                         "pi rpc run waiter dropped".to_string(),
@@ -1185,10 +1294,34 @@ impl PiSession {
         &self,
         session_id: Option<&str>,
     ) -> Result<Arc<PiRpcClient>, String> {
-        self.rpc_disabled.store(false, Ordering::SeqCst);
         let resident = self.ensure_resident(session_id, None, "commands").await?;
         self.align_rpc_session(&resident, session_id).await?;
         Ok(resident.client)
+    }
+
+    /// Run a mutating RPC command (fork/compact) while holding the session
+    /// op_lock so a concurrent send cannot sneak past the busy check.
+    pub async fn with_exclusive_rpc_command<T, F, Fut>(
+        &self,
+        session_id: Option<&str>,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce(Arc<PiRpcClient>) -> Fut,
+        Fut: std::future::Future<Output = Result<T, String>>,
+    {
+        let resident = self.ensure_resident(session_id, None, "commands").await?;
+        let _op = resident.op_lock.lock().await;
+        self.settle_stale_rpc_run_if_idle(&resident).await;
+        self.align_rpc_session(&resident, session_id).await?;
+        if resident.run.read().await.is_some() || resident.in_flight.load(Ordering::SeqCst) {
+            return Err("当前 turn 仍在进行中，无法执行该操作；请等待完成或先停止。".to_string());
+        }
+        f(resident.client.clone()).await
+    }
+
+    pub async fn restore_tracked_session_id(&self, id: Option<String>) {
+        self.set_session_id(id).await;
     }
 
     /// Whether THIS session's resident currently has a streaming run.
@@ -1200,7 +1333,9 @@ impl PiSession {
             guard.get(&key).cloned()
         };
         match resident {
-            Some(resident) => resident.run.read().await.is_some(),
+            Some(resident) => {
+                resident.run.read().await.is_some() || resident.in_flight.load(Ordering::SeqCst)
+            }
             None => false,
         }
     }
@@ -1469,6 +1604,9 @@ impl PiSession {
                     turn_id,
                     reason
                 );
+                if let Some(session_id) = params.session_id.as_deref() {
+                    self.drop_resident(session_id).await;
+                }
             }
             Err(PiRpcSendError::Failed(error)) => {
                 self.emit_error(turn_id, error.clone());
@@ -1484,7 +1622,11 @@ impl PiSession {
         // 路径——此时必须拒绝而不是假装 steer，让消息留在队列里。
         {
             let active = self.active_processes.lock().await;
-            if !active.is_empty() {
+            if !active.is_empty()
+                || self
+                    .rpc_has_active_run_for(params.session_id.as_deref())
+                    .await
+            {
                 let error = "PI session is busy (rpc unavailable, print-json fallback cannot steer); the message stays queued.".to_string();
                 self.emit_error(turn_id, error.clone());
                 return Err(error);
@@ -1841,7 +1983,8 @@ impl PiSession {
             let guard = self.residents.read().await;
             let mut out = Vec::new();
             for resident in guard.values() {
-                if resident.run.read().await.is_some() {
+                if resident.run.read().await.is_some() || resident.in_flight.load(Ordering::SeqCst)
+                {
                     out.push(resident.clone());
                 }
             }
@@ -1907,6 +2050,15 @@ impl PiSession {
                     break;
                 }
             }
+            if found.is_none() {
+                for resident in guard.values() {
+                    let flying = resident.in_flight_turn.lock().await;
+                    if flying.as_deref() == Some(turn_id) {
+                        found = Some(resident.clone());
+                        break;
+                    }
+                }
+            }
             found
         };
         if let Some(resident) = resident {
@@ -1956,13 +2108,23 @@ impl PiSession {
 
 impl Drop for PiSession {
     fn drop(&mut self) {
-        if let Ok(mut map) = self.residents.try_write() {
-            for (_, resident) in map.drain() {
-                let client = resident.client.clone();
-                tokio::spawn(async move {
-                    client.kill().await;
-                });
-            }
+        let clients: Vec<Arc<PiRpcClient>> = if let Ok(mut map) = self.residents.try_write() {
+            map.drain().map(|(_, resident)| resident.client).collect()
+        } else if let Ok(map) = self.residents.try_read() {
+            map.values()
+                .map(|resident| resident.client.clone())
+                .collect()
+        } else {
+            log::warn!(
+                "[pi] dropping session workspace={} while residents lock is held",
+                self.workspace_id
+            );
+            Vec::new()
+        };
+        for client in clients {
+            tokio::spawn(async move {
+                client.kill().await;
+            });
         }
         let Ok(mut active) = self.active_processes.try_lock() else {
             log::warn!(
@@ -2027,6 +2189,51 @@ mod tests {
         // thread ids with `pi:` prefix are not valid CLI session args — they
         // must not collide with an established session slot.
         assert_eq!(pi_resident_map_key(Some("pi:abc-123"), "t1"), "scratch:t1");
+    }
+
+    #[test]
+    fn parallel_sends_do_not_share_resident_keys() {
+        let a = pi_resident_map_key(Some("sess-a"), "turn-1");
+        let b = pi_resident_map_key(Some("sess-b"), "turn-1");
+        let new_1 = pi_resident_map_key(None, "turn-1");
+        let new_2 = pi_resident_map_key(None, "turn-2");
+        assert_ne!(a, b);
+        assert_ne!(new_1, new_2);
+        assert_ne!(a, new_1);
+        // same session + different turns still share the process (steer, not spawn)
+        assert_eq!(
+            pi_resident_map_key(Some("sess-a"), "turn-1"),
+            pi_resident_map_key(Some("sess-a"), "turn-9")
+        );
+    }
+
+    #[test]
+    fn rpc_prompt_expands_at_file_text_and_images_without_colliding() {
+        let dir = std::env::temp_dir().join(format!(
+            "pi-rpc-at-file-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let notes = dir.join("notes.md");
+        let shot = dir.join("shot.png");
+        std::fs::write(&notes, "hello from notes").unwrap();
+        std::fs::write(&shot, [0x89, b'P', b'N', b'G']).unwrap();
+        let prompt = format!("@{} 总结 @{}", notes.display(), shot.display());
+        let expanded = expand_rpc_prompt_attachments(&prompt, None, &dir).expect("expand");
+        assert!(
+            expanded.text.contains("hello from notes"),
+            "text attachment must be inlined: {}",
+            expanded.text
+        );
+        assert!(
+            expanded.images.iter().any(|p| p.ends_with("shot.png")),
+            "image @file must join images[]: {:?}",
+            expanded.images
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

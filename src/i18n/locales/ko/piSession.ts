@@ -1,19 +1,47 @@
 export default {
   piSession: {
     fork: {
-      title: "이 메시지에서 분기",
+      title: "Fork from this message",
       description:
-        "이 메시지 이전 지점으로 돌아가 새 세션 파일을 만듭니다. 이 메시지는 다시 작성할 초안으로 채워지고 원본 세션은 그대로 유지됩니다. 새 브랜치는 세션 트리 패널에 표시되며(사이드바에는 표시되지 않음), 생성 후 자동으로 이동합니다.",
-      cancel: "취소",
-      confirm: "분기 만들기",
-      confirming: "분기 생성 중…",
-      successTitle: "✓ 분기가 생성되었습니다",
+        "Creates a new session file from the point before this message: the message becomes a draft you rewrite, and the source session stays untouched. The new branch appears in the session tree panel (not in the sidebar), and you jump to it automatically.",
+      cancel: "Cancel",
+      confirm: "Create fork",
+      confirming: "Forking…",
+      successTitle: "✓ Fork created",
       successBody:
-        "새 브랜치가 오른쪽 세션 트리 패널에 표시되었고, 원본 메시지가 입력창 초안으로 채워졌습니다. 이동해서 계속하세요.",
+        "The new branch is in the session tree panel on the right, with the source message pre-filled as its composer draft — jump over to continue.",
       errorEntryNotFound:
-        "pi 세션에서 이 메시지를 찾을 수 없습니다(압축되었을 수 있습니다).",
+        "Couldn't locate this message in the pi session (it may have been compacted).",
       errorEntryNotForkable:
-        "이 메시지는 현재 세션 파일에 없습니다. 세션 트리의 다른 브랜치에 속해 있거나(또는 압축되어) 여기서 바로 분기할 수 없습니다. 세션 트리에서 해당 메시지의 브랜치로 「↪ 이동」한 뒤 분기하세요.",
+        "This message isn't in the current session file — it belongs to another branch in the session tree (or was compacted), so it can't be forked from here. In the session tree, jump to the branch that owns this message first (↪), then fork it there.",
+    },
+    compact: {
+      entryTitle: "Compact context (pi RPC: compact)",
+      entryLabel: "Compact",
+      dialogTitle: "Compact context",
+      dialogAria: "Compact context",
+      occupancy: "Context used",
+      messages: "Messages",
+      tokens: "Context tokens",
+      instructionsLabel: "Instructions (optional)",
+      instructionsPlaceholder:
+        "e.g. keep root-cause conclusions and file lists; compress trial-and-error",
+      hint: "Compaction is lossy. Full history stays in the pi session file and can be traced in the session tree.",
+      cancel: "Cancel",
+      close: "Close",
+      confirm: "Compact context",
+      confirming: "Compacting…",
+      tooShort:
+        "This session is still short — nothing to compact (pi keeps the last ~20k tokens intact).",
+      done: "Compacted: {{before}} → {{after}} (estimate).",
+    },
+    tree: {
+      panelAria: "Session tree",
+      badge: "PI session tree",
+      resizeAria: "Resize session tree panel",
+      chipTitle:
+        "Session branches ({{count}} lanes) · open the session tree (pi RPC has no lane-switch command)",
+      sidebarBadgeTitle: "Session tree has {{count}} branches · click to view",
     },
   },
 };

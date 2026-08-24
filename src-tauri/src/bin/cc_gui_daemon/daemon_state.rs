@@ -4328,6 +4328,125 @@ impl DaemonState {
         .await
     }
 
+    async fn resolve_pi_session_for_rpc(
+        &self,
+        workspace_id: &str,
+        provider_profile_id: Option<&str>,
+    ) -> Result<std::sync::Arc<engine::pi::PiSession>, String> {
+        let workspace_path = {
+            let workspaces = self.workspaces.lock().await;
+            workspaces
+                .get(workspace_id)
+                .map(|entry| std::path::PathBuf::from(&entry.path))
+                .ok_or_else(|| "Workspace not found".to_string())?
+        };
+        let effective_provider_profile_id =
+            session_management::resolve_engine_provider_profile_id(
+                self.storage_path.as_path(),
+                workspace_id,
+                None,
+                "pi",
+                provider_profile_id,
+            )?;
+        let provider_launch_profile =
+            engine::pi_provider_profile::resolve_pi_provider_launch_profile(
+                workspace_id,
+                effective_provider_profile_id.as_deref(),
+                None,
+            )?;
+        Ok(self
+            .engine_manager
+            .get_or_create_pi_session_for_runtime(
+                workspace_id,
+                &workspace_path,
+                &provider_launch_profile.runtime_key,
+                provider_launch_profile.home_dir.as_deref(),
+            )
+            .await)
+    }
+
+    pub(super) async fn pi_get_session_stats(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+        client.get_session_stats().await
+    }
+
+    pub(super) async fn pi_compact(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        custom_instructions: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        session
+            .with_exclusive_rpc_command(session_id.as_deref(), |client| async move {
+                client.compact(custom_instructions.as_deref()).await
+            })
+            .await
+    }
+
+    pub(super) async fn pi_fork(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        entry_id: String,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        session
+            .with_exclusive_rpc_command(session_id.as_deref(), |client| async move {
+                let pre_state = client.get_state().await?;
+                let pre_file = pre_state
+                    .get("sessionFile")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let data = client.fork(&entry_id).await?;
+                if let Some(path) = pre_file {
+                    client.switch_session(&path).await?;
+                }
+                Ok(data)
+            })
+            .await
+    }
+
+    pub(super) async fn pi_get_session_tree(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+        client.get_tree().await
+    }
+
+    pub(super) async fn pi_get_fork_messages(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+        client.get_fork_messages().await
+    }
+
     pub(super) async fn list_qoder_sessions(
         &self,
         workspace_path: String,

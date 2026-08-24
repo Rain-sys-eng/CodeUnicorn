@@ -31,6 +31,33 @@ vi.mock("../../../services/tauri/piAuth", () => ({
   piAuthDeleteCredential: vi.fn(),
 }));
 
+vi.mock("../../../services/tauri/piModelsConfig", () => ({
+  piModelsConfigRead: vi.fn(),
+  piModelsConfigWrite: vi.fn(),
+}));
+
+import {
+  piModelsConfigRead,
+  piModelsConfigWrite,
+  type PiModelsConfigReadResult,
+} from "../../../services/tauri/piModelsConfig";
+
+const mockModelsRead = vi.mocked(piModelsConfigRead);
+const mockModelsWrite = vi.mocked(piModelsConfigWrite);
+
+function modelsConfigFixture(
+  overrides: Partial<PiModelsConfigReadResult> = {},
+): PiModelsConfigReadResult {
+  return {
+    file: { path: "/home/u/.pi/agent/models.json", exists: false },
+    text: null,
+    template: '{\n  "providers": {\n    "my-relay": {}\n  }\n}\n',
+    providers: [],
+    parseError: null,
+    ...overrides,
+  };
+}
+
 const mockList = vi.mocked(piAuthListProviders);
 const mockSet = vi.mocked(piAuthSetApiKey);
 const mockDelete = vi.mocked(piAuthDeleteCredential);
@@ -74,6 +101,8 @@ beforeEach(() => {
   mockList.mockResolvedValue(snapshotFixture());
   mockSet.mockResolvedValue(undefined);
   mockDelete.mockResolvedValue(undefined);
+  mockModelsRead.mockResolvedValue(modelsConfigFixture());
+  mockModelsWrite.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -231,5 +260,120 @@ describe("PiProviderAuthSection", () => {
     const ids = new Set(PI_AUTH_APIKEY_PROVIDERS.map((p) => p.id));
     expect(ids.size).toBe(35);
     expect(ids.has("github-copilot")).toBe(false);
+  });
+
+  it("lists custom providers from models.json with api and key state", async () => {
+    mockModelsRead.mockResolvedValue(
+      modelsConfigFixture({
+        file: { path: "/home/u/.pi/agent/models.json", exists: true },
+        text: '{"providers":{}}',
+        providers: [
+          {
+            id: "my-relay",
+            name: "Grok 4.6 (中转)",
+            baseUrl: "https://relay.example.com/v1",
+            api: "openai-responses",
+            modelCount: 2,
+            hasApiKey: true,
+          },
+          {
+            id: "bare",
+            name: null,
+            baseUrl: null,
+            api: null,
+            modelCount: 0,
+            hasApiKey: false,
+          },
+        ],
+      }),
+    );
+    await renderSection();
+
+    expect(screen.getByText("Grok 4.6 (中转)")).toBeTruthy();
+    expect(screen.getByText("https://relay.example.com/v1")).toBeTruthy();
+    expect(screen.getByText("openai-responses")).toBeTruthy();
+    expect(screen.getByText("2 个模型")).toBeTruthy();
+    expect(screen.getByText("含 Key")).toBeTruthy();
+    // 无名 provider 回退显示 id（名称与 baseUrl 位置均回退为 id）
+    expect(screen.getAllByText("bare").length).toBeGreaterThan(0);
+    expect(screen.getByText("无 Key")).toBeTruthy();
+  });
+
+  it("shows empty state and prefills editor with template when file missing", async () => {
+    await renderSection();
+
+    expect(
+      screen.getByText(/models.json 不存在，点击「编辑配置」/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByText("编辑配置"));
+    const textarea = (await screen.findByTestId(
+      "pi-models-config-editor",
+    )).querySelector("textarea");
+    expect(textarea).toBeTruthy();
+    expect((textarea as HTMLTextAreaElement).value).toContain("my-relay");
+  });
+
+  it("prefills editor with raw text when file exists", async () => {
+    mockModelsRead.mockResolvedValue(
+      modelsConfigFixture({
+        file: { path: "/home/u/.pi/agent/models.json", exists: true },
+        text: '{\n  // comment\n  "providers": {}\n}',
+        providers: [],
+      }),
+    );
+    await renderSection();
+    fireEvent.click(screen.getByText("编辑配置"));
+    const textarea = (await screen.findByTestId(
+      "pi-models-config-editor",
+    )).querySelector("textarea") as HTMLTextAreaElement;
+    expect(textarea.value).toBe('{\n  // comment\n  "providers": {}\n}');
+  });
+
+  it("saves models.json text and refreshes; backend rejection stays inline", async () => {
+    await renderSection();
+    fireEvent.click(screen.getByText("编辑配置"));
+    const textarea = (await screen.findByTestId(
+      "pi-models-config-editor",
+    )).querySelector("textarea") as HTMLTextAreaElement;
+
+    // 保存失败 → 行内错误，编辑器保持展开
+    mockModelsWrite.mockRejectedValueOnce(
+      new Error("[PI_MODELS_INVALID_JSON] bad"),
+    );
+    fireEvent.change(textarea, { target: { value: "{ broken" } });
+    fireEvent.click(screen.getByText("保存"));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByTestId("pi-models-config-editor")).toBeTruthy();
+
+    // 保存成功 → 收起并刷新
+    fireEvent.change(textarea, {
+      target: { value: '{"providers":{"my-relay":{}}}' },
+    });
+    fireEvent.click(screen.getByText("保存"));
+    await waitFor(() =>
+      expect(mockModelsWrite).toHaveBeenCalledWith(
+        '{"providers":{"my-relay":{}}}',
+      ),
+    );
+    await waitFor(() => expect(mockModelsRead).toHaveBeenCalledTimes(2));
+  });
+
+  it("surfaces parseError banner while keeping raw text editable", async () => {
+    mockModelsRead.mockResolvedValue(
+      modelsConfigFixture({
+        file: { path: "/home/u/.pi/agent/models.json", exists: true },
+        text: "{ not json",
+        parseError: "[PI_MODELS_INVALID_JSON] …",
+      }),
+    );
+    await renderSection();
+
+    expect(screen.getByText(/PI_MODELS_INVALID_JSON/)).toBeTruthy();
+    fireEvent.click(screen.getByText("编辑配置"));
+    const textarea = (await screen.findByTestId(
+      "pi-models-config-editor",
+    )).querySelector("textarea") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("{ not json");
   });
 });

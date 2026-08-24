@@ -21,6 +21,11 @@ import {
   type PiAuthListResult,
   type PiAuthProviderSnapshot,
 } from "../../../services/tauri/piAuth";
+import {
+  piModelsConfigRead,
+  piModelsConfigWrite,
+  type PiModelsConfigReadResult,
+} from "../../../services/tauri/piModelsConfig";
 import { requestTerminalCommand } from "../../terminal/utils/terminalCommandRequestEvent";
 import {
   PI_AUTH_APIKEY_PROVIDERS,
@@ -60,10 +65,21 @@ export function PiProviderAuthSection({ piBin }: { piBin?: string | null }) {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PiAuthUiProvider | null>(null);
+  // ── 自定义供应商（models.json）──
+  const [modelsConfig, setModelsConfig] = useState<PiModelsConfigReadResult | null>(null);
+  const [modelsEditorOpen, setModelsEditorOpen] = useState(false);
+  const [modelsDraft, setModelsDraft] = useState("");
+  const [modelsSaving, setModelsSaving] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      setSnapshot(await piAuthListProviders());
+      const [authResult, modelsResult] = await Promise.all([
+        piAuthListProviders(),
+        piModelsConfigRead(),
+      ]);
+      setSnapshot(authResult);
+      setModelsConfig(modelsResult);
       setLoadError(null);
     } catch (error) {
       setLoadError(String(error));
@@ -164,6 +180,35 @@ export function PiProviderAuthSection({ piBin }: { piBin?: string | null }) {
       setActionError(String(error));
     }
   }, [deleteTarget, refresh]);
+
+  const openModelsEditor = useCallback(() => {
+    if (modelsEditorOpen) {
+      setModelsEditorOpen(false);
+      setModelsDraft("");
+      setModelsError(null);
+      return;
+    }
+    // 空文件 / 不存在 → 预填默认示例（不落盘，保存才写入）。
+    const existing = modelsConfig?.text ?? "";
+    setModelsDraft(existing.trim() ? existing : (modelsConfig?.template ?? ""));
+    setModelsError(null);
+    setModelsEditorOpen(true);
+  }, [modelsEditorOpen, modelsConfig]);
+
+  const handleModelsSave = useCallback(async () => {
+    setModelsSaving(true);
+    setModelsError(null);
+    try {
+      await piModelsConfigWrite(modelsDraft);
+      setModelsEditorOpen(false);
+      setModelsDraft("");
+      await refresh();
+    } catch (error) {
+      setModelsError(String(error));
+    } finally {
+      setModelsSaving(false);
+    }
+  }, [modelsDraft, refresh]);
 
   // pi 的 slash 命令不能走 argv（会被当作 prompt 发给模型）：
   // 两段式 PTY 输入——先启动 pi TUI，就绪后再写入 /login <provider>。
@@ -492,6 +537,146 @@ export function PiProviderAuthSection({ piBin }: { piBin?: string | null }) {
               defaultValue: "解析顺序：--api-key → auth.json → 环境变量 → models.json",
             })}
           </span>
+        </div>
+      </div>
+
+      {/* ── 自定义供应商（models.json） ── */}
+      <div className="pi-auth-subhead">
+        <span className="pi-auth-subhead-title">
+          {t("settings.vendor.piAuth.customTitle", { defaultValue: "自定义供应商" })}
+        </span>
+        <span className="pi-auth-subhead-hint">
+          {t("settings.vendor.piAuth.customHint", {
+            defaultValue: "写入 ~/.pi/agent/models.json · 中转站 / 自定义模型",
+          })}
+        </span>
+        <span className="pi-auth-subhead-spacer" />
+        <button
+          type="button"
+          className="vendor-btn-cancel pi-auth-login-btn"
+          onClick={openModelsEditor}
+        >
+          {modelsEditorOpen
+            ? t("settings.vendor.piAuth.collapse", { defaultValue: "收起" })
+            : t("settings.vendor.piAuth.editConfig", { defaultValue: "编辑配置" })}
+        </button>
+      </div>
+      <div className="vendor-group-card">
+        {modelsConfig?.parseError ? (
+          <div className="pi-auth-row pi-auth-row-message" role="alert">
+            {t("settings.vendor.piAuth.customParseError", {
+              defaultValue: "models.json 解析失败，可在下方编辑修复",
+            })}
+            ：{modelsConfig.parseError}
+          </div>
+        ) : null}
+        {(modelsConfig?.providers ?? []).map((provider) => (
+          <div className="pi-auth-row" key={provider.id}>
+            <PiAuthBrandIcon iconSrc={null} />
+            <div className="pi-auth-row-copy">
+              <div className="pi-auth-row-name">{provider.name ?? provider.id}</div>
+              <div className="pi-auth-row-desc">
+                <code className="pi-auth-env-chip">
+                  {provider.baseUrl ?? provider.id}
+                </code>
+              </div>
+            </div>
+            <div className="pi-auth-row-right">
+              {provider.api ? (
+                <code className="pi-auth-mask-chip">{provider.api}</code>
+              ) : null}
+              <span className="pi-auth-status pi-auth-status-idle">
+                {t("settings.vendor.piAuth.customModelCount", {
+                  count: provider.modelCount,
+                  defaultValue: `${provider.modelCount} 个模型`,
+                })}
+              </span>
+              <span
+                className={`pi-auth-status ${
+                  provider.hasApiKey ? "pi-auth-status-ok" : "pi-auth-status-idle"
+                }`}
+              >
+                <span className="pi-auth-dot" aria-hidden />
+                {provider.hasApiKey
+                  ? t("settings.vendor.piAuth.customHasKey", { defaultValue: "含 Key" })
+                  : t("settings.vendor.piAuth.customNoKey", { defaultValue: "无 Key" })}
+              </span>
+            </div>
+          </div>
+        ))}
+        {modelsConfig && modelsConfig.providers.length === 0 && !modelsConfig.parseError ? (
+          <div className="pi-auth-row pi-auth-row-message">
+            {modelsConfig.file.exists
+              ? t("settings.vendor.piAuth.customEmpty", {
+                  defaultValue: "尚未定义自定义供应商",
+                })
+              : t("settings.vendor.piAuth.customMissing", {
+                  defaultValue: "models.json 不存在，点击「编辑配置」从示例模板开始",
+                })}
+          </div>
+        ) : null}
+        {modelsEditorOpen ? (
+          <div className="pi-auth-editor" data-testid="pi-models-config-editor">
+            <label className="pi-auth-editor-label" htmlFor="pi-models-config-text">
+              {t("settings.vendor.piAuth.customEditorLabel", {
+                defaultValue: "models.json · 整段 JSON（支持注释）",
+              })}
+            </label>
+            <textarea
+              id="pi-models-config-text"
+              className="pi-auth-textarea"
+              value={modelsDraft}
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              rows={16}
+              onChange={(event) => setModelsDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  openModelsEditor();
+                }
+              }}
+            />
+            <p className="pi-auth-editor-tips">
+              {t("settings.vendor.piAuth.customEditorTips", {
+                defaultValue:
+                  "宽松校验：仅检查 JSON 结构，未知字段保留。apiKey 支持明文、$ENV_VAR 与 !command。",
+              })}
+            </p>
+            {modelsError ? (
+              <p className="pi-auth-editor-error" role="alert">
+                {modelsError}
+              </p>
+            ) : null}
+            <div className="pi-auth-editor-actions">
+              <button
+                type="button"
+                className="vendor-btn-danger-solid pi-auth-save"
+                disabled={modelsSaving}
+                onClick={() => void handleModelsSave()}
+              >
+                {modelsSaving
+                  ? t("settings.vendor.piAuth.saving", { defaultValue: "保存中…" })
+                  : t("settings.vendor.piAuth.save", { defaultValue: "保存" })}
+              </button>
+              <button
+                type="button"
+                className="vendor-btn-cancel"
+                onClick={openModelsEditor}
+              >
+                {t("settings.vendor.cancel", { defaultValue: "取消" })}
+              </button>
+              <span className="pi-auth-save-hint">
+                {t("settings.vendor.piAuth.customSaveHint", {
+                  defaultValue: "保存后写入 ~/.pi/agent/models.json（0600 权限）",
+                })}
+              </span>
+            </div>
+          </div>
+        ) : null}
+        <div className="pi-auth-foot">
+          <code>{modelsConfig?.file.path ?? "~/.pi/agent/models.json"}</code>
+          <span className="pi-auth-perm-badge">0600</span>
         </div>
       </div>
 

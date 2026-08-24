@@ -2721,6 +2721,53 @@ async fn handle_rpc_request(
             let command = parse_string_array(&params, "command")?;
             state.remember_approval_rule(workspace_id, command).await
         }
+        "pi_get_session_stats" => {
+            state
+                .pi_get_session_stats(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_compact" => {
+            state
+                .pi_compact(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "customInstructions"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_fork" => {
+            state
+                .pi_fork(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_string(&params, "entryId")?,
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_get_session_tree" => {
+            state
+                .pi_get_session_tree(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_get_fork_messages" => {
+            state
+                .pi_get_fork_messages(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
         _ => Err(format!("unknown method: {method}")),
     }
 }

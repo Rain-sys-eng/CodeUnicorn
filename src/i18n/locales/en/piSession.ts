@@ -15,5 +15,33 @@ export default {
       errorEntryNotForkable:
         "This message isn't in the current session file — it belongs to another branch in the session tree (or was compacted), so it can't be forked from here. In the session tree, jump to the branch that owns this message first (↪), then fork it there.",
     },
+    compact: {
+      entryTitle: "Compact context (pi RPC: compact)",
+      entryLabel: "Compact",
+      dialogTitle: "Compact context",
+      dialogAria: "Compact context",
+      occupancy: "Context used",
+      messages: "Messages",
+      tokens: "Context tokens",
+      instructionsLabel: "Instructions (optional)",
+      instructionsPlaceholder:
+        "e.g. keep root-cause conclusions and file lists; compress trial-and-error",
+      hint: "Compaction is lossy. Full history stays in the pi session file and can be traced in the session tree.",
+      cancel: "Cancel",
+      close: "Close",
+      confirm: "Compact context",
+      confirming: "Compacting…",
+      tooShort:
+        "This session is still short — nothing to compact (pi keeps the last ~20k tokens intact).",
+      done: "Compacted: {{before}} → {{after}} (estimate).",
+    },
+    tree: {
+      panelAria: "Session tree",
+      badge: "PI session tree",
+      resizeAria: "Resize session tree panel",
+      chipTitle:
+        "Session branches ({{count}} lanes) · open the session tree (pi RPC has no lane-switch command)",
+      sidebarBadgeTitle: "Session tree has {{count}} branches · click to view",
+    },
   },
 };

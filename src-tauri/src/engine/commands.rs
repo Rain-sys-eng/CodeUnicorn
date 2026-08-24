@@ -4912,15 +4912,11 @@ pub async fn pi_compact(
         provider_profile_id.as_deref(),
     )
     .await?;
-    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
-    // pi 的 compact() 内部第一步是 abort()：turn 进行中压缩会无提示掐断
-    // 当前流式。只挡本会话的 run，其它 PI 标签保持并行。
-    if session.rpc_has_active_run_for(session_id.as_deref()).await {
-        return Err(
-            "当前 turn 仍在进行中，无法压缩；请等待完成或先停止。".to_string()
-        );
-    }
-    client.compact(custom_instructions.as_deref()).await
+    session
+        .with_exclusive_rpc_command(session_id.as_deref(), |client| async move {
+            client.compact(custom_instructions.as_deref()).await
+        })
+        .await
 }
 
 /// fork 后身份判定：fork 成功会切换 resident 的会话文件；若 fork 前后
@@ -4978,43 +4974,44 @@ pub async fn pi_fork(
         provider_profile_id.as_deref(),
     )
     .await?;
-    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
-    // Fork 会切换本 resident 的会话文件：只挡本会话的流式。其它 PI 标签
-    // 各有进程，继续并行。
-    if session.rpc_has_active_run_for(session_id.as_deref()).await {
-        return Err(
-            "当前 turn 仍在进行中，无法分叉；请等待完成或先停止。".to_string()
-        );
-    }
-    let pre_state = client.get_state().await?;
-    let pre_session_file = pre_state
-        .get("sessionFile")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let data = client.fork(&entry_id).await?;
-    // fork 成功后 resident 处于新文件：先取新会话身份，再 switch 回原文件。
-    // 「源会话不受污染」是硬约束——旧 thread 的后续发送必须落回旧文件，
-    // 新文件以干净副本出现在侧栏（fork-to-new-file 语义）。
-    let forked_state = client.get_state().await.ok();
-    // 静默 no-op 防护（函数内含 warn 日志）：fork 未真正切换会话文件时，
-    // get_state 拿到的是源会话身份——把它当 forkedSessionId 返回会让前端
-    // 把主线误登记为派生并整局隐藏（2026-08-24 侧栏主线丢失取证）。
-    let forked_session_id = resolve_pi_forked_session_id(
-        pre_session_file.as_deref(),
-        forked_state.as_ref(),
-    );
-    if let Some(ref path) = pre_session_file {
-        if let Err(error) = client.switch_session(path).await {
-            log::warn!("[pi/rpc] switch back after fork failed: {error}");
-        }
-    }
-    let current_session_id = session.rpc_resync_session_id(&client).await;
-    Ok(json!({
-        "text": data.get("text").cloned().unwrap_or(Value::Null),
-        "cancelled": data.get("cancelled").and_then(Value::as_bool).unwrap_or(false),
-        "sessionId": current_session_id,
-        "forkedSessionId": forked_session_id,
-    }))
+    let session_for_fork = session.clone();
+    session
+        .with_exclusive_rpc_command(session_id.as_deref(), move |client| {
+            let session = session_for_fork;
+            async move {
+            let pre_state = client.get_state().await?;
+            let pre_session_id = pre_state
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let pre_session_file = pre_state
+                .get("sessionFile")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let data = client.fork(&entry_id).await?;
+            let forked_state = client.get_state().await.ok();
+            let forked_session_id = resolve_pi_forked_session_id(
+                pre_session_file.as_deref(),
+                forked_state.as_ref(),
+            );
+            if let Some(ref path) = pre_session_file {
+                if let Err(error) = client.switch_session(path).await {
+                    session.restore_tracked_session_id(pre_session_id.clone()).await;
+                    return Err(format!(
+                        "fork created a branch but failed to switch back to the source session: {error}"
+                    ));
+                }
+            }
+            let current_session_id = session.rpc_resync_session_id(&client).await;
+            Ok(json!({
+                "text": data.get("text").cloned().unwrap_or(Value::Null),
+                "cancelled": data.get("cancelled").and_then(Value::as_bool).unwrap_or(false),
+                "sessionId": current_session_id,
+                "forkedSessionId": forked_session_id,
+            }))
+            }
+        })
+        .await
 }
 
 #[tauri::command]

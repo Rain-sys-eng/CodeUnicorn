@@ -360,3 +360,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── 自定义供应商（models.json）整段文本编辑器 ── */
+
+.pi-auth-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-hover) 25%, transparent);
+  border: 1px solid var(--settings-basic-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 220px;
+  white-space: pre;
+  overflow: auto;
+}
+
+.pi-auth-textarea:focus {
+  outline: none;
+  border-color: var(--accent, var(--settings-accent, #7c6cf0));
+}

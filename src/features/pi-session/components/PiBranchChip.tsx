@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   openPiTreeOverlay,
   refreshPiSessionTree,
@@ -18,6 +19,7 @@ export function PiBranchChip({
   workspaceId: string;
   threadId: string;
 }) {
+  const { t } = useTranslation();
   const tree = usePiSessionTree(workspaceId, threadId);
 
   // Active pi tab 挂载即拉取树快照（事件驱动一次性拉取，不轮询）；
@@ -32,7 +34,7 @@ export function PiBranchChip({
   return (
     <span
       className="topbar-tab-branch pi-branch-chip"
-      title={`会话分支（${tree.laneCount} 条 lane）· 点击查看会话树（pi RPC 无 lane 切换命令）`}
+      title={t("piSession.tree.chipTitle", { count: tree.laneCount })}
       onClick={(event) => {
         event.stopPropagation();
         openPiTreeOverlay(workspaceId, threadId);
