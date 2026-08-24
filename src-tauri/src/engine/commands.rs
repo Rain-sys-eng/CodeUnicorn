@@ -4879,8 +4879,7 @@ pub async fn pi_get_session_stats(
         provider_profile_id.as_deref(),
     )
     .await?;
-    let client = session.rpc_client_for_commands().await?;
-    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
     client.get_session_stats().await
 }
 
@@ -4913,12 +4912,10 @@ pub async fn pi_compact(
         provider_profile_id.as_deref(),
     )
     .await?;
-    let client = session.rpc_client_for_commands().await?;
-    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
     // pi 的 compact() 内部第一步是 abort()：turn 进行中压缩会无提示掐断
-    // 当前流式。与 fork 同纪律；守卫放在对齐之后，对齐会先清掉丢失
-    // settle 的僵尸 run，只挡真实流式。
-    if session.rpc_has_active_run().await {
+    // 当前流式。只挡本会话的 run，其它 PI 标签保持并行。
+    if session.rpc_has_active_run_for(session_id.as_deref()).await {
         return Err(
             "当前 turn 仍在进行中，无法压缩；请等待完成或先停止。".to_string()
         );
@@ -4981,12 +4978,10 @@ pub async fn pi_fork(
         provider_profile_id.as_deref(),
     )
     .await?;
-    let client = session.rpc_client_for_commands().await?;
-    session.align_rpc_session(&client, session_id.as_deref()).await?;
-    // Fork 会切换 resident 的会话文件：turn 进行中禁止（事件流与文件切换
-    // 会互相破坏；历史教训 = 「会话已停止 + 时间线错乱」）。守卫放在对齐
-    // 之后：对齐会先清掉丢失 settle 的僵尸 run，只挡真实流式。
-    if session.rpc_has_active_run().await {
+    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+    // Fork 会切换本 resident 的会话文件：只挡本会话的流式。其它 PI 标签
+    // 各有进程，继续并行。
+    if session.rpc_has_active_run_for(session_id.as_deref()).await {
         return Err(
             "当前 turn 仍在进行中，无法分叉；请等待完成或先停止。".to_string()
         );
@@ -5045,8 +5040,7 @@ pub async fn pi_get_session_tree(
         provider_profile_id.as_deref(),
     )
     .await?;
-    let client = session.rpc_client_for_commands().await?;
-    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
     // get_tree 对外统一为浅层 entries（摊平+瘦身在 pi_rpc 内完成：深会话在
     // pump 的大栈线程，浅会话在 get_tree 内），这里只需透传。
     let tree = client.get_tree().await?;
@@ -5123,7 +5117,6 @@ pub async fn pi_get_fork_messages(
         provider_profile_id.as_deref(),
     )
     .await?;
-    let client = session.rpc_client_for_commands().await?;
-    session.align_rpc_session(&client, session_id.as_deref()).await?;
+    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
     client.get_fork_messages().await
 }

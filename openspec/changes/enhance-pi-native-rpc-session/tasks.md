@@ -242,3 +242,12 @@
 - [x] 32.1 用户报告：pi 会话带截图/文件附件时首条消息的侧栏标题显示原始 `<file name="...">` 包装，与其它引擎不一致。根因：`read_session_summary` 提取首条用户消息直接 `extract_text_blocks` + 截断，未剥附件包装——index 与磁盘 list 两条侧栏标题通道同受此害
 - [x] 32.2 修复：标题提取与 `load_pi_session` 展示路径同纪律——先 legacy 注入标记拆分、再 `@file` 附件拆分取 visible 文本；纯附件消息兜底 `[图片]`（全图片扩展名）/ `[附件]`，多个带 xN（对齐 gemini `[image]` 惯例）。index upsert 冲突时 `title = excluded.title` 覆盖写，存量泄漏标题随下次 sync 自愈；thread_titles 自动改名通道核查无泄漏
 - [x] 32.3 验证：新增回归 ×2（附件+文本剥包装 / 纯图片附件兜底 `[图片]`）；pi_history 5 绿 / commands 65 绿 / check 0 错误 / tsc 0 错误
+
+## 33. 真并行（2026-08-24，一会话一只 resident，撤销 workspace 单飞互斥）
+
+> 用户实证：新会话发图+「啊」被拒「另一 PI 会话的 turn 仍在进行中」。proposal 原文是 per (workspace × session)；08-23 对齐补丁把一只进程挂在 runtime key 上靠 switch_session 串行，违反「以前就能并行」。
+
+- [x] 33.1 `PiSession.residents: HashMap<session:{id}|scratch:{turn}, PiResident>`；`ensure_resident` 不再回落 tracked session id；新发送 scratch 独占
+- [x] 33.2 删除跨会话「另一 PI 会话的 turn 仍在进行中」拒绝；同会话仍 steer；tree/stats/compact/fork 按 session 取 resident；fork/compact 只挡本会话 run
+- [x] 33.3 删除会话 `drop_resident`（v2 + `delete_pi_session` 命令）；Drop 杀全部；interrupt_turn 按 turn_id 找对应 resident
+- [x] 33.4 spec/design 回写「真并行」；`pi_resident_map_key` 单测（同 session 共用 / 新发送隔离 / `pi:` 前缀不进 session 槽）

@@ -917,6 +917,13 @@ impl EngineManager {
         }
     }
 
+    pub async fn drop_pi_resident_by_session_id(&self, session_id: &str) {
+        let sessions = self.pi_sessions.lock().await;
+        for entry in sessions.values() {
+            entry.session.drop_resident(session_id).await;
+        }
+    }
+
     pub async fn get_or_create_qoder_session_for_runtime(
         &self,
         workspace_id: &str,

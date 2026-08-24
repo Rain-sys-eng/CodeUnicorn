@@ -718,6 +718,9 @@ fn build_delete_execution<'a>(
                     session_id: session_id.clone(),
                 },
                 Box::pin(async move {
+                    engine_manager
+                        .drop_pi_resident_by_session_id(&session_id)
+                        .await;
                     engine::pi_history::delete_pi_session(
                         &workspace_path,
                         &session_id,

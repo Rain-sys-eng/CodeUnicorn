@@ -481,6 +481,10 @@ pub async fn delete_pi_session(
     }
     let path = std::path::PathBuf::from(&workspace_path);
     let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
+    state
+        .engine_manager
+        .drop_pi_resident_by_session_id(&session_id)
+        .await;
     super::pi_history::delete_pi_session(
         &path,
         &session_id,
@@ -518,12 +522,9 @@ pub async fn list_qoder_sessions(
         provider_profile_id.as_deref(),
         &super::qoder_provider_profile::QoderDistributionSettings::from_app_settings(&settings),
     )?;
-    let sessions = super::qoder_history::list_qoder_sessions_for_launch_profile(
-        &path,
-        limit,
-        &launch_profile,
-    )
-    .await?;
+    let sessions =
+        super::qoder_history::list_qoder_sessions_for_launch_profile(&path, limit, &launch_profile)
+            .await?;
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 

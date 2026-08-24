@@ -17,9 +17,9 @@ Composer (queue+融合)    engine_send_message ──► PiSession ──ensure_
 fallback: RPC spawn 失败 → 现有 print-json spawn-per-turn 路径（log warn，不阻断）
 ```
 
-关键决策：**一个 native pi thread = 一个 RPC resident process**。进程跟着 `PiSession`（per workspace）走；`--session-id <id>` 启动即绑定会话文件；session id 变更（fork 后）通过 `get_state` 对账 + `SessionStarted` 事件上报。
+关键决策：**一个 native pi thread = 一个 RPC resident process**（proposal 原文：per workspace × session）。`PiSession` 仍 per workspace×provider runtime key，内部 `residents: HashMap<session|scratch, PiResident>`，每条会话自己的 `pi --mode rpc` 进程。`--session-id <id>` 启动即绑定该文件；新发送无 id 时用 scratch/turn 独占进程，prompt 后 rekey 到 `session:<id>`。
 
-**Resident 会话对齐（2026-08-23 验收后补）**：一个 workspace 可同时存在多个 pi thread，而 resident 每 runtime key 只有一个且跟随最近一次 fork/switch。所有发送与 RPC 命令（tree/stats/compact/fork）MUST 先对齐：`switch_session` 到调用方 thread 的会话文件（pi_history 解析 id→file）；新会话目标用 `new_session`；活跃 run 且目标不同 = 诚实拒绝。这是「树结构不对 / 幕布错乱」的根因修复。
+**禁止** workspace 单飞 + `switch_session` 串行所有标签（2026-08-23 对齐补丁的实现走偏：活跃 run 把其它 PI 标签全部拒成「另一会话 turn 进行中」）。同会话二次发送仍 `steer`；跨会话并行 prompt。fork 仍在源 resident 上 fork-then-switch-back，派生会话等到首次发送再 spawn 自己的进程。删除会话时 `drop_resident` 只杀该 session 的进程。
 
 ## 2. RPC 语义校准（与设计稿的差异，诚实声明）
 

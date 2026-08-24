@@ -56,33 +56,40 @@
 - **THEN** 系统 MUST 立即写入 `{"type":"extension_ui_response","id":<同 id>,"cancelled":true}`
 - **AND** MUST NOT 桥接 mossx elicitation UI（v1 边界）
 
-### Requirement: Resident MUST 对齐调用方会话文件
+### Requirement: Resident MUST 按会话隔离（真并行）
 
-一个 workspace 可有多个 pi thread，但 resident 每个 runtime key 只有一个且跟随最近一次 fork/switch。系统 MUST 在每次发送与每个 RPC 命令前对齐 resident 到调用方 thread 的会话文件，禁止内容落错会话。
+系统 MUST 为每个 native PI session 维护独立的 `pi --mode rpc` resident process（map key = 有效 session id；无 id 的新发送用 scratch/turn 独占进程）。同一 workspace 的多条 PI 会话 MUST 能同时 streaming。禁止用一只进程靠 `switch_session` 串行所有标签。
 
-#### Scenario: 发送前对齐
+#### Scenario: 两条 PI 会话同时发送
 
-- **WHEN** 发起发送且目标 session 与 resident 当前绑定不一致
-- **THEN** 系统 MUST 先 `switch_session` 到目标会话文件（经 pi_history 解析 id→file）
-- **AND** 目标为新会话（无 session id）时 MUST `new_session`，禁止附加到旧文件
+- **WHEN** 同一 workspace 中会话 A 正在 streaming，用户向会话 B（或新会话）发送
+- **THEN** 系统 MUST 为 B 使用（或惰性 spawn）独立 resident 并受理 prompt
+- **AND** MUST NOT 返回「另一 PI 会话的 turn 仍在进行中」
+- **AND** A 的 run / 事件流 MUST 不受影响
 
-#### Scenario: 活跃 run 禁止跨会话操作
+#### Scenario: 同会话二次发送仍走 steer
 
-- **WHEN** 存在未 settle 的 agent run 且操作目标会话与 run 所属会话不同
-- **THEN** 系统 MUST 拒绝并返回「另一 PI 会话的 turn 仍在进行中」
-- **AND** MUST NOT 跨会话 steer 或切换文件
+- **WHEN** 同一 session id 上已有未 settle 的 run
+- **THEN** 系统 MUST 在该 resident 上发送 `steer`（same-run 融合）
+- **AND** MUST NOT 再 spawn 第二只进程
 
-#### Scenario: 树/统计/compact/fork 命令对齐
+#### Scenario: 新会话不得复用上一场进程
+
+- **WHEN** 发送未带有效 session id（新会话 / pending）
+- **THEN** 系统 MUST spawn 新的 scratch resident，MUST NOT 回落到 workspace 级 tracked session id
+
+#### Scenario: 树/统计/compact/fork 命令按会话取 resident
 
 - **WHEN** 执行 `pi_get_session_tree` / `pi_get_session_stats` / `pi_compact` / `pi_fork` / `pi_get_fork_messages`
-- **THEN** 命令 MUST 携带调用方 thread 的 session id 并先完成对齐
-- **AND** 返回的数据 MUST 属于该 thread 的会话而非 resident 先前绑定的会话
+- **THEN** 命令 MUST 携带调用方 thread 的 session id 并使用该 session 的 resident
+- **AND** MUST NOT 打开树/统计时 spawn 一只无 session 的共享进程给后续发送复用
 
-#### Scenario: 活跃 run 禁止 fork/compact（同会话亦拦截）
+#### Scenario: 活跃 run 禁止 fork/compact（仅挡本会话）
 
-- **WHEN** 存在未 settle 的 agent run 且调用 `pi_fork` / `pi_compact`
-- **THEN** 系统 MUST 拒绝并返回「turn 仍在进行中」——即使目标就是当前会话（fork 切换会话文件会与事件流互相破坏；pi `compact()` 内部第一步是 `abort()`，放行会无提示掐断当前流式）
-- **AND** 守卫 MUST 放在会话对齐之后（对齐会先清掉丢失 settle 的僵尸 run，只挡真实流式）
+- **WHEN** 目标 session 存在未 settle 的 agent run 且调用 `pi_fork` / `pi_compact`
+- **THEN** 系统 MUST 拒绝并返回「turn 仍在进行中」（fork 会切该进程的会话文件；pi `compact()` 内部第一步是 `abort()`）
+- **AND** 其它 PI 会话的 resident MUST 不受影响
+- **AND** 守卫 MUST 只读取该 session 的 run（对齐会先清掉本 resident 丢失 settle 的僵尸 run）
 
 ### Requirement: Resident 模型 MUST 与发送请求模型对齐
 
