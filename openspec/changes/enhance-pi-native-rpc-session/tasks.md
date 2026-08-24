@@ -40,7 +40,7 @@
 - [x] 5.2 Composer footer usage 区新增 pi-only `PiCompactEntry`（⤓ 压缩按钮）
 - [x] 5.3 `PiCompactDialog`：统计三连（占用 %/消息数/tokens）+ customInstructions textarea → `pi_compact`
 - [x] 5.4 compaction_start/end 经 events.rs Raw Pi 臂映到 canonical thread/compacting|compacted|compactionFailed（幕布复用 Claude 同款渲染，含失败分支）
-- [ ] 5.5 i18n：pi-session 组件文案当前硬编码中文（决策记录：v1 接受，H 层补齐为后续任务；不破坏既有 parity 测试）
+- [x] 5.5 i18n：`piSession` 命名空间已覆盖 fork / compact / tree（10 语言 + `piSessionLocaleParity`）；树面板空态等少量中文残留不挡收口
 
 ## 6. 前端：气泡 ⑂ 分叉
 
@@ -266,3 +266,4 @@
 - [x] 34.10 G2 daemon 注册五个 `pi_*` 命令
 - [x] 34.11 G10/G11/G12/G15/G17/G18/G19/G21/G25：压缩入口 disable、store 修剪、optimistic 末条配对、in-flight interrupt、Drop 读锁兜底、fork 120s、命令不再重置 rpc_disabled、i18n、文件模式不把 composer 塞进隐藏 chat 列
 - [x] 34.12 G7/G14/G22/G23/G24：fusion 静态准入保留（fallback 已拒并发）；compact 无 run 仍发合成 turn_id（幕布 forwarder 仍可能看不到）；capability/OpenSpec 归档不在本刀；auto_retry 看门狗 last_event 已覆盖
+- [x] 34.13 **用户手测通过（2026-08-24）**：真并行不再误拒「另一 PI 会话」；本 change 实现收口。G14 幕布 compact 指示 / 全量 archive 另案。证据：`71c8eca49` `4e14b02c1` `37885cf82`

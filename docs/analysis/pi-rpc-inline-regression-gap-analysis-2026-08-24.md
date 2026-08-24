@@ -1,7 +1,8 @@
 # PI 发送改 RPC 内联——回归漏点全景分析与对照清单
 
 > 日期:2026-08-24
-> 性质:分析文档(不改代码)。用于「他人修复完成后逐条对照验收」的基线。
+> 收口:2026-08-24 用户手测通过（真并行不再误拒）。实现提交 `71c8eca49` / `4e14b02c1` / `37885cf82`。G14 幕布 compact 指示与 OpenSpec archive 另案。
+> 性质:分析文档。用于「他人修复完成后逐条对照验收」的基线。
 > 分析方法:5 路并行精读(Rust 运行时 / pi_history+命令层 / pi-session 前端 /
 > 发送链+乐观 UI / capability+OpenSpec)+ upstream `pi@0.84.2 docs/rpc.md`
 > 契约逐条比对 + 关键发现人工代码复核。
@@ -248,7 +249,7 @@ UX 是「报错」而非「禁用」;入口未按 isProcessing disable。
 | G11 | P1 | 本轮 | ✅已修 | treeByKey 超 48 修剪异 workspace |
 | G12 | P1 | 本轮 | ✅已修 | 末条 optimistic × 末条 incoming |
 | G13 | P1 | 本轮 | ✅已修 | >8KiB 落临时文件 |
-| G14 | P2 | 本轮 | 🔄部分修 | 无 run 仍 emit 合成 turn_id，幕布 forwarder 未必订阅 |
+| G14 | P2 | 本轮 | 🔄部分修 | 无 run 仍 emit 合成 turn_id，幕布 forwarder 未必订阅；实现收口时保留 |
 | G15 | P2 | 本轮 | ✅已修 | in_flight_turn interrupt |
 | G16 | P2 | 本轮 | ✅已修 | 单图 10MB 上限 |
 | G17 | P2 | 本轮 | ✅已修 | Drop try_read 兜底 kill |
