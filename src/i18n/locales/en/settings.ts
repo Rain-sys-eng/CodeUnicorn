@@ -1771,6 +1771,8 @@ const settings = {
         envActive: "Environment variable active",
         envActiveHint:
           "The process environment is active when mossx launches {{cliName}}. Set a PAT to override it.",
+        envIgnoredStoredWins:
+          "The process environment also defines {{envVar}}; it is ignored and the saved PAT takes effect.",
         setKey: "Set Key",
         overrideSet: "Override",
         edit: "Edit",
@@ -1784,7 +1786,7 @@ const settings = {
         toggleKeyVisibility: "Show / hide",
         saveHint: "Writes {{authFile}} (0600) and injects it when launching {{cliName}}",
         loadFailed: "Failed to read auth status",
-        resolutionOrder: "Resolution order: process env → {{authFile}} → {{cliName}} login",
+        resolutionOrder: "Resolution order: {{authFile}} → process env → {{cliName}} login",
       },
     },
     cliValidationTitle: "CLI Validation",

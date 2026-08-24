@@ -1399,6 +1399,7 @@ const settings = {
         "notConfigured": "Não configurado",
         "envActive": "Variável de ambiente ativa",
         "envActiveHint": "O ambiente do processo está ativo quando o mossx inicia o {{cliName}}. Defina um PAT para substituí-lo.",
+        "envIgnoredStoredWins": "O ambiente do processo também define {{envVar}}; ele é ignorado e o PAT salvo prevalece.",
         "setKey": "Definir chave",
         "overrideSet": "Substituir",
         "edit": "Editar",
@@ -1412,7 +1413,7 @@ const settings = {
         "toggleKeyVisibility": "Mostrar / ocultar",
         "saveHint": "Grava {{authFile}} (0600) e injeta ao iniciar o {{cliName}}",
         "loadFailed": "Falha ao ler o status de autenticação",
-        "resolutionOrder": "Ordem de resolução: env do processo → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "Ordem de resolução: {{authFile}} → env do processo → {{cliName}} login"
       }
     },
     "cliValidationTitle": "Validação de CLI",

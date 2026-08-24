@@ -1399,6 +1399,7 @@ const settings = {
         "notConfigured": "구성되지 않음",
         "envActive": "환경 변수 활성",
         "envActiveHint": "mossx가 {{cliName}}를 실행할 때 프로세스 환경이 적용됩니다. 덮어쓰려면 PAT를 설정하세요.",
+        "envIgnoredStoredWins": "프로세스 환경에도 {{envVar}}가 정의되어 있지만 무시되며, 저장된 PAT가 적용됩니다.",
         "setKey": "키 설정",
         "overrideSet": "덮어쓰기",
         "edit": "편집",
@@ -1412,7 +1413,7 @@ const settings = {
         "toggleKeyVisibility": "표시 / 숨기기",
         "saveHint": "{{authFile}}(0600)에 쓰고 {{cliName}} 실행 시 주입합니다",
         "loadFailed": "인증 상태를 읽지 못했습니다",
-        "resolutionOrder": "해석 순서: 프로세스 env → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "해석 순서: {{authFile}} → 프로세스 env → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI 검증",

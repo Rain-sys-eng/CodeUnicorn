@@ -10,6 +10,11 @@
 
 ## 2026-08
 
+### 2026-08-24
+
+- [`2026-08-24-fix-topbar-tab-close-empty-canvas`](2026-08-24-fix-topbar-tab-close-empty-canvas/proposal.md) — verified implementation，已同步 `workspace-topbar-session-tabs`；关最后一个 topbar 页签不再经 `handleSelectWorkspace` 恢复 workspace last thread（幽灵内容 + tab 复活），改为 `handleClearActiveThread` 清空选择落空画布（方案 A，选款稿 `docs/designs/session-close-behavior/`）；hook 3 测 + policy 测试 + tsc / app-shell governance / openspec validate 绿；mac 手测通过，Win/Linux 同 renderer 路径覆盖
+- [`2026-08-24-fix-qoder-pat-env-precedence`](2026-08-24-fix-qoder-pat-env-precedence/proposal.md) — verified implementation，已同步 `qoder-dual-distribution`；Qoder PAT spawn 注入优先级反转为 stored PAT > 进程 env（修 Windows 持久 env 遮蔽设置页新 PAT 导致「换新 token 仍被要求重新认证」）；status 新增 `envPresent` + 10 语言 hint；基石设计文档校准行已回写
+
 ### 2026-08-22
 
 - [`2026-08-22-fix-shared-owned-native-sidebar-leak`](2026-08-22-fix-shared-owned-native-sidebar-leak/proposal.md) — verified implementation，已同步 `shared-session-thread`、`shared-hide-list-prefilter`；Shared live Target 认主，Shared-owned Native 不得进侧栏；用户手测通过

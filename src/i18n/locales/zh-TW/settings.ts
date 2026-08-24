@@ -1402,6 +1402,7 @@ const settings = {
         "notConfigured": "未設定",
         "envActive": "環境變數生效中",
         "envActiveHint": "環境變數生效中（mossx 啟動 {{cliName}} 時繼承）。如需覆蓋，請設定 PAT。",
+        "envIgnoredStoredWins": "處理程序環境變數中同時存在 {{envVar}}，已忽略；以儲存的 PAT 為準。",
         "setKey": "設定金鑰",
         "overrideSet": "覆蓋",
         "edit": "編輯",
@@ -1415,7 +1416,7 @@ const settings = {
         "toggleKeyVisibility": "顯示 / 隱藏",
         "saveHint": "儲存後寫入 {{authFile}}（0600），啟動 {{cliName}} 時注入",
         "loadFailed": "讀取驗證狀態失敗",
-        "resolutionOrder": "解析順序：行程環境變數 → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "解析順序：{{authFile}} → 行程環境變數 → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI 驗證",

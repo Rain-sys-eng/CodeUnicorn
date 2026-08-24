@@ -1399,6 +1399,7 @@ const settings = {
         "notConfigured": "कॉन्फ़िगर नहीं",
         "envActive": "पर्यावरण चर सक्रिय",
         "envActiveHint": "mossx {{cliName}} चलाते समय प्रोसेस एन्वायरनमेंट सक्रिय रहता है। ओवरराइड करने के लिए PAT सेट करें।",
+        "envIgnoredStoredWins": "प्रोसेस एन्वायरनमेंट में भी {{envVar}} मौजूद है; इसे अनदेखा किया गया है—सहेजा गया PAT लागू होगा।",
         "setKey": "की सेट करें",
         "overrideSet": "ओवरराइड",
         "edit": "संपादित करें",
@@ -1412,7 +1413,7 @@ const settings = {
         "toggleKeyVisibility": "दिखाएँ / छिपाएँ",
         "saveHint": "{{authFile}} (0600) लिखता है और {{cliName}} लॉन्च पर इंजेक्ट करता है",
         "loadFailed": "ऑथ स्थिति पढ़ने में विफल",
-        "resolutionOrder": "रिज़ॉल्यूशन क्रम: प्रोसेस env → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "रिज़ॉल्यूशन क्रम: {{authFile}} → प्रोसेस env → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI सत्यापन",

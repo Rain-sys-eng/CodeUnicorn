@@ -1399,6 +1399,7 @@ const settings = {
         "notConfigured": "Не настроено",
         "envActive": "Переменная окружения активна",
         "envActiveHint": "Окружение процесса действует при запуске {{cliName}} из mossx. Задайте PAT, чтобы переопределить его.",
+        "envIgnoredStoredWins": "В окружении процесса также задан {{envVar}}; он игнорируется, действует сохранённый PAT.",
         "setKey": "Задать ключ",
         "overrideSet": "Переопределить",
         "edit": "Изменить",
@@ -1412,7 +1413,7 @@ const settings = {
         "toggleKeyVisibility": "Показать / скрыть",
         "saveHint": "Записывает {{authFile}} (0600) и подставляет при запуске {{cliName}}",
         "loadFailed": "Не удалось прочитать состояние аутентификации",
-        "resolutionOrder": "Порядок разрешения: env процесса → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "Порядок разрешения: {{authFile}} → env процесса → {{cliName}} login"
       }
     },
     "cliValidationTitle": "Проверка CLI",

@@ -1399,6 +1399,7 @@ const settings = {
         "notConfigured": "未設定",
         "envActive": "環境変数が有効",
         "envActiveHint": "mossx が {{cliName}} を起動するときプロセス環境が有効です。上書きするには PAT を設定してください。",
+        "envIgnoredStoredWins": "プロセス環境にも {{envVar}} が定義されていますが、無視され、保存済みの PAT が優先されます。",
         "setKey": "キーを設定",
         "overrideSet": "上書き",
         "edit": "編集",
@@ -1412,7 +1413,7 @@ const settings = {
         "toggleKeyVisibility": "表示 / 非表示",
         "saveHint": "{{authFile}}（0600）に書き込み、{{cliName}} 起動時に注入します",
         "loadFailed": "認証状態の読み取りに失敗しました",
-        "resolutionOrder": "解決順: プロセス環境変数 → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "解決順: {{authFile}} → プロセス環境変数 → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI 検証",
