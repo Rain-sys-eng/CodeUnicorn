@@ -5,9 +5,7 @@
 定义对话幕布（Native + Shared 共用 Messages 核）过程相位折叠契约：每个有可见正文的
 assistant 只折叠紧挨在它正上方的连续 process run，hard-unmount 折叠体，按时间线分段
 穿插呈现。
-
 ## Requirements
-
 ### Requirement: Process Phase Collapse MUST Use Contiguous Segmentation
 
 对话幕布过程相位折叠 MUST 将每个有可见正文的 assistant message 只归属**紧挨在它正上方**的连续 collapsible process run（`reasoning` / `tool` / `explore`）。walk-back 遇到 user message、另一段 assistant 正文或其它非 process item 时 MUST 停止，MUST NOT 把同 turn 内更早、已被中间正文隔开的 process 并进终稿。
@@ -42,3 +40,4 @@ mid-turn assistant 正文 MUST 保留在时间线，作为分段边界。
 - **WHEN** 最后一条 assistant 终稿之后仍有 running tool/explore
 - **THEN** 这些 trailing process items MUST NOT 被并入已完成正文的 phase
 - **AND** MUST 保持展开可见，直到触发既有 trailing 滚动窗口或后续终稿落地
+

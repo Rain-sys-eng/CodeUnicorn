@@ -271,3 +271,40 @@ checksum, and it MUST fail closed when an embedded payload type conflicts with `
 - **WHEN** a type-less legacy stream is rebuilt successfully
 - **THEN** projection MUST persist the normal versioned checkpoint through the final sequence
 - **AND** subsequent incremental loads MUST preserve item order and checksum identity
+
+### Requirement: turnRequested MUST project user image locators onto the user message item
+
+When `CanonicalFact::TurnRequested` carries `input.image_refs`, `SharedProjector` MUST include those locators on the projected user `message` content as an `images` array of non-empty locator strings. Projection MUST NOT invent `generatedImage` items for user-attached input images.
+
+#### Scenario: turnRequested with image_refs projects images array
+
+- **WHEN** a turnRequested fact has `input.text = "hello"` and one `image_refs` entry with `locator = "/tmp/photo.png"`
+- **THEN** the projector produces a user message projection item with `role=user`, `text` containing the user text
+- **AND** `content.images` is a non-empty array that includes `"/tmp/photo.png"`
+- **AND** no `generatedImage` item is created solely from those user input image_refs
+
+#### Scenario: turnRequested without image_refs omits images field or empties it
+
+- **WHEN** a turnRequested fact has text only and `image_refs` is absent or empty
+- **THEN** the projected user message does not require an images list
+- **AND** behavior remains backward compatible with existing text-only turns
+
+### Requirement: Canonical Projection MUST Separate Squad Worker Presentation From Top-Level Conversation
+The canonical projection layer MUST use durable owner metadata to keep every Squad Worker turn, including final Synthesize, out of top-level Conversation items and MUST expose Worker evidence only through `SquadProjectionV1`.
+
+#### Scenario: linked attempt is excluded from timeline
+- **WHEN** a requested, committed, or usage fact carries a durable Squad Worker binding
+- **THEN** Shared Conversation projection omits its top-level rows without deleting its canonical evidence
+
+#### Scenario: successful settlement publishes final answer
+- **WHEN** `SquadRunSettled(status=succeeded)` carries the validated final summary
+- **THEN** Shared Conversation projection publishes exactly one run-linked assistant answer without exposing the Synthesize Worker turn
+
+#### Scenario: ordinary turn remains unchanged
+- **WHEN** a committed Shared turn has no Squad attempt linkage
+- **THEN** existing canonical-to-ConversationItem behavior remains unchanged
+
+#### Scenario: rebuild preserves nesting
+- **WHEN** projection is rebuilt after restart
+- **THEN** the same attempts remain nested and no worker transcript flashes as a top-level conversation row
+

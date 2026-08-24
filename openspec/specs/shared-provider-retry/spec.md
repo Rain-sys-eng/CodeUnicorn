@@ -129,3 +129,13 @@ Shared provider retry 分类器 MUST 把余额 / 配额不足类失败判定为 
 - **WHEN** 用户手动发送新消息
 - **THEN** 既有 series 状态 MUST 清理，后续失败允许开启新 series
 
+### Requirement: Deterministic Context Protocol Failures MUST Not Retry The Same Binding
+
+Shared provider retry MUST fail closed when an `invalid_request_error` states that a message is missing its required reasoning item. The error represents an incomplete provider-native Context chain rather than a transient provider failure.
+
+#### Scenario: missing reasoning item stops automatic retry
+
+- **WHEN** a Shared terminal error contains `required reasoning item`
+- **THEN** the retry classifier MUST mark it permanent
+- **AND** it MUST NOT schedule another attempt on the same CLI / Provider / Model Binding
+

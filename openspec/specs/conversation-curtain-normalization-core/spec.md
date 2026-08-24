@@ -75,7 +75,7 @@ conversation curtain 对 user bubble 的等价判断 MUST 去除 source-specific
 
 ### Requirement: Assistant Settlement Canonicalization MUST Collapse Equivalent Replay
 
-conversation curtain 对 assistant reply 的 completed settlement MUST 能收敛 `stream delta`、`completed replay`、`history hydrate` 等多来源中的等价正文，避免主体文本重复拼接。该收敛 MUST 对 `Codex`、`Claude Code` 与 `Gemini` 生效；provider-specific completion carrier 不得绕过 shared assistant comparator。
+conversation curtain 对 assistant reply 的 completed settlement MUST 能收敛 `stream delta`、`completed replay`、`history hydrate` 等多来源中的等价正文，避免主体文本重复拼接。该收敛 MUST 对 `Codex`、`Claude Code` 与 `Gemini` 生效，且 MUST 在 **Native 与 Shared** 会话上一致；provider-specific completion carrier 不得绕过 shared assistant comparator。收敛范围 MUST 包含：精确双份、`prefix + full` 回放、以及 **更长稿之后的 early-body 回显**（`A2` 后再附带 `A`）。
 
 #### Scenario: completed replay with streamed prefix converges before history refresh
 
@@ -97,6 +97,13 @@ conversation curtain 对 assistant reply 的 completed settlement MUST 能收敛
 - **AND** terminal completion 或 history hydrate 提供等价 full Markdown snapshot
 - **THEN** shared assistant settlement MUST replace or canonicalize the live row
 - **AND** MUST NOT 将 streamed prefix 与 final snapshot 重复拼接
+
+#### Scenario: longer snapshot then early-body echo does not double body
+
+- **WHEN** live or completed assistant text already holds a longer readable draft
+- **AND** an incoming snapshot or completed payload appends or embeds a replay of the early body after that draft
+- **THEN** settlement MUST collapse to one readable draft in conversation state
+- **AND** this MUST hold for Native and Shared sessions using the shared merge helpers
 
 #### Scenario: gemini assistant replay stays canonical
 

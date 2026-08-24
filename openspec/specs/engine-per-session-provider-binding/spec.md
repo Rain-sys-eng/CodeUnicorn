@@ -3,9 +3,7 @@
 ## Purpose
 
 定义引擎无关的 per-session 供应商绑定契约：新建会话时可选定供应商，绑定随 thread 持久化，该 thread 后续所有 turn 按绑定路由，同一 workspace 下不同绑定的会话可并行使用不同供应商。
-
 ## Requirements
-
 ### Requirement: Per-Session Provider Binding MUST Be Recorded And Resolvable
 
 系统 MUST 将 managed provider 绑定建模为会话级 launch configuration（而非全局切换），并在发送消息时按固定优先级解析生效供应商。
@@ -57,6 +55,14 @@
 - **WHEN** 用户通过新建会话菜单先后为同一 engine 创建绑定 A 与绑定 B 的两个 native 会话
 - **THEN** 两会话的 thread binding MUST 分别记录 A 与 B
 - **AND** 后续全局设置页 switch 到 C MUST NOT 改写 A/B 已记录的 managed binding
+
+#### Scenario: historical native second turn ignores last-used parallel provider residue
+
+- **WHEN** 用户并行使用多个 native Claude 会话且各自绑定不同 managed provider（例如 A=MiniMax、B=DeepSeek）
+- **AND** 用户返回会话 A 发起第二次（或后续）turn
+- **THEN** 该 turn 的生效 provider 路由 MUST 仍为会话 A 的 L2 `providerProfileId`（发送参数或 catalog binding）
+- **AND** 上送 runtime model MUST 按会话 A 绑定 profile 的 catalog/env 解析；MUST NOT 静默使用会话 B 遗留的产品模型名导致跨供应商 400
+- **AND** Shared Session 路径 MUST NOT 被本 scenario 要求改动
 
 ### Requirement: Child Threads MUST Inherit Parent Binding
 
@@ -356,3 +362,44 @@ The new-conversation provider selector MUST describe local/disk profiles and man
 - **AND** 当前 composer selection 的 runtime 不属于新 profile 的合法 model 集合
 - **THEN** 系统 MUST 将 selection repair 为新 profile 默认 runtime 对应的 catalog entry
 - **AND** 后续发送 MUST 使用 repair 后的 runtime
+
+### Requirement: Qoder Distribution Binding MUST Be Persisted Per Session
+
+For `qoder`, the system MUST treat `__qoder_global__` and `__qoder_cn__` as
+persistable distribution bindings rather than generic local provider sentinels.
+Creation, canonical identity promotion, fork and continuation MUST retain the
+resolved distribution. Global settings edits MUST NOT reroute a bound Qoder thread.
+
+#### Scenario: parallel Global and CN Qoder sessions
+
+- **WHEN** one workspace has a Global Qoder thread and a CN Qoder thread
+- **THEN** both threads MUST retain different persisted bindings
+- **AND** their sends MUST use different distribution runtime keys and launch
+  descriptors
+
+#### Scenario: legacy local sentinel compatibility
+
+- **WHEN** a legacy Qoder thread contains `__local_qoder__` or no profile id
+- **THEN** it MUST use the Global compatibility binding
+- **AND** a newly created Global thread MUST use the explicit Global distribution
+  binding instead of being normalized to `null`
+
+#### Scenario: unknown Qoder distribution is rejected before Shared Tx1
+
+- **WHEN** a Shared Qoder target contains a non-empty profile id other than
+  `__local_qoder__`, `__qoder_global__`, or `__qoder_cn__`
+- **THEN** the system MUST return `target-unavailable` before writing
+  `conversation.turnRequested` or a binding row
+- **AND** it MUST NOT silently fall back to the Global distribution
+
+### Requirement: Composer Draft MUST Not Contaminate Finalized Historical Native Sessions
+
+从某一 native 会话离开到「无 active thread」再进入 **已 finalized 的历史会话** 时，系统 MUST NOT 把上一会话的 composer draft model selection 写入该历史会话。
+
+#### Scenario: draft applies only to pending create threads
+
+- **WHEN** `shouldApplyDraftToNextThread` 为 true 且存在 draft selection
+- **AND** 目标 `activeThreadId` 为 finalized 历史会话（id 不含 `-pending-`）
+- **THEN** draft MUST NOT 应用到该会话
+- **AND** 仅当目标为 `*-pending-*` 创建中会话时 draft 才可应用（保持既有 create 体验）
+

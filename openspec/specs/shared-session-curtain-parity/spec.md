@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change. Update Purpose for `shared-session-curtain-parity`.
-
 ## Requirements
-
 ### Requirement: Shared history final assistant metadata parity
 
 Shared Session history projection SHALL stamp the same final assistant metadata fields consumed by the unified conversation canvas footer that Native sessions use when the underlying facts are available.
@@ -56,3 +54,19 @@ Shared Session SHALL continue to render through the same Messages timeline as Na
 - **WHEN** history or live items are shown
 - **THEN** presentation still flows through `Messages → Timeline → TimelineRowRenderer`
 - **AND** no Shared-only message row component is introduced by this change
+
+### Requirement: Shared user attachment display parity with Native user bubbles
+
+Shared Session canvas MUST display user-attached images on the user message bubble using the same MessageRow / MessageImageGrid path as Native sessions when projection or optimistic items supply `images`. Shared MUST NOT rely on a separate attachment-only bubble that duplicates the user text.
+
+#### Scenario: shared user message with images uses standard image grid
+
+- **WHEN** a Shared thread ConversationItem has `kind=message`, `role=user`, non-empty `text`, and non-empty `images`
+- **THEN** the unified Messages timeline renders a single user row with MessageImageGrid (or equivalent) plus text
+- **AND** no Shared-only dual text bubble is introduced for the same item identity
+
+#### Scenario: text-only shared user message unchanged
+
+- **WHEN** a Shared user message has text and no images
+- **THEN** rendering remains a single text user bubble as before this change
+

@@ -7,9 +7,7 @@ cross-layer 行为合同：outcome 字符上限、Inspector 展示契约、降�
 
 可执行落点与常量表见 `dev-guidelines/multi-agent/contracts.md`。
 设计文档：`docs/architecture/multi-engine-collaboration-orchestration-design.md`。
-
 ## Requirements
-
 ### Requirement: Stage outcome character limits SHALL be shared constants
 
 系统 MUST 使用控制平面统一常量截断 stage short / body / final summary，
@@ -32,6 +30,7 @@ cross-layer 行为合同：outcome 字符上限、Inspector 展示契约、降�
 
 系统 MUST 保证头与幕布「两套故事」一致：徽章对齐本段 target；
 非 plan 段禁止用 plan.markdown；canvas key 带 `shared:` 前缀 attempt 隔离。
+在此基础上，Inspector MUST 在 stage 输出幕布上方提供可折叠的注入上下文 Header（详见 capability `multi-agent-inspector-inject-context`），且该 Header 使用 plan/上游摘要时 MUST NOT 将 plan.markdown 写入非 plan 段的 **输出幕布** 正文。
 
 #### Scenario: contract 2 non-plan stage must not use plan.markdown
 
@@ -64,16 +63,27 @@ cross-layer 行为合同：outcome 字符上限、Inspector 展示契约、降�
 - **AND** 主幕 / Inspector 卡片 MUST NOT 渲染智能体正文
 - **AND** 展示层 MAY 仅显示 persona icon 与 name
 
+#### Scenario: inject-context header may reference plan summary without polluting canvas
+
+- **WHEN** 非 plan 段 Inspector 展开注入上下文 Header
+- **THEN** Header 的上游分区 MAY 展示 `plan.summary` 或截断后的 plan 文本作为「注入来源」
+- **AND** Messages 输出幕布正文 MUST 仍遵守 contract 2（不得因 Header 而把 plan.markdown 写入非 plan 段 canvas）
+
 ### Requirement: Composer context SHALL fan into first stage only
 
-系统 MUST 将 Composer 上下文（图片、skill、记忆、便签，可多条）对齐注入模板首段，
-后续段仅消费首段文字归纳，禁止整类拒绝或静默丢弃。
+系统 MUST 将 Composer 上下文（图片、skill、记忆、便签，可多条）以及**主幕已有对话 digest**（若有）对齐注入模板首段，后续段仅消费首段文字归纳与上游 stage 产出，禁止整类拒绝或静默丢弃。有主幕历史时 MUST 注入 digest；空历史可跳过。
 
 #### Scenario: images and context allowed on collab submit
 
 - **WHEN** 用户开启协作并附带图片和/或 skill/记忆/便签后发送
 - **THEN** 系统 MUST NOT 因「协作暂不接收附件/上下文」拦截
 - **AND** 首段 worker turn MUST 收到注入后的 model text 与（若有）images
+
+#### Scenario: main-canvas history fans into first stage model text
+
+- **WHEN** 用户在已有主幕对话的会话上开启协作发送
+- **THEN** 首段 model text MUST 在本轮用户任务前包含主幕对话 digest 标记块（`【主幕对话上下文】`）
+- **AND** `visibleText` / 主幕用户气泡 MUST NOT 包含该 digest 块
 
 #### Scenario: dispatch falls back to durable image_refs
 
@@ -106,7 +116,7 @@ cross-layer 行为合同：outcome 字符上限、Inspector 展示契约、降�
 
 - **WHEN** 首段已成功并启动后续 stage
 - **THEN** 后续 stage begin turn MUST NOT 附带 first-stage images
-- **AND** 后续 prompt 的「用户任务」MUST 使用 `userVisibleText`（无记忆/skill 注入块）
+- **AND** 后续 prompt 的「用户任务」MUST 使用 `userVisibleText`（无记忆/skill/主幕 digest 注入块）
 - **AND** 后续 prompt MUST 可依赖 plan / short_outcome / upstream notes 中的文字归纳
 
 ### Requirement: Downstream start failure MAY degrade to succeeded after implement
@@ -127,3 +137,4 @@ cross-layer 行为合同：outcome 字符上限、Inspector 展示契约、降�
 - **WHEN** 首段（index 0）启动失败
 - **THEN** run MUST 走 failed settle 路径
 - **AND** MUST NOT 降级为 succeeded
+

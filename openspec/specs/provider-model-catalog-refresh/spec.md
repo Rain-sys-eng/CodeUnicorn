@@ -3,9 +3,7 @@
 ## Purpose
 
 定义 Provider-scoped 模型目录的配置重读、CLI discovery、分源合并和隔离契约。
-
 ## Requirements
-
 ### Requirement: Provider Catalog Actions MUST Separate Config Reload From CLI Discovery
 
 系统 MUST 将 Provider 配置重读与 CLI model discovery 建模为两个独立动作，并按完整
@@ -152,3 +150,24 @@ managed provider 的 model catalog 查询成功但返回空数组时，frontend 
 - **WHEN** 用户展开某渠道且模型列表为空
 - **THEN** 子菜单 MUST 显示两行引导（标题 + 操作提示）
 - **AND** 底部「添加模型」动作 MUST 保持可用
+
+### Requirement: Qoder Catalog Requests MUST Be Distribution-Isolated And Cold-Path Only
+
+Qoder model catalog cache, request dedupe and last-good state MUST include the
+distribution profile id. The application MUST request Qoder catalog data only when
+the picker is opened, the user explicitly refreshes, or a send cannot proceed
+without a catalog. Session switching and sidebar selection MUST NOT initiate a Qoder
+catalog IPC.
+
+#### Scenario: rapid session switching causes no Qoder catalog fetch
+
+- **WHEN** the user switches between Qoder Global/CN history rows in the sidebar
+- **THEN** the application MUST update selection identity and chrome only
+- **AND** it MUST NOT call `get_engine_models` or modify the active distribution
+
+#### Scenario: stale Global response cannot overwrite CN
+
+- **WHEN** a Global catalog request resolves after a newer CN catalog request
+- **THEN** the CN-visible picker MUST retain CN rows
+- **AND** Global rows MAY update only the Global cache scope
+
