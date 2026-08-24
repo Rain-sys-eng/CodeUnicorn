@@ -426,29 +426,55 @@ html.dark .crs-subagent-row.is-error .crs-subagent-status {
   font-variant-numeric: tabular-nums;
 }
 
-/* RollingStat（@number-flow/react）：位滚动需要一定上下留白，mask 过小会「看起来没动画」 */
+/* RollingStat：自实现 odometer 位滚动（纯 CSS transition，无 mask / blend-mode / will-change，
+ * Windows WebView2 合成安全；历史上 @number-flow 在此平台符号与首位数字重叠错位） */
 .composer-run-status-pill-count--edit .is-add,
 .composer-run-status-pill-count--edit .is-del {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   min-width: 1.5ch;
   min-height: 1.15em;
-  text-align: right;
   line-height: 1;
-  /* 允许 digit 上下滑出一点，再由 NumberFlow 自身 mask 裁切 */
-  overflow: visible;
 }
 
-.composer-run-status-pill-count--edit .composer-run-status-rolling-stat {
+.crs-rolling {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
-  line-height: 0.85;
-  --number-flow-mask-height: 0.25em;
-  --number-flow-mask-width: 0.35em;
 }
 
-/* 父级 pill 若 overflow:hidden 会裁掉滚动；编辑计数允许露出 */
-.composer-run-status-pill .composer-run-status-pill-count--edit {
-  overflow: visible;
+.crs-rolling-prefix {
+  flex-shrink: 0;
+}
+
+.crs-rolling-digit {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+}
+
+.crs-rolling-strip {
+  display: flex;
+  flex-direction: column;
+  transition-property: transform;
+  transition-timing-function: var(
+    --crs-rolling-easing,
+    cubic-bezier(0.22, 1, 0.36, 1)
+  );
+}
+
+.crs-rolling-strip-cell {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crs-rolling-strip {
+    transition: none;
+  }
 }
 
 /* pill 上 +/- 与 diff 语义一致：增绿删红 */

@@ -3,27 +3,6 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RollingStat } from "./RollingStat";
 
-vi.mock("@number-flow/react", async () => {
-  const continuous = {};
-  function NumberFlow(props: {
-    value: number;
-    prefix?: string;
-    className?: string;
-  }) {
-    return (
-      <span className={props.className} data-nf-value={props.value}>
-        {props.prefix}
-        {props.value}
-      </span>
-    );
-  }
-  return {
-    __esModule: true,
-    default: NumberFlow,
-    continuous,
-  };
-});
-
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -57,7 +36,8 @@ describe("RollingStat", () => {
     });
 
     expect(el.getAttribute("data-display-value")).toBe("12");
-    expect(el.textContent ?? "").toContain("12");
+    // 终值两位 → 两条数字列（strip 内容即 0-9 滚动条）
+    expect(el.querySelectorAll(".crs-rolling-digit")).toHaveLength(2);
     expect(el.textContent ?? "").toContain("+");
   });
 
