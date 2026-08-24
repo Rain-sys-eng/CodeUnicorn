@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   RequestUserInputRequest,
@@ -192,7 +192,10 @@ export function RequestUserInputMessage({
       return undefined;
     }
     const timerId = window.setInterval(() => {
-      setClockMs(Date.now());
+      // 倒计时秒针走 transition，避免每秒 setState 以紧急优先级打断输入等交互。
+      startTransition(() => {
+        setClockMs(Date.now());
+      });
     }, 1000);
     return () => {
       window.clearInterval(timerId);

@@ -1,5 +1,6 @@
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { looksLikeMarkdownDocument, normalizeDenseMarkdownOutput } from "../../../utils/denseMarkdownOutput";
+import { escapeHtmlText as escapeHtml } from "@/utils/html";
 
 const SHELL_COMMAND_SET = new Set([
   "ls",
@@ -93,13 +94,6 @@ const READ_COMMAND_SET = new Set([
   "grep",
   "rg",
 ]);
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
 
 function stripWrappingQuotes(token: string) {
   if (token.length >= 2) {

@@ -9,6 +9,7 @@ import type {
 } from "../../../types";
 import type { SharedSessionSupportedEngine } from "../../shared-session/utils/sharedSessionEngines";
 import { isSharedSessionThreadId } from "../../shared-session/utils/sharedSessionIdentity";
+import { createId } from "@/utils/id";
 import {
   createNativeProviderContinuation,
   discardPreparedNativeProviderContinuation,
@@ -646,8 +647,7 @@ export function useSidebarMenus({
       ].join(":");
       const operationId =
         providerContinuationOperationIdsRef.current.get(operationKey) ??
-        globalThis.crypto?.randomUUID?.() ??
-        `continuation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        createId("continuation");
       providerContinuationOperationIdsRef.current.set(operationKey, operationId);
       const previous = providerContinuationDialogStateRef.current;
       if (previous?.stage === "running") {

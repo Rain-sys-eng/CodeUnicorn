@@ -1,14 +1,12 @@
 import type { WorkspaceNoteCard } from "../../../services/tauri";
+import { truncateChars } from "@/utils/text";
 
 const MAX_NOTE_BODY_CHARS = 2400;
 const MAX_TOTAL_NOTE_CHARS = 9000;
 export const NOTE_CARD_CONTEXT_SUMMARY_PREFIX = "【便签上下文】";
 
 function clampChars(value: string, maxChars: number) {
-  if (value.length <= maxChars) {
-    return value;
-  }
-  return `${value.slice(0, maxChars)}...`;
+  return truncateChars(value, maxChars, "...");
 }
 
 function sanitizeNoteCardText(value: string) {

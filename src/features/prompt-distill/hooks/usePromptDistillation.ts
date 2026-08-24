@@ -8,6 +8,7 @@ import {
   PromptEnhancerError,
 } from "../../composer/components/ChatInputBox/hooks/usePromptEnhancer";
 import { buildDistillInstruction } from "../utils/distillInstruction";
+import { createId } from "@/utils/id";
 
 const DISTILL_TIMEOUT_SECONDS = 60;
 const DISTILL_AUTO_SESSION = {
@@ -47,10 +48,7 @@ function resolveDistillFailureCopy(
 }
 
 function buildIsolatedSessionId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `prompt-distill-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return createId("prompt-distill");
 }
 
 async function withTimeout<T>(

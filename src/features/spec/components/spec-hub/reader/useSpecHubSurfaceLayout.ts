@@ -7,6 +7,7 @@ import {
   type RefObject,
 } from "react";
 import { getClientStoreSync, writeClientStoreValue } from "../../../../../services/clientStorage";
+import { clamp } from "@/utils/math";
 
 const PANEL_RESIZING_DATASET_KEY = "panelResizing";
 const MIN_CHANGES_WIDTH = 220;
@@ -15,10 +16,6 @@ const DEFAULT_CHANGES_WIDTH: Record<"embedded" | "detached", number> = {
   embedded: 248,
   detached: 280,
 };
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
 
 function readStoredBoolean(key: string, fallback: boolean) {
   const stored = getClientStoreSync<boolean>("layout", key);

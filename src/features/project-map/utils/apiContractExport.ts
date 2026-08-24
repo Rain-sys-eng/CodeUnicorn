@@ -6,6 +6,7 @@ import type {
   ProjectMapApiResponse,
   ProjectMapApiStructuredSchemaField,
 } from "../types";
+import { escapeHtmlAttr } from "@/utils/html";
 
 export type ProjectMapApiExportFormat = "markdown" | "html" | "openapi-json";
 
@@ -75,14 +76,7 @@ function markdownEscape(value: string): string {
   return value.replace(/\|/g, "\\|");
 }
 
-function htmlEscape(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+const htmlEscape = escapeHtmlAttr;
 
 function schemaFieldLines(fields: ProjectMapApiStructuredSchemaField[] | undefined, depth = 0): string[] {
   if (!fields?.length || depth > 5) {

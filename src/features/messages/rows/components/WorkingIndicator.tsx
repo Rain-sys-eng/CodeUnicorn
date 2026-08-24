@@ -98,6 +98,33 @@ function WorkingSpinner() {
   return isWindowsPlatform() ? <GlyphFrameSpinner /> : <SvgDashSpinner />;
 }
 
+/**
+ * 每秒计时器走 ref 直写 textContent（与 GlyphFrameSpinner 同模式），
+ * 避免秒级 setState 让整个 WorkingIndicator 每秒重渲染。
+ */
+function WorkingClock({ startedAt }: { startedAt: number }) {
+  const clockRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const clockNode = clockRef.current;
+    if (!clockNode) {
+      return undefined;
+    }
+    const update = () => {
+      clockNode.textContent = formatDurationMs(Date.now() - startedAt);
+    };
+    update();
+    const intervalId = window.setInterval(update, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [startedAt]);
+
+  return (
+    <span ref={clockRef} className="working-timer-clock">
+      {formatDurationMs(Math.max(0, Date.now() - startedAt))}
+    </span>
+  );
+}
+
 type WorkingIndicatorProps = {
   isThinking: boolean;
   proxyEnabled?: boolean;
@@ -139,7 +166,6 @@ export const WorkingIndicator = memo(function WorkingIndicator({
   primaryLabel = null,
 }: WorkingIndicatorProps) {
   const { t } = useTranslation();
-  const [elapsedMs, setElapsedMs] = useState(0);
   const liveTokenSnapshot = useActiveCanvasSelector(
     selectLiveTokenSnapshot,
     areLiveTokenSnapshotsEqual,
@@ -151,23 +177,44 @@ export const WorkingIndicator = memo(function WorkingIndicator({
     processingStartedAt,
   });
 
+  // 阈值到点只需一次 setTimeout 翻转，不需要每秒轮询 elapsed。
+  const heartbeatWaitingHintEnabled =
+    presentationProfile?.heartbeatWaitingHint ?? activeEngine === "opencode";
+  const [hintDelayReached, setHintDelayReached] = useState(false);
+
   useEffect(() => {
-    if (!isThinking || !processingStartedAt) {
-      setElapsedMs(0);
+    if (
+      !heartbeatWaitingHintEnabled ||
+      !isThinking ||
+      !waitingForFirstChunk ||
+      !processingStartedAt
+    ) {
+      setHintDelayReached(false);
       return undefined;
     }
-    setElapsedMs(Date.now() - processingStartedAt);
-    const interval = window.setInterval(() => {
-      setElapsedMs(Date.now() - processingStartedAt);
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [isThinking, processingStartedAt]);
+    const remainingMs =
+      OPENCODE_NON_STREAMING_HINT_DELAY_MS - (Date.now() - processingStartedAt);
+    if (remainingMs <= 0) {
+      setHintDelayReached(true);
+      return undefined;
+    }
+    setHintDelayReached(false);
+    const timeoutId = window.setTimeout(() => {
+      setHintDelayReached(true);
+    }, remainingMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    heartbeatWaitingHintEnabled,
+    isThinking,
+    waitingForFirstChunk,
+    processingStartedAt,
+  ]);
 
   const showNonStreamingHint =
-    (presentationProfile?.heartbeatWaitingHint ?? activeEngine === "opencode") &&
+    heartbeatWaitingHintEnabled &&
     isThinking &&
     waitingForFirstChunk &&
-    elapsedMs >= OPENCODE_NON_STREAMING_HINT_DELAY_MS;
+    hintDelayReached;
   // reasoningLabel is only used to suppress activity that is itself a reasoning echo.
   const showActivityLabel = shouldDisplayWorkingActivityLabel(
     reasoningLabel,
@@ -262,7 +309,11 @@ export const WorkingIndicator = memo(function WorkingIndicator({
           )}
           <WorkingSpinner />
           <div className="working-timer">
-            <span className="working-timer-clock">{formatDurationMs(elapsedMs)}</span>
+            {processingStartedAt ? (
+              <WorkingClock startedAt={processingStartedAt} />
+            ) : (
+              <span className="working-timer-clock">{formatDurationMs(0)}</span>
+            )}
             {liveTokenLabel ? (
               <>
                 <span className="working-timer-separator" aria-hidden>

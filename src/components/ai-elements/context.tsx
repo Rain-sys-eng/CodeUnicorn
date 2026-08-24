@@ -3,6 +3,7 @@ import {
   type ReactNode,
   createContext,
   useContext,
+  useMemo,
 } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -137,19 +138,24 @@ export const Context = ({
   usage,
   costUSD,
   ...props
-}: ContextProps) => (
-  <ContextContext.Provider
-    value={{
+}: ContextProps) => {
+  const value = useMemo<ContextSchema>(
+    () => ({
       usedTokens,
       maxTokens,
       usedPercent,
       usage,
       costUSD,
-    }}
-  >
-    <HoverCard openDelay={300} closeDelay={100} {...props} />
-  </ContextContext.Provider>
-);
+    }),
+    [usedTokens, maxTokens, usedPercent, usage, costUSD],
+  );
+
+  return (
+    <ContextContext.Provider value={value}>
+      <HoverCard openDelay={300} closeDelay={100} {...props} />
+    </ContextContext.Provider>
+  );
+};
 
 export type ContextUsageIconProps = ComponentProps<"svg"> & {
   usedPercent: number | null;

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import i18n from "../../../i18n";
+import { createId } from "@/utils/id";
 
 export type TerminalTab = {
   id: string;
@@ -12,10 +13,7 @@ type UseTerminalTabsOptions = {
 };
 
 function createTerminalId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `terminal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return createId("terminal");
 }
 
 export function useTerminalTabs({

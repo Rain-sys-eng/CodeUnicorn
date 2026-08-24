@@ -3,14 +3,29 @@
  * 数据格式与 idea-claude-code-gui 项目完全兼容
  */
 
-// model id 校验的单一事实源为 composer/types/provider(长度 ≤128 + pattern 校验);
-// 此处经 import 别名再导出,保持 vendors feature 既有导入路径与函数引用不变,
-// 避免两份漂移的实现。
+// model id / custom model 校验与 CodexCustomModel 类型的单一事实源为
+// composer/types/provider; 此处 re-export 保持 vendors feature 既有导入路径
+// 与函数引用不变, 避免两份漂移的实现。
 import {
-  MODEL_ID_PATTERN as COMPOSER_MODEL_ID_PATTERN,
-  isValidModelId as isValidComposerModelId,
+  MODEL_ID_PATTERN,
+  isValidModelId,
+  isValidShapeOnlyCustomModel,
+  isValidCodexCustomModel,
+  validateCodexCustomModels,
+  validateShapeOnlyCustomModels,
+  type CodexCustomModel,
 } from "../composer/types/provider";
 import { STORAGE_KEYS as MODEL_STORAGE_KEYS } from "../models/constants";
+
+export {
+  MODEL_ID_PATTERN,
+  isValidModelId,
+  isValidShapeOnlyCustomModel,
+  isValidCodexCustomModel,
+  validateCodexCustomModels,
+  validateShapeOnlyCustomModels,
+};
+export type { CodexCustomModel };
 
 // ============ Constants ============
 
@@ -32,46 +47,6 @@ export const LOCAL_KIMI_PROVIDER_ID = "__local_config_toml__";
 export const LOCAL_GROK_PROVIDER_ID = "__local_config_toml__";
 
 export const LOCAL_OPENCODE_PROVIDER_ID = "__local_opencode_json__";
-
-// ============ Validation Helpers ============
-
-export const MODEL_ID_PATTERN = COMPOSER_MODEL_ID_PATTERN;
-export const isValidModelId = isValidComposerModelId;
-
-export function isValidShapeOnlyCustomModel(
-  model: unknown,
-): model is CodexCustomModel {
-  if (!model || typeof model !== "object") return false;
-  const obj = model as Record<string, unknown>;
-  if (typeof obj.id !== "string" || obj.id.trim().length === 0) return false;
-  if (typeof obj.label !== "string" || obj.label.trim().length === 0) return false;
-  if (obj.description !== undefined && typeof obj.description !== "string") {
-    return false;
-  }
-  if (
-    obj.providerProfileId !== undefined &&
-    typeof obj.providerProfileId !== "string"
-  ) {
-    return false;
-  }
-  return true;
-}
-
-export function isValidCodexCustomModel(model: unknown): model is CodexCustomModel {
-  if (!isValidShapeOnlyCustomModel(model)) return false;
-  return isValidModelId(model.id);
-}
-
-export function validateCodexCustomModels(models: unknown): CodexCustomModel[] {
-  if (!Array.isArray(models)) return [];
-  return models.filter(isValidCodexCustomModel);
-}
-
-/** Claude custom models: shape-only (ids may include spaces / vendor syntax). */
-export function validateShapeOnlyCustomModels(models: unknown): CodexCustomModel[] {
-  if (!Array.isArray(models)) return [];
-  return models.filter(isValidShapeOnlyCustomModel);
-}
 
 // ============ Types ============
 
@@ -122,13 +97,6 @@ export interface ProviderConfig {
     };
     [key: string]: unknown;
   };
-}
-
-export interface CodexCustomModel {
-  id: string;
-  label: string;
-  description?: string;
-  providerProfileId?: string;
 }
 
 export interface ClaudeCurrentConfig {

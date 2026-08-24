@@ -1,6 +1,2 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// 单一事实源在 src/lib/utils.ts；此处 re-export 保持 tokentracker 既有导入路径不变。
+export { cn } from "@/lib/utils";

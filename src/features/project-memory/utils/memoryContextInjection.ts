@@ -6,6 +6,7 @@ import {
   buildProjectMemorySourceRecords,
   formatProjectMemoryRetrievalPack,
 } from "./projectMemoryRetrievalPack";
+import { truncateChars } from "@/utils/text";
 
 export const MAX_ITEM_CHARS = 200;
 export const MAX_TOTAL_CHARS = 1000;
@@ -260,10 +261,7 @@ function selectRecentConversations(scored: ScoredMemory[]): ScoredMemory[] {
 }
 
 function clampText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) {
-    return text;
-  }
-  return `${text.slice(0, maxChars)}...`;
+  return truncateChars(text, maxChars, "...");
 }
 
 export function sanitizeForMemoryBlock(text: string): string {
