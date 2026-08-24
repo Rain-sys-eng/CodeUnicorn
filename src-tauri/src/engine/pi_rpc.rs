@@ -49,6 +49,17 @@ struct PiRpcShared {
     pending: Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>,
     next_id: AtomicU64,
     streaming: AtomicBool,
+    /// 最近一行 stdout（任意类型）的 unix ms。pump 直接刷新，不经过
+    /// broadcast——即使投影侧丢事件，活性判定仍以此为准。
+    last_event_ms: AtomicU64,
+}
+
+fn unix_time_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 pub struct PiRpcClient {
@@ -115,6 +126,7 @@ impl PiRpcClient {
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             streaming: AtomicBool::new(false),
+            last_event_ms: AtomicU64::new(0),
         });
         let (pump_sender, _) = broadcast::channel(1024);
 
@@ -150,6 +162,8 @@ impl PiRpcClient {
                                     continue;
                                 }
                             };
+                            // 任何一行解码成功都证明 resident 活着且在说话。
+                            shared.last_event_ms.store(unix_time_ms(), Ordering::SeqCst);
                             let kind = value
                                 .get("type")
                                 .and_then(Value::as_str)
@@ -261,6 +275,16 @@ impl PiRpcClient {
 
     pub fn is_streaming(&self) -> bool {
         self.shared.streaming.load(Ordering::SeqCst)
+    }
+
+    /// 最近一行 stdout 距今的时长；None = 自 spawn 以来无任何输出。
+    /// 看门狗 ground truth：活跃 turn 持续流事件，长时间静默 = 流停滞。
+    pub fn last_event_age(&self) -> Option<Duration> {
+        let ms = self.shared.last_event_ms.load(Ordering::SeqCst);
+        if ms == 0 {
+            return None;
+        }
+        Some(Duration::from_millis(unix_time_ms().saturating_sub(ms)))
     }
 
     pub async fn is_alive(&self) -> bool {

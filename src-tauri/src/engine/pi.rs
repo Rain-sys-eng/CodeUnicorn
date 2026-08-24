@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
@@ -28,8 +28,13 @@ use super::{EngineConfig, EngineType, SendMessageParams};
 const THINKING_LEVELS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /// RPC resident path: a turn is settled by typed `agent_settled`, not process
-/// EOF, so a generous ceiling is enough (aborts/errors settle long before).
-const PI_RPC_TURN_TIMEOUT: Duration = Duration::from_secs(600);
+/// EOF. 不按墙钟杀 turn（长 agentic 任务合法地跑几十分钟）：看门狗周期性
+/// 与 resident 实况对账，只有持续静默才判超时。
+const PI_RPC_TURN_WATCHDOG_TICK: Duration = Duration::from_secs(30);
+/// 真超时判据：resident 完全静默（无任何 stdout 行）超过该预算才判死。
+/// 必须覆盖 PI_RPC_COMPACT_TIMEOUT(500s)——auto-compaction 在 turn 收尾
+/// 阶段同样可能长时间无流式事件。
+const PI_RPC_TURN_SILENCE_TIMEOUT: Duration = Duration::from_secs(900);
 /// After `abort`, give pi this long to settle before killing the resident.
 const PI_RPC_ABORT_SETTLE_GRACE: Duration = Duration::from_secs(2);
 
@@ -1066,40 +1071,102 @@ impl PiSession {
             }
         }
 
-        match tokio::time::timeout(PI_RPC_TURN_TIMEOUT, rx).await {
-            Ok(Ok(Ok(text))) => Ok(text),
-            Ok(Ok(Err(error))) => Err(PiRpcSendError::Failed(error)),
-            Ok(Err(_closed)) => Err(PiRpcSendError::Failed(
-                "pi rpc run waiter dropped".to_string(),
-            )),
-            Err(_elapsed) => {
-                // turn 超时 = 整个 run 失联：必须把 run 摘下、全部 waiter
-                // （main + attached steer）以同一错误结算——否则 agent_settled
-                // 迟到或 stale-settle 自愈时同一 turn 会收到第二次终态
-                // （TurnError 后又 TurnCompleted，双结算违反 terminal 纪律）。
-                let error = "pi rpc turn timed out".to_string();
-                let run = self.rpc_run.write().await.take();
-                if let Some(run) = run {
-                    let workspace_id = self.workspace_id.clone();
-                    let sender = self.event_sender.clone();
-                    settle_rpc_run(
-                        &workspace_id,
-                        run,
-                        Some(error.clone()),
-                        &|turn_id, event| {
+        // Turn 结算看门狗：不按墙钟杀 turn，每个 tick 与 resident 实况对账——
+        //   streaming + 事件新鲜  → 长任务正常运行，继续等；
+        //   !streaming + run 有产出 → agent_settled 丢失（broadcast lag /
+        //     树切换 rebind 空窗），按完成结算，rx 随 settle 解决；
+        //   resident 持续静默超预算 → 真超时，报错并 abort。
+        let turn_started_at = Instant::now();
+        let mut missing_run_ticks = 0u8;
+        let mut rx = rx;
+        loop {
+            match tokio::time::timeout(PI_RPC_TURN_WATCHDOG_TICK, &mut rx).await {
+                Ok(Ok(Ok(text))) => return Ok(text),
+                Ok(Ok(Err(error))) => return Err(PiRpcSendError::Failed(error)),
+                Ok(Err(_closed)) => {
+                    return Err(PiRpcSendError::Failed(
+                        "pi rpc run waiter dropped".to_string(),
+                    ));
+                }
+                Err(_elapsed) => {}
+            }
+
+            let has_output = {
+                let guard = self.rpc_run.read().await;
+                guard.as_ref().map(|run| {
+                    !run.response_text.trim().is_empty()
+                        || run.saw_tool_activity
+                        || run.stream_error.is_some()
+                })
+            };
+            let Some(has_output) = has_output else {
+                // run 已被投影侧结算（agent_settled 抢先）：rx 下一 tick 内
+                // 必定就绪；连续多 tick 不就绪才按终态纪律补发错误。
+                missing_run_ticks += 1;
+                if missing_run_ticks >= 3 {
+                    let error = "pi rpc turn timed out".to_string();
+                    self.emit_error(turn_id, error.clone());
+                    return Err(PiRpcSendError::Settled(error));
+                }
+                continue;
+            };
+            missing_run_ticks = 0;
+
+            if !client.is_streaming() {
+                if has_output {
+                    log::warn!(
+                        "[pi/rpc] turn={} settlement event missed; settling from resident ground truth",
+                        turn_id
+                    );
+                    let run = self.rpc_run.write().await.take();
+                    if let Some(run) = run {
+                        let workspace_id = self.workspace_id.clone();
+                        let sender = self.event_sender.clone();
+                        settle_rpc_run(&workspace_id, run, None, &|turn_id, event| {
                             let _ = sender.send(PiTurnEvent {
                                 turn_id: turn_id.to_string(),
                                 event,
                             });
-                        },
-                    );
-                } else {
-                    // run 已被投影侧结算（agent_settled 抢先）：补发本 turn 终态。
-                    self.emit_error(turn_id, error.clone());
+                        });
+                    }
+                    continue;
                 }
-                let _ = client.abort().await;
-                Err(PiRpcSendError::Settled(error))
+                // 无产出且未 streaming：prompt 可能尚未 agent_start，给足静默预算。
+                if turn_started_at.elapsed() < PI_RPC_TURN_SILENCE_TIMEOUT {
+                    continue;
+                }
+            } else if client
+                .last_event_age()
+                .is_some_and(|age| age < PI_RPC_TURN_SILENCE_TIMEOUT)
+            {
+                continue;
             }
+
+            // 真超时（后端流停滞 / 从未启动）= 整个 run 失联：必须把 run 摘下、
+            // 全部 waiter（main + attached steer）以同一错误结算——否则
+            // agent_settled 迟到或 stale-settle 自愈时同一 turn 会收到第二次
+            // 终态（TurnError 后又 TurnCompleted，双结算违反 terminal 纪律）。
+            let error = "pi rpc turn timed out".to_string();
+            let run = self.rpc_run.write().await.take();
+            if let Some(run) = run {
+                let workspace_id = self.workspace_id.clone();
+                let sender = self.event_sender.clone();
+                settle_rpc_run(
+                    &workspace_id,
+                    run,
+                    Some(error.clone()),
+                    &|turn_id, event| {
+                        let _ = sender.send(PiTurnEvent {
+                            turn_id: turn_id.to_string(),
+                            event,
+                        });
+                    },
+                );
+            } else {
+                self.emit_error(turn_id, error.clone());
+            }
+            let _ = client.abort().await;
+            return Err(PiRpcSendError::Settled(error));
         }
     }
 
@@ -1903,6 +1970,14 @@ impl Drop for PiSession {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn turn_watchdog_silence_budget_covers_compact_and_tick() {
+        // auto-compaction 在 turn 收尾可能长时无流式事件：静默预算必须
+        // 覆盖 compact 预算，否则 compact 中的 turn 会被误判超时。
+        assert!(PI_RPC_TURN_SILENCE_TIMEOUT > crate::engine::pi_rpc::PI_RPC_COMPACT_TIMEOUT);
+        assert!(PI_RPC_TURN_WATCHDOG_TICK < PI_RPC_TURN_SILENCE_TIMEOUT);
+    }
 
     #[test]
     fn parses_session_id() {
