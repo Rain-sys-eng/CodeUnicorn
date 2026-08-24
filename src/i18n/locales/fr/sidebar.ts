@@ -82,7 +82,7 @@ const sidebar = {
     "assignWorkspaceGroup": "Changer de groupe de projet",
     "workspaceAliasPrompt": "Saisissez l'alias affiché pour cet espace de travail dans la barre latérale. Laissez vide pour utiliser le nom du projet d'origine.",
     "workspaceAliasDialogTitle": "Définir l'alias de l'espace de travail",
-    "workspaceAliasDialogSubtitle": "Nom du projet d'origine : {{name}}",
+    "workspaceAliasDialogSubtitle": "Nom du projet d'origine : <code>{{name}}</code>",
     "workspaceAliasLabel": "Nom affiché dans la barre latérale",
     "workspaceAliasPlaceholder": "Exemple : Backend de facturation",
     "workspaceAliasEmptyHint": "Enregistrez une valeur vide pour effacer l'alias et afficher le nom du projet d'origine.",

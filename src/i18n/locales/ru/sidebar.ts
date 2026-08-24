@@ -82,7 +82,7 @@ const sidebar = {
     "assignWorkspaceGroup": "Изменить группу проекта",
     "workspaceAliasPrompt": "Введите псевдоним, отображаемый для этой рабочей области на боковой панели. Оставьте пустым, чтобы использовать исходное имя проекта.",
     "workspaceAliasDialogTitle": "Задать псевдоним рабочей области",
-    "workspaceAliasDialogSubtitle": "Исходное имя проекта: {{name}}",
+    "workspaceAliasDialogSubtitle": "Исходное имя проекта: <code>{{name}}</code>",
     "workspaceAliasLabel": "Отображаемое имя на боковой панели",
     "workspaceAliasPlaceholder": "Пример: Бэкенд биллинга",
     "workspaceAliasEmptyHint": "Сохраните пустое значение, чтобы очистить псевдоним и показать исходное имя проекта.",

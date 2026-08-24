@@ -93,7 +93,7 @@ const sidebar = {
     workspaceAliasPrompt:
       "输入此工作区在左侧栏显示的别名；留空将恢复原项目名。",
     workspaceAliasDialogTitle: "设置工作区别名",
-    workspaceAliasDialogSubtitle: "原项目名：{{name}}",
+    workspaceAliasDialogSubtitle: "原项目名：<code>{{name}}</code>",
     workspaceAliasLabel: "左侧栏显示名称",
     workspaceAliasPlaceholder: "例如：支付后端",
     workspaceAliasEmptyHint: "留空保存会清除别名，恢复显示原项目名。",

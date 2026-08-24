@@ -82,7 +82,7 @@ const sidebar = {
     "assignWorkspaceGroup": "प्रोजेक्ट समूह बदलें",
     "workspaceAliasPrompt": "साइडबार में इस workspace के लिए दिखाया जाने वाला उपनाम दर्ज करें। मूल प्रोजेक्ट नाम उपयोग करने के लिए खाली छोड़ें।",
     "workspaceAliasDialogTitle": "Workspace उपनाम सेट करें",
-    "workspaceAliasDialogSubtitle": "मूल प्रोजेक्ट नाम: {{name}}",
+    "workspaceAliasDialogSubtitle": "मूल प्रोजेक्ट नाम: <code>{{name}}</code>",
     "workspaceAliasLabel": "साइडबार प्रदर्शन नाम",
     "workspaceAliasPlaceholder": "उदाहरण: बिलिंग बैकएंड",
     "workspaceAliasEmptyHint": "उपनाम हटाने और मूल प्रोजेक्ट नाम दिखाने के लिए खाली मान सहेजें।",

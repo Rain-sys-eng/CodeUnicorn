@@ -97,7 +97,7 @@ const sidebar = {
     workspaceAliasPrompt:
       "Enter the alias shown for this workspace in the sidebar. Leave empty to use the original project name.",
     workspaceAliasDialogTitle: "Set workspace alias",
-    workspaceAliasDialogSubtitle: "Original project name: {{name}}",
+    workspaceAliasDialogSubtitle: "Original project name: <code>{{name}}</code>",
     workspaceAliasLabel: "Sidebar display name",
     workspaceAliasPlaceholder: "Example: Billing backend",
     workspaceAliasEmptyHint:

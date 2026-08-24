@@ -82,7 +82,7 @@ const sidebar = {
     "assignWorkspaceGroup": "Alterar grupo do projeto",
     "workspaceAliasPrompt": "Digite o apelido exibido para este workspace na barra lateral. Deixe em branco para usar o nome original do projeto.",
     "workspaceAliasDialogTitle": "Definir apelido do workspace",
-    "workspaceAliasDialogSubtitle": "Nome original do projeto: {{name}}",
+    "workspaceAliasDialogSubtitle": "Nome original do projeto: <code>{{name}}</code>",
     "workspaceAliasLabel": "Nome de exibição na barra lateral",
     "workspaceAliasPlaceholder": "Exemplo: Backend de faturamento",
     "workspaceAliasEmptyHint": "Salve um valor vazio para limpar o apelido e exibir o nome original do projeto.",

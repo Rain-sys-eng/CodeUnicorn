@@ -82,7 +82,7 @@ const sidebar = {
     "assignWorkspaceGroup": "プロジェクトグループを変更",
     "workspaceAliasPrompt": "サイドバーでこのワークスペースに表示するエイリアスを入力します。空欄のままにすると元のプロジェクト名が使われます。",
     "workspaceAliasDialogTitle": "ワークスペースのエイリアスを設定",
-    "workspaceAliasDialogSubtitle": "元のプロジェクト名: {{name}}",
+    "workspaceAliasDialogSubtitle": "元のプロジェクト名: <code>{{name}}</code>",
     "workspaceAliasLabel": "サイドバーの表示名",
     "workspaceAliasPlaceholder": "例: 請求バックエンド",
     "workspaceAliasEmptyHint": "空の値で保存するとエイリアスがクリアされ、元のプロジェクト名が表示されます。",

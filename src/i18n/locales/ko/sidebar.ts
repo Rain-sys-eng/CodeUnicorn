@@ -82,7 +82,7 @@ const sidebar = {
     "assignWorkspaceGroup": "프로젝트 그룹 변경",
     "workspaceAliasPrompt": "사이드바에 표시할 이 워크스페이스의 별칭을 입력하세요. 비워 두면 원래 프로젝트 이름을 사용합니다.",
     "workspaceAliasDialogTitle": "워크스페이스 별칭 설정",
-    "workspaceAliasDialogSubtitle": "원래 프로젝트 이름: {{name}}",
+    "workspaceAliasDialogSubtitle": "원래 프로젝트 이름: <code>{{name}}</code>",
     "workspaceAliasLabel": "사이드바 표시 이름",
     "workspaceAliasPlaceholder": "예: 결제 백엔드",
     "workspaceAliasEmptyHint": "빈 값을 저장하면 별칭이 지워지고 원래 프로젝트 이름이 표시됩니다.",
