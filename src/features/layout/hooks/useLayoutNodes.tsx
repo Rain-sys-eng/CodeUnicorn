@@ -2885,7 +2885,11 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
     ],
   );
 
-  const fileViewPanelNode = options.editorFilePath && options.activeWorkspace ? (
+  // 重面板节点必须 memo：未 memo 的新元素身份会击穿 AppLayout 的 ReactNode
+  // props Object.is 比较，让根 render 反复重渲染已挂载的重面板（S1 残余项）。
+  const fileViewPanelNode = useMemo(
+    () =>
+      options.editorFilePath && options.activeWorkspace ? (
       <Suspense fallback={<HeavyPanelFallback />}>
         <FileViewPanel
           workspaceId={options.activeWorkspace.id}
@@ -2951,36 +2955,108 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           expandSelectionShortcut={options.expandSelectionShortcut}
         />
       </Suspense>
-    ) : null;
+      ) : null,
+    [
+      options.editorFilePath,
+      options.activeWorkspace,
+      options.gitRoot,
+      options.gitRepositories,
+      activeWorkspaceCustomSpecRoot,
+      options.editorNavigationTarget,
+      options.editorHighlightTarget,
+      options.gitStatus.files,
+      options.openEditorTabs,
+      options.onActivateEditorTab,
+      options.onCloseEditorTab,
+      options.onCloseOtherEditorTabs,
+      options.onCloseAllEditorTabs,
+      options.onReorderEditorTabs,
+      options.fileReferenceMode,
+      options.onFileReferenceModeChange,
+      options.activeComposerFileLineRange,
+      options.onActiveEditorLineRangeChange,
+      options.onActiveCodeSelectionAnchorChange,
+      handleAssociateIntentCanvasCodeAnchor,
+      options.openAppTargets,
+      options.openAppIconById,
+      options.selectedOpenAppId,
+      options.onSelectOpenAppId,
+      options.editorSplitLayout,
+      options.onToggleEditorSplitLayout,
+      options.isEditorFileMaximized,
+      options.onToggleEditorFileMaximized,
+      options.onOpenFile,
+      options.onOpenFileHistory,
+      handleRevealInFileTree,
+      options.onExitEditor,
+      options.onInsertComposerText,
+      handleCreateCodeAnnotation,
+      handleCaptureWorkspaceNote,
+      handleRemoveCodeAnnotation,
+      selectedCodeAnnotations,
+      options.externalChangeMonitoringEnabled,
+      options.externalChangeTransportMode,
+      options.externalChangeApplyMode,
+      options.externalChangeAutoApplyDebounceMs,
+      options.liveEditPreviewEnabled,
+      fileRenderPressure,
+      options.saveFileShortcut,
+      options.findInFileShortcut,
+      options.expandSelectionShortcut,
+    ],
+  );
 
   const isWorkspaceNoteCardsMounted =
     options.centerMode === "notes" ||
     (options.centerMode === "editor" &&
       options.editorSplitCompanion === "notes");
-  const noteCardsPanelNode = isWorkspaceNoteCardsMounted ? (
-    <WorkspaceNoteCardPanel
-      workspaceId={options.activeWorkspace?.id ?? null}
-      workspaceName={options.activeWorkspace?.name ?? null}
-      workspacePath={options.activeWorkspace?.path ?? null}
-      focusNoteId={options.focusedWorkspaceNoteId ?? null}
-      focusRequestKey={options.focusedWorkspaceNoteRequestKey ?? 0}
-      captureRequest={workspaceNoteCaptureRequest}
-      onCaptureRequestHandled={handleWorkspaceNoteCaptureRequestHandled}
-      onReferenceNote={handleReferenceWorkspaceNote}
-      onOpenCodeSource={handleOpenWorkspaceNoteCodeSource}
-    />
-  ) : null;
+  const noteCardsPanelNode = useMemo(
+    () =>
+      isWorkspaceNoteCardsMounted ? (
+        <WorkspaceNoteCardPanel
+          workspaceId={options.activeWorkspace?.id ?? null}
+          workspaceName={options.activeWorkspace?.name ?? null}
+          workspacePath={options.activeWorkspace?.path ?? null}
+          focusNoteId={options.focusedWorkspaceNoteId ?? null}
+          focusRequestKey={options.focusedWorkspaceNoteRequestKey ?? 0}
+          captureRequest={workspaceNoteCaptureRequest}
+          onCaptureRequestHandled={handleWorkspaceNoteCaptureRequestHandled}
+          onReferenceNote={handleReferenceWorkspaceNote}
+          onOpenCodeSource={handleOpenWorkspaceNoteCodeSource}
+        />
+      ) : null,
+    [
+      isWorkspaceNoteCardsMounted,
+      options.activeWorkspace,
+      options.focusedWorkspaceNoteId,
+      options.focusedWorkspaceNoteRequestKey,
+      workspaceNoteCaptureRequest,
+      handleWorkspaceNoteCaptureRequestHandled,
+      handleReferenceWorkspaceNote,
+      handleOpenWorkspaceNoteCodeSource,
+    ],
+  );
 
-  const fileComparePanelNode = options.centerMode === "fileCompare" ? (
-    <WorkspaceFileComparePanel
-      session={options.fileCompareSession}
-      workspaceId={options.activeWorkspace?.id ?? null}
-      workspaceName={options.activeWorkspace?.name ?? null}
-      workspacePath={options.activeWorkspace?.path ?? null}
-      saveFileShortcut={options.saveFileShortcut}
-      onClose={options.onCloseFileCompare}
-    />
-  ) : null;
+  const fileComparePanelNode = useMemo(
+    () =>
+      options.centerMode === "fileCompare" ? (
+        <WorkspaceFileComparePanel
+          session={options.fileCompareSession}
+          workspaceId={options.activeWorkspace?.id ?? null}
+          workspaceName={options.activeWorkspace?.name ?? null}
+          workspacePath={options.activeWorkspace?.path ?? null}
+          saveFileShortcut={options.saveFileShortcut}
+          onClose={options.onCloseFileCompare}
+        />
+      ) : null,
+    [
+      options.centerMode,
+      options.fileCompareSession,
+      options.activeWorkspace,
+      options.saveFileShortcut,
+      options.onCloseFileCompare,
+    ],
+  );
 
   const projectMapImpactInput = useMemo(
     () =>
@@ -2989,39 +3065,67 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
         : EMPTY_PROJECT_MAP_IMPACT_INPUT,
     [isProjectMapSurfaceActive, options.gitStatus.files],
   );
-  const projectMapPanelNode = isProjectMapSurfaceActive ? (
-    <Suspense fallback={<HeavyPanelFallback />}>
-      <ProjectMapPanel
-        key={options.activeWorkspace?.id ?? "no-workspace"}
-        activeWorkspace={options.activeWorkspace ?? null}
-        workspaceName={options.activeWorkspace?.name ?? null}
-        selectedEngine={options.selectedEngine ?? null}
-        selectedModelId={options.selectedModelId}
-        models={options.models}
-        datasetController={options.projectMapDatasetController}
-        changedFilePaths={projectMapImpactInput.filePaths}
-        changedFileSource={projectMapImpactInput.source}
-        activeCodeSelectionAnchor={options.activeCodeSelectionAnchor}
-        onOpenEvidenceFile={handleOpenProjectMapEvidenceFile}
-        onOpenIntentCanvas={options.onOpenIntentCanvas}
-        onOpenIntentCanvasFromRelationship={options.onOpenIntentCanvas}
-      />
-    </Suspense>
-  ) : null;
+  const projectMapPanelNode = useMemo(
+    () =>
+      isProjectMapSurfaceActive ? (
+        <Suspense fallback={<HeavyPanelFallback />}>
+          <ProjectMapPanel
+            key={options.activeWorkspace?.id ?? "no-workspace"}
+            activeWorkspace={options.activeWorkspace ?? null}
+            workspaceName={options.activeWorkspace?.name ?? null}
+            selectedEngine={options.selectedEngine ?? null}
+            selectedModelId={options.selectedModelId}
+            models={options.models}
+            datasetController={options.projectMapDatasetController}
+            changedFilePaths={projectMapImpactInput.filePaths}
+            changedFileSource={projectMapImpactInput.source}
+            activeCodeSelectionAnchor={options.activeCodeSelectionAnchor}
+            onOpenEvidenceFile={handleOpenProjectMapEvidenceFile}
+            onOpenIntentCanvas={options.onOpenIntentCanvas}
+            onOpenIntentCanvasFromRelationship={options.onOpenIntentCanvas}
+          />
+        </Suspense>
+      ) : null,
+    [
+      isProjectMapSurfaceActive,
+      options.activeWorkspace,
+      options.selectedEngine,
+      options.selectedModelId,
+      options.models,
+      options.projectMapDatasetController,
+      projectMapImpactInput,
+      options.activeCodeSelectionAnchor,
+      handleOpenProjectMapEvidenceFile,
+      options.onOpenIntentCanvas,
+    ],
+  );
 
-  const intentCanvasPanelNode = isIntentCanvasSurfaceActive ? (
-    <Suspense fallback={<HeavyPanelFallback />}>
-      <IntentCanvasManager
-        activeWorkspace={options.activeWorkspace ?? null}
-        activeThreadId={options.activeThreadId ?? null}
-        openRequest={options.intentCanvasOpenRequest ?? null}
-        onOpenRequestConsumed={options.onIntentCanvasOpenRequestConsumed}
-        onAttachToThread={options.onAttachIntentCanvasToThread}
-        onOpenProjectMap={options.onOpenProjectMap}
-        onOpenSourceFile={handleOpenProjectMapEvidenceFile}
-      />
-    </Suspense>
-  ) : null;
+  const intentCanvasPanelNode = useMemo(
+    () =>
+      isIntentCanvasSurfaceActive ? (
+        <Suspense fallback={<HeavyPanelFallback />}>
+          <IntentCanvasManager
+            activeWorkspace={options.activeWorkspace ?? null}
+            activeThreadId={options.activeThreadId ?? null}
+            openRequest={options.intentCanvasOpenRequest ?? null}
+            onOpenRequestConsumed={options.onIntentCanvasOpenRequestConsumed}
+            onAttachToThread={options.onAttachIntentCanvasToThread}
+            onOpenProjectMap={options.onOpenProjectMap}
+            onOpenSourceFile={handleOpenProjectMapEvidenceFile}
+          />
+        </Suspense>
+      ) : null,
+    [
+      isIntentCanvasSurfaceActive,
+      options.activeWorkspace,
+      options.activeThreadId,
+      options.intentCanvasOpenRequest,
+      options.onIntentCanvasOpenRequestConsumed,
+      options.onAttachIntentCanvasToThread,
+      options.onOpenProjectMap,
+      handleOpenProjectMapEvidenceFile,
+    ],
+  );
 
   // 运行态入口改挂 Composer 上方 strip；底部 dock 暂不挂载。
   const planPanelNode = null;
