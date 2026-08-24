@@ -148,5 +148,3 @@ export const ReadToolGroupBlock = memo(function ReadToolGroupBlock({
     </ExploreInlineToolGroup>
   );
 });
-
-export default ReadToolGroupBlock;

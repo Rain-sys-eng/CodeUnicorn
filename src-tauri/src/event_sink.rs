@@ -181,6 +181,14 @@ pub(crate) struct BatchStats {
     last_flush_size_bytes: usize,
 }
 
+/// Lock a std mutex, recovering the guard if a previous holder panicked.
+/// The guarded state stays structurally valid (worst case a partially queued
+/// batch), and crashing the whole app on a poisoned lock is strictly worse
+/// than emitting a degraded batch.
+fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 impl BatchedTauriEventSink {
     pub(crate) fn new(app: AppHandle) -> Self {
         let inner = Arc::new(Mutex::new(BatchedEventState {
@@ -204,16 +212,12 @@ impl BatchedTauriEventSink {
                 // Serialize drain ownership with critical emits. The state lock
                 // is still released before app.emit, while this dedicated lock
                 // prevents a terminal from overtaking an already-drained batch.
-                let _emit_order_guard = flush_emit_order
-                    .lock()
-                    .expect("BatchedTauriEventSink emit-order mutex poisoned; an emitter panicked");
+                let _emit_order_guard = lock_unpoisoned(&flush_emit_order);
                 let drained_batches: Vec<Vec<AppServerEvent>> = {
                     // Take the state out into a local, drop the lock, then
                     // emit. We hold the lock for microseconds so a sync mutex
                     // is appropriate here.
-                    let mut guard = inner_clone.lock().expect(
-                        "BatchedTauriEventSink inner mutex poisoned; the background flush task panicked",
-                    );
+                    let mut guard = lock_unpoisoned(&inner_clone);
                     guard.drain_all_workspace_batches()
                 };
                 for drained in drained_batches {
@@ -228,9 +232,7 @@ impl BatchedTauriEventSink {
             loop {
                 ticker.tick().await;
                 let stats = {
-                    let guard = stats_inner.lock().expect(
-                        "BatchedTauriEventSink inner mutex poisoned; the stats task panicked",
-                    );
+                    let guard = lock_unpoisoned(&stats_inner);
                     guard.stats()
                 };
                 let _ = stats_app.emit(APP_SERVER_EVENT_BATCH_STATS, stats);
@@ -404,34 +406,22 @@ impl EventSink for BatchedTauriEventSink {
         // briefly serialize, but the event is always batched, never
         // double-emitted.
         if is_terminal_barrier_app_server_event(&event) {
-            let _emit_order_guard = self
-                .emit_order
-                .lock()
-                .expect("BatchedTauriEventSink emit-order mutex poisoned; an emitter panicked");
-            let mut guard = self.inner.lock().expect(
-                "BatchedTauriEventSink inner mutex poisoned; the background flush task panicked",
-            );
+            let _emit_order_guard = lock_unpoisoned(&self.emit_order);
+            let mut guard = lock_unpoisoned(&self.inner);
             let batch = guard.terminal_barrier_batch(event);
             drop(guard);
             let _ = self.app.emit(APP_SERVER_EVENT_BATCH, batch);
             return;
         }
         if is_critical_app_server_event(&event) {
-            let _emit_order_guard = self
-                .emit_order
-                .lock()
-                .expect("BatchedTauriEventSink emit-order mutex poisoned; an emitter panicked");
-            let mut guard = self.inner.lock().expect(
-                "BatchedTauriEventSink inner mutex poisoned; the background flush task panicked",
-            );
+            let _emit_order_guard = lock_unpoisoned(&self.emit_order);
+            let mut guard = lock_unpoisoned(&self.inner);
             let batch = guard.critical_bypass_batch(event);
             drop(guard);
             let _ = self.app.emit(APP_SERVER_EVENT_BATCH, batch);
             return;
         }
-        let mut guard = self.inner.lock().expect(
-            "BatchedTauriEventSink inner mutex poisoned; the background flush task panicked",
-        );
+        let mut guard = lock_unpoisoned(&self.inner);
         guard.submit(event);
     }
 

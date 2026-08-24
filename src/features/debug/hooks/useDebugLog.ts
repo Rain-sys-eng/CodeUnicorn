@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DebugEntry } from "../../../types";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import {
   getClientStoreSync,
   writeClientStoreValue,
@@ -507,7 +508,7 @@ export function useDebugLog() {
       })
       .join("\n\n");
     if (text) {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
     }
   }, [debugEntries]);
 

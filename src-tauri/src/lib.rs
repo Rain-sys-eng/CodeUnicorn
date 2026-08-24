@@ -32,7 +32,9 @@ struct ForwardedDragDropPayload {
 /// Get and clear any pending paths that were passed to the app on launch
 #[tauri::command]
 fn get_pending_open_paths() -> Vec<String> {
-    let mut paths = PENDING_OPEN_PATHS.lock().unwrap();
+    let mut paths = PENDING_OPEN_PATHS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::mem::take(&mut *paths)
 }
 

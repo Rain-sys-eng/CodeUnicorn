@@ -170,5 +170,3 @@ export const DropdownItem = ({
     </div>
   );
 };
-
-export default DropdownItem;

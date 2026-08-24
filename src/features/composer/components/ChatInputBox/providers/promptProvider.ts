@@ -84,5 +84,3 @@ export function promptToDropdownItem(prompt: PromptItem): DropdownItemData {
     },
   };
 }
-
-export default promptProvider;

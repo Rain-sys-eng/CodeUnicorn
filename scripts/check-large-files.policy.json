@@ -1,6 +1,7 @@
 {
-  "version": "2026-07-06.policy-v3",
+  "version": "2026-08-25.policy-v4",
   "newFileFailThreshold": 800,
+  "growthAllowanceLines": 50,
   "policies": [
     {
       "id": "test-files",

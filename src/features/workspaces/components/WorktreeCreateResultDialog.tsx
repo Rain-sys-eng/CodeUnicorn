@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import Check from "lucide-react/dist/esm/icons/check";
 import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
 import AlertTriangle from "lucide-react/dist/esm/icons/triangle-alert";
@@ -50,18 +51,16 @@ export function WorktreeCreateResultDialog({
     if (!result.retryCommand) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(result.retryCommand);
-      setCopied(true);
-      if (copyTimeoutRef.current != null) {
-        window.clearTimeout(copyTimeoutRef.current);
-      }
-      copyTimeoutRef.current = window.setTimeout(() => {
-        setCopied(false);
-      }, 1800);
-    } catch {
-      // Ignore clipboard failures.
+    if (!(await copyTextToClipboard(result.retryCommand))) {
+      return;
     }
+    setCopied(true);
+    if (copyTimeoutRef.current != null) {
+      window.clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = window.setTimeout(() => {
+      setCopied(false);
+    }, 1800);
   };
 
   return (

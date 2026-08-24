@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GitLogEntry, WorkspaceInfo } from "../../../types";
 import { getGitLog } from "../../../services/tauri";
+import { setVisibilityGatedInterval } from "../../../services/visibilityGatedInterval";
 
 type GitLogState = {
   entries: GitLogEntry[];
@@ -26,7 +27,9 @@ const emptyState: GitLogState = {
   error: null,
 };
 
-const REFRESH_INTERVAL_MS = 10000;
+// 渲染红线：常驻轮询 ≥30s；后台窗口由 setVisibilityGatedInterval 暂停，
+// 恢复可见时 helper 会立即补一拍。
+const REFRESH_INTERVAL_MS = 30_000;
 
 export function useGitLog(
   activeWorkspace: WorkspaceInfo | null,
@@ -100,12 +103,9 @@ export function useGitLog(
       return;
     }
     void refresh();
-    const interval = window.setInterval(() => {
+    return setVisibilityGatedInterval(() => {
       refresh().catch(() => {});
     }, REFRESH_INTERVAL_MS);
-    return () => {
-      window.clearInterval(interval);
-    };
   }, [activeWorkspace, enabled, refresh]);
 
   return {

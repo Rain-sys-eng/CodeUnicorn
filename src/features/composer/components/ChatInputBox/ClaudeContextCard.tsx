@@ -95,5 +95,3 @@ export const ClaudeContextCard = ({
     </ContextContentHeader>
   );
 };
-
-export default ClaudeContextCard;

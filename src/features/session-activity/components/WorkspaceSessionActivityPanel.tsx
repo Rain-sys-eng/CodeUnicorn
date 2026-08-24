@@ -13,7 +13,7 @@ import Package from "lucide-react/dist/esm/icons/package";
 import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import type { CSSProperties, ReactNode } from "react";
-import FileIcon from "../../../components/FileIcon";
+import { FileIcon } from "../../../components/FileIcon";
 import { UnsavedChangesDialog } from "../../../components/ui/UnsavedChangesDialog";
 import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import { WorkspaceEditableDiffReviewSurface } from "../../git/components/WorkspaceEditableDiffReviewSurface";

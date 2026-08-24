@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import Cherry from "lucide-react/dist/esm/icons/cherry";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import GitBranchPlus from "lucide-react/dist/esm/icons/git-branch-plus";
@@ -52,16 +52,10 @@ export const PUSH_TARGET_MENU_MIN_HEIGHT = 120;
 export const PUSH_TARGET_MENU_ESTIMATED_ROW_HEIGHT = 34;
 export const PUSH_TARGET_MENU_VIEWPORT_PADDING = 16;
 export const CREATE_PR_PREVIEW_COMMIT_LIMIT = 200;
-export const FILE_TREE_ROOT_PATH = "__repo_root__";
-
 const SORT_ORDER_FALLBACK = Number.MAX_SAFE_INTEGER;
 
 export function getSortOrderValue(value: number | null | undefined) {
   return typeof value === "number" ? value : SORT_ORDER_FALLBACK;
-}
-
-export function isActivationKey(event: KeyboardEvent<HTMLElement>): boolean {
-  return event.key === "Enter" || event.key === " ";
 }
 
 export function clamp(value: number, min: number, max: number): number {

@@ -12,6 +12,7 @@ import {
   setPerfDiagnosticsEnabled,
 } from "@/services/perfBaseline/perfDiagnosticsController";
 import { buildDiagnosticsReportText } from "@/services/perfBaseline/diagnosticsReport";
+import { copyTextToClipboard } from "@/utils/clipboard";
 import { CuratedSection } from "../../../../curated-skills";
 import { HistoryCompletionSettings } from "../../HistoryCompletionSettings";
 import { SessionRadarHistoryManagementSection } from "../../SessionRadarHistoryManagementSection";
@@ -105,13 +106,11 @@ export function OtherSection({
 
   const handleCopyPerfReport = async () => {
     const report = buildDiagnosticsReportText();
-    try {
-      await navigator.clipboard.writeText(report);
+    if (await copyTextToClipboard(report)) {
       setCopyReportMessage(t("settings.perfCopyReportDone"));
       return;
-    } catch {
-      // WKWebView 可能拒绝剪贴板写入,降级为下载文本文件。
     }
+    // WKWebView 可能拒绝剪贴板写入,降级为下载文本文件。
     try {
       const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);

@@ -4,7 +4,7 @@ import CopyX from "lucide-react/dist/esm/icons/copy-x";
 import GitCommitHorizontal from "lucide-react/dist/esm/icons/git-commit-horizontal";
 import PanelTopClose from "lucide-react/dist/esm/icons/panel-top-close";
 import X from "lucide-react/dist/esm/icons/x";
-import FileIcon, { getFileName } from "../../../components/FileIcon";
+import { FileIcon, getFileName } from "../../../components/FileIcon";
 import {
   clampRendererContextMenuPosition,
   estimateRendererContextMenuHeight,

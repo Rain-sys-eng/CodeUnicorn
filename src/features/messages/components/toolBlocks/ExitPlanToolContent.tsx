@@ -1,4 +1,5 @@
 import { CollapsibleReveal } from "../../../../components/common/CollapsibleReveal";
+import { copyTextToClipboard } from "../../../../utils/clipboard";
 import { Markdown } from "../Markdown";
 import type {
   ExitPlanCardContent,
@@ -83,17 +84,13 @@ export function ExitPlanToolContent({
               aria-label={copiedPlanMarkdown ? copy.copied : copy.copy}
               onClick={(event) => {
                 event.stopPropagation();
-                if (typeof navigator === "undefined" || !navigator.clipboard) {
-                  return;
-                }
-                void navigator.clipboard.writeText(content.planMarkdown)
-                  .then(() => {
-                    onCopiedPlanMarkdownChange(true);
-                    window.setTimeout(() => onCopiedPlanMarkdownChange(false), 1800);
-                  })
-                  .catch(() => {
-                    // Clipboard errors are non-critical in restricted contexts.
-                  });
+                void copyTextToClipboard(content.planMarkdown).then((copied) => {
+                  if (!copied) {
+                    return;
+                  }
+                  onCopiedPlanMarkdownChange(true);
+                  window.setTimeout(() => onCopiedPlanMarkdownChange(false), 1800);
+                });
               }}
             >
               <span

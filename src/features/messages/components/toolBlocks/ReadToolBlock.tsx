@@ -321,5 +321,3 @@ export const ReadToolBlock = memo(function ReadToolBlock({
     </ToolMarkerShell>
   );
 });
-
-export default ReadToolBlock;

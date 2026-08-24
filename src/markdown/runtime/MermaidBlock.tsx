@@ -15,6 +15,7 @@ import {
   MermaidFullscreenViewer,
   preloadViewerjs,
 } from "../../features/markdown/mermaidFullscreen";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { CodeBlockLanguageBadge } from "../presentation/codeBlockLanguageIcon";
 import { normalizeMermaidSource } from "../presentation/normalizeMermaidSource";
 
@@ -128,34 +129,30 @@ export default function MermaidBlock({
   const fencedValue = `\`\`\`mermaid\n${value}\n\`\`\``;
 
   const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
-    try {
-      const nextValue = copyUseModifier && event.altKey ? fencedValue : value;
-      await navigator.clipboard.writeText(nextValue);
-      setCopiedMode(nextValue === fencedValue ? "fenced" : "plain");
-      if (copyTimeoutRef.current) {
-        window.clearTimeout(copyTimeoutRef.current);
-      }
-      copyTimeoutRef.current = window.setTimeout(() => {
-        setCopiedMode(null);
-      }, 1200);
-    } catch {
-      // clipboard errors can occur in restricted contexts
+    const nextValue = copyUseModifier && event.altKey ? fencedValue : value;
+    if (!(await copyTextToClipboard(nextValue))) {
+      return;
     }
+    setCopiedMode(nextValue === fencedValue ? "fenced" : "plain");
+    if (copyTimeoutRef.current) {
+      window.clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = window.setTimeout(() => {
+      setCopiedMode(null);
+    }, 1200);
   };
 
   const handleCopyFenced = async () => {
-    try {
-      await navigator.clipboard.writeText(fencedValue);
-      setCopiedMode("fenced");
-      if (copyTimeoutRef.current) {
-        window.clearTimeout(copyTimeoutRef.current);
-      }
-      copyTimeoutRef.current = window.setTimeout(() => {
-        setCopiedMode(null);
-      }, 1200);
-    } catch {
-      // clipboard errors can occur in restricted contexts
+    if (!(await copyTextToClipboard(fencedValue))) {
+      return;
     }
+    setCopiedMode("fenced");
+    if (copyTimeoutRef.current) {
+      window.clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = window.setTimeout(() => {
+      setCopiedMode(null);
+    }, 1200);
   };
 
   const handleToggleSource = () => {

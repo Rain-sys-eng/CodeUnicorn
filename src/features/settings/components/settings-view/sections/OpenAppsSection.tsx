@@ -29,6 +29,7 @@ import {
   fileManagerTypeI18nKey,
   getOpenAppHostPlatform,
 } from "../../../../app/utils/openAppPlatform";
+import { useKnownOpenAppIcons } from "../../../../app/hooks/useKnownOpenAppIcons";
 import { resolveOpenAppDisplayIcon } from "../../../../app/utils/openAppIcons";
 import { pickApplicationPath } from "../../../../../services/tauri/filePickers";
 import type { OpenAppDraft } from "../actions/settingsViewActions";
@@ -110,6 +111,9 @@ export function OpenAppsSection({
 }: OpenAppsSectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addPickerOpen, setAddPickerOpen] = useState(false);
+  // Built-in open-app PNGs load lazily; this re-renders once they are cached
+  // so resolveOpenAppDisplayIcon calls below pick up the real logos.
+  useKnownOpenAppIcons();
   const hostPlatform = getOpenAppHostPlatform();
 
   const presets = useMemo(

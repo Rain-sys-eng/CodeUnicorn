@@ -193,5 +193,3 @@ export const RequestUserInputSubmittedBlock = memo(
     );
   },
 );
-
-export default RequestUserInputSubmittedBlock;

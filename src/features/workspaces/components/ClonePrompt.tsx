@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import { loadCloneModalStyles } from "../../../styles/featureStyleLoaders";
 import { useFeatureStylesReady } from "../../../styles/useFeatureStylesReady";
 
@@ -162,11 +163,7 @@ export function ClonePrompt({
                   if (!suggestedCopiesFolder) {
                     return;
                   }
-                  try {
-                    await navigator.clipboard.writeText(suggestedCopiesFolder);
-                  } catch {
-                    // Ignore clipboard failures (e.g. permission denied).
-                  }
+                  await copyTextToClipboard(suggestedCopiesFolder);
                 }}
                 disabled={isBusy || !suggestedCopiesFolder}
               >

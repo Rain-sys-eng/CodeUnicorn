@@ -305,5 +305,3 @@ export const McpToolBlock = memo(function McpToolBlock({
     </ToolMarkerShell>
   );
 });
-
-export default McpToolBlock;

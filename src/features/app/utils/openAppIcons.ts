@@ -1,11 +1,89 @@
-import cursorIcon from "../../../assets/app-icons/cursor.png";
-import finderIcon from "../../../assets/app-icons/finder.png";
-import antigravityIcon from "../../../assets/app-icons/antigravity.png";
-import ghosttyIcon from "../../../assets/app-icons/ghostty.png";
-import ideaIcon from "../../../assets/app-icons/idea.png";
-import vscodeIcon from "../../../assets/app-icons/vscode.png";
-import zedIcon from "../../../assets/app-icons/zed.png";
 import type { OpenAppTarget } from "../../../types";
+
+type KnownOpenAppPngIconId =
+  | "cursor"
+  | "finder"
+  | "antigravity"
+  | "ghostty"
+  | "idea"
+  | "vscode"
+  | "zed";
+
+/**
+ * Cold-start: bundled app-icon PNGs (~216KB raw) stay off the eager AppShell
+ * chunk. Components call `useKnownOpenAppIcons()` (or
+ * `ensureKnownOpenAppIconsLoaded()`) to hydrate the cache; until then the sync
+ * getters below fall back to null → generic glyph for one brief paint.
+ */
+const KNOWN_PNG_ICON_LOADERS: Record<
+  KnownOpenAppPngIconId,
+  () => Promise<string>
+> = {
+  cursor: () =>
+    import("../../../assets/app-icons/cursor.png?url").then(
+      (module) => module.default,
+    ),
+  finder: () =>
+    import("../../../assets/app-icons/finder.png?url").then(
+      (module) => module.default,
+    ),
+  antigravity: () =>
+    import("../../../assets/app-icons/antigravity.png?url").then(
+      (module) => module.default,
+    ),
+  ghostty: () =>
+    import("../../../assets/app-icons/ghostty.png?url").then(
+      (module) => module.default,
+    ),
+  idea: () =>
+    import("../../../assets/app-icons/idea.png?url").then(
+      (module) => module.default,
+    ),
+  vscode: () =>
+    import("../../../assets/app-icons/vscode.png?url").then(
+      (module) => module.default,
+    ),
+  zed: () =>
+    import("../../../assets/app-icons/zed.png?url").then(
+      (module) => module.default,
+    ),
+};
+
+const KNOWN_PNG_ICON_COUNT = Object.keys(KNOWN_PNG_ICON_LOADERS).length;
+
+const knownPngIconSrcById = new Map<KnownOpenAppPngIconId, string>();
+let knownPngIconsLoadPromise: Promise<void> | null = null;
+
+/** True once every built-in PNG icon URL is cached for sync lookup. */
+export function areKnownOpenAppIconsLoaded(): boolean {
+  return knownPngIconSrcById.size === KNOWN_PNG_ICON_COUNT;
+}
+
+/** Load all built-in PNG icon URLs (lazy chunks); idempotent, promise cached. */
+export function ensureKnownOpenAppIconsLoaded(): Promise<void> {
+  if (!knownPngIconsLoadPromise) {
+    const entries = Object.entries(KNOWN_PNG_ICON_LOADERS) as Array<
+      [KnownOpenAppPngIconId, () => Promise<string>]
+    >;
+    const loadAll = Promise.all(
+      entries.map(([id, load]) =>
+        load().then((url) => {
+          knownPngIconSrcById.set(id, url);
+        }),
+      ),
+    ).then(() => undefined);
+    // Evict failed loads so a later mount retries instead of caching the error.
+    loadAll.catch(() => {
+      knownPngIconsLoadPromise = null;
+    });
+    knownPngIconsLoadPromise = loadAll;
+  }
+  return knownPngIconsLoadPromise;
+}
+
+function getKnownPngIcon(id: KnownOpenAppPngIconId): string | null {
+  return knownPngIconSrcById.get(id) ?? null;
+}
 
 /**
  * IMPORTANT: keep raw `#` colors here. `svgDataUri` runs encodeURIComponent;
@@ -34,7 +112,6 @@ function svgDataUri(svg: string): string {
 }
 
 export const GENERIC_APP_ICON = svgDataUri(GENERIC_APP_SVG);
-export const IDEA_APP_ICON = ideaIcon;
 export const SUBLIME_APP_ICON = svgDataUri(SUBLIME_SVG);
 export const NOTEPAD_APP_ICON = svgDataUri(NOTEPAD_SVG);
 export const TERMINAL_APP_ICON = svgDataUri(TERMINAL_SVG);
@@ -44,21 +121,21 @@ export const CHROME_APP_ICON = svgDataUri(CHROME_SVG);
 export function getKnownOpenAppIcon(id: string): string | null {
   switch (id) {
     case "vscode":
-      return vscodeIcon;
+      return getKnownPngIcon("vscode");
     case "cursor":
-      return cursorIcon;
+      return getKnownPngIcon("cursor");
     case "zed":
-      return zedIcon;
+      return getKnownPngIcon("zed");
     case "idea":
     case "intellij":
     case "jetbrains":
-      return IDEA_APP_ICON;
+      return getKnownPngIcon("idea");
     case "ghostty":
-      return ghosttyIcon;
+      return getKnownPngIcon("ghostty");
     case "antigravity":
-      return antigravityIcon;
+      return getKnownPngIcon("antigravity");
     case "finder":
-      return finderIcon;
+      return getKnownPngIcon("finder");
     case "sublime":
       return SUBLIME_APP_ICON;
     case "notepad":
@@ -93,26 +170,26 @@ export function getKnownOpenAppIconByRef(
     /[/\\]code\.app\b/.test(haystack) ||
     /[/\\]code\.exe\b/.test(haystack)
   ) {
-    return vscodeIcon;
+    return getKnownPngIcon("vscode");
   }
   if (haystack.includes("cursor")) {
-    return cursorIcon;
+    return getKnownPngIcon("cursor");
   }
   if (/\bzed\b/.test(haystack) || haystack.includes("zed.app")) {
-    return zedIcon;
+    return getKnownPngIcon("zed");
   }
   if (
     haystack.includes("intellij") ||
     haystack.includes("idea") ||
     haystack.includes("jetbrains")
   ) {
-    return IDEA_APP_ICON;
+    return getKnownPngIcon("idea");
   }
   if (haystack.includes("ghostty")) {
-    return ghosttyIcon;
+    return getKnownPngIcon("ghostty");
   }
   if (haystack.includes("antigravity")) {
-    return antigravityIcon;
+    return getKnownPngIcon("antigravity");
   }
   if (haystack.includes("sublime")) {
     return SUBLIME_APP_ICON;
@@ -132,7 +209,7 @@ export function getKnownOpenAppIconByRef(
     haystack.includes("访达") ||
     haystack.includes("资源管理器")
   ) {
-    return finderIcon;
+    return getKnownPngIcon("finder");
   }
   return null;
 }

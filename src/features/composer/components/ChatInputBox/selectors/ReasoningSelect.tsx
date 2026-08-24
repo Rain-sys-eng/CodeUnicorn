@@ -217,5 +217,3 @@ export const ReasoningSelect = memo(({
     </div>
   );
 });
-
-export default ReasoningSelect;

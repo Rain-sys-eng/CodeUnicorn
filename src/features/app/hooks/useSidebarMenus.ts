@@ -22,6 +22,7 @@ import {
   type NativeProviderContinuationProgressPhase,
 } from "../../../services/events";
 import { pushGlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import { isEngineExecutionEnabled } from "../../../utils/engineExecutionPolicy";
 import { formatByteSize } from "../../../utils/formatting";
 import {
@@ -2263,12 +2264,8 @@ export function useSidebarMenus({
         id: "copy-id",
         label: t("threads.copyId"),
         onSelect: async () => {
-          try {
-            const copyId = claudeSessionId ?? threadId;
-            await navigator.clipboard.writeText(copyId);
-          } catch {
-            // Clipboard failures are non-fatal here.
-          }
+          const copyId = claudeSessionId ?? threadId;
+          await copyTextToClipboard(copyId);
         },
       });
       if (claudeSessionId && claudeResumeCommand) {
@@ -2290,20 +2287,18 @@ export function useSidebarMenus({
           id: "copy-claude-resume-command",
           label: t("threads.copyClaudeResumeCommand"),
           onSelect: async () => {
-            try {
-              await navigator.clipboard.writeText(claudeResumeCommand);
-              pushGlobalRuntimeNotice({
-                severity: "info",
-                category: "runtime",
-                messageKey: "runtimeNotice.claude.resumeCommandCopied",
-                messageParams: {
-                  sessionId: claudeSessionId,
-                },
-                dedupeKey: `claude-resume-command-copied:${workspaceId}:${claudeSessionId}`,
-              });
-            } catch {
-              // Clipboard failures are non-fatal here.
+            if (!(await copyTextToClipboard(claudeResumeCommand))) {
+              return;
             }
+            pushGlobalRuntimeNotice({
+              severity: "info",
+              category: "runtime",
+              messageKey: "runtimeNotice.claude.resumeCommandCopied",
+              messageParams: {
+                sessionId: claudeSessionId,
+              },
+              dedupeKey: `claude-resume-command-copied:${workspaceId}:${claudeSessionId}`,
+            });
           },
         });
         items.push({

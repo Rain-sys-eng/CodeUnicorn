@@ -13,6 +13,7 @@ import {
   isEngineExecutionEnabled,
   type ExecutableEngineType,
 } from "../../../utils/engineExecutionPolicy";
+import { clamp } from "../../../utils/math";
 import type {
   ProjectMapCandidate,
   ProjectMapDataset,
@@ -438,10 +439,6 @@ function inferSourceEvidencePath(source: ProjectMapSource): string {
   });
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 function normalizeEvidenceLineEndings(content: string): string {
   return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
@@ -489,7 +486,7 @@ function allocateEvidenceFileBudget(fileCount: number): number {
   }
   const promptOverhead = fileCount * FILE_HEADER_PROMPT_OVERHEAD;
   const availableChars = Math.max(MIN_EVIDENCE_FILE_CHARS, MAX_EVIDENCE_PROMPT_CHARS - promptOverhead);
-  return clampNumber(
+  return clamp(
     Math.floor(availableChars / fileCount),
     MIN_EVIDENCE_FILE_CHARS,
     MAX_EVIDENCE_FILE_CHARS,

@@ -221,5 +221,3 @@ export function MessageQueue({
     </>
   );
 }
-
-export default MessageQueue;

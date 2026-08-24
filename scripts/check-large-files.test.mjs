@@ -85,6 +85,14 @@ test("determineHardDebtStatus distinguishes baseline growth states", () => {
   assert.equal(determineHardDebtStatus(2600, { lines: 2601 }, true), "reduced");
 });
 
+test("determineHardDebtStatus tolerates growth within the configured allowance", () => {
+  assert.equal(determineHardDebtStatus(2602, { lines: 2601 }, true, 50), "within-allowance");
+  assert.equal(determineHardDebtStatus(2651, { lines: 2601 }, true, 50), "within-allowance");
+  assert.equal(determineHardDebtStatus(2652, { lines: 2601 }, true, 50), "regressed");
+  assert.equal(determineHardDebtStatus(2601, { lines: 2601 }, true, 50), "retained");
+  assert.equal(determineHardDebtStatus(2600, { lines: 2601 }, true, 50), "reduced");
+});
+
 test("resolvePolicy prefers exact and prefix matches before default fallback", async () => {
   const root = process.cwd();
   const policy = await loadPolicyConfig(root, "scripts/check-large-files.policy.json");
@@ -129,6 +137,121 @@ test("scanLargeFiles reports baseline-aware regressions for policy fail scope", 
   });
 });
 
+test("scanLargeFiles keeps hard-debt growth within the growth allowance non-blocking", async () => {
+  await withTempDir(async (root) => {
+    const policyConfig = criticalPolicyConfig({ exactPaths: ["src/services/tauri.ts"] });
+    policyConfig.growthAllowanceLines = 2;
+    await writeJson(root, "policy.json", policyConfig);
+    await writeJson(
+      root,
+      "baseline.json",
+      baselineConfig({ entries: [criticalBaselineEntry("src/services/tauri.ts")] }),
+    );
+
+    await writeLines(path.join(root, "src/services/tauri.ts"), 11);
+
+    const scan = await scanLargeFiles({
+      root,
+      policyFile: "policy.json",
+      baselineFile: "baseline.json",
+      threshold: 3000,
+      mode: "report",
+      markdownOutput: null,
+      baselineOutput: null,
+      scope: "fail",
+    });
+
+    assert.equal(scan.results.length, 1);
+    assert.equal(scan.results[0]?.status, "within-allowance");
+    assert.equal(scan.results[0]?.delta, 2);
+    assert.equal(scan.results[0]?.growthAllowanceLines, 2);
+  });
+});
+
+test("scanLargeFiles flags hard-debt growth beyond the growth allowance as regressed", async () => {
+  await withTempDir(async (root) => {
+    const policyConfig = criticalPolicyConfig({ exactPaths: ["src/services/tauri.ts"] });
+    policyConfig.growthAllowanceLines = 2;
+    await writeJson(root, "policy.json", policyConfig);
+    await writeJson(
+      root,
+      "baseline.json",
+      baselineConfig({ entries: [criticalBaselineEntry("src/services/tauri.ts")] }),
+    );
+
+    await writeLines(path.join(root, "src/services/tauri.ts"), 12);
+
+    const scan = await scanLargeFiles({
+      root,
+      policyFile: "policy.json",
+      baselineFile: "baseline.json",
+      threshold: 3000,
+      mode: "report",
+      markdownOutput: null,
+      baselineOutput: null,
+      scope: "fail",
+    });
+
+    assert.equal(scan.results.length, 1);
+    assert.equal(scan.results[0]?.status, "regressed");
+    assert.equal(scan.results[0]?.delta, 3);
+  });
+});
+
+test("scanLargeFiles lets per-policy growthAllowanceLines override the top-level allowance", async () => {
+  await withTempDir(async (root) => {
+    const policyConfig = criticalPolicyConfig({ exactPaths: ["src/services/tauri.ts"] });
+    policyConfig.growthAllowanceLines = 50;
+    policyConfig.policies[0].growthAllowanceLines = 0;
+    await writeJson(root, "policy.json", policyConfig);
+    await writeJson(
+      root,
+      "baseline.json",
+      baselineConfig({ entries: [criticalBaselineEntry("src/services/tauri.ts")] }),
+    );
+
+    await writeLines(path.join(root, "src/services/tauri.ts"), 10);
+
+    const scan = await scanLargeFiles({
+      root,
+      policyFile: "policy.json",
+      baselineFile: "baseline.json",
+      threshold: 3000,
+      mode: "report",
+      markdownOutput: null,
+      baselineOutput: null,
+      scope: "fail",
+    });
+
+    assert.equal(scan.results.length, 1);
+    assert.equal(scan.results[0]?.status, "regressed");
+    assert.equal(scan.results[0]?.growthAllowanceLines, 0);
+  });
+});
+
+test("scanLargeFiles rejects invalid growthAllowanceLines before scanning", async () => {
+  await withTempDir(async (root) => {
+    const policyConfig = defaultPolicyConfig({ growthAllowanceLines: -1 });
+    await writeJson(root, "policy.json", policyConfig);
+    await writeLines(path.join(root, "src/visible-large.ts"), 13);
+
+    await assert.rejects(
+      () =>
+        scanLargeFiles({
+          root,
+          policyFile: "policy.json",
+          baselineFile: null,
+          threshold: 3000,
+          mode: "report",
+          markdownOutput: null,
+          baselineOutput: null,
+          scope: "fail",
+        }),
+      /Invalid growthAllowanceLines in large-file policy/,
+    );
+  });
+});
+
 test("scanLargeFiles blocks files above the new-file ratchet that are missing from the ratchet baseline", async () => {
   await withTempDir(async (root) => {
     await writeJson(root, "policy.json", defaultPolicyConfig({ newFileFailThreshold: 5 }));
@@ -151,7 +274,7 @@ test("scanLargeFiles blocks files above the new-file ratchet that are missing fr
       }),
     );
 
-    await writeLines(path.join(root, "src/existing-ratchet-debt.ts"), 7);
+    await writeLines(path.join(root, "src/existing-ratchet-debt.ts"), 6);
     await writeLines(path.join(root, "src/new-ratchet-debt.ts"), 6);
 
     const scan = await scanLargeFiles({
@@ -172,6 +295,157 @@ test("scanLargeFiles blocks files above the new-file ratchet that are missing fr
     assert.equal(scan.results[0]?.failThreshold, 5);
     assert.equal(scan.results[0]?.thresholdSource, "new-file-ratchet");
     assert.equal(scan.results[0]?.baselineLines, null);
+  });
+});
+
+test("scanLargeFiles keeps tracked ratchet files silent while within the growth allowance", async () => {
+  await withTempDir(async (root) => {
+    await writeJson(
+      root,
+      "policy.json",
+      defaultPolicyConfig({ newFileFailThreshold: 5, growthAllowanceLines: 1 }),
+    );
+    await writeJson(root, "hard-baseline.json", baselineConfig());
+    await writeJson(
+      root,
+      "new-file-baseline.json",
+      baselineConfig({
+        scope: "new-file",
+        entries: [
+          {
+            path: "src/existing-ratchet-debt.ts",
+            lines: 6,
+            policyId: "default-source",
+            priority: "P1",
+            warnThreshold: 10,
+            failThreshold: 5,
+          },
+        ],
+      }),
+    );
+
+    await writeLines(path.join(root, "src/existing-ratchet-debt.ts"), 7);
+
+    const scan = await scanLargeFiles({
+      root,
+      policyFile: "policy.json",
+      baselineFile: "hard-baseline.json",
+      newFileBaselineFile: "new-file-baseline.json",
+      threshold: 3000,
+      mode: "report",
+      markdownOutput: null,
+      baselineOutput: null,
+      scope: "fail",
+    });
+
+    assert.equal(scan.results.length, 0);
+  });
+});
+
+test("scanLargeFiles flags tracked ratchet files growing beyond the allowance as regressed", async () => {
+  await withTempDir(async (root) => {
+    await writeJson(
+      root,
+      "policy.json",
+      defaultPolicyConfig({ newFileFailThreshold: 5, growthAllowanceLines: 1 }),
+    );
+    await writeJson(root, "hard-baseline.json", baselineConfig());
+    await writeJson(
+      root,
+      "new-file-baseline.json",
+      baselineConfig({
+        scope: "new-file",
+        entries: [
+          {
+            path: "src/existing-ratchet-debt.ts",
+            lines: 6,
+            policyId: "default-source",
+            priority: "P1",
+            warnThreshold: 10,
+            failThreshold: 5,
+          },
+        ],
+      }),
+    );
+
+    await writeLines(path.join(root, "src/existing-ratchet-debt.ts"), 8);
+
+    const scan = await scanLargeFiles({
+      root,
+      policyFile: "policy.json",
+      baselineFile: "hard-baseline.json",
+      newFileBaselineFile: "new-file-baseline.json",
+      threshold: 3000,
+      mode: "report",
+      markdownOutput: null,
+      baselineOutput: null,
+      scope: "fail",
+    });
+
+    assert.equal(scan.results.length, 1);
+    assert.equal(scan.results[0]?.path, "src/existing-ratchet-debt.ts");
+    assert.equal(scan.results[0]?.status, "regressed");
+    assert.equal(scan.results[0]?.severity, "fail");
+    assert.equal(scan.results[0]?.thresholdSource, "new-file-ratchet");
+    assert.equal(scan.results[0]?.baselineLines, 6);
+    assert.equal(scan.results[0]?.delta, 2);
+  });
+});
+
+test("cli fails in fail mode when a tracked ratchet file grows beyond the allowance", async () => {
+  await withTempDir(async (root) => {
+    await writeJson(
+      root,
+      "policy.json",
+      defaultPolicyConfig({ newFileFailThreshold: 5, growthAllowanceLines: 1 }),
+    );
+    await writeJson(root, "hard-baseline.json", baselineConfig());
+    await writeJson(
+      root,
+      "new-file-baseline.json",
+      baselineConfig({
+        scope: "new-file",
+        entries: [
+          {
+            path: "src/existing-ratchet-debt.ts",
+            lines: 6,
+            policyId: "default-source",
+            priority: "P1",
+            warnThreshold: 10,
+            failThreshold: 5,
+          },
+        ],
+      }),
+    );
+    await writeLines(path.join(root, "src/existing-ratchet-debt.ts"), 8);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-large-files.mjs",
+        "--root",
+        root,
+        "--policy-file",
+        "policy.json",
+        "--baseline-file",
+        "hard-baseline.json",
+        "--new-file-baseline-file",
+        "new-file-baseline.json",
+        "--scope",
+        "fail",
+        "--mode",
+        "fail",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /status=regressed/);
+    assert.match(result.stdout, /threshold=new-file-ratchet/);
+    assert.match(result.stdout, /allowance=1/);
   });
 });
 

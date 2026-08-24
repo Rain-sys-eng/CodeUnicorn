@@ -122,13 +122,15 @@ import {
   getClientStoreSync,
   writeClientStoreValue,
 } from "../../../../../services/clientStorage";
+import { copyTextToClipboard } from "../../../../../utils/clipboard";
 import { isEngineExecutionEnabled } from "../../../../../utils/engineExecutionPolicy";
 import {
   readLastCommitMessageConfig,
   saveLastCommitMessageConfig,
 } from "../../../../../utils/commitMessage";
 import { pushErrorToast } from "../../../../../services/toasts";
-import FileIcon, {
+import {
+  FileIcon,
   type FileIconProps,
 } from "../../../../../components/FileIcon";
 import { GitDiffViewer } from "../../../../git/components/GitDiffViewer";
@@ -3082,11 +3084,10 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
     if (!path) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(path);
+    if (await copyTextToClipboard(path)) {
       setForceDeleteCopiedPath(true);
       window.setTimeout(() => setForceDeleteCopiedPath(false), 1200);
-    } catch {
+    } else {
       setForceDeleteCopiedPath(false);
     }
   }, [forceDeleteDialogState?.worktreePath]);

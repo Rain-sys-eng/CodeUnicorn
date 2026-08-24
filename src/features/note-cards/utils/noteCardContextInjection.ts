@@ -1,4 +1,5 @@
 import type { WorkspaceNoteCard } from "../../../services/tauri";
+import { normalizePathSeparators } from "@/utils/path";
 import { truncateChars } from "@/utils/text";
 
 const MAX_NOTE_BODY_CHARS = 2400;
@@ -22,10 +23,6 @@ function dedupeImagePaths(paths: string[]) {
   );
 }
 
-function normalizeInjectedAttachmentPath(path: string) {
-  return path.replace(/\\/g, "/");
-}
-
 export type LedgerNoteCardLike = Pick<
   WorkspaceNoteCard,
   "title" | "bodyMarkdown" | "plainTextExcerpt" | "archivedAt"
@@ -46,7 +43,7 @@ export function buildNoteBlock(note: LedgerNoteCardLike) {
     lines.push("");
     lines.push("Images:");
     for (const attachment of note.attachments) {
-      lines.push(`- ${attachment.fileName} | ${normalizeInjectedAttachmentPath(attachment.absolutePath)}`);
+      lines.push(`- ${attachment.fileName} | ${normalizePathSeparators(attachment.absolutePath)}`);
     }
   }
   lines.push("</note-card>");

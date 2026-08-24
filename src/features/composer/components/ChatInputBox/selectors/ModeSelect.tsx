@@ -312,5 +312,3 @@ export const ModeSelect = memo(({
     </DropdownMenu>
   );
 });
-
-export default ModeSelect;

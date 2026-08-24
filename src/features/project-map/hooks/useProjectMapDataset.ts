@@ -54,6 +54,7 @@ import {
   shouldTriggerProjectMapAutoIngestion,
 } from "../utils/autoIngestion";
 import { deriveProjectMapStorageKey } from "../utils/storageKey";
+import { normalizePathSeparators } from "../../../utils/path";
 
 const DEFAULT_STORAGE_LOCATION: ProjectMapStorageLocation = "global";
 const activeProjectMapWorkerKeys = new Set<string>();
@@ -337,10 +338,6 @@ function getNextActiveRun(runs: ProjectMapRunMetadata[]): ProjectMapRunMetadata 
   );
 }
 
-function normalizePathSeparator(value: string): string {
-  return value.replace(/\\/g, "/");
-}
-
 function isProjectStorageDir(
   storageDir: string,
   workspacePath: string,
@@ -348,7 +345,7 @@ function isProjectStorageDir(
 ): boolean {
   const isCaseInsensitive = typeof process !== "undefined" && process.platform === "win32";
   const normalize = (value: string): string =>
-    normalizePathSeparator(value.replace(/[/\\]+$/g, ""));
+    normalizePathSeparators(value.replace(/[/\\]+$/g, ""));
   const normalizedStorageDir = normalize(storageDir);
   const normalizedWorkspacePath = normalize(workspacePath);
   const expected = `${normalizedWorkspacePath}/.ccgui/project-map/${storageKey}`;
@@ -485,7 +482,7 @@ function resolveGenerationDefaults(
 }
 
 function projectMapSourceFromPath(path: string): ProjectMapSource {
-  const normalizedPath = path.replace(/\\/g, "/");
+  const normalizedPath = normalizePathSeparators(path);
   const label = normalizedPath.split("/").filter(Boolean).pop() ?? normalizedPath;
   return {
     type: "file",

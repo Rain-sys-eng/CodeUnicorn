@@ -155,7 +155,7 @@ impl AgentEventBus {
         let sink_id = self.next_sink_id.fetch_add(1, Ordering::Relaxed);
         self.sinks
             .lock()
-            .expect("agent event sinks poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(
                 sink_id,
                 AgentEventSink {
@@ -243,7 +243,10 @@ impl AgentEventBus {
         status: RunSettlementStatus,
         evidence: Value,
     ) -> bool {
-        let mut settled_runs = self.settled_runs.lock().expect("settled runs poisoned");
+        let mut settled_runs = self
+            .settled_runs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if !settled_runs.insert(run_id.to_string()) {
             self.diagnostics
                 .duplicate_settlements
@@ -277,7 +280,10 @@ impl AgentEventBus {
     fn publish(&self, event: MossxAgentEvent) -> bool {
         self.diagnostics.published.fetch_add(1, Ordering::Relaxed);
         let mut dead_sink_ids = Vec::new();
-        let sinks = self.sinks.lock().expect("agent event sinks poisoned");
+        let sinks = self
+            .sinks
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         for (sink_id, sink) in sinks.iter() {
             let send_result = match event.lane {
                 AgentEventLane::Critical => sink.critical_tx.send(event.clone()).map_err(|_| ()),
@@ -291,7 +297,7 @@ impl AgentEventBus {
                         let mut pending = sink
                             .coalesced_deltas
                             .lock()
-                            .expect("coalesced delta queue poisoned");
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
                         coalesce_delta(&mut pending, event);
                         let _ = sink.coalesced_notify_tx.send(());
                         self.diagnostics
@@ -308,7 +314,10 @@ impl AgentEventBus {
         }
         drop(sinks);
         if !dead_sink_ids.is_empty() {
-            let mut sinks = self.sinks.lock().expect("agent event sinks poisoned");
+            let mut sinks = self
+                .sinks
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             dead_sink_ids.into_iter().for_each(|sink_id| {
                 sinks.remove(&sink_id);
             });

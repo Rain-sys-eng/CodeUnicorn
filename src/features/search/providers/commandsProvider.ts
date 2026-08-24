@@ -1,4 +1,5 @@
 import type { CustomCommandOption } from "../../../types";
+import { normalizePathSeparators } from "../../../utils/path";
 import type { SearchResult } from "../types";
 
 type NormalizedCommandEntry = {
@@ -8,10 +9,6 @@ type NormalizedCommandEntry = {
   path: string;
   source: string;
 };
-
-function normalizeCommandPath(value: string): string {
-  return value.replace(/\\/g, "/");
-}
 
 function normalizeCommandSource(value: string | undefined): string {
   return value?.trim() ?? "";
@@ -44,7 +41,7 @@ export function searchCommands(query: string, commands: CustomCommandOption[]): 
     }
     const description = command.description?.trim() ?? "";
     const argumentHint = command.argumentHint?.trim() ?? "";
-    const path = normalizeCommandPath(command.path?.trim() ?? "");
+    const path = normalizePathSeparators(command.path?.trim() ?? "");
     const source = normalizeCommandSource(command.source);
     const entry: NormalizedCommandEntry = {
       name,

@@ -19,6 +19,7 @@ import {
   writeTerminalSession,
 } from "../../../services/tauri";
 import type { WorkspaceInfo } from "../../../types";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import { isWindowsPlatform } from "../../../utils/platform";
 
 const RUNTIME_TERMINAL_ID = "runtime-console";
@@ -828,11 +829,7 @@ export function useRuntimeLogSession({
     if (!activeSession.log) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(activeSession.log);
-    } catch {
-      // Ignore clipboard failures in restricted contexts.
-    }
+    await copyTextToClipboard(activeSession.log);
   }, [activeSession.log]);
 
   const onToggleRuntimeAutoScroll = useCallback(() => {

@@ -194,5 +194,3 @@ export const SearchToolGroupBlock = memo(function SearchToolGroupBlock({
     </ExploreInlineToolGroup>
   );
 });
-
-export default SearchToolGroupBlock;

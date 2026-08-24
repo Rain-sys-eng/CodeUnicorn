@@ -85,5 +85,4 @@ export const FileIcon = memo(
 
 FileIcon.displayName = 'FileIcon';
 
-export default FileIcon;
 export { getFileIconSvg, getFileName };

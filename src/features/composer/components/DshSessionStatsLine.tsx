@@ -94,5 +94,3 @@ export const DshSessionStatsLine = memo(function DshSessionStatsLine({
     </div>
   );
 });
-
-export default DshSessionStatsLine;

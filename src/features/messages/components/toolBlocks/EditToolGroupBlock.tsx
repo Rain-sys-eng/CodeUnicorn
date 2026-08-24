@@ -271,5 +271,3 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
     />
   );
 });
-
-export default EditToolGroupBlock;

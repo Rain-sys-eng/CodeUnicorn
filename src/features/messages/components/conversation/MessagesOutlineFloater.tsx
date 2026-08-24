@@ -109,5 +109,3 @@ export function MessagesOutlineFloater({
     </div>
   );
 }
-
-export default MessagesOutlineFloater;

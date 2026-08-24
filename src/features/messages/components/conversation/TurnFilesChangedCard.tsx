@@ -306,5 +306,3 @@ export const TurnFilesChangedCard = memo(
     prev.onRevertFile === next.onRevertFile &&
     prev.onRevertAll === next.onRevertAll,
 );
-
-export default TurnFilesChangedCard;

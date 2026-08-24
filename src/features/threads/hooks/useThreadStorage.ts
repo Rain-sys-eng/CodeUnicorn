@@ -123,7 +123,9 @@ export function useThreadStorage(): UseThreadStorageResult {
       }
       autoTitlePendingRef.current = next;
       setAutoTitlePendingVersion((v) => v + 1);
-    }, 5_000);
+    }, 30_000);
+    // 30s 仅作清扫兜底（渲染红线：根链轮询 ≥30s）；正确性不依赖它——
+    // 消费侧读取时已按 AUTO_TITLE_PENDING_EXPIRE_MS 做 on-demand 过期判断。
     return () => clearInterval(intervalId);
   }, []);
 

@@ -80,5 +80,3 @@ export const TokenIndicator = ({
     </Context>
   );
 };
-
-export default TokenIndicator;

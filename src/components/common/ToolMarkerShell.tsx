@@ -201,5 +201,3 @@ export function ToolMarkerShell({
     </div>
   );
 }
-
-export default ToolMarkerShell;

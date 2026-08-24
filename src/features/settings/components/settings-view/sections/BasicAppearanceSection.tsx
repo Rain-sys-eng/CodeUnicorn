@@ -39,6 +39,7 @@ import {
   DEFAULT_OPEN_APP_ID,
   DEFAULT_OPEN_APP_TARGETS,
 } from "@/features/app/constants";
+import { useKnownOpenAppIcons } from "@/features/app/hooks/useKnownOpenAppIcons";
 import {
   GENERIC_APP_ICON,
   getKnownOpenAppIcon,
@@ -62,6 +63,7 @@ import {
   DEFAULT_UI_FONT_FAMILY,
   listCodeFontSizeSelectOptions,
 } from "../../../../../utils/fonts";
+import { useDockIconSrc } from "../../../../theme/hooks/useDockIconSrc";
 import {
   DOCK_ICON_OPTIONS,
   sanitizeDockIconId,
@@ -221,6 +223,15 @@ function WallpaperPreviewThumb({
 const DOCK_ICON_SCROLL_STEP_PX = 160;
 const WALLPAPER_SLIDER_PREVIEW_DEBOUNCE_MS = 1000;
 
+/** Dock PNGs live in lazy chunks; render nothing for the brief load window. */
+function DockIconOptionImage({ iconId }: { iconId: DockIconId }) {
+  const src = useDockIconSrc(iconId);
+  if (!src) {
+    return null;
+  }
+  return <img src={src} alt="" draggable={false} />;
+}
+
 type DockIconPickerProps = {
   selectedDockIconId: DockIconId;
   onSelect: (iconId: DockIconId) => void;
@@ -322,7 +333,7 @@ function DockIconPicker({
               className={`settings-dock-icon-option${isActive ? " is-active" : ""}`}
               onClick={() => onSelect(option.id)}
             >
-              <img src={option.src} alt="" draggable={false} />
+              <DockIconOptionImage iconId={option.id} />
             </button>
           );
         })}
@@ -382,7 +393,11 @@ export function BasicAppearanceSection({
 }: BasicAppearanceSectionProps) {
   const { t } = useTranslation();
   const clientUiVisibility = useClientUiVisibility();
-  const selectedOpenAppIconSrc = resolveSelectedOpenAppIconSrc(appSettings);
+  // Built-in open-app PNGs load lazily; show the generic glyph until cached.
+  const knownOpenAppIconsLoaded = useKnownOpenAppIcons();
+  const selectedOpenAppIconSrc = knownOpenAppIconsLoaded
+    ? resolveSelectedOpenAppIconSrc(appSettings)
+    : GENERIC_APP_ICON;
   const selectedDockIconId = sanitizeDockIconId(appSettings.dockIconId);
   const wallpaper = sanitizeWorkspaceWallpaper(appSettings.workspaceWallpaper);
   const selectedLibraryItem = resolveWorkspaceWallpaperLibraryItem(wallpaper);

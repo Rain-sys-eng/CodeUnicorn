@@ -229,5 +229,3 @@ export const ShortcutActionsSelect = ({ actions, inline = false }: ShortcutActio
     </div>
   );
 };
-
-export default ShortcutActionsSelect;

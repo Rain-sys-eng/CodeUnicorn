@@ -37,13 +37,16 @@ describe("dockIcon", () => {
     expect(isDockIconId("")).toBe(false);
   });
 
-  it("resolves a stable src for every catalog id", () => {
+  it("resolves a stable src for every catalog id", async () => {
     for (const option of DOCK_ICON_OPTIONS) {
-      const src = resolveDockIconSrc(option.id);
+      const src = await resolveDockIconSrc(option.id);
       expect(typeof src).toBe("string");
       expect(src.length).toBeGreaterThan(0);
     }
-    expect(resolveDockIconSrc("bogus")).toBe(resolveDockIconSrc("default"));
+    // Unknown ids sanitize to default and share its cached URL.
+    expect(await resolveDockIconSrc("bogus")).toBe(
+      await resolveDockIconSrc("default"),
+    );
   });
 
   it("loads Uint8Array png bytes for every catalog id including default", async () => {

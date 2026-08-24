@@ -297,5 +297,3 @@ export const SearchToolBlock = memo(function SearchToolBlock({
     </div>
   );
 });
-
-export default SearchToolBlock;

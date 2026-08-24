@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from "react";
 import type { AccessMode, ConversationItem } from "../../../../types";
+import { copyTextToClipboard } from "../../../../utils/clipboard";
 import type { MessagesCoreProps } from "../../contracts/messagesInput";
 import { useConversationNoteCaptureMenu } from "../../hooks/useConversationNoteCaptureMenu";
 import { useFileLinkOpener } from "../../hooks/useFileLinkOpener";
@@ -177,19 +178,17 @@ export function useMessagesInteractions({
       item: Extract<ConversationItem, { kind: "message" }>,
       copyText?: string,
     ) => {
-      try {
-        await navigator.clipboard.writeText(copyText ?? item.text);
-        setCopiedMessageId(item.id);
-        if (copyTimeoutRef.current !== null) {
-          window.clearTimeout(copyTimeoutRef.current);
-        }
-        copyTimeoutRef.current = window.setTimeout(() => {
-          copyTimeoutRef.current = null;
-          setCopiedMessageId(null);
-        }, 1200);
-      } catch {
-        // Clipboard access can be unavailable in restricted renderer contexts.
+      if (!(await copyTextToClipboard(copyText ?? item.text))) {
+        return;
       }
+      setCopiedMessageId(item.id);
+      if (copyTimeoutRef.current !== null) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        copyTimeoutRef.current = null;
+        setCopiedMessageId(null);
+      }, 1200);
     },
     [],
   );

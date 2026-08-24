@@ -66,5 +66,3 @@ export function AgentIcon({
     />
   );
 }
-
-export default AgentIcon;

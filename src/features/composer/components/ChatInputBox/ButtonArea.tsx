@@ -639,5 +639,3 @@ export const ButtonArea = ({
     </div>
   );
 };
-
-export default ButtonArea;

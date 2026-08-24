@@ -2,6 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { copyTextToClipboard } from "@/utils/clipboard";
 
 import { useTokenTrackerServer } from "../hooks/useTokenTrackerServer";
 import { useTokenTrackerViewBridge } from "../hooks/useTokenTrackerViewBridge";
@@ -70,12 +71,9 @@ export function TokenTrackerServerGate({
   }, [copied]);
 
   const handleCopyInstallCommand = async () => {
-    if (typeof navigator === "undefined" || !navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(TT_INSTALL_COMMAND);
+    // 剪贴板被拒（权限 / 非安全上下文）时保持原状，不打断引导流程。
+    if (await copyTextToClipboard(TT_INSTALL_COMMAND)) {
       setCopied(true);
-    } catch {
-      // 剪贴板被拒（权限 / 非安全上下文）时保持原状，不打断引导流程。
     }
   };
 

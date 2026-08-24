@@ -1,9 +1,4 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import bellSoundUrl from "../assets/sounds/bell.wav";
-import chimeSoundUrl from "../assets/sounds/chime.wav";
-import dingSoundUrl from "../assets/sounds/ding.wav";
-import defaultSoundUrl from "../assets/sounds/success.wav";
-import successSoundUrl from "../assets/sounds/task-complete.wav";
 import type { DebugEntry } from "../types";
 
 type DebugLogger = (entry: DebugEntry) => void;
@@ -27,13 +22,50 @@ type PlayNotificationSoundBySelectionParams = {
 
 const CUSTOM_SOUND_FILE_PATTERN = /\.(wav|mp3|aiff)$/i;
 
-const BUILTIN_SOUND_URLS: Record<Exclude<NotificationSoundId, "custom">, string> = {
-  default: defaultSoundUrl,
-  chime: chimeSoundUrl,
-  bell: bellSoundUrl,
-  ding: dingSoundUrl,
-  success: successSoundUrl,
+type BuiltinNotificationSoundId = Exclude<NotificationSoundId, "custom">;
+
+/**
+ * Cold-start: the bundled .wav files (~212KB) stay off the eager AppShell
+ * chunk. Each URL module is imported lazily on first playback and the promise
+ * is cached, so repeat plays cost nothing extra.
+ */
+const BUILTIN_SOUND_URL_LOADERS: Record<
+  BuiltinNotificationSoundId,
+  () => Promise<string>
+> = {
+  default: () =>
+    import("../assets/sounds/success.wav?url").then((module) => module.default),
+  chime: () =>
+    import("../assets/sounds/chime.wav?url").then((module) => module.default),
+  bell: () =>
+    import("../assets/sounds/bell.wav?url").then((module) => module.default),
+  ding: () =>
+    import("../assets/sounds/ding.wav?url").then((module) => module.default),
+  success: () =>
+    import("../assets/sounds/task-complete.wav?url").then(
+      (module) => module.default,
+    ),
 };
+
+const builtinSoundUrlPromises = new Map<
+  BuiltinNotificationSoundId,
+  Promise<string>
+>();
+
+function loadBuiltinSoundUrl(
+  soundId: BuiltinNotificationSoundId,
+): Promise<string> {
+  let promise = builtinSoundUrlPromises.get(soundId);
+  if (!promise) {
+    promise = BUILTIN_SOUND_URL_LOADERS[soundId]();
+    // Evict failed loads so the next play retries instead of caching the error.
+    promise.catch(() => {
+      builtinSoundUrlPromises.delete(soundId);
+    });
+    builtinSoundUrlPromises.set(soundId, promise);
+  }
+  return promise;
+}
 
 const KNOWN_NOTIFICATION_SOUND_IDS = new Set<NotificationSoundId>([
   "default",
@@ -112,6 +144,26 @@ const playNotificationAudioUrl = (
   }
 };
 
+const playBuiltinNotificationSound = (
+  soundId: BuiltinNotificationSoundId,
+  label: NotificationSoundLabel,
+  onDebug?: DebugLogger,
+) => {
+  loadBuiltinSoundUrl(soundId)
+    .then((url) => {
+      playNotificationAudioUrl(url, label, onDebug);
+    })
+    .catch((error) => {
+      onDebug?.({
+        id: `${Date.now()}-audio-${label}-asset-load-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: `audio/${label} asset load error`,
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    });
+};
+
 export function playNotificationSoundBySelection({
   soundId,
   customSoundPath,
@@ -132,8 +184,8 @@ export function playNotificationSoundBySelection({
       label: `audio/${label} custom path invalid`,
       payload: customSoundPath ?? "",
     });
-    playNotificationAudioUrl(BUILTIN_SOUND_URLS.default, label, onDebug);
+    playBuiltinNotificationSound("default", label, onDebug);
     return;
   }
-  playNotificationAudioUrl(BUILTIN_SOUND_URLS[resolvedSoundId], label, onDebug);
+  playBuiltinNotificationSound(resolvedSoundId, label, onDebug);
 }

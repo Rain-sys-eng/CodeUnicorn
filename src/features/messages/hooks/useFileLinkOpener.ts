@@ -5,6 +5,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { openWorkspaceIn, revealInFileManager } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import type { OpenAppTarget } from "../../../types";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import {
   formatOpenHtmlInBrowserError,
   isHtmlFilePath,
@@ -410,11 +411,7 @@ export function useFileLinkOpener(
           onSelect: async () => {
             const link =
               resolvedPath.startsWith("/") ? `file://${resolvedPath}` : resolvedPath;
-            try {
-              await navigator.clipboard.writeText(link);
-            } catch {
-              // Clipboard failures are non-fatal here.
-            }
+            await copyTextToClipboard(link);
           },
         },
       ];

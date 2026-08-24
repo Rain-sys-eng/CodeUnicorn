@@ -4,6 +4,8 @@
  * non-minified stack. Never includes prompts, assistant text, or file contents.
  */
 
+import { copyTextToClipboard } from "../utils/clipboard";
+
 export const ERROR_BOUNDARY_FEEDBACK_URL =
   "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/new";
 
@@ -152,13 +154,9 @@ export async function copyTextWithDownloadFallback(
   text: string,
   downloadFileName: string,
 ): Promise<"copied" | "downloaded" | "failed"> {
-  try {
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return "copied";
-    }
-  } catch {
-    // WKWebView may reject clipboard writes; fall through to download.
+  // WKWebView may reject clipboard writes; fall through to download.
+  if (await copyTextToClipboard(text)) {
+    return "copied";
   }
 
   try {

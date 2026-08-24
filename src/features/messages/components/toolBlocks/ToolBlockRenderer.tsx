@@ -234,5 +234,3 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
     />
   );
 });
-
-export default ToolBlockRenderer;

@@ -1719,5 +1719,3 @@ export const ModelSelect = memo(({
     </>
   );
 });
-
-export default ModelSelect;

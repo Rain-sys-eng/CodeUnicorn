@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import FileIcon from "./FileIcon";
+import { FileIcon } from "./FileIcon";
 
 describe("FileIcon", () => {
   it("supports the shared filePath contract", () => {

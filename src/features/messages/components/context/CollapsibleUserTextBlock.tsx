@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CollapsibleReveal } from "../../../../components/common/CollapsibleReveal";
-import FileIcon from "../../../../components/FileIcon";
+import { FileIcon } from "../../../../components/FileIcon";
 
 type CollapsibleUserTextBlockProps = {
   content: string;

@@ -15,6 +15,7 @@ import {
   type WebServerStatus,
   type WebAssetsStatus,
 } from "@/services/tauri";
+import { copyTextToClipboard } from "@/utils/clipboard";
 import { WebAssetsPackageSection } from "./WebAssetsPackageSection";
 
 type WebServiceSettingsProps = {
@@ -508,10 +509,9 @@ export function WebServiceSettings({
 
   const handleCopy = useCallback(
     async (value: string) => {
-      try {
-        await navigator.clipboard.writeText(value);
+      if (await copyTextToClipboard(value)) {
         setCopiedMessage(t("settings.webServiceCopied"));
-      } catch {
+      } else {
         setError(t("settings.webServiceCopyFailed"));
       }
     },

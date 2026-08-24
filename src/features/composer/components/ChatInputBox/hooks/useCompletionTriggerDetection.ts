@@ -267,5 +267,3 @@ export function useCompletionTriggerDetection({
     debouncedDetectCompletion,
   };
 }
-
-export default useCompletionTriggerDetection;
