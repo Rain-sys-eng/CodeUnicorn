@@ -208,6 +208,125 @@ fn content_has_media_part(content: Option<&Value>) -> bool {
     })
 }
 
+fn first_nonempty_str(value: &Value, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        if let Some(text) = value
+            .get(*key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+        {
+            return Some(text.to_string());
+        }
+    }
+    None
+}
+
+fn push_unique_image(out: &mut Vec<String>, value: String) {
+    if !value.is_empty() && !out.iter().any(|existing| existing == &value) {
+        out.push(value);
+    }
+}
+
+fn image_data_url(mime: &str, data: &str) -> Option<String> {
+    let trimmed = data.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("data:image/") {
+        return Some(trimmed.to_string());
+    }
+    let mime = mime.trim();
+    let mime = if mime.to_ascii_lowercase().starts_with("image/") {
+        mime
+    } else {
+        "image/png"
+    };
+    Some(format!("data:{mime};base64,{trimmed}"))
+}
+
+/// RPC-era Pi user turns store screenshots as `{type:"image", data, mimeType}`
+/// content blocks with no `<file name>` wrapper. Print-json `@file` history
+/// still uses wrappers; those paths win when present. Image blocks are the
+/// fallback so reopen/history can show the same thumbs other engines keep.
+fn extract_image_content_display_refs(content: Option<&Value>) -> Vec<String> {
+    let Some(parts) = content.and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for part in parts {
+        let kind = part.get("type").and_then(Value::as_str).unwrap_or("");
+        if kind != "image" && kind != "image_url" {
+            continue;
+        }
+        if let Some(path) = first_nonempty_str(part, &["path", "url", "src"]) {
+            push_unique_image(&mut out, path);
+            continue;
+        }
+        if let Some(url) = part
+            .pointer("/image_url/url")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+        {
+            push_unique_image(&mut out, url.to_string());
+            continue;
+        }
+        if let Some(data) = part
+            .get("data")
+            .and_then(Value::as_str)
+        {
+            let mime = part
+                .get("mimeType")
+                .or_else(|| part.get("mime_type"))
+                .or_else(|| part.get("media_type"))
+                .and_then(Value::as_str)
+                .unwrap_or("image/png");
+            if let Some(url) = image_data_url(mime, data) {
+                push_unique_image(&mut out, url);
+            }
+            continue;
+        }
+        if let Some(source) = part.get("source") {
+            if let Some(url) = first_nonempty_str(source, &["url", "path"]) {
+                push_unique_image(&mut out, url);
+                continue;
+            }
+            if let Some(data) = source.get("data").and_then(Value::as_str) {
+                let mime = source
+                    .get("media_type")
+                    .or_else(|| source.get("mimeType"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("image/png");
+                if let Some(url) = image_data_url(mime, data) {
+                    push_unique_image(&mut out, url);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn split_pi_user_content_for_display(
+    raw_text: &str,
+    content: Option<&Value>,
+) -> (String, Vec<String>) {
+    let (legacy_text, legacy_images) =
+        crate::engine::cli_image_input::split_pi_prompt_for_display(raw_text);
+    let (display_text, wrapper_images) = if !legacy_images.is_empty() {
+        (legacy_text, legacy_images)
+    } else {
+        crate::engine::cli_image_input::split_pi_file_attachments_for_display(&legacy_text)
+    };
+    if !wrapper_images.is_empty() {
+        return (display_text, wrapper_images);
+    }
+    (
+        display_text,
+        extract_image_content_display_refs(content),
+    )
+}
+
 fn extract_text_blocks(content: Option<&Value>) -> String {
     let Some(content) = content else {
         return String::new();
@@ -1114,20 +1233,11 @@ pub async fn load_pi_session(
         match role {
             "user" => {
                 let raw_text = extract_text_blocks(message.get("content"));
-                // Legacy injection marker first (pre-`@file` sessions), then the
-                // `@file`-era `<file name="...">` wrappers. Image content blocks
-                // are ignored: display goes through paths.
-                let (display_text, images) = {
-                    let (legacy_text, legacy_images) =
-                        crate::engine::cli_image_input::split_pi_prompt_for_display(&raw_text);
-                    if !legacy_images.is_empty() {
-                        (legacy_text, legacy_images)
-                    } else {
-                        crate::engine::cli_image_input::split_pi_file_attachments_for_display(
-                            &legacy_text,
-                        )
-                    }
-                };
+                // Legacy marker → `@file` `<file name>` wrappers → RPC image
+                // content blocks (print-json paths win when present so we do
+                // not double-project the inlined base64).
+                let (display_text, images) =
+                    split_pi_user_content_for_display(&raw_text, message.get("content"));
                 if display_text.trim().is_empty() && images.is_empty() {
                     continue;
                 }
@@ -1384,6 +1494,65 @@ mod tests {
         let legacy_turn = &loaded.messages[1];
         assert_eq!(legacy_turn.text, "legacy text");
         assert_eq!(legacy_turn.images, Some(vec!["/abs/legacy.png".to_string()]));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn loads_rpc_era_user_message_images_from_content_blocks() {
+        let dir = std::env::temp_dir().join(format!(
+            "pi-history-rpc-image-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let sessions = dir.join("sessions");
+        let cwd_dir = sessions.join("--tmp-project--");
+        std::fs::create_dir_all(&cwd_dir).expect("mkdir");
+        let session_id = "019fe705-27fd-712e-a1be-f972ef3773f5";
+        let file = cwd_dir.join(format!("2026-08-24T21-00-00-000Z_{session_id}.jsonl"));
+        let project = dir.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        let mut handle = std::fs::File::create(&file).expect("create");
+        writeln!(
+            handle,
+            r#"{{"type":"session","version":3,"id":"{session_id}","timestamp":"2026-08-24T21:00:00.000Z","cwd":"{}"}}"#,
+            project.display()
+        )
+        .unwrap();
+        // RPC prompt/steer: image content block + user text, no <file name> wrapper.
+        writeln!(
+            handle,
+            r#"{{"type":"message","id":"m-rpc","timestamp":"2026-08-24T21:00:01.000Z","message":{{"role":"user","content":[{{"type":"image","data":"aGVsbG8=","mimeType":"image/png"}},{{"type":"text","text":"这是啥"}}]}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            handle,
+            r#"{{"type":"message","id":"m-rpc-empty","timestamp":"2026-08-24T21:00:02.000Z","message":{{"role":"user","content":[{{"type":"image","source":{{"type":"base64","media_type":"image/jpeg","data":"AAAA"}}}},{{"type":"text","text":""}}]}}}}"#
+        )
+        .unwrap();
+
+        let agent_dir = dir.to_string_lossy().to_string();
+        let loaded = load_pi_session(&project, session_id, Some(&agent_dir))
+            .await
+            .expect("load");
+        assert_eq!(loaded.messages.len(), 2);
+
+        let captioned = &loaded.messages[0];
+        assert_eq!(captioned.text, "这是啥");
+        assert_eq!(
+            captioned.images,
+            Some(vec!["data:image/png;base64,aGVsbG8=".to_string()])
+        );
+        assert!(!captioned.text.contains("<file name="));
+
+        let image_only = &loaded.messages[1];
+        assert_eq!(image_only.text, "");
+        assert_eq!(
+            image_only.images,
+            Some(vec!["data:image/jpeg;base64,AAAA".to_string()])
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

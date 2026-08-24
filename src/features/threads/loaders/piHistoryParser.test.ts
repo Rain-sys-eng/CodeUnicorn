@@ -8,6 +8,29 @@ describe("parsePiHistoryMessages", () => {
     expect(parsePiHistoryMessages(undefined)).toEqual([]);
   });
 
+  it("keeps user image paths on history rows", () => {
+    const items = parsePiHistoryMessages([
+      {
+        id: "pi-user-shot",
+        kind: "message",
+        role: "user",
+        text: "这是啥",
+        images: ["data:image/png;base64,AAAA"],
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(
+      expect.objectContaining({
+        id: "pi-user-shot",
+        kind: "message",
+        role: "user",
+        text: "这是啥",
+        images: ["data:image/png;base64,AAAA"],
+      }),
+    );
+  });
+
   it("maps user and assistant messages to conversation items", () => {
     const items = parsePiHistoryMessages([
       { id: "pi-user-1", kind: "message", role: "user", text: "hello" },

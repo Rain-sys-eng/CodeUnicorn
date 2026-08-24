@@ -172,6 +172,14 @@ RPC 路径下系统 MUST 以 `images` 字段（base64 ImageContent）传输图�
 - **THEN** 系统 MUST 读取文件并编码为 `images: [{type:"image",data,mimeType}]`
 - **AND** MUST NOT 使用 print 模式的 `@file` argv 传输
 
+#### Scenario: RPC 历史回看 MUST 还原用户附图
+
+- **WHEN** `load_pi_session` 读到 user message 的 content 含 `{type:"image", data, mimeType}`（或 `source.data`）且没有 `<file name>` 包装
+- **THEN** 投影 MUST 把该块变成可展示的 `images`（data URL 或 path）
+- **AND** 用户可见正文 MUST 仍是 text block（例如「这是啥」）
+- **AND** 若同一条还带 `@file` 时代的 `<file name="/abs/..">` 包装，MUST 继续只用路径，不得把 inlined base64 再投影一份
+- **AND** 纯图片、无 text 的 RPC user 行 MUST 保留，不得当空消息丢掉
+
 ### Requirement: ACK 分级 MUST 不假装
 
 系统 MUST 区分 command acceptance 与 turn settlement：response.success 仅代表受理，终态只能来自 typed 事件流。
