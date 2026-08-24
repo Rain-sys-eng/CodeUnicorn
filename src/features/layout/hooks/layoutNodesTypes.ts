@@ -252,6 +252,7 @@ export type LayoutNodesFlatOptions = {
   onAddCloneAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onClearActiveThread: (workspaceId: string) => void;
   onProviderContinuationTargetReady?: (input: {
     workspaceId: string;
     threadId: string;
@@ -864,6 +865,7 @@ export type ChromeLayoutNodesOptions = Pick<
   | "onAddCloneAgent"
   | "onToggleWorkspaceCollapse"
   | "onSelectThread"
+  | "onClearActiveThread"
   | "onProviderContinuationTargetReady"
   | "onSelectHomeWorkspace"
   | "onDeleteThread"

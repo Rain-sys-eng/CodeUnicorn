@@ -725,7 +725,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       threadsByWorkspace: options.threadsByWorkspace,
       t,
       onSelectThread: options.onSelectThread,
-      onSelectWorkspace: options.onSelectWorkspace,
+      onClearActiveThread: options.onClearActiveThread,
     });
   const handleRuntimeProfileRender = useCallback<ProfilerOnRenderCallback>(
     (id) => {

@@ -14,6 +14,7 @@ status: active
 | [`loading-picker/index.html`](loading-picker/index.html) | 「响应中」loading 25 选 1（01–10 几何 / 11–25 意象）；生产仍是 Mac `03` / Windows `10` | 浏览器打开 gallery |
 | [`session-loading/index.html`](session-loading/index.html) | 切换会话画布幕布第一轮（保留 03 / 04 / 10） | 浏览器打开 gallery |
 | [`session-loading/r2/index.html`](session-loading/r2/index.html) | 第二轮 10 稿：换几何（日食 / 底栏 / 竖脊 / 握手 / 地平线 / 仪表 / 星座 / 扫光 / 双月 / 大字） | 浏览器打开 gallery |
+| [`session-close-behavior/index.html`](session-close-behavior/index.html) | 关闭会话页签后的画布行为三案（修幽灵内容）：A 浏览器式相邻激活 + 真实空状态 / B 常驻「开始」页 / C 软关闭 + ⇧⌘T 撤销；每稿可点 × 实演 | 浏览器打开 gallery，iframe 内直接点页签 × |
 | [`curtain-reveal/index.html`](curtain-reveal/index.html) | 加载幕布拉开：各方向 + Mac/Win 兼容分层 | 浏览器打开，点卡片重播 |
 | [`dsh-vendor-settings/DSH Vendor Settings.html`](dsh-vendor-settings/DSH%20Vendor%20Settings.html) | DSH vendor 连接面板方案 A | 浏览器打开 |
 | [`git-operation-panels/index.html`](git-operation-panels/index.html) | Git 拉取 / 推送 / 同步 / 获取 / 刷新确认框第二轮：03 内容 × 05 外观，A / B 两套 | 浏览器打开 gallery，再点进 A 或 B |

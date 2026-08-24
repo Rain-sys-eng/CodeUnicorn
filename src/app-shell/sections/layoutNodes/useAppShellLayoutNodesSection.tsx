@@ -1239,6 +1239,17 @@ export function useAppShellLayoutNodesSection(
       setActiveThreadId,
     );
   });
+  // 关闭最后一个 topbar 页签的落点：清空会话选择并落到 workspace home 首页
+  //（HomeChat）。禁止复用 handleSelectWorkspace——它会恢复 workspace last
+  // thread（刚被关闭的会话）造成幽灵内容。identity + chrome only，零 IPC。
+  const handleClearActiveThread = useEventCallback((workspaceId: string) => {
+    exitDiffView();
+    resetPullRequestSelection();
+    setHomeOpen(false);
+    setCenterMode("chat");
+    setActiveThreadId(null, workspaceId);
+    setWorkspaceHomeWorkspaceId(workspaceId);
+  });
   const handleConnectWorkspace = useEventCallback(
     async (workspace: WorkspaceInfo) => {
       await connectWorkspace(workspace);
@@ -2018,6 +2029,7 @@ export function useAppShellLayoutNodesSection(
       onAddCloneAgent: handleAddCloneAgent,
       onToggleWorkspaceCollapse: handleToggleWorkspaceCollapse,
       onSelectThread: handleSelectThread,
+      onClearActiveThread: handleClearActiveThread,
       onProviderContinuationTargetReady: handleProviderContinuationTargetReady,
       onSelectHomeWorkspace: handleSelectHomeWorkspace,
       onDeleteThread: handleDeleteThread,

@@ -43,7 +43,7 @@ type UseLayoutTopbarSessionTabsInput = {
   threadsByWorkspace: Record<string, ThreadSummary[]>;
   t: (key: string) => string;
   onSelectThread: (workspaceId: string, threadId: string) => void;
-  onSelectWorkspace: (workspaceId: string) => void;
+  onClearActiveThread: (workspaceId: string) => void;
 };
 
 type UseLayoutTopbarSessionTabsResult = {
@@ -167,7 +167,7 @@ export function useLayoutTopbarSessionTabs(
   const selectedWorkspaceId = input.activeWorkspaceId;
   const selectedThreadId = input.activeThreadId;
   const selectThread = input.onSelectThread;
-  const selectWorkspace = input.onSelectWorkspace;
+  const clearActiveThread = input.onClearActiveThread;
   // 解构为裸标识符供 useMemo/useCallback deps 使用：eslint-plugin-react-hooks v4
   // 对 input.x 形式的成员依赖会误报 missing 'input'，裸标识符可精确匹配。
   const threadStatusById = input.threadStatusById;
@@ -257,10 +257,7 @@ export function useLayoutTopbarSessionTabs(
   );
 
   const applyTopbarWindowMutation = useCallback(
-    (
-      mutate: (windows: TopbarSessionWindows) => TopbarSessionWindows,
-      fallbackWorkspaceId: string,
-    ) => {
+    (mutate: (windows: TopbarSessionWindows) => TopbarSessionWindows) => {
       const previousWindows = topbarSessionWindowsRef.current;
       const nextWindows = mutate(previousWindows);
       if (nextWindows === previousWindows) {
@@ -314,9 +311,13 @@ export function useLayoutTopbarSessionTabs(
         selectThread(fallbackTab.workspaceId, fallbackTab.threadId);
         return;
       }
-      selectWorkspace(activeWorkspaceId || fallbackWorkspaceId);
+      // 无剩余 tab：清空会话选择落空画布（方案 A）。禁止走 selectWorkspace——
+      // 它会经 planWorkspaceNavigationThread 恢复 workspace last thread（就是刚被
+      // 关闭的会话），导致画布幽灵内容 + 已关闭 tab 复活。dismissed key 保留，
+      // 之后从侧栏重新激活该会话时 tab 自然回归。
+      clearActiveThread(activeWorkspaceId);
     },
-    [selectedThreadId, selectedWorkspaceId, selectThread, selectWorkspace],
+    [selectedThreadId, selectedWorkspaceId, selectThread, clearActiveThread],
   );
 
   useEffect(() => {
@@ -331,14 +332,12 @@ export function useLayoutTopbarSessionTabs(
       if (!input.activeWorkspaceId || !input.activeThreadId) {
         return;
       }
-      applyTopbarWindowMutation(
-        (windows) =>
-          dismissTopbarSessionTab(
-            windows,
-            input.activeWorkspaceId ?? "",
-            input.activeThreadId ?? "",
-          ),
-        input.activeWorkspaceId,
+      applyTopbarWindowMutation((windows) =>
+        dismissTopbarSessionTab(
+          windows,
+          input.activeWorkspaceId ?? "",
+          input.activeThreadId ?? "",
+        ),
       );
     };
 
@@ -382,9 +381,8 @@ export function useLayoutTopbarSessionTabs(
             id: "close-tab",
             label: t("threads.closeTab"),
             onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
-                workspaceId,
+              applyTopbarWindowMutation((windows) =>
+                dismissTopbarSessionTab(windows, workspaceId, threadId),
               );
             },
           },
@@ -394,9 +392,8 @@ export function useLayoutTopbarSessionTabs(
             label: t("threads.closeLeftTabs"),
             disabled: !hasLeftTabs,
             onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
-                workspaceId,
+              applyTopbarWindowMutation((windows) =>
+                dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
               );
             },
           },
@@ -406,9 +403,8 @@ export function useLayoutTopbarSessionTabs(
             label: t("threads.closeRightTabs"),
             disabled: !hasRightTabs,
             onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
-                workspaceId,
+              applyTopbarWindowMutation((windows) =>
+                dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
               );
             },
           },
@@ -417,9 +413,8 @@ export function useLayoutTopbarSessionTabs(
             id: "close-all-tabs",
             label: t("threads.closeAllTabs"),
             onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissAllTopbarSessionTabs(windows),
-                workspaceId,
+              applyTopbarWindowMutation((windows) =>
+                dismissAllTopbarSessionTabs(windows),
               );
             },
           },
@@ -429,9 +424,8 @@ export function useLayoutTopbarSessionTabs(
             label: t("threads.closeCompletedTabs"),
             disabled: !hasCompletedTabs,
             onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissCompletedTopbarSessionTabs(windows, threadStatusById),
-                workspaceId,
+              applyTopbarWindowMutation((windows) =>
+                dismissCompletedTopbarSessionTabs(windows, threadStatusById),
               );
             },
           },
@@ -465,9 +459,8 @@ export function useLayoutTopbarSessionTabs(
           selectThread(workspaceId, threadId);
         }}
         onCloseThread={(workspaceId, threadId) => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
-            workspaceId,
+          applyTopbarWindowMutation((windows) =>
+            dismissTopbarSessionTab(windows, workspaceId, threadId),
           );
         }}
         onShowTabMenu={showTopbarTabMenu}

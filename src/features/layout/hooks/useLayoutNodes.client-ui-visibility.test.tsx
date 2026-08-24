@@ -625,6 +625,7 @@ function createLayoutOptions(
     onAddCloneAgent: asyncNoop,
     onToggleWorkspaceCollapse: noop,
     onSelectThread: noop,
+    onClearActiveThread: noop,
     onDeleteThread: noop,
     onArchiveThread: noop,
     onSyncThread: noop,
