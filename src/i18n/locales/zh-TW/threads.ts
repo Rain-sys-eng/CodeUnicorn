@@ -12,6 +12,7 @@ const threads = {
     "runtimeCompleted": "已完成",
     "archive": "封存",
     "delete": "刪除",
+    "openSessionManagement": "在會話管理中批量刪除…",
     "deleteThreadTitle": "刪除對話",
     "deleteThreadMessage": "確定要刪除「{{name}}」嗎？",
     "deleteThreadHint": "此操作無法復原，且本機工作階段紀錄將被移除。",

@@ -12,6 +12,7 @@ const threads = {
     "runtimeCompleted": "완료",
     "archive": "보관",
     "delete": "삭제",
+    "openSessionManagement": "세션 관리에서 일괄 삭제…",
     "deleteThreadTitle": "대화 삭제",
     "deleteThreadMessage": "\"{{name}}\"을(를) 삭제하시겠습니까?",
     "deleteThreadHint": "이 작업은 되돌릴 수 없으며 로컬 세션 기록이 제거됩니다.",

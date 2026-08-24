@@ -809,6 +809,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           onCancelSwitchAccount={options.onCancelSwitchAccount}
           accountSwitching={options.accountSwitching}
           onOpenSettings={options.onOpenSettings}
+          onOpenSessionManagement={options.onOpenSessionManagement}
           onOpenDebug={options.onOpenDebug}
           showDebugButton={options.showDebugButton}
           onAddWorkspace={options.onAddWorkspace}
@@ -953,6 +954,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       options.onOpenQuickSwitcher,
       options.onOpenReleaseNotes,
       options.onOpenSettings,
+      options.onOpenSessionManagement,
       options.onOpenSpecHub,
       options.onOpenWorkspaceHome,
       options.onProviderContinuationTargetReady,

@@ -56,6 +56,11 @@ import { resolveMergedThreadCreatedAt } from "../utils/threadSummarySort";
 import { clearLiveAssistantText } from "../utils/liveAssistantTextChannel";
 import { clearLiveItemDelta } from "../utils/liveItemDeltaChannel";
 import { resolveCodexSubagentIdentity } from "../utils/codexSubagentIdentity";
+import {
+  isSessionDeleteSuccessCode,
+  requestSessionDelete,
+} from "../utils/sessionDeleteV2";
+import type { SessionDeleteV2Result } from "../../../services/tauri/sessionManagement";
 import { saveThreadActivity } from "../utils/threadStorage";
 import {
   collectKnownCodexThreadIds,
@@ -2919,6 +2924,23 @@ export function useThreadActions({
     threadsByWorkspace,
   ]);
 
+  // v2 删除（Index First + marker-first）：批量恒为一次 IPC，
+  // 成功项同步清理 lastGood 缓存快照。乐观摘行与失败回滚在 useThreads 层。
+  const deleteThreadForWorkspaceV2 = useMemo(() => {
+    return async (
+      workspaceId: string,
+      threadIds: string[],
+    ): Promise<SessionDeleteV2Result[]> => {
+      const results = await requestSessionDelete(workspaceId, threadIds);
+      for (const result of results) {
+        if (result.ok || isSessionDeleteSuccessCode(result.code)) {
+          removeThreadFromCachedSummaries(workspaceId, result.sessionId);
+        }
+      }
+      return results;
+    };
+  }, [removeThreadFromCachedSummaries]);
+
   return {
     startThreadForWorkspace,
     finalizeCodexPendingThread,
@@ -2934,6 +2956,7 @@ export function useThreadActions({
     archiveThread,
     archiveClaudeThread,
     deleteThreadForWorkspace,
+    deleteThreadForWorkspaceV2,
     renameThreadTitleMapping,
     setThreadHistoryLoading,
     setThreadHistoryLoadingProgress,

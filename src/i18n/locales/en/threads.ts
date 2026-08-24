@@ -9,6 +9,7 @@ const threads = {
     runtimeCompleted: "Completed",
     archive: "Archive",
     delete: "Delete",
+    openSessionManagement: "Bulk Delete in Session Management…",
     deleteThreadTitle: "Delete conversation",
     deleteThreadMessage: 'Are you sure you want to delete "{{name}}"?',
     deleteThreadHint:

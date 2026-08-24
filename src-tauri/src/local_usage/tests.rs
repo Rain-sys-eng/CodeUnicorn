@@ -2488,3 +2488,52 @@ fn path_matches_workspace_handles_unc_extended_prefix() {
         workspace
     ));
 }
+
+#[test]
+fn delete_codex_session_file_at_removes_file_and_is_idempotent() {
+    let codex_home = std::env::temp_dir().join(format!("codex-home-{}", Uuid::new_v4()));
+    let sessions_root = codex_home.join("sessions");
+    let session_path = write_named_session_file(
+        &sessions_root,
+        "2026-08-24",
+        "rollout-2026-08-24T10-00-00-session-beta",
+        &["{}".to_string()],
+    );
+
+    // 第一次删除：文件被移除
+    let deleted = delete_codex_session_file_at(&session_path).expect("delete");
+    assert!(deleted);
+    assert!(!session_path.exists());
+
+    // 第二次删除：NotFound → Ok(false)（ALREADY_MISSING 幂等语义）
+    let deleted = delete_codex_session_file_at(&session_path).expect("delete again");
+    assert!(!deleted);
+}
+
+#[test]
+fn locate_codex_session_file_fast_matches_filename_without_reading_content() {
+    let codex_home = std::env::temp_dir().join(format!("codex-home-{}", Uuid::new_v4()));
+    let sessions_root = codex_home.join("sessions");
+    // 目标文件：rollout 后缀内嵌 session id
+    let target = write_named_session_file(
+        &sessions_root,
+        "2026-08-24",
+        "rollout-2026-08-24T11-00-00-session-gamma",
+        &["not-even-json".to_string()],
+    );
+    // 干扰文件：不同 session id
+    write_named_session_file(
+        &sessions_root,
+        "2026-08-24",
+        "rollout-2026-08-24T11-01-00-session-other",
+        &["{}".to_string()],
+    );
+
+    let located = locate_codex_session_file_fast("session-gamma", &[sessions_root.clone()]);
+    assert_eq!(located, Some(target));
+
+    // 未命中返回 None（ghost / already-missing 判定依据）
+    assert!(locate_codex_session_file_fast("session-missing", &[sessions_root.clone()]).is_none());
+    // 非法输入防御
+    assert!(locate_codex_session_file_fast("../escape", &[sessions_root]).is_none());
+}

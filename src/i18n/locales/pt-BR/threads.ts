@@ -12,6 +12,7 @@ const threads = {
     "runtimeCompleted": "Concluído",
     "archive": "Arquivar",
     "delete": "Excluir",
+    "openSessionManagement": "Exclusão em massa no Gerenciamento de sessões…",
     "deleteThreadTitle": "Excluir conversa",
     "deleteThreadMessage": "Tem certeza de que deseja excluir \"{{name}}\"?",
     "deleteThreadHint": "Isso não pode ser desfeito e o registro local da sessão será removido.",

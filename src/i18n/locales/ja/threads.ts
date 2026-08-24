@@ -12,6 +12,7 @@ const threads = {
     "runtimeCompleted": "完了",
     "archive": "アーカイブ",
     "delete": "削除",
+    "openSessionManagement": "セッション管理で一括削除…",
     "deleteThreadTitle": "会話を削除",
     "deleteThreadMessage": "「{{name}}」を削除してもよろしいですか？",
     "deleteThreadHint": "この操作は元に戻せず、ローカルのセッション記録が削除されます。",

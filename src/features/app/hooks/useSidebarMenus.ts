@@ -291,6 +291,7 @@ type SidebarMenuHandlers = {
   ) => Promise<void> | void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
   onArchiveThread: (workspaceId: string, threadId: string) => void;
+  onOpenSessionManagement?: () => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
   onPinThread: (workspaceId: string, threadId: string) => void;
   onUnpinThread: (workspaceId: string, threadId: string) => void;
@@ -390,6 +391,7 @@ export function useSidebarMenus({
   onAssignNewSessionToFolder,
   onDeleteThread,
   onArchiveThread,
+  onOpenSessionManagement,
   onSyncThread,
   onPinThread,
   onUnpinThread,
@@ -2366,6 +2368,15 @@ export function useSidebarMenus({
         tone: "danger",
         onSelect: () => onDeleteThread(workspaceId, threadId),
       });
+      if (onOpenSessionManagement) {
+        // 多条删除引导：跳转设置 → 项目管理 → 会话管理（批量治理入口）
+        items.push({
+          type: "item",
+          id: "open-session-management",
+          label: t("threads.openSessionManagement"),
+          onSelect: () => onOpenSessionManagement(),
+        });
+      }
       const position = clampRendererContextMenuPosition(event.clientX, event.clientY);
       setSidebarContextMenuState({
         ...position,
@@ -2380,6 +2391,7 @@ export function useSidebarMenus({
       isThreadAutoNaming,
       onArchiveThread,
       onDeleteThread,
+      onOpenSessionManagement,
       onOpenClaudeTui,
       onPinThread,
       onAutoNameThread,

@@ -1193,6 +1193,10 @@ export function useAppShellLayoutNodesSection(
     });
   });
   const handleOpenSettings = useEventCallback(() => openSettings());
+  // 右键菜单「删除」旁的批量删除引导：直达 项目管理 → 会话管理
+  const handleOpenSessionManagement = useEventCallback(() =>
+    openSettings("project-management", "project-sessions"),
+  );
   const handleOpenShortcutsSettings = useEventCallback(() =>
     openSettings("shortcuts"),
   );
@@ -1989,6 +1993,7 @@ export function useAppShellLayoutNodesSection(
     },
     chrome: {
       onOpenSettings: handleOpenSettings,
+      onOpenSessionManagement: handleOpenSessionManagement,
       onOpenShortcutsSettings: handleOpenShortcutsSettings,
       onOpenAgentSettings: handleOpenAgentSettings,
       onOpenPromptSettings: handleOpenPromptSettings,

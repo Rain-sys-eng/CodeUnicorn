@@ -177,6 +177,7 @@ type SidebarProps = {
   onCancelSwitchAccount: () => void;
   accountSwitching: boolean;
   onOpenSettings: () => void;
+  onOpenSessionManagement?: () => void;
   onOpenDebug: () => void;
   showDebugButton?: boolean;
   showTerminalButton?: boolean;
@@ -322,6 +323,7 @@ function SidebarImpl({
   onCancelSwitchAccount: _onCancelSwitchAccount,
   accountSwitching: _accountSwitching,
   onOpenSettings,
+  onOpenSessionManagement,
   onOpenDebug: _onOpenDebug,
   showTerminalButton: _showTerminalButton,
   isTerminalOpen: _isTerminalOpen,
@@ -1085,6 +1087,7 @@ function SidebarImpl({
       onAssignNewSessionToFolder: assignNewSessionToFolder,
       onDeleteThread,
       onArchiveThread,
+      onOpenSessionManagement,
       onSyncThread,
       onPinThread: pinThread,
       onUnpinThread: unpinThread,

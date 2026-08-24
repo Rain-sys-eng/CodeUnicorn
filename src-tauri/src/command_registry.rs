@@ -457,6 +457,7 @@ pub(crate) fn invoke_handler(
         crate::session_management::archive_workspace_sessions,
         crate::session_management::unarchive_workspace_sessions,
         crate::session_management::delete_workspace_sessions,
+        crate::session_delete_v2::delete_workspace_sessions_v2,
         crate::session_management::list_workspace_session_folders,
         crate::session_management::create_workspace_session_folder,
         crate::session_management::rename_workspace_session_folder,

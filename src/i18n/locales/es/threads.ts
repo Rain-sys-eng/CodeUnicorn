@@ -12,6 +12,7 @@ const threads = {
     "runtimeCompleted": "Completado",
     "archive": "Archivar",
     "delete": "Eliminar",
+    "openSessionManagement": "Eliminación masiva en Gestión de sesiones…",
     "deleteThreadTitle": "Eliminar conversación",
     "deleteThreadMessage": "¿Seguro que quieres eliminar \"{{name}}\"?",
     "deleteThreadHint": "Esto no se puede deshacer y se eliminará el registro local de la sesión.",

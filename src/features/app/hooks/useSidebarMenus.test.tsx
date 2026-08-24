@@ -67,6 +67,7 @@ vi.mock("react-i18next", () => ({
         "threads.pin": "Pin",
         "threads.unpin": "Unpin",
         "threads.delete": "Delete",
+        "threads.openSessionManagement": "Bulk Delete in Session Management…",
         "threads.continuationSourceUnavailable": "来源不可用",
         "sidebar.sessionActionsGroup": "New session",
         "sidebar.newSharedSession": "Shared Session",
@@ -2724,5 +2725,81 @@ describe("useSidebarMenus", () => {
       "new-session-grok",
       "new-session-dsh",
     ]);
+  });
+});
+
+describe("thread context menu session management link", () => {
+  it("删除项后追加了「会话管理批量删除」入口并触发跳转", async () => {
+    const handlers = createHandlers();
+    const onOpenSessionManagement = vi.fn();
+    const { result } = renderHook(() =>
+      useSidebarMenus({ ...handlers, onOpenSessionManagement }),
+    );
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "thread-1",
+        true,
+        undefined,
+        [],
+        null,
+        false,
+      );
+    });
+
+    const items = result.current.sidebarContextMenuState?.items ?? [];
+    const ids = items.map((item) => (item.type === "separator" ? "---" : item.id));
+    const deleteIndex = ids.indexOf("delete");
+    const linkIndex = ids.indexOf("open-session-management");
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    expect(linkIndex).toBe(deleteIndex + 1);
+
+    const linkItem = items.find(
+      (item): item is Extract<typeof item, { type: "item" }> =>
+        item.type === "item" && item.id === "open-session-management",
+    );
+    expect(linkItem?.label).toBe("Bulk Delete in Session Management…");
+    await act(async () => {
+      await linkItem?.onSelect();
+    });
+    expect(onOpenSessionManagement).toHaveBeenCalledTimes(1);
+  });
+
+  it("未注入 onOpenSessionManagement 时不显示该入口", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "thread-1",
+        true,
+        undefined,
+        [],
+        null,
+        false,
+      );
+    });
+
+    const ids = (result.current.sidebarContextMenuState?.items ?? []).map(
+      (item) => (item.type === "separator" ? "---" : item.id),
+    );
+    expect(ids).toContain("delete");
+    expect(ids).not.toContain("open-session-management");
   });
 });

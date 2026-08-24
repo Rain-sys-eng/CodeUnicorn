@@ -547,7 +547,7 @@ pub(crate) fn invalidate_source_freshness(
     Ok(())
 }
 
-const INDEX_LIST_ENGINES: &[&str] = &[
+pub(crate) const INDEX_LIST_ENGINES: &[&str] = &[
     "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
 ];
 
@@ -1099,6 +1099,56 @@ pub(crate) fn tombstone_engine_sessions(
             .map_err(|error| error.to_string())?;
     }
     Ok(updated)
+}
+
+/// Delete-v2 lookup row：与 `SessionIndexRow` 配对返回 tombstone 状态，
+/// 让 orchestrator 区分「可删除」与「重试已标记项」（marker-first 语义下
+/// tombstoned 行仍然是合法删除目标——物理删除可能尚未完成）。
+#[derive(Debug, Clone)]
+pub(crate) struct SessionIndexDeleteLookup {
+    pub(crate) row: SessionIndexRow,
+    pub(crate) tombstoned_at: Option<i64>,
+}
+
+/// Index-first 定位删除目标（v2 删除链路 Resolve 阶段）。
+/// full/bare 双匹配：`claude:abc` 命中 `session_id = 'abc'`（engine 列匹配）
+/// 或 `session_id = 'claude:abc'`；裸 id 反向同理。返回所有候选（含
+/// tombstoned 行），由调用方按 engine / workspace 优选，绝不做全表扫描。
+pub(crate) fn lookup_rows_for_delete(
+    connection: &Connection,
+    full_id: &str,
+) -> Result<Vec<SessionIndexDeleteLookup>, String> {
+    let full = full_id.trim();
+    if full.is_empty() {
+        return Ok(Vec::new());
+    }
+    let bare = full
+        .split_once(':')
+        .map(|(_, rest)| rest.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(full);
+    let mut statement = connection
+        .prepare(
+            "SELECT engine, session_id, title, native_title, updated_at, created_at,
+                    cwd, workspace_path, physical_path, parent_session_id, size_bytes,
+                    provider_profile_id, provider_profile_name, tombstoned_at
+             FROM session_index
+             WHERE session_id = ?1
+                OR session_id = ?2
+                OR (engine || ':' || session_id) = ?1",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![full, bare], |row| {
+            Ok(SessionIndexDeleteLookup {
+                row: map_row(row)?,
+                tombstoned_at: row.get(13)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(rows)
 }
 
 /// Hard-delete Index rows that should never have been imported (empty /
@@ -1737,6 +1787,46 @@ mod tests {
             listed.is_empty(),
             "bare-id tombstone markers must cover every known engine"
         );
+    }
+
+    #[test]
+    fn lookup_rows_for_delete_matches_full_bare_and_tombstoned() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        upsert_rows(
+            &connection,
+            &[
+                index_row("claude", "abc-1", 300),
+                index_row("codex", "uuid-9", 200),
+            ],
+        )
+        .expect("upsert");
+
+        // full id 命中 bare 行
+        let hits = lookup_rows_for_delete(&connection, "claude:abc-1").expect("lookup");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].row.engine, "claude");
+        assert_eq!(hits[0].row.session_id, "abc-1");
+        assert!(hits[0].tombstoned_at.is_none());
+
+        // 裸 id 直命中
+        let hits = lookup_rows_for_delete(&connection, "uuid-9").expect("lookup");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].row.engine, "codex");
+
+        // tombstoned 行也返回（marker-first 重试路径）
+        tombstone_session_ids(&connection, &["claude:abc-1".into()]).expect("tombstone");
+        let hits = lookup_rows_for_delete(&connection, "claude:abc-1").expect("lookup");
+        assert!(
+            hits.iter().any(|hit| hit.tombstoned_at.is_some()),
+            "tombstoned rows must remain resolvable for delete retry"
+        );
+
+        // 未命中返回空（ghost 判定依据）
+        let hits = lookup_rows_for_delete(&connection, "gemini:nope").expect("lookup");
+        assert!(hits.is_empty());
+        let hits = lookup_rows_for_delete(&connection, "  ").expect("lookup");
+        assert!(hits.is_empty());
     }
 
     #[test]

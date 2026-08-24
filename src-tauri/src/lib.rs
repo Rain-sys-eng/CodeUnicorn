@@ -164,6 +164,7 @@ mod renderer_stability;
 mod rules;
 mod runtime;
 mod runtime_log;
+mod session_delete_v2;
 mod session_index;
 mod session_management;
 mod settings;

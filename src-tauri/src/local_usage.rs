@@ -23,7 +23,8 @@ pub(crate) use codex_rewind::commit_codex_rewind_for_workspace;
 #[path = "local_usage/session_delete.rs"]
 mod session_delete;
 pub(crate) use session_delete::{
-    delete_codex_session_for_workspace, delete_codex_sessions_for_workspace,
+    delete_codex_session_file_at, delete_codex_session_for_workspace,
+    delete_codex_sessions_for_workspace, locate_codex_session_file_fast,
 };
 
 #[derive(Default, Clone, Copy)]

@@ -9,6 +9,7 @@ const threads = {
     runtimeCompleted: "已完成",
     archive: "归档",
     delete: "删除",
+    openSessionManagement: "在会话管理中批量删除…",
     deleteThreadTitle: "删除会话",
     deleteThreadMessage: "确定要删除“{{name}}”吗？",
     deleteThreadHint: "删除后将无法恢复，该会话的本地记录也会一并移除。",

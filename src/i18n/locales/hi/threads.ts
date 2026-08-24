@@ -12,6 +12,7 @@ const threads = {
     "runtimeCompleted": "पूर्ण",
     "archive": "आर्काइव करें",
     "delete": "हटाएं",
+    "openSessionManagement": "सत्र प्रबंधन में सामूहिक हटाना…",
     "deleteThreadTitle": "बातचीत हटाएं",
     "deleteThreadMessage": "क्या आप वाकई \"{{name}}\" को हटाना चाहते हैं?",
     "deleteThreadHint": "इसे पूर्ववत नहीं किया जा सकता और स्थानीय सत्र रिकॉर्ड हटा दिया जाएगा।",

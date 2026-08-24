@@ -368,6 +368,31 @@ export async function deleteWorkspaceSessions(
   );
 }
 
+// ---- Session delete v2（Index First + marker-first，见
+// docs/plans/2026-08-24-session-delete-architecture-redesign.md）----
+
+export interface SessionDeleteV2Target {
+  threadId: string;
+  engine?: string;
+  nativeSessionId?: string;
+}
+
+export interface SessionDeleteV2Result {
+  sessionId: string;
+  ok: boolean;
+  code: string;
+  error?: string | null;
+}
+
+export async function deleteWorkspaceSessionsV2(
+  workspaceId: string,
+  targets: SessionDeleteV2Target[],
+): Promise<{ requestId: string }> {
+  return invoke<{ requestId: string }>("delete_workspace_sessions_v2", {
+    request: { workspaceId, targets },
+  });
+}
+
 export async function listWorkspaceSessionFolders(
   workspaceId: string,
 ): Promise<WorkspaceSessionFolderTree> {

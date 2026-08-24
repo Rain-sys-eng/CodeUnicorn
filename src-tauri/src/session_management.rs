@@ -1352,7 +1352,7 @@ fn replace_batch_results_for_targets(
     }
 }
 
-fn should_settle_delete_as_success(error: &str) -> bool {
+pub(crate) fn should_settle_delete_as_success(error: &str) -> bool {
     let normalized = error.trim().to_ascii_lowercase();
     if normalized.contains("invalid claude session id")
         || normalized.contains("invalid gemini session id")
@@ -1365,7 +1365,7 @@ fn should_settle_delete_as_success(error: &str) -> bool {
         || normalized.contains("thread not found")
 }
 
-fn normalize_workspace_id(workspace_id: &str) -> Result<String, String> {
+pub(crate) fn normalize_workspace_id(workspace_id: &str) -> Result<String, String> {
     let normalized = workspace_id.trim();
     if normalized.is_empty() {
         return Err("workspace_id is required".to_string());
@@ -1852,7 +1852,7 @@ fn read_catalog_metadata_from_path(
     Ok(metadata)
 }
 
-fn with_catalog_metadata_mutation<T>(
+pub(crate) fn with_catalog_metadata_mutation<T>(
     storage_path: &Path,
     workspace_id: &str,
     mutation: impl FnOnce(&mut WorkspaceSessionCatalogMetadata) -> Result<T, String>,
@@ -2233,7 +2233,7 @@ fn catalog_metadata_lookup_keys_for_entry(entry: &WorkspaceSessionCatalogEntry) 
     keys
 }
 
-fn catalog_metadata_lookup_keys_for_session(
+pub(crate) fn catalog_metadata_lookup_keys_for_session(
     workspace_id: &str,
     session_id: &str,
     engine: &str,

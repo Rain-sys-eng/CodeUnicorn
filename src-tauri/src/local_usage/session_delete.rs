@@ -296,6 +296,46 @@ fn delete_codex_session_files_batch(
     Ok(results)
 }
 
+/// v2 删除链路：按 index 已解析的 physical_path 直接删除 codex 会话文件。
+/// 返回 Ok(true) 表示有文件被删除；文件不存在返回 Ok(false)（幂等 ALREADY_MISSING）。
+/// 禁止回退到全量收集 + 逐文件解析的旧路径。
+pub(crate) fn delete_codex_session_file_at(path: &Path) -> Result<bool, String> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!(
+            "failed to delete codex session file {}: {}",
+            path.display(),
+            error
+        )),
+    }
+}
+
+/// v2 删除链路：codex 会话文件名快速定位（只读目录项，不打开文件解析内容）。
+/// rollout 文件名内嵌 session id 后缀（rollout-<ts>-<uuid>.jsonl），文件名匹配即足够。
+pub(crate) fn locate_codex_session_file_fast(
+    session_id: &str,
+    sessions_roots: &[PathBuf],
+) -> Option<PathBuf> {
+    let normalized = session_id.trim();
+    if normalized.is_empty() || is_invalid_session_path_segment(normalized) {
+        return None;
+    }
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+    for root in sessions_roots {
+        collect_jsonl_files(root, &mut files, &mut seen);
+    }
+    let exact = format!("{normalized}.jsonl");
+    let suffix = format!("-{normalized}.jsonl");
+    files.into_iter().find(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name == exact || name.ends_with(&suffix))
+            .unwrap_or(false)
+    })
+}
+
 pub(crate) fn codex_session_file_matches_session_id(
     path: &Path,
     session_id: &str,

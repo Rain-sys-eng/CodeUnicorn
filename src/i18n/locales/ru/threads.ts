@@ -12,6 +12,7 @@ const threads = {
     "runtimeCompleted": "Завершено",
     "archive": "Архивировать",
     "delete": "Удалить",
+    "openSessionManagement": "Массовое удаление в Управлении сеансами…",
     "deleteThreadTitle": "Удалить беседу",
     "deleteThreadMessage": "Вы уверены, что хотите удалить «{{name}}»?",
     "deleteThreadHint": "Это нельзя отменить, локальная запись сессии будет удалена.",

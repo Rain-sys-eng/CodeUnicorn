@@ -11,7 +11,7 @@ status: active
 
 ## Draft / pending confirmation
 
-- [幕布历史顶部丢失 + 消息顺序/用户气泡连堆](./2026-08-18-conversation-curtain-history-missing-and-order.md) — P0 Bug A 已落地（`fix-claude-history-disk-window-load-more`，待 T5 真机手滑）；P1 Bug B 另开 `fix-canvas-user-bubble-stack-and-merge-order`。
+- [Session Delete 架构重设计（v2）](./2026-08-24-session-delete-architecture-redesign.md) — 删除链路整体重写：index-first O(1) 定位 + Resolve/Execute/Settle 三段式 + 前端乐观删除；旧 `delete_workspace_sessions` 全量扫描方案废弃。**待确认 + OpenSpec 化**。 — P0 Bug A 已落地（`fix-claude-history-disk-window-load-more`，待 T5 真机手滑）；P1 Bug B 另开 `fix-canvas-user-bubble-stack-and-merge-order`。
 - [0.8.9 → 0.9 通读盘点](./2026-08-15-port-0.8.9-capabilities-to-0.9.md) — 判定表；验收逐条见 [acceptance matrix](./2026-08-16-0.8.9-to-0.9-acceptance-matrix.md)。
 - [Shared Session recovery exit closure](./2026-08-04-shared-session-recovery-exit-closure.md) — P0：恢复出口闭环（跨平台）；**尚未** OpenSpec 化、未改代码。
 
