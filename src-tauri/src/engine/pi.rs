@@ -583,9 +583,21 @@ fn is_valid_pi_session_id_arg(value: &str) -> bool {
 }
 
 fn resolve_thinking_flag(effort: Option<&str>) -> Option<String> {
+    pick_thinking_level(effort, None)
+}
+
+/// Prefer the model-specific allowlist from `get_available_thinking_levels`.
+/// Fall back to the static CLI list when the resident has not reported one.
+fn pick_thinking_level(effort: Option<&str>, available: Option<&[String]>) -> Option<String> {
     let normalized = effort?.trim().to_ascii_lowercase();
     if normalized.is_empty() {
         return None;
+    }
+    if let Some(levels) = available.filter(|levels| !levels.is_empty()) {
+        return levels
+            .iter()
+            .find(|level| level.eq_ignore_ascii_case(&normalized))
+            .cloned();
     }
     THINKING_LEVELS
         .iter()
@@ -1117,12 +1129,25 @@ impl PiSession {
         .map_err(PiRpcSendError::Failed)?;
         let images = encode_images_for_rpc(Some(expanded.images.as_slice()), &self.workspace_path)
             .map_err(PiRpcSendError::Failed)?;
-        if let Some(thinking) = resolve_thinking_flag(params.effort.as_deref()) {
+        let available = client.available_thinking_levels().await;
+        if let Some(thinking) = pick_thinking_level(params.effort.as_deref(), available.as_deref())
+        {
             // Best effort: level support is model-dependent; failure must not
             // block the prompt itself.
             if let Err(error) = client.set_thinking_level(&thinking).await {
                 log::warn!("[pi/rpc] set_thinking_level({thinking}) failed: {error}");
             }
+        } else if let Some(requested) = params
+            .effort
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            log::info!(
+                "[pi/rpc] skip set_thinking_level({requested}); not in model allowlist {:?} (workspace={})",
+                available,
+                self.workspace_id
+            );
         }
 
         let (tx, rx) = oneshot::channel();
@@ -2377,6 +2402,23 @@ mod tests {
             Some("high".to_string())
         );
         assert_eq!(resolve_thinking_flag(Some("nope")), None);
+    }
+
+    #[test]
+    fn pick_thinking_level_uses_model_allowlist() {
+        let available = vec!["off".to_string(), "high".to_string()];
+        assert_eq!(
+            pick_thinking_level(Some("high"), Some(available.as_slice())),
+            Some("high".to_string())
+        );
+        assert_eq!(
+            pick_thinking_level(Some("xhigh"), Some(available.as_slice())),
+            None
+        );
+        assert_eq!(
+            pick_thinking_level(Some("xhigh"), None),
+            Some("xhigh".to_string())
+        );
     }
 
     #[test]

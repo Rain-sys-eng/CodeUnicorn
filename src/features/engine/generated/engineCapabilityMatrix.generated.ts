@@ -135,7 +135,7 @@ export const GENERATED_ENGINE_CAPABILITY_MATRIX: Readonly<
   "pi": {
     "streaming.text": "supported",
     "streaming.reasoning": "supported",
-    "streaming.tool-output": "supported",
+    "streaming.tool-output": "unsupported",
     "tool.use": "supported",
     "tool.mcp": "unsupported",
     "reasoning.effort": "supported",

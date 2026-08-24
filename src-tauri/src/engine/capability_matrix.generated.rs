@@ -131,7 +131,7 @@ pub fn spec_capability_state(engine_type: EngineType, capability: &str) -> &'sta
         EngineType::Pi => match capability {
             "streaming.text" => "supported",
             "streaming.reasoning" => "supported",
-            "streaming.tool-output" => "supported",
+            "streaming.tool-output" => "unsupported",
             "tool.use" => "supported",
             "tool.mcp" => "unsupported",
             "reasoning.effort" => "supported",

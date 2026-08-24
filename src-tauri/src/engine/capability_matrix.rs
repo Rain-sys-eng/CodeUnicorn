@@ -36,7 +36,14 @@ pub fn capability_state(engine_type: EngineType, capability: &str) -> &'static s
     match capability {
         "streaming.text" => bool_state(features.streaming),
         "streaming.reasoning" => bool_state(features.streaming),
-        "streaming.tool-output" => bool_state(features.streaming && features.tools_control),
+        // PI has tool start/end cards but does not stream tool_execution_update.
+        "streaming.tool-output" => {
+            if matches!(engine_type, EngineType::Pi) {
+                "unsupported"
+            } else {
+                bool_state(features.streaming && features.tools_control)
+            }
+        }
         "tool.use" => bool_state(features.tools_control),
         "tool.mcp" => bool_state(features.mcp),
         "reasoning.effort" => bool_state(features.reasoning_effort),
@@ -142,6 +149,22 @@ mod tests {
         );
         assert_eq!(
             capability_state(EngineType::Pi, "reasoning.effort"),
+            "supported"
+        );
+    }
+
+    #[test]
+    fn pi_does_not_claim_live_tool_output() {
+        assert_eq!(
+            spec_capability_state(EngineType::Pi, "streaming.tool-output"),
+            "unsupported"
+        );
+        assert_eq!(
+            capability_state(EngineType::Pi, "streaming.tool-output"),
+            "unsupported"
+        );
+        assert_eq!(
+            spec_capability_state(EngineType::Pi, "tool.use"),
             "supported"
         );
     }

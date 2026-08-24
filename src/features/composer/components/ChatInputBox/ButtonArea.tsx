@@ -556,13 +556,15 @@ export const ButtonArea = ({
         ) : null}
 
         <div className="button-area-inline-controls">
-          <ModeSelect
-            value={permissionMode}
-            onChange={onModeSelect ?? NOOP_MODE}
-            provider={currentProvider}
-            selectedCollaborationModeId={selectedCollaborationModeId}
-            onSelectCollaborationMode={onSelectCollaborationMode}
-          />
+          {currentProvider !== 'pi' ? (
+            <ModeSelect
+              value={permissionMode}
+              onChange={onModeSelect ?? NOOP_MODE}
+              provider={currentProvider}
+              selectedCollaborationModeId={selectedCollaborationModeId}
+              onSelectCollaborationMode={onSelectCollaborationMode}
+            />
+          ) : null}
           {currentProvider === 'dsh' &&
           (onDshAgentPresetSelect || dshAgentPresetLocked) ? (
             <DshAgentPresetSelect

@@ -129,7 +129,7 @@
     "pi": {
       "streaming.text": "supported",
       "streaming.reasoning": "supported",
-      "streaming.tool-output": "supported",
+      "streaming.tool-output": "unsupported",
       "tool.use": "supported",
       "tool.mcp": "unsupported",
       "reasoning.effort": "supported",
