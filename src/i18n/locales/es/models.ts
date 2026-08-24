@@ -21,6 +21,8 @@ const models = {
     "emptyChannelModelsHint": "Haga clic en «Añadir modelo» a continuación para agregar un modelo personalizado",
     "emptyDshHostHint": "Configura los modelos en DeepSeek Harness. Haz clic aquí para abrir la configuración.",
     "refreshConfigFailed": "Error al actualizar: {{message}}",
+    "searchModelsPlaceholder": "Buscar modelos…",
+    "noMatchingModels": "No hay modelos que coincidan",
         "claude": {
       "fable5": {
         "label": "Fable 5",

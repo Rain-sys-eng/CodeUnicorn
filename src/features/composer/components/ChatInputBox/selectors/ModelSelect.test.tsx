@@ -555,6 +555,81 @@ describe("ModelSelect", () => {
     expect(onAddModel).toHaveBeenCalledTimes(1);
   });
 
+  it("filters submenu models by search query", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onChange = vi.fn();
+
+    render(
+      <ModelSelect
+        value="claude-opus-4-8"
+        currentProvider="claude"
+        triggerVariant="readiness"
+        onChange={onChange}
+        models={[
+          { id: "claude-opus-4-8", label: "Opus 4.8" },
+          { id: "claude-sonnet-5", label: "Sonnet 5" },
+        ]}
+        modelGroups={[
+          {
+            providerId: "claude",
+            providerLabel: "Claude Code",
+            enabled: true,
+            models: [
+              { id: "claude-opus-4-8", label: "Opus 4.8" },
+              { id: "claude-sonnet-5", label: "Sonnet 5" },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "chat.currentModel:Opus 4.8" }));
+    await user.hover(await screen.findByRole("menuitem", { name: /Claude Code/ }));
+
+    const searchInput = await screen.findByPlaceholderText(
+      "models.searchModelsPlaceholder",
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: /Opus 4.8/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Sonnet 5/ })).toBeTruthy();
+
+    // 点击搜索框区域不得关闭菜单 / 子菜单（真实 pointer 事件在 jsdom 零布局下
+    // 会误关子菜单，这里用 fireEvent 模拟按下 + 点击验证选择器保持打开）。
+    fireEvent.pointerDown(searchInput);
+    fireEvent.mouseDown(searchInput);
+    fireEvent.click(searchInput);
+    expect(screen.getByRole("menuitem", { name: /Claude Code/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Opus 4.8/ })).toBeTruthy();
+
+    // jsdom 无布局，Radix 子菜单 grace-area 计算会把真实 pointer 移入输入框
+    // 误判为离开而关闭子菜单（真实浏览器无此问题），这里用 fireEvent 模拟输入。
+    fireEvent.change(searchInput, { target: { value: "sonnet" } });
+
+    expect(screen.queryByRole("menuitem", { name: /Opus 4.8/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /Sonnet 5/ })).toBeTruthy();
+
+    // Escape：有 query 时先清空并留在菜单，不关闭选择器。
+    fireEvent.keyDown(searchInput, { key: "Escape" });
+    expect((searchInput as HTMLInputElement).value).toBe("");
+    expect(
+      await screen.findByRole("menuitem", { name: /Opus 4.8/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Sonnet 5/ })).toBeTruthy();
+
+    fireEvent.change(searchInput, { target: { value: "zzz-no-match" } });
+
+    expect(screen.queryByRole("menuitem", { name: /Opus 4.8/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Sonnet 5/ })).toBeNull();
+    expect(screen.getByText("models.noMatchingModels")).toBeTruthy();
+
+    // 只有选中具体模型才关闭选择器。
+    fireEvent.change(searchInput, { target: { value: "sonnet" } });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Sonnet 5/ }));
+    expect(onChange).toHaveBeenCalledWith("claude-sonnet-5");
+    expect(screen.queryByRole("menuitem", { name: /Sonnet 5/ })).toBeNull();
+  });
+
   it("shows add model in every provider submenu, not only the current engine", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onAddModel = vi.fn();

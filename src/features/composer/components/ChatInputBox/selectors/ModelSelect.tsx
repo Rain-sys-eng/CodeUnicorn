@@ -2,6 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useTranslation } from 'react-i18next';
 import CheckIcon from 'lucide-react/dist/esm/icons/check';
 import ChevronDownIcon from 'lucide-react/dist/esm/icons/chevron-down';
+import SearchIcon from 'lucide-react/dist/esm/icons/search';
 import Settings2Icon from 'lucide-react/dist/esm/icons/settings-2';
 import type { ModelInfo, ProviderId } from '../types';
 import {
@@ -595,6 +596,10 @@ export const ModelSelect = memo(({
 }: ModelSelectProps) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  /** 各引擎子菜单的模型筛选关键字（菜单关闭时清空） */
+  const [modelSearchQueries, setModelSearchQueries] = useState<
+    Partial<Record<ProviderId, string>>
+  >({});
   const [refreshConfigError, setRefreshConfigError] = useState<string | null>(null);
   const [modelMappingVersion, setModelMappingVersion] = useState(0);
   /** 底栏渠道按钮打开的全屏选择弹窗所绑定的引擎 */
@@ -1158,7 +1163,13 @@ export const ModelSelect = memo(({
   const handleMenuOpenChange = useCallback(
     (nextOpen: boolean) => {
       setIsOpen(nextOpen);
-      if (!nextOpen || !hasTargetGroups) {
+      if (!nextOpen) {
+        setModelSearchQueries((prev) =>
+          Object.keys(prev).length === 0 ? prev : {},
+        );
+        return;
+      }
+      if (!hasTargetGroups) {
         return;
       }
       void onOpenTargetCatalog?.();
@@ -1175,6 +1186,53 @@ export const ModelSelect = memo(({
       pickerGroups,
     ],
   );
+
+  // 子菜单打开时把焦点交给搜索框（Radix 会把焦点留在 content，需要 rAF 后置）
+  const searchInputRef = useCallback((el: HTMLInputElement | null) => {
+    if (el && el.dataset.autoFocused !== 'true') {
+      el.dataset.autoFocused = 'true';
+      requestAnimationFrame(() => el.focus());
+    }
+  }, []);
+
+  const setGroupSearchQuery = useCallback(
+    (providerId: ProviderId, query: string) => {
+      setModelSearchQueries((prev) => ({ ...prev, [providerId]: query }));
+    },
+    [],
+  );
+
+  // Escape：焦点在搜索框且有 query 时先清空、留在菜单；无 query 时正常关闭。
+  // Radix 用 document capture keydown 关菜单，React 合成事件的 stopPropagation
+  // 拦不住，必须用注册更早（组件 mount 时）的 document capture listener 抢前。
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const modelSearchQueriesRef = useRef(modelSearchQueries);
+  modelSearchQueriesRef.current = modelSearchQueries;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !isOpenRef.current) {
+        return;
+      }
+      const active = document.activeElement;
+      if (
+        !(active instanceof HTMLInputElement) ||
+        !active.dataset.modelSearchInput
+      ) {
+        return;
+      }
+      const providerId = active.dataset.modelSearchInput as ProviderId;
+      if (!modelSearchQueriesRef.current[providerId]?.trim()) {
+        return;
+      }
+      event.stopImmediatePropagation();
+      setModelSearchQueries((prev) => ({ ...prev, [providerId]: '' }));
+    };
+    document.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, { capture: true });
+    };
+  }, []);
 
   const trigger = (
     <button
@@ -1250,6 +1308,48 @@ export const ModelSelect = memo(({
     </button>
   );
 
+  // 按筛选关键字过滤子菜单行：匹配 catalog id / runtime / 展示名 / 描述，
+  // heading 仅在其分组有命中模型时保留。
+  const filterPickerRowsByQuery = (
+    group: PickerModelGroup,
+    query: string,
+  ): PickerModelRow[] => {
+    const rows = pickerRowsForGroup(group);
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return rows;
+    }
+    const matches = (model: ModelInfo): boolean => {
+      const candidates = [
+        model.id,
+        resolveRuntimeModel(model),
+        model.label,
+        getModelLabel(model, group.providerId),
+        getModelDescription(model),
+      ];
+      return candidates.some(
+        (candidate) =>
+          candidate != null && candidate.toLowerCase().includes(normalized),
+      );
+    };
+    const filtered: PickerModelRow[] = [];
+    let pendingHeading: PickerModelRow | null = null;
+    for (const row of rows) {
+      if (row.kind === 'heading') {
+        pendingHeading = row;
+        continue;
+      }
+      if (matches(row.model)) {
+        if (pendingHeading) {
+          filtered.push(pendingHeading);
+          pendingHeading = null;
+        }
+        filtered.push(row);
+      }
+    }
+    return filtered;
+  };
+
   const menu = (
     <DropdownMenu open={isOpen} onOpenChange={handleMenuOpenChange}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
@@ -1268,6 +1368,11 @@ export const ModelSelect = memo(({
             )}
             {pickerGroups.map((group, groupIndex) => {
               const groupRefresh = resolveGroupRefresh(group);
+              const searchQuery = modelSearchQueries[group.providerId] ?? '';
+              const pickerRows = filterPickerRowsByQuery(group, searchQuery);
+              const hasSearchMatch = pickerRows.some(
+                (row) => row.kind === 'model',
+              );
               const hasChannelSwitcher =
                 hasTargetGroups &&
                 group.providerId !== 'dsh' &&
@@ -1333,6 +1438,54 @@ export const ModelSelect = memo(({
                           </button>
                         )}
                       </DropdownMenuLabel>
+                      {!group.loading &&
+                        !group.error &&
+                        group.models.length > 0 && (
+                          <div
+                            className="sticky top-0 z-10 -mt-1 bg-popover px-1.5 pb-1 pt-1"
+                            data-model-search={group.providerId}
+                            // 点击搜索框不得关闭选择器：仅阻止冒泡，
+                            // 不用 preventDefault（会抢走 input 聚焦）。
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <div className="relative">
+                              <SearchIcon
+                                className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                aria-hidden
+                              />
+                              <input
+                                ref={searchInputRef}
+                                type="text"
+                                value={searchQuery}
+                                data-model-search-input={group.providerId}
+                                placeholder={t('models.searchModelsPlaceholder', {
+                                  defaultValue: '搜索模型…',
+                                })}
+                                aria-label={t('models.searchModelsPlaceholder', {
+                                  defaultValue: '搜索模型…',
+                                })}
+                                className="h-8 w-full rounded-md border border-border/70 bg-muted/45 pl-7 pr-2 text-sm outline-none placeholder:text-muted-foreground focus:bg-background"
+                                onChange={(event) =>
+                                  setGroupSearchQuery(
+                                    group.providerId,
+                                    event.target.value,
+                                  )
+                                }
+                                onKeyDown={(event) => {
+                                  // 阻止 Radix menu typeahead 抢键；
+                                  // Escape 不在此处处理（见下方 document
+                                  // capture listener），无 query 时自然关闭菜单。
+                                  if (event.key === 'Escape') {
+                                    return;
+                                  }
+                                  event.stopPropagation();
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       {group.loading && (
                         <DropdownMenuItem disabled>
                           <span
@@ -1391,7 +1544,7 @@ export const ModelSelect = memo(({
                             </div>
                           </DropdownMenuItem>
                         )}
-                      {pickerRowsForGroup(group).map((entry) => {
+                      {pickerRows.map((entry) => {
                         if (entry.kind === 'heading') {
                           return (
                             <DropdownMenuLabel
@@ -1443,6 +1596,20 @@ export const ModelSelect = memo(({
                           </DropdownMenuItem>
                         );
                       })}
+                      {searchQuery.trim().length > 0 &&
+                        !group.loading &&
+                        !group.error &&
+                        group.models.length > 0 &&
+                        !hasSearchMatch && (
+                          <div
+                            className="px-2 py-2 text-xs text-muted-foreground"
+                            role="status"
+                          >
+                            {t('models.noMatchingModels', {
+                              defaultValue: '无匹配模型',
+                            })}
+                          </div>
+                        )}
                       {(hasChannelSwitcher || canAddModel) && (
                         <>
                           <DropdownMenuSeparator />
