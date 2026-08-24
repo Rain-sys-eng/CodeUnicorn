@@ -19,6 +19,7 @@ import {
   TERMINAL_COMMAND_REQUEST_EVENT,
   type TerminalCommandRequest,
 } from "../../features/terminal/utils/terminalCommandRequestEvent";
+import { archiveWorkspaceSessionsV2 } from "../../services/tauri/sessionManagement";
 import { writeTerminalSession } from "../../services/tauri/terminalRuntime";
 import type { AgentTaskScrollRequest } from "../../features/messages";
 import type {
@@ -71,10 +72,10 @@ export type WorkspaceShellBoundary = {
   ) => Promise<unknown> | unknown;
   refreshThread: (workspaceId: string, threadId: string) => Promise<unknown> | unknown;
   removeImagesForThread: (threadId: string) => void;
-  removeThread: (
+  ensureWorkspaceThreadListLoaded: (
     workspaceId: string,
-    threadId: string,
-  ) => Promise<{ success: boolean; message?: string | null }>;
+    options?: { deletedThreadIds?: string[]; localRemovalOnly?: boolean },
+  ) => boolean;
   renameWorktree: (workspaceId: string, branch: string) => Promise<WorkspaceInfo>;
   renameWorktreeUpstream: (
     workspaceId: string,
@@ -85,7 +86,7 @@ export type WorkspaceShellBoundary = {
   selectWorkspace: (workspaceId: string) => void;
   setActiveEngine: (engine: EngineType) => Promise<void> | void;
   setActiveTab: Dispatch<SetStateAction<WorkspaceShellTab>>;
-  setActiveThreadId: (threadId: string, workspaceId: string) => void;
+  setActiveThreadId: (threadId: string | null, workspaceId: string) => void;
   setAgentTaskScrollRequest: Dispatch<SetStateAction<AgentTaskScrollRequest | null>>;
   setAppMode: Dispatch<SetStateAction<AppMode>>;
   setAppSettings: Dispatch<SetStateAction<WorkspaceShellSettings>>;
@@ -127,7 +128,7 @@ export function useAppShellWorkspaceFlowsSection(
     queueSaveSettings,
     refreshThread,
     removeImagesForThread,
-    removeThread,
+    ensureWorkspaceThreadListLoaded,
     renameWorktree,
     renameWorktreeUpstream,
     resetWorkspaceThreads,
@@ -704,24 +705,44 @@ export function useAppShellWorkspaceFlowsSection(
     },
   });
 
+  // 归档快捷键（archiveThread）：metadata soft-archive，不是删除。
+  // OpenSpec change：redesign-session-archive-fast-path。
   const handleArchiveActiveThread = useCallback(async () => {
     if (!activeWorkspaceId || !activeThreadId) {
       return;
     }
-    const result = await removeThread(activeWorkspaceId, activeThreadId);
-    if (!result.success) {
-      alertError(result.message ?? t("workspace.deleteConversationFailed"));
-      return;
+    const workspaceId = activeWorkspaceId;
+    const threadId = activeThreadId;
+    try {
+      const response = await archiveWorkspaceSessionsV2(workspaceId, [
+        { threadId },
+      ]);
+      const mutationResult =
+        response.results.find((result) => result.sessionId === threadId) ??
+        (response.results.length === 1 ? response.results[0] : undefined);
+      if (!mutationResult?.ok) {
+        throw new Error(
+          mutationResult?.error ?? t("workspace.archiveConversationFailed"),
+        );
+      }
+      setActiveThreadId(null, workspaceId);
+      ensureWorkspaceThreadListLoaded(workspaceId, {
+        deletedThreadIds: [threadId],
+        localRemovalOnly: true,
+      });
+      clearDraftForThread(threadId);
+      removeImagesForThread(threadId);
+    } catch (error: unknown) {
+      alertError(error instanceof Error ? error.message : String(error));
     }
-    clearDraftForThread(activeThreadId);
-    removeImagesForThread(activeThreadId);
   }, [
     activeThreadId,
     activeWorkspaceId,
     alertError,
     clearDraftForThread,
+    ensureWorkspaceThreadListLoaded,
     removeImagesForThread,
-    removeThread,
+    setActiveThreadId,
     t,
   ]);
 

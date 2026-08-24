@@ -78,6 +78,8 @@ type ListThreadsForWorkspace = (
     preserveState?: boolean;
     includeOpenCodeSessions?: boolean;
     deletedThreadIds?: string[];
+    /** 归档摘行：仅本地移除 deletedThreadIds，零 IPC / 零 catalog 重扫。 */
+    localRemovalOnly?: boolean;
     startupHydrationMode?: "full-catalog" | "first-paint";
     allowRuntimeReconnect?: boolean;
     /**
@@ -121,6 +123,8 @@ type UseWorkspaceThreadListHydrationResult = {
       preserveState?: boolean;
       force?: boolean;
       deletedThreadIds?: string[];
+      /** 归档摘行：仅本地移除 deletedThreadIds，零 IPC / 零 catalog 重扫。 */
+      localRemovalOnly?: boolean;
       startupHydrationMode?: "full-catalog" | "first-paint";
       mergeExistingThreads?: boolean;
     },
@@ -789,6 +793,7 @@ export function useWorkspaceThreadListHydration({
         preserveState?: boolean;
         force?: boolean;
         deletedThreadIds?: string[];
+        localRemovalOnly?: boolean;
         startupHydrationMode?: "full-catalog" | "first-paint";
         mergeExistingThreads?: boolean;
       },
@@ -796,6 +801,15 @@ export function useWorkspaceThreadListHydration({
       const workspace = workspacesById.get(workspaceId);
       if (!workspace) {
         return false;
+      }
+      // 归档摘行快路径：绕过 hydration 守卫，只做本地移除，零 IPC。
+      if (options?.localRemovalOnly) {
+        void listThreadsForWorkspaceTracked(workspace, {
+          preserveState: true,
+          deletedThreadIds: options.deletedThreadIds,
+          localRemovalOnly: true,
+        });
+        return true;
       }
       const force = options?.force ?? false;
       const isLoading = threadListLoadingByWorkspace[workspaceId] ?? false;

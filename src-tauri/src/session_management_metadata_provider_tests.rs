@@ -489,13 +489,16 @@
         .expect("assign provider-home folder");
         assert_eq!(folder_response.folder_id.as_deref(), Some(folder.id.as_str()));
 
-        let archive_response = archive_workspace_sessions_core(
+        let archive_response = crate::session_archive_v2::archive_workspace_sessions_v2_with_lookups(
             &workspaces,
             &sessions,
-            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
-            vec![requested_session_id.clone()],
+            vec![crate::session_archive_v2::SessionArchiveV2Target {
+                thread_id: requested_session_id.clone(),
+                engine: None,
+            }],
+            &HashMap::new(),
         )
         .await
         .expect("archive provider-home session");

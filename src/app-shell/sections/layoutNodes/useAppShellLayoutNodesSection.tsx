@@ -48,7 +48,7 @@ import {
   type QuickSwitcherNavigationState,
 } from "../quickSwitcherNavigationState";
 import { getEngineModels } from "../../../services/tauri/appServer";
-import { archiveWorkspaceSessions } from "../../../services/tauri/sessionManagement";
+import { archiveWorkspaceSessionsV2 } from "../../../services/tauri/sessionManagement";
 import { markExplicitComposerEngineSwitch } from "../../../features/composer/hooks/explicitComposerEngineSwitch";
 import {
   clearDetachedExternalChangeMonitor,
@@ -1401,8 +1401,10 @@ export function useAppShellLayoutNodesSection(
   const handleArchiveThread = useEventCallback(
     async (workspaceId: string, threadId: string) => {
       try {
-        const response = await archiveWorkspaceSessions(workspaceId, [
-          threadId,
+        // v2 归档：Index First + metadata-only，零全量 catalog 扫描；成功后
+        // 本地摘行，不再 force full-catalog 重扫。
+        const response = await archiveWorkspaceSessionsV2(workspaceId, [
+          { threadId },
         ]);
         // Prefer exact id match; fall back to the only result when backend
         // normalizes the requested id into a different sessionId field.
@@ -1420,12 +1422,11 @@ export function useAppShellLayoutNodesSection(
         ) {
           setActiveThreadId(null, workspaceId);
         }
-        // Immediately drop the row from local sidebar state via deletedThreadIds.
-        // Without this, success only triggers a full catalog rescan — slow, easy
-        // to race with continuity merge, and looks like "click does nothing".
+        // 本地摘行（不触发 full-catalog 重扫；归档证据由 metadata 持久化，
+        // 下次自然刷新仍隐藏）。
         ensureWorkspaceThreadListLoaded(workspaceId, {
-          force: true,
           deletedThreadIds: [threadId],
+          localRemovalOnly: true,
         });
       } catch (error: unknown) {
         alertError(error instanceof Error ? error.message : String(error));

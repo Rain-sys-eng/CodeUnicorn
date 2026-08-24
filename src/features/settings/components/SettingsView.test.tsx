@@ -16,7 +16,7 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import {
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   deleteWorkspaceSessions,
   exportDiagnosticsBundle,
   getDaemonStatus,
@@ -28,7 +28,7 @@ import {
   listWorkspaceSessions,
   readWorkspaceWallpaperPreview,
   searchWorkspaceWallpaperMarket,
-  unarchiveWorkspaceSessions,
+  unarchiveWorkspaceSessionsV2,
 } from "../../../services/tauri";
 import {
   resetClientStorageForTests,
@@ -107,8 +107,8 @@ vi.mock("../../../services/tauri", async () => {
     getWorkspaceSessionProjectionSummary: vi.fn(),
     listWorkspaceSessionFolders: vi.fn(),
     listWorkspaceSessions: vi.fn(),
-    archiveWorkspaceSessions: vi.fn(),
-    unarchiveWorkspaceSessions: vi.fn(),
+    archiveWorkspaceSessionsV2: vi.fn(),
+    unarchiveWorkspaceSessionsV2: vi.fn(),
     deleteWorkspaceSessions: vi.fn(),
     exportDiagnosticsBundle: vi.fn(),
     getWebServerStatus: vi.fn(),
@@ -177,8 +177,8 @@ beforeEach(() => {
     unassignedFolderCount: 0,
     partialSources: [],
   });
-  vi.mocked(archiveWorkspaceSessions).mockResolvedValue({ results: [] });
-  vi.mocked(unarchiveWorkspaceSessions).mockResolvedValue({ results: [] });
+  vi.mocked(archiveWorkspaceSessionsV2).mockResolvedValue({ results: [] });
+  vi.mocked(unarchiveWorkspaceSessionsV2).mockResolvedValue({ results: [] });
   vi.mocked(deleteWorkspaceSessions).mockResolvedValue({ results: [] });
   vi.mocked(exportDiagnosticsBundle).mockResolvedValue({
     filePath: "/tmp/diagnostics.json",

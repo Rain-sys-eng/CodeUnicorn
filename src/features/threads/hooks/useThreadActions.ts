@@ -71,7 +71,6 @@ import {
   type AutomaticRuntimeRecoverySource,
 } from "./useAutomaticRuntimeRecovery";
 import {
-  createArchiveThreadAction,
   createDeleteThreadForWorkspaceAction,
   createRenameThreadTitleMappingAction,
 } from "./useThreadActions.sessionActions";
@@ -403,6 +402,12 @@ export function useThreadActions({
          */
         includePiDiskList?: boolean;
         deletedThreadIds?: string[];
+        /**
+         * 仅做本地摘行（归档/软隐藏路径）：执行 deletedThreadIds 的本地清理后
+         * 立即返回，不 dispatch loading、不发起任何 IPC/catalog 扫描。
+         * OpenSpec change：redesign-session-archive-fast-path。
+         */
+        localRemovalOnly?: boolean;
         recoverySource?: AutomaticRuntimeRecoverySource;
         allowRuntimeReconnect?: boolean;
         startupHydrationMode?: StartupThreadHydrationMode;
@@ -488,6 +493,10 @@ export function useThreadActions({
         clearLiveItemDelta(threadId);
         dispatch({ type: "removeThread", workspaceId: workspace.id, threadId });
       });
+      if (options?.localRemovalOnly) {
+        // 归档摘行：本地状态已清，直接返回（零 IPC、零 catalog 重扫）。
+        return null;
+      }
       if (!preserveState) {
         dispatch({
           type: "setThreadListLoading",
@@ -2900,11 +2909,6 @@ export function useThreadActions({
     workspacePathsByIdRef,
   });
 
-  const archiveThread = useMemo(
-    () => createArchiveThreadAction({ onDebug }),
-    [onDebug],
-  );
-
   const deleteThreadForWorkspace = useMemo(() => {
     const deleteThread = createDeleteThreadForWorkspaceAction({
       threadsByWorkspace,
@@ -2947,7 +2951,6 @@ export function useThreadActions({
     resetWorkspaceThreads,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
-    archiveThread,
     deleteThreadForWorkspace,
     deleteThreadForWorkspaceV2,
     renameThreadTitleMapping,

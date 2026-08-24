@@ -2,7 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   listGlobalCodexSessions,
   listProjectRelatedSessions,
   listWorkspaceSessions,
@@ -19,8 +19,8 @@ vi.mock("../../../../../services/tauri", () => ({
   listGlobalCodexSessions: vi.fn(),
   listProjectRelatedSessions: vi.fn(),
   listWorkspaceSessions: vi.fn(),
-  archiveWorkspaceSessions: vi.fn(),
-  unarchiveWorkspaceSessions: vi.fn(),
+  archiveWorkspaceSessionsV2: vi.fn(),
+  unarchiveWorkspaceSessionsV2: vi.fn(),
   deleteWorkspaceSessions: vi.fn(),
 }));
 
@@ -416,7 +416,7 @@ describe("useWorkspaceSessionCatalog", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(archiveWorkspaceSessions)
+    vi.mocked(archiveWorkspaceSessionsV2)
       .mockResolvedValueOnce({
         results: [{ sessionId: "codex:main", ok: true, archivedAt: 100 }],
       })
@@ -441,11 +441,11 @@ describe("useWorkspaceSessionCatalog", () => {
       response = await result.current.mutate("archive", result.current.entries);
     });
 
-    expect(archiveWorkspaceSessions).toHaveBeenNthCalledWith(1, "ws-main", [
-      "codex:main",
+    expect(archiveWorkspaceSessionsV2).toHaveBeenNthCalledWith(1, "ws-main", [
+      { threadId: "codex:main", engine: "codex" },
     ]);
-    expect(archiveWorkspaceSessions).toHaveBeenNthCalledWith(2, "ws-worktree", [
-      "codex:worktree",
+    expect(archiveWorkspaceSessionsV2).toHaveBeenNthCalledWith(2, "ws-worktree", [
+      { threadId: "codex:worktree", engine: "codex" },
     ]);
     expect(response?.results).toEqual([
       {
@@ -485,7 +485,7 @@ describe("useWorkspaceSessionCatalog", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(archiveWorkspaceSessions).mockResolvedValueOnce({
+    vi.mocked(archiveWorkspaceSessionsV2).mockResolvedValueOnce({
       results: [
         {
           sessionId: "claude:child-session",
@@ -514,8 +514,8 @@ describe("useWorkspaceSessionCatalog", () => {
       response = await result.current.mutate("archive", result.current.entries);
     });
 
-    expect(archiveWorkspaceSessions).toHaveBeenCalledWith("child-ws", [
-      "claude:child-session",
+    expect(archiveWorkspaceSessionsV2).toHaveBeenCalledWith("child-ws", [
+      { threadId: "claude:child-session", engine: "claude" },
     ]);
     expect(response?.results[0]).toMatchObject({
       selectionKey: "child-ws::claude:child-ws:child-session",
@@ -549,7 +549,7 @@ describe("useWorkspaceSessionCatalog", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(archiveWorkspaceSessions)
+    vi.mocked(archiveWorkspaceSessionsV2)
       .mockResolvedValueOnce({
         results: [{ sessionId: "codex:main", ok: true, archivedAt: 100 }],
       })
@@ -681,7 +681,7 @@ describe("useWorkspaceSessionCatalog", () => {
         code: "OWNER_WORKSPACE_UNRESOLVED",
       },
     ]);
-    expect(archiveWorkspaceSessions).not.toHaveBeenCalled();
+    expect(archiveWorkspaceSessionsV2).not.toHaveBeenCalled();
   });
 
   it("loads inferred related codex sessions for project mode", async () => {

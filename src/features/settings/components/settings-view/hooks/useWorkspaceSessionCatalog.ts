@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   assignWorkspaceSessionFolders,
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   deleteWorkspaceSessions,
   listGlobalCodexSessions,
   listProjectRelatedSessions,
   listWorkspaceSessions,
-  unarchiveWorkspaceSessions,
+  unarchiveWorkspaceSessionsV2,
   type WorkspaceSessionBatchMutationResponse,
   type WorkspaceSessionCatalogEntry,
   type WorkspaceSessionCatalogPage,
@@ -466,16 +466,16 @@ export function useWorkspaceSessionCatalog({
               });
             } else {
               let response: WorkspaceSessionBatchMutationResponse;
-              if (kind === "archive") {
-                response = await archiveWorkspaceSessions(
-                  entryWorkspaceId,
-                  sessionIds,
-                );
-              } else if (kind === "unarchive") {
-                response = await unarchiveWorkspaceSessions(
-                  entryWorkspaceId,
-                  sessionIds,
-                );
+              if (kind === "archive" || kind === "unarchive") {
+                // v2：Index First + metadata-only，后端不再全量扫描 catalog。
+                const targets = entryBucket.map((entry) => ({
+                  threadId: entry.sessionId,
+                  engine: entry.engine,
+                }));
+                response =
+                  kind === "archive"
+                    ? await archiveWorkspaceSessionsV2(entryWorkspaceId, targets)
+                    : await unarchiveWorkspaceSessionsV2(entryWorkspaceId, targets);
               } else if (kind === "delete") {
                 response = await deleteWorkspaceSessions(
                   entryWorkspaceId,

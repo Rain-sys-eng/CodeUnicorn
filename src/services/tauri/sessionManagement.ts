@@ -329,28 +329,36 @@ export async function getWorkspaceSessionProjectionSummary(
   });
 }
 
-export async function archiveWorkspaceSessions(
+export type SessionArchiveV2Target = {
+  threadId: string;
+  /** engine hint（如 `claude` / `codex`）；缺省时后端按 id 前缀/session index 解析。 */
+  engine?: string | null;
+};
+
+/**
+ * 归档 v2（Index First 定位 + metadata-only 结算，零全量 catalog 扫描）。
+ * OpenSpec change：`openspec/changes/redesign-session-archive-fast-path/`
+ */
+export async function archiveWorkspaceSessionsV2(
   workspaceId: string,
-  sessionIds: string[],
+  targets: SessionArchiveV2Target[],
 ): Promise<WorkspaceSessionBatchMutationResponse> {
   return invoke<WorkspaceSessionBatchMutationResponse>(
-    "archive_workspace_sessions",
+    "archive_workspace_sessions_v2",
     {
-      workspaceId,
-      sessionIds,
+      request: { workspaceId, targets },
     },
   );
 }
 
-export async function unarchiveWorkspaceSessions(
+export async function unarchiveWorkspaceSessionsV2(
   workspaceId: string,
-  sessionIds: string[],
+  targets: SessionArchiveV2Target[],
 ): Promise<WorkspaceSessionBatchMutationResponse> {
   return invoke<WorkspaceSessionBatchMutationResponse>(
-    "unarchive_workspace_sessions",
+    "unarchive_workspace_sessions_v2",
     {
-      workspaceId,
-      sessionIds,
+      request: { workspaceId, targets },
     },
   );
 }

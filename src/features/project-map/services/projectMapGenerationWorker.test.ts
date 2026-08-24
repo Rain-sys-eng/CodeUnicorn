@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  archiveThread,
+  archiveWorkspaceSessionsV2,
   engineSendMessageSync,
   getWorkspaceFiles,
   readWorkspaceFile,
@@ -19,7 +19,7 @@ vi.mock("../../../services/events", () => ({
 }));
 
 vi.mock("../../../services/tauri", () => ({
-  archiveThread: vi.fn(),
+  archiveWorkspaceSessionsV2: vi.fn(),
   engineSendMessageSync: vi.fn(),
   getWorkspaceFiles: vi.fn(),
   readWorkspaceFile: vi.fn(),
@@ -215,10 +215,10 @@ describe("runProjectMapGenerationWorker", () => {
     vi.mocked(engineSendMessageSync).mockReset();
     vi.mocked(startThread).mockReset();
     vi.mocked(sendUserMessage).mockReset();
-    vi.mocked(archiveThread).mockReset();
+    vi.mocked(archiveWorkspaceSessionsV2).mockReset();
     vi.mocked(subscribeAppServerEvents).mockReset();
     vi.mocked(subscribeAppServerEvents).mockReturnValue(() => {});
-    vi.mocked(archiveThread).mockResolvedValue(null);
+    vi.mocked(archiveWorkspaceSessionsV2).mockResolvedValue({ results: [] });
   });
 
   it("collects bounded evidence, asks the selected engine, and returns generated map data", async () => {
@@ -1505,7 +1505,9 @@ describe("runProjectMapGenerationWorker", () => {
         accessMode: "read-only",
       }),
     );
-    expect(archiveThread).toHaveBeenCalledWith("ws-1", "codex-thread-1");
+    expect(archiveWorkspaceSessionsV2).toHaveBeenCalledWith("ws-1", [
+      { threadId: "codex-thread-1" },
+    ]);
     expect(updates).toContainEqual(
       expect.objectContaining({
         threadId: "codex-thread-1",

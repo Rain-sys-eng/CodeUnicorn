@@ -372,13 +372,42 @@
 
         let requested_session_id = format!("claude:{session_id}");
         let stable_key = format!("claude:child:{session_id}");
-        let archive_response = archive_workspace_sessions_core(
+        // v2：Index First 定位——注入 child 归属的 index 行，替代旧的全量
+        // catalog 扫描定位 owner。
+        let archive_lookups = HashMap::from([(
+            requested_session_id.clone(),
+            vec![crate::session_index::store::SessionIndexDeleteLookup {
+                row: crate::session_index::store::SessionIndexRow {
+                    engine: "claude".to_string(),
+                    session_id: session_id.to_string(),
+                    title: String::new(),
+                    native_title: None,
+                    updated_at: 100,
+                    created_at: None,
+                    cwd: None,
+                    workspace_path: Some(child_path.to_string_lossy().to_string()),
+                    physical_path: None,
+                    parent_session_id: None,
+                    size_bytes: None,
+                    provider_profile_id: None,
+                    provider_profile_name: None,
+                },
+                tombstoned_at: None,
+            }],
+        )]);
+        let archive_targets = || {
+            vec![crate::session_archive_v2::SessionArchiveV2Target {
+                thread_id: requested_session_id.clone(),
+                engine: None,
+            }]
+        };
+        let archive_response = crate::session_archive_v2::archive_workspace_sessions_v2_with_lookups(
             &workspaces,
             &sessions,
-            &engine_manager,
             &storage_path,
             "parent".to_string(),
-            vec![requested_session_id.clone()],
+            archive_targets(),
+            &archive_lookups,
         )
         .await
         .expect("archive child from parent aggregate");
@@ -402,12 +431,12 @@
             .archived_at_by_session_id
             .contains_key(&stable_key));
 
-        let unarchive_response = unarchive_workspace_sessions_core(
+        let unarchive_response = crate::session_archive_v2::unarchive_workspace_sessions_v2_with_lookups(
             &workspaces,
-            &engine_manager,
             &storage_path,
             "parent".to_string(),
-            vec![requested_session_id.clone()],
+            archive_targets(),
+            &archive_lookups,
         )
         .await
         .expect("unarchive child from parent aggregate");

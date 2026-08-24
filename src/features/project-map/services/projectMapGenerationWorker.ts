@@ -1,5 +1,5 @@
 import {
-  archiveThread,
+  archiveWorkspaceSessionsV2,
   engineSendMessageSync,
   getWorkspaceFiles,
   readWorkspaceFile,
@@ -959,7 +959,10 @@ async function runCodexThreadTurn(input: {
     waiter.cancel();
     throw error;
   } finally {
-    await archiveThread(input.workspaceId, threadId).catch(() => undefined);
+    // best-effort 归档一次性临时线程（v2：metadata-only，零全量扫描）
+    await archiveWorkspaceSessionsV2(input.workspaceId, [{ threadId }]).catch(
+      () => undefined,
+    );
   }
 }
 

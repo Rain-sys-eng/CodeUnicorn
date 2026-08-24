@@ -224,39 +224,6 @@ pub(crate) async fn get_workspace_session_projection_summary(
 }
 
 #[tauri::command]
-pub(crate) async fn archive_workspace_sessions(
-    workspace_id: String,
-    session_ids: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    archive_workspace_sessions_core(
-        &state.workspaces,
-        &state.sessions,
-        &state.engine_manager,
-        state.storage_path.as_path(),
-        workspace_id,
-        session_ids,
-    )
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn unarchive_workspace_sessions(
-    workspace_id: String,
-    session_ids: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    unarchive_workspace_sessions_core(
-        &state.workspaces,
-        &state.engine_manager,
-        state.storage_path.as_path(),
-        workspace_id,
-        session_ids,
-    )
-    .await
-}
-
-#[tauri::command]
 pub(crate) async fn delete_workspace_sessions(
     workspace_id: String,
     session_ids: Vec<String>,
@@ -607,188 +574,6 @@ async fn catalog_workspace_scope(
     Ok(scoped)
 }
 
-pub(crate) async fn archive_workspace_sessions_core(
-    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
-    sessions: &Mutex<HashMap<String, std::sync::Arc<crate::codex::WorkspaceSession>>>,
-    engine_manager: &engine::EngineManager,
-    storage_path: &Path,
-    workspace_id: String,
-    session_ids: Vec<String>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    let workspace_id = normalize_workspace_id(&workspace_id)?;
-    let _workspace_path = workspace_path_for_id(workspaces, &workspace_id).await?;
-    let archived_at = now_millis();
-    let mut results = Vec::new();
-    let mut archive_success_targets = Vec::new();
-    let normalized_session_ids = normalize_session_ids(session_ids)?;
-    let scope_catalog = build_workspace_scope_catalog_data(
-        workspaces,
-        engine_manager,
-        storage_path,
-        &workspace_id,
-        SessionCatalogScanMode::Exhaustive,
-        WorkspaceSessionAttributionMode::Related,
-        WorkspaceSessionScanQuality::Full,
-    )
-    .await?;
-    let workspaces_snapshot = workspaces.lock().await.clone();
-
-    for session_id in normalized_session_ids {
-        match parse_catalog_identity(&session_id) {
-            SessionCatalogIdentity::Codex { .. } => {
-                let Some(target) = resolve_session_mutation_target(
-                    &scope_catalog.entries,
-                    &workspaces_snapshot,
-                    &session_id,
-                ) else {
-                    let message =
-                        unresolved_session_mutation_message(&session_id, &scope_catalog.entries);
-                    results.push(batch_error(
-                        session_id,
-                        "OWNER_WORKSPACE_UNRESOLVED",
-                        &message,
-                    ));
-                    continue;
-                };
-                let _ = codex_core::archive_thread_best_effort_core(
-                    sessions,
-                    target.owner_workspace_id.clone(),
-                    target.provider_profile_id.clone(),
-                    target.native_session_id.clone(),
-                    Duration::from_millis(SESSION_CATALOG_ARCHIVE_TIMEOUT_MS),
-                )
-                .await;
-                archive_success_targets.push(target.clone());
-                results.push(batch_success_for_target(&target, Some(archived_at)));
-            }
-            // Shared and other native engines: soft archive via catalog metadata only.
-            _ => {
-                let Some(target) = resolve_session_mutation_target(
-                    &scope_catalog.entries,
-                    &workspaces_snapshot,
-                    &session_id,
-                ) else {
-                    results.push(batch_error(
-                        session_id,
-                        "OWNER_WORKSPACE_UNRESOLVED",
-                        "session does not belong to target workspace",
-                    ));
-                    continue;
-                };
-                archive_success_targets.push(target.clone());
-                results.push(batch_success_for_target(&target, Some(archived_at)));
-            }
-        }
-    }
-
-    if !archive_success_targets.is_empty() {
-        let mut targets_by_owner = HashMap::<String, Vec<WorkspaceSessionMutationTarget>>::new();
-        for target in archive_success_targets {
-            targets_by_owner
-                .entry(target.owner_workspace_id.clone())
-                .or_default()
-                .push(target);
-        }
-        for (owner_workspace_id, targets) in targets_by_owner {
-            if let Err(error) =
-                with_catalog_metadata_mutation(storage_path, &owner_workspace_id, |metadata| {
-                    for target in &targets {
-                        metadata
-                            .archived_at_by_session_id
-                            .insert(target.stable_session_key.clone(), archived_at);
-                    }
-                    Ok(())
-                })
-            {
-                let message = format!("failed to update archive metadata: {error}");
-                replace_batch_results_for_targets(
-                    &mut results,
-                    &targets,
-                    "ARCHIVE_METADATA_WRITE_FAILED",
-                    &message,
-                );
-            }
-        }
-    }
-    Ok(WorkspaceSessionBatchMutationResponse { results })
-}
-
-pub(crate) async fn unarchive_workspace_sessions_core(
-    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
-    engine_manager: &engine::EngineManager,
-    storage_path: &Path,
-    workspace_id: String,
-    session_ids: Vec<String>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    let workspace_id = normalize_workspace_id(&workspace_id)?;
-    let _workspace_path = workspace_path_for_id(workspaces, &workspace_id).await?;
-    let normalized_session_ids = normalize_session_ids(session_ids)?;
-    let scope_catalog = build_workspace_scope_catalog_data(
-        workspaces,
-        engine_manager,
-        storage_path,
-        &workspace_id,
-        SessionCatalogScanMode::Exhaustive,
-        WorkspaceSessionAttributionMode::Related,
-        WorkspaceSessionScanQuality::Full,
-    )
-    .await?;
-    let workspaces_snapshot = workspaces.lock().await.clone();
-    let mut targets_by_owner = HashMap::<String, Vec<WorkspaceSessionMutationTarget>>::new();
-    let mut results = Vec::new();
-
-    for session_id in normalized_session_ids {
-        let Some(target) = resolve_session_mutation_target(
-            &scope_catalog.entries,
-            &workspaces_snapshot,
-            &session_id,
-        ) else {
-            let message = unresolved_session_mutation_message(&session_id, &scope_catalog.entries);
-            results.push(batch_error(
-                session_id,
-                "OWNER_WORKSPACE_UNRESOLVED",
-                &message,
-            ));
-            continue;
-        };
-        targets_by_owner
-            .entry(target.owner_workspace_id.clone())
-            .or_default()
-            .push(target);
-    }
-
-    for (owner_workspace_id, targets) in targets_by_owner {
-        match with_catalog_metadata_mutation(storage_path, &owner_workspace_id, |metadata| {
-            let mut owner_results = Vec::new();
-            for target in &targets {
-                let was_archived = target
-                    .metadata_lookup_keys
-                    .iter()
-                    .any(|key| metadata.archived_at_by_session_id.contains_key(key));
-                remove_catalog_metadata_for_target(metadata, target);
-                if was_archived {
-                    owner_results.push(batch_success_for_target(target, None));
-                } else {
-                    owner_results.push(batch_error_for_target(
-                        target,
-                        "NOT_ARCHIVED",
-                        "Session is not archived",
-                    ));
-                }
-            }
-            Ok(owner_results)
-        }) {
-            Ok(owner_results) => results.extend(owner_results),
-            Err(error) => {
-                let message = format!("failed to update unarchive metadata: {error}");
-                results.extend(targets.iter().map(|target| {
-                    batch_error_for_target(target, "UNARCHIVE_METADATA_WRITE_FAILED", &message)
-                }));
-            }
-        }
-    }
-    Ok(WorkspaceSessionBatchMutationResponse { results })
-}
 
 pub(crate) async fn delete_workspace_sessions_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -1437,17 +1222,6 @@ fn is_invalid_session_path_segment(session_id: &str) -> bool {
         || session_id.contains("..")
 }
 
-async fn workspace_path_for_id(
-    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
-    workspace_id: &str,
-) -> Result<PathBuf, String> {
-    let workspaces = workspaces.lock().await;
-    workspaces
-        .get(workspace_id)
-        .map(|entry| PathBuf::from(&entry.path))
-        .ok_or_else(|| "workspace not found".to_string())
-}
-
 fn build_catalog_entry_dedupe_key(entry: &WorkspaceSessionCatalogEntry) -> String {
     format!(
         "{}::{}::{}",
@@ -2092,7 +1866,7 @@ fn engine_provider_binding_stable_key(
     Some(format!("{engine}:{workspace_id}:{canonical_session_id}"))
 }
 
-fn metadata_stable_key_for_session_id(workspace_id: &str, session_id: &str) -> String {
+pub(crate) fn metadata_stable_key_for_session_id(workspace_id: &str, session_id: &str) -> String {
     let workspace_id = workspace_id.trim();
     let session_id = session_id.trim();
     if session_id.starts_with("qoder:") {
@@ -3306,7 +3080,7 @@ fn unresolved_session_mutation_message(
 
     "Codex session target could not be resolved safely for this workspace; provider-home source may be incomplete or the session no longer belongs to this workspace".to_string()
 }
-fn now_millis() -> i64 {
+pub(crate) fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_| Duration::from_millis(0))

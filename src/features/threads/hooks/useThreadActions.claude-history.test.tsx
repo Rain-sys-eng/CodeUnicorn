@@ -2,7 +2,6 @@
 import { act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  archiveThread,
   deleteCodexSession,
   deleteClaudeSession,
   deleteGeminiSession,
@@ -58,7 +57,6 @@ vi.mock("../../../services/tauri", () => ({
   setThreadTitle: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
-  archiveThread: vi.fn(),
   deleteCodexSession: vi.fn(),
   deleteClaudeSession: vi.fn(),
   deleteGeminiSession: vi.fn(),
@@ -130,7 +128,6 @@ describe("useThreadActions Claude history refresh", () => {
     vi.mocked(startThread).mockResolvedValue({
       result: { thread: { id: "thread-1" } },
     });
-    vi.mocked(archiveThread).mockResolvedValue({ archivedCount: 1 });
     vi.mocked(trashWorkspaceItem).mockResolvedValue(undefined);
     vi.mocked(writeWorkspaceFile).mockResolvedValue(undefined);
     vi.mocked(loadSidebarSnapshot).mockReturnValue(null);

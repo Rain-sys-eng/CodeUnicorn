@@ -8,7 +8,6 @@ use crate::types::WorkspaceSessionAttributionMode;
 pub(crate) const SESSION_CATALOG_DEFAULT_LIMIT: usize = 50;
 pub(crate) const SESSION_CATALOG_MAX_LIMIT: usize = 9_999;
 pub(crate) const SESSION_CATALOG_SCAN_LOOKAHEAD: usize = 1;
-pub(crate) const SESSION_CATALOG_ARCHIVE_TIMEOUT_MS: u64 = 1_500;
 pub(crate) const SESSION_CATALOG_CURSOR_PREFIX: &str = "offset:";
 pub(crate) const SESSION_CATALOG_STABLE_CURSOR_PREFIX: &str = "stable:";
 pub(crate) const SESSION_CATALOG_PARTIAL_CODEX: &str = "codex-history-unavailable";

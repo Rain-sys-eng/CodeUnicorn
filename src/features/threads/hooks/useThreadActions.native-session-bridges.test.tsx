@@ -3,7 +3,6 @@ import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import {
-  archiveThread,
   deleteCodexSession,
   deleteClaudeSession,
   deleteGeminiSession,
@@ -70,7 +69,6 @@ vi.mock("../../../services/tauri", () => ({
   setThreadTitle: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
-  archiveThread: vi.fn(),
   deleteCodexSession: vi.fn(),
   deleteClaudeSession: vi.fn(),
   deleteGeminiSession: vi.fn(),
@@ -175,7 +173,6 @@ describe("useThreadActions native session bridges", () => {
     vi.mocked(startThread).mockResolvedValue({
       result: { thread: { id: "thread-1" } },
     });
-    vi.mocked(archiveThread).mockResolvedValue({ archivedCount: 1 });
     vi.mocked(trashWorkspaceItem).mockResolvedValue(undefined);
     vi.mocked(writeWorkspaceFile).mockResolvedValue(undefined);
     vi.mocked(loadSidebarSnapshot).mockReturnValue(null);
@@ -546,7 +543,6 @@ describe("useThreadActions native session bridges", () => {
       );
     });
 
-    expect(archiveThread).not.toHaveBeenCalled();
     expect(deleteOpenCodeSession).not.toHaveBeenCalled();
     expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
       "opencode:ses_opc_1",
@@ -566,7 +562,6 @@ describe("useThreadActions native session bridges", () => {
       await result.current.deleteThreadForWorkspace("ws-1", "pi:ses_pi_1");
     });
 
-    expect(archiveThread).not.toHaveBeenCalled();
     expect(deleteCodexSession).not.toHaveBeenCalled();
     expect(deletePiSession).not.toHaveBeenCalled();
     expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
@@ -584,7 +579,6 @@ describe("useThreadActions native session bridges", () => {
       );
     });
 
-    expect(archiveThread).not.toHaveBeenCalled();
     expect(deleteCodexSession).not.toHaveBeenCalled();
     expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
       "019d767b-5541-7010-a30d-a454864bccd8",

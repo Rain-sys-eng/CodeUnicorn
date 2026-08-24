@@ -1126,35 +1126,6 @@ pub(crate) async fn list_mcp_server_status(
 }
 
 #[tauri::command]
-pub(crate) async fn archive_thread(
-    workspace_id: String,
-    thread_id: String,
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<Value, String> {
-    if remote_backend::is_remote_mode(&*state).await {
-        return remote_backend::call_remote(
-            &*state,
-            app,
-            "archive_thread",
-            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
-        )
-        .await;
-    }
-
-    let provider_profile_id =
-        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
-    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
-    codex_core::archive_thread_core(
-        &state.sessions,
-        workspace_id,
-        Some(provider_profile_id),
-        thread_id,
-    )
-    .await
-}
-
-#[tauri::command]
 pub(crate) async fn delete_codex_session(
     workspace_id: String,
     session_id: String,

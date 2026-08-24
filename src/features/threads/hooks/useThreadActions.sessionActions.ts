@@ -2,7 +2,6 @@ import type { Dispatch, MutableRefObject } from "react";
 
 import type { DebugEntry, ThreadSummary } from "../../../types";
 import {
-  archiveThread as archiveThreadService,
   deleteWorkspaceSessions as deleteWorkspaceSessionsService,
   renameThreadTitleKey as renameThreadTitleKeyService,
   setThreadTitle as setThreadTitleService,
@@ -127,25 +126,6 @@ export function createStartSharedSessionForWorkspace(params: {
     }
     loadedThreadsRef.current[threadId] = true;
     return threadId;
-  };
-}
-
-export function createArchiveThreadAction(params: { onDebug?: OnDebug }) {
-  const { onDebug } = params;
-
-  return async (workspaceId: string, threadId: string) => {
-    try {
-      await archiveThreadService(workspaceId, threadId);
-    } catch (error) {
-      onDebug?.({
-        id: `${Date.now()}-client-thread-archive-error`,
-        timestamp: Date.now(),
-        source: "error",
-        label: "thread/archive error",
-        payload: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
   };
 }
 

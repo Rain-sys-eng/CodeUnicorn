@@ -1444,11 +1444,16 @@ export function SessionManagementSection({
           }),
         });
       }
-      const shouldReloadPrimary = kind !== "delete" || failed.length > 0;
+      // archive/unarchive v2 全成功：本地 patch 即终态，不再三查齐发；
+      // delete 与失败对账保持原有 reload 行为不变。
+      const shouldReloadPrimary = failed.length > 0;
       const shouldReloadRelated =
-        mode === "project" && (shouldReloadPrimary || hasSelectedRelatedEntry);
+        mode === "project" &&
+        (shouldReloadPrimary || (kind === "delete" && hasSelectedRelatedEntry));
       const shouldReloadProjectionSummary =
-        mode === "project" && Boolean(workspaceId);
+        mode === "project" &&
+        Boolean(workspaceId) &&
+        (kind === "delete" || failed.length > 0);
       if (shouldReloadPrimary || shouldReloadRelated) {
         void Promise.all([
           shouldReloadPrimary ? reloadPrimary() : Promise.resolve(),

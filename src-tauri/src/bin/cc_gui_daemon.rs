@@ -163,8 +163,37 @@ mod session_index {
             pub provider_profile_id: Option<String>,
             pub provider_profile_name: Option<String>,
         }
+
+        pub(crate) const INDEX_LIST_ENGINES: &[&str] = &[
+            "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
+        ];
+
+        #[derive(Debug, Clone)]
+        pub(crate) struct SessionIndexDeleteLookup {
+            pub(crate) row: SessionIndexRow,
+            pub(crate) tombstoned_at: Option<i64>,
+        }
+
+        /// daemon 无本地 SQLite index：open 恒失败，archive v2 resolve 走
+        /// engine 前缀定向 + 请求 workspace 回退（与桌面端 index miss 同语义）。
+        pub(crate) struct DaemonUnavailableConnection;
+
+        pub(crate) fn open_connection() -> Result<DaemonUnavailableConnection, String> {
+            Err("daemon has no local session index".to_string())
+        }
+
+        pub(crate) fn lookup_rows_for_delete(
+            _connection: &DaemonUnavailableConnection,
+            _full_id: &str,
+        ) -> Result<Vec<SessionIndexDeleteLookup>, String> {
+            Ok(Vec::new())
+        }
     }
 }
+
+#[allow(dead_code)]
+#[path = "../session_archive_v2.rs"]
+mod session_archive_v2;
 // session_management now catalogs/deletes shared sessions via crate::shared_sessions.
 // The desktop app gets the full module from lib.rs; the daemon keeps a small local
 // adapter and only uses the shared read-only V2 binding projection. It never pulls
@@ -2358,22 +2387,6 @@ async fn handle_rpc_request(
                 .await?;
             serde_json::to_value(summary).map_err(|err| err.to_string())
         }
-        "archive_workspace_sessions" => {
-            let workspace_id = parse_string(&params, "workspaceId")?;
-            let session_ids = parse_string_array(&params, "sessionIds")?;
-            let response = state
-                .archive_workspace_sessions(workspace_id, session_ids)
-                .await?;
-            serde_json::to_value(response).map_err(|err| err.to_string())
-        }
-        "unarchive_workspace_sessions" => {
-            let workspace_id = parse_string(&params, "workspaceId")?;
-            let session_ids = parse_string_array(&params, "sessionIds")?;
-            let response = state
-                .unarchive_workspace_sessions(workspace_id, session_ids)
-                .await?;
-            serde_json::to_value(response).map_err(|err| err.to_string())
-        }
         "delete_workspace_sessions" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let session_ids = parse_string_array(&params, "sessionIds")?;
@@ -2555,11 +2568,6 @@ async fn handle_rpc_request(
             state
                 .list_mcp_server_status(workspace_id, cursor, limit)
                 .await
-        }
-        "archive_thread" => {
-            let workspace_id = parse_string(&params, "workspaceId")?;
-            let thread_id = parse_string(&params, "threadId")?;
-            state.archive_thread(workspace_id, thread_id).await
         }
         "delete_codex_session" => {
             let workspace_id = parse_string(&params, "workspaceId")?;

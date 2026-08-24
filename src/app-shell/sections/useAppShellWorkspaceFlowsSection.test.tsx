@@ -17,6 +17,12 @@ vi.mock("../../services/clientStorage", () => ({
   writeClientStoreValue: vi.fn(),
 }));
 
+const { archiveWorkspaceSessionsV2Mock } = vi.hoisted(() => ({
+  archiveWorkspaceSessionsV2Mock: vi.fn(),
+}));
+vi.mock("../../services/tauri/sessionManagement", () => ({
+  archiveWorkspaceSessionsV2: archiveWorkspaceSessionsV2Mock,
+}));
 vi.mock("../../services/tauri/terminalRuntime", () => ({
   writeTerminalSession: vi.fn(),
 }));
@@ -136,7 +142,7 @@ function createContext(overrides: Partial<Parameters<typeof useAppShellWorkspace
     queueSaveSettings: vi.fn(),
     refreshThread: vi.fn(),
     removeImagesForThread: vi.fn(),
-    removeThread: vi.fn().mockResolvedValue({ success: true }),
+    ensureWorkspaceThreadListLoaded: vi.fn(),
     renameWorktree: vi.fn(),
     renameWorktreeUpstream: vi.fn(),
     resetWorkspaceThreads: vi.fn(),
@@ -375,6 +381,9 @@ describe("useAppShellWorkspaceFlowsSection", () => {
   });
 
   it("archives the active thread and clears draft/image state after success", async () => {
+    archiveWorkspaceSessionsV2Mock.mockResolvedValue({
+      results: [{ sessionId: "thread-1", ok: true, code: "OK" }],
+    });
     const context = createContext();
     const { result } = renderHook(() =>
       useAppShellWorkspaceFlowsSection(context),
@@ -384,19 +393,26 @@ describe("useAppShellWorkspaceFlowsSection", () => {
       await result.current.handleArchiveActiveThread();
     });
 
-    expect(context.removeThread).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(archiveWorkspaceSessionsV2Mock).toHaveBeenCalledWith("ws-1", [
+      { threadId: "thread-1" },
+    ]);
+    expect(context.setActiveThreadId).toHaveBeenCalledWith(null, "ws-1");
+    expect(context.ensureWorkspaceThreadListLoaded).toHaveBeenCalledWith(
+      "ws-1",
+      { deletedThreadIds: ["thread-1"], localRemovalOnly: true },
+    );
     expect(context.clearDraftForThread).toHaveBeenCalledWith("thread-1");
     expect(context.removeImagesForThread).toHaveBeenCalledWith("thread-1");
     expect(context.alertError).not.toHaveBeenCalled();
   });
 
   it("surfaces archive failure without clearing local thread state", async () => {
-    const context = createContext({
-      removeThread: vi.fn().mockResolvedValue({
-        success: false,
-        message: "archive failed",
-      }),
+    archiveWorkspaceSessionsV2Mock.mockResolvedValue({
+      results: [
+        { sessionId: "thread-1", ok: false, error: "archive failed" },
+      ],
     });
+    const context = createContext();
     const { result } = renderHook(() =>
       useAppShellWorkspaceFlowsSection(context),
     );

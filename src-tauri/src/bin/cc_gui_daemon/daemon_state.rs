@@ -4409,14 +4409,6 @@ impl DaemonState {
             .await
     }
 
-    pub(super) async fn archive_thread(
-        &self,
-        workspace_id: String,
-        thread_id: String,
-    ) -> Result<Value, String> {
-        codex_core::archive_thread_core(&self.sessions, workspace_id, None, thread_id).await
-    }
-
     pub(super) async fn delete_codex_session(
         &self,
         workspace_id: String,
@@ -4895,37 +4887,6 @@ impl DaemonState {
             self.storage_path.as_path(),
             workspace_id,
             query,
-        )
-        .await
-    }
-
-    pub(super) async fn archive_workspace_sessions(
-        &self,
-        workspace_id: String,
-        session_ids: Vec<String>,
-    ) -> Result<session_management::WorkspaceSessionBatchMutationResponse, String> {
-        session_management::archive_workspace_sessions_core(
-            &self.workspaces,
-            &self.sessions,
-            &self.engine_manager,
-            self.storage_path.as_path(),
-            workspace_id,
-            session_ids,
-        )
-        .await
-    }
-
-    pub(super) async fn unarchive_workspace_sessions(
-        &self,
-        workspace_id: String,
-        session_ids: Vec<String>,
-    ) -> Result<session_management::WorkspaceSessionBatchMutationResponse, String> {
-        session_management::unarchive_workspace_sessions_core(
-            &self.workspaces,
-            &self.engine_manager,
-            self.storage_path.as_path(),
-            workspace_id,
-            session_ids,
         )
         .await
     }
