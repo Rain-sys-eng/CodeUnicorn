@@ -47,6 +47,11 @@ describe("classifier collision: intended hits", () => {
     ["json code 424", '{"code":424}', "pool"],
     ["json code 429", '{"code":"429"}', "rate"],
     ["json code 502", '{"code":"502"}', "server"],
+    ["json code 402 no balance keyword", '{"code":402}', "pool"],
+    ["json code 404 channel missing", '{"code":404}', "pool"],
+    ["json code 408 request timeout", '{"code":408}', "timeout"],
+    ["json code 409 conflict", '{"code":409}', "soft-cancel"],
+    ["json code 503 body only", '{"code":503}', "server"],
     [
       "claude silent exit 1",
       "会话失败：Claude exited with status: exit code: 1. Diagnostics: input_format=stream-json, include_hook_events=true, permission_mode=full-access. No stdout/stderr diagnostics were observed.",

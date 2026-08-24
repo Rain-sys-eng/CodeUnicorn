@@ -129,6 +129,39 @@ Shared provider retry 分类器 MUST 把余额 / 配额不足类失败判定为 
 - **WHEN** 用户手动发送新消息
 - **THEN** 既有 series 状态 MUST 清理，后续失败允许开启新 series
 
+### Requirement: Status-code whitelist MUST classify retryable vs permanent by code
+
+分类器 MUST 按状态码白名单判定，且关键词 permanent 规则（quota / config / overflow / permission）MUST 先于码表生效。码表判定只认显式状态码语境（`API Error: NNN`、`status NNN`、JSON `"code"` / `"status"` 字段），MUST NOT 用裸 `\b5\d\d\b` 全量匹配，避免误伤 `job-503.log` 这类文件名。
+
+| 码 | 判定 | 依据 |
+|---|---|---|
+| 401 / 402 / 403* / 404 / 405 / 424 | retryable `pool` | relay/号池轮换可愈；带 balance/quota 关键词的 402/403 仍判 `quota` permanent |
+| 408 | retryable `timeout` | Request Timeout 标准瞬断 |
+| 400 / 409 / 421 / 423 / 425 | retryable `soft-cancel` | 请求时序/冲突类瞬断；确定性 400（reasoning item / context length / unknown model）已被关键词 permanent 拦截 |
+| 429 | retryable `rate` | 限流 |
+| 5xx（prose 关键词或 JSON 字段形式） | retryable `server` | 上游/网关服务错误，含 Cloudflare 520–527 / 529 家族 |
+| 413 / 414 / 431 | permanent `overflow` | payload / URI / header 过大，同目标重试确定性无效 |
+
+重试激进度的安全网是 identical-failure 熔断（同签名 3 连败停跑）与 `maxAttempts` 上限，而不是收窄码表。
+
+#### Scenario: 裸 JSON code 402 判为号池轮换
+
+- **WHEN** 失败消息为 `{"code":402}`（无余额/配额关键词）
+- **THEN** 分类 MUST 为 retryable `pool`
+- **AND** `{"code":402,"message":"insufficient balance"}` MUST 仍判 permanent `quota`
+
+#### Scenario: 纯 JSON body 的 5xx 判为服务错误
+
+- **WHEN** 失败消息为 `{"code":503}` 或 `{"status":500}`
+- **THEN** 分类 MUST 为 retryable `server`
+- **AND** `failed to read /tmp/job-503.log` MUST 保持 `ignore`（文件名不误判）
+
+#### Scenario: payload 过大判为 permanent
+
+- **WHEN** 失败消息含状态码 `413` / `414` / `431`
+- **THEN** 分类 MUST 为 permanent `overflow`
+- **AND** MUST NOT 启动 auto-resume countdown
+
 ### Requirement: Deterministic Context Protocol Failures MUST Not Retry The Same Binding
 
 Shared provider retry MUST fail closed when an `invalid_request_error` states that a message is missing its required reasoning item. The error represents an incomplete provider-native Context chain rather than a transient provider failure.
