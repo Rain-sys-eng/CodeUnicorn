@@ -5,17 +5,17 @@ status: active
 
 <!-- DOC-LIFECYCLE: active-guide -->
 > [!NOTE]
-> **Lifecycle: Current onboarding guide.** 已按产品 `0.7.16` 校准；概念性名称不能替代真实 source symbol，接入前必须核验当前 engine registry、capability matrix 与 runtime adapters。
+> **Lifecycle: Current onboarding guide.** 已按产品 `0.9.3` 校准（含 Qoder 双分发与 PI RPC 长驻两轮接入实证回写）；概念性名称不能替代真实 source symbol，接入前必须核验当前 engine registry、capability matrix 与 runtime adapters。
 
 # 新 CLI 接入指南（Engine Onboarding Guide）
 
 > 初始日期：2026-07-27
 > 内容类型：How-to + conceptual integration contract + 全量注册点核对矩阵
-> 生命周期：accepted；流程有效，注册点已按 2026-08-04 代码校准
-> 最近校准：2026-08-04 · mossx `0.7.16` · HEAD `e0f8c0aa77`
+> 生命周期：accepted；流程有效，注册点已按 2026-08-24 代码校准
+> 最近校准：2026-08-24 · mossx `0.9.3` · HEAD `d387afce4`（Qoder 双分发 identity + PI RPC resident 收口批次实证回写）
 > 上游契约：[`mossx-multi-cli-provider-session-foundation-design.md`](./mossx-multi-cli-provider-session-foundation-design.md)（下称**基石设计**）
 > 适用读者：要为 mossx 接入新 Agent CLI（如 Auggie、未来任意 CLI）的工程师
-> 核心结论：接入一个新 CLI = **一次 Capability Spike + 按 §0 核对矩阵逐层勾选 + 15 项 Contract Tests**。矩阵中标注 ⚠ 的点**不会编译报错、不会测试失败，只会静默缺功能**——历史接入事故（幕布缺 streaming 态、provider 图标错位、Shared 目标被静默改写）全部出自这组点。
+> 核心结论：接入一个新 CLI = **一次 Capability Spike + 按 §0 核对矩阵逐层勾选 + 15 项 Contract Tests**。矩阵中标注 ⚠ 的点**不会编译报错、不会测试失败，只会静默缺功能**——历史接入事故（幕布缺 streaming 态、provider 图标错位、Shared 目标被静默改写）全部出自这组点；2026-08 Qoder / PI 接入又补齐一批新形态（跨分发身份撞车、stored 凭据被 env 遮蔽、resident 进程误伤并行、进程退出码误判终态、中文路径附件 panic、fork 派生行挤占侧栏），已回写为 A7 / B11 / B12 / D11 / G8 五行。
 
 ---
 
@@ -33,8 +33,9 @@ status: active
 | A2 🔴 | `src/features/engine/engineIds.json` | id / displayName / shortName / adapterId / protocolFamily / executionModel / capabilityProfile 的 SSOT | `check:engine-adapter-registry` 失败 |
 | A3 🔴 | `src/features/engine/engineRegistry.ts` | `BUILTIN_ENGINE_REGISTRY` 包装；新协议族需扩 `EngineProtocolFamily` union | registry parity gate 失败 |
 | A4 🔴 | `src-tauri/src/engine/mod.rs` | `EngineType` variant + `display_name()` / `icon()` / `engine_enabled_in_settings()` / `EngineFeatures` 等 exhaustive match + `pub mod` | 编译器会逐个列出集成点——**这是免费的接入清单，不要 `_ => unreachable!()` 糊掉** |
-| A5 🔴 | `src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs` | daemon 二进制的**平行** `EngineType` 枚举 + `display_name`/`icon` match + 每个 per-engine 文件的 `#[path]` include | daemon 二进制编译失败或新引擎在 daemon 模式下消失 |
+| A5 🔴 | `src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs` | daemon 二进制的**平行** `EngineType` 枚举 + `display_name`/`icon` match + 每个 per-engine 文件的 `#[path]` include + **daemon 侧平行 payload struct 字段对齐**（如 `ModelInfo`） | daemon 二进制编译失败或新引擎在 daemon 模式下消失；struct 字段漏同步不报错（2026-08 实证：daemon `ModelInfo` 缺 `reasoning` 字段） |
 | A6 🔴 | `src-tauri/src/engine/adapter_registry.rs` | `EngineAdapterRegistry::with_builtins()` 数组 + `engine_id()` match；非 stream-json 协议需在 `BuiltinEngineProtocol::family()` 加路由 | registry parity gate 失败 |
+| A7 ⚠ | `src-tauri/src/engine/<name>_provider_profile.rs` + canonical id 组装处（`canonical<Engine>ThreadId` / session-index writers / Shared binding / hide 集合） | **多分发 identity 限定**：同一 CLI 存在多分发（如 Qoder Global/CN）、raw session id 跨分发不保证唯一时，durable identity 必须 `<engine>:<providerProfileId>:<rawId>`；raw id 只留 transport 边界，旧 raw 输入仅兼容已有 binding | 跨分发撞 id：会话互相串台、Shared 认主认错、hide 集合误隐藏同 id 他人会话（Qoder 2026-08-22 F17 实证，`add-qoder-dual-distribution` / `enable-qoder-shared-target`） |
 
 自检：`pnpm check:engine-adapter-registry`
 
@@ -43,7 +44,7 @@ status: active
 | # | 文件 | 职责 | 漏掉的后果 |
 |---|------|------|------------|
 | B1 🔴 | `src-tauri/src/engine/manager.rs` | session 集合字段（每引擎一个 manager/registry）+ `refresh_engine_status*` detect match + per-engine config accessor | 编译错误 |
-| B2 🔴 | `src-tauri/src/engine/status.rs` | `detect_<engine>_status` + `resolve_engine_type()` 字符串分支 + `get_engine_models` 分发 + 模型目录读取 | 编译错误或新引擎永远检测不到 |
+| B2 🔴 | `src-tauri/src/engine/status.rs` | `detect_<engine>_status` + `resolve_engine_type()` 字符串分支 + `get_engine_models` 分发 + 模型目录读取；探测路径必须覆盖**平台 × 安装渠道矩阵**（PATH / npm global / 官方安装目录——Qoder 曾漏 Windows 官方安装目录） | 编译错误或新引擎永远检测不到；特定平台/渠道下已安装却报 not-installed |
 | B3 🔴 | `src-tauri/src/engine/commands.rs` | `engine_send_message` / `engine_send_message_sync` / `engine_interrupt` / `get_engine_models` 四个 dispatch match | 编译错误 |
 | B4 🔴 | `src-tauri/src/engine/events.rs` | 事件 envelope 的 engine→字符串 match | 编译错误 |
 | B5 ⚠ | `src-tauri/src/command_registry.rs` | per-engine `list_/load_/delete_<engine>_sessions` 等命令注册 + `engine/mod.rs` re-export | 前端调命令得到 "unknown command"；Session 管理页对该引擎空白 |
@@ -52,15 +53,17 @@ status: active
 | B8 ⚠ | `src-tauri/src/session_management.rs` | `get_engine_config` per-engine 分支 | Session 管理读不到该引擎配置 |
 | B9 🔵 | `src-tauri/src/engine_policy.rs` | 若新引擎要默认禁用：仿 `GEMINI_RUNTIME_ENABLED` 加编译期常量，并接线 `engine_enabled_in_settings` / `sanitize_engine_gates` / `resolve_engine_type` / manager / commands | 编译期开关是多点短路，只改一处会行为不一致 |
 | B10 🔴 | `src-tauri/src/engine/<name>.rs` + `<name>_history.rs` + `<name>_provider_profile.rs` | 最小三件套：进程/session 管理 + 历史 + provider profile（参照 `kimi.rs`/`grok.rs` 布局；复杂引擎参照 `claude/` 目录模式或 `codex/` 顶级模块模式） | — |
+| B11 ⚠ | `<name>_auth.rs` / spawn env 组装处 | **凭据注入优先级**：mossx stored 凭证（设置页保存）必须**优先于**进程环境变量；auth status 命令暴露 `envPresent` 共存态，让 UI 提示「env 被忽略」 | env 优先会遮蔽用户新存凭证：Windows 持久环境变量下「换新 token 仍被要求重新认证」（Qoder PAT 2026-08-25 实证，`fix-qoder-pat-env-precedence`） |
+| B12 ⚠ | `<name>.rs` + `<name>_rpc.rs`（若 CLI 有长驻/RPC 控制面） | **长驻进程生命周期纪律**：resident 作用域 = workspace × session（禁止 workspace 单飞 + `switch_session` 互斥——PI 实证误伤同 workspace 并行会话）；发送前对账 resident 配置（模型选型漂移不生效实证）；typed settle 迟到用**看门狗对账**（进程活性 + 事件推进），禁止固定 timeout 一刀切（长任务误杀实证）；RPC pending **先注册后写**（response 早到竞态）；typed terminal 优先于进程退出码 | 并行误伤、选型漂移、长任务误杀、TurnError 双发——全部只在真实多会话长任务下暴露，单测抓不到（PI RPC 收口批次，`enhance-pi-native-rpc-session`） |
 
 ### C. Capability 治理层（SSOT → codegen → CI）
 
 | # | 文件 | 职责 | 漏掉的后果 |
 |---|------|------|------------|
 | C1 🔴 | `openspec/specs/engine-capability-matrix/fixtures/matrix.json` | capability 事实源，加新引擎行（15 个 capability key 全填） | matrix gate 失败 |
-| C2 ⚠ | `scripts/check-engine-capability-matrix.mjs` | **`ENGINE_VARIANTS` 硬编码六引擎，必须同步改脚本本体**，然后 `--write` 重新生成 `src/features/engine/generated/engineCapabilityMatrix.generated.ts` 与 `src-tauri/src/engine/capability_matrix.generated.rs` | 只改 fixture 不改脚本 → 生成物缺新引擎段，**所有 capability 查询对该引擎返回 `unknown`**，UI 能力降级全失效 |
-| C3 ⚠ | `scripts/check-engine-adapter-registry.mjs` | `expectedBuiltins` 硬编码六 id，同步改脚本本体 | 同 C2，gate 变绿但 registry 实际不齐 |
-| C4 ⚠ | `scripts/check-model-provider-catalog.mjs` | 硬编码引擎列表（当前含 codex/gemini/grok/kimi/opencode，**无 claude**）；同步后更新 `src/features/models/generatedModelCatalog.json` + `generatedModelFallbacks.ts` | 模型 fallback roster 缺失，模型选择器空白 |
+| C2 ⚠ | `scripts/check-engine-capability-matrix.mjs` | **`ENGINE_VARIANTS` 硬编码引擎表（2026-08 校准：九引擎 claude/codex/gemini/grok/opencode/kimi/pi/dsh/qoder），必须同步改脚本本体**，然后 `--write` 重新生成 `src/features/engine/generated/engineCapabilityMatrix.generated.ts` 与 `src-tauri/src/engine/capability_matrix.generated.rs` | 只改 fixture 不改脚本 → 生成物缺新引擎段，**所有 capability 查询对该引擎返回 `unknown`**，UI 能力降级全失效 |
+| C3 ⚠ | `scripts/check-engine-adapter-registry.mjs` | `expectedBuiltins` 硬编码 id 列表（2026-08 校准：九 id），同步改脚本本体 | 同 C2，gate 变绿但 registry 实际不齐 |
+| C4 ⚠ | `scripts/check-model-provider-catalog.mjs` | **双列表硬编码**（2026-08 校准）：`STATIC_FALLBACK_ENGINES`（codex/gemini/grok/kimi/opencode）生成静态 fallback roster；`RUNTIME_ONLY_ENGINES`（dsh/qoder）只校验运行时目录；pi 当前**不在任一列表**（catalog JSON 有静态条目、无 fallback roster，模型主通道是运行时 pi 自身 provider 配置 auth.json/models.json）。新引擎必须显式决策进哪一段并写决策记录；同步后更新 `src/features/models/generatedModelCatalog.json` + `generatedModelFallbacks.ts` | 模型 fallback roster 缺失，模型选择器空白；不进列表又不写理由 → 后人无法分辨「有意」还是「漏了」 |
 | C5 ⚠ | `scripts/scan-engine-name-branches.mjs` | 扫描 `engine === "<id>"` 型分支生成 inventory；**exit 0 只代表扫描成功**，review 必须核对 finding count，新分支要进 capability policy 或加 `capability-router-allow-engine-branch` 豁免注释 | 散落的 engine-name 分支脱离治理 |
 
 自检：`pnpm check:engine-capability-matrix && pnpm check:engine-adapter-registry && pnpm check:model-provider-catalog && pnpm check:capability-aware-policy-router && pnpm check:engine-controller-facade`
@@ -72,13 +75,14 @@ status: active
 | D1 🔴 | `src/features/threads/adapters/<engine>RealtimeAdapter.ts` + `realtimeAdapterRegistry.ts` | runtime event → `NormalizedThreadEvent`；registry 是 `Record<ConversationEngine, …>` 穷举类型 | 编译错误（有兜底，好事） |
 | D2 ⚠ | `src/features/threads/loaders/<engine>HistoryLoader.ts` + `src/features/threads/hooks/useThreadActions.historyLoaderFactory.ts` | history 投影；factory 是按 threadId 前缀的 if 链 | **漏加分支则历史加载静默落到 codex loader**，解析出错乱内容 |
 | D3 ⚠ | `src/features/threads/contracts/conversationCurtainContracts.ts` | `ConversationEngine` union + `NORMALIZED_EVENT_DICTIONARY`（引擎私有事件名 → canonical kind） | 新引擎的私有事件**被静默丢弃**，幕布缺整类条目 |
-| D4 ⚠ | `src/features/messages/timeline/components/TimelineRowRenderer.tsx` | **streaming 态白名单**（当前硬编码六引擎）+ codex collaboration badge | **新引擎不在白名单 → assistant 消息永远不显示 streaming 光标/进行态**，这是"幕布缺渲染"的头号病灶 |
+| D4 ⚠ | `src/features/messages/timeline/components/TimelineRowRenderer.tsx` | **streaming 态白名单**（2026-08 校准：九引擎硬编码）+ codex collaboration badge | **新引擎不在白名单 → assistant 消息永远不显示 streaming 光标/进行态**，这是"幕布缺渲染"的头号病灶 |
 | D5 ⚠ | `src/features/messages/components/MessagesCore.tsx` | process/explore 折叠白名单、usage 收尾展示白名单、user-input 节点白名单、heartbeat pulse 白名单（多处硬编码） | 对应区块对新引擎静默不渲染 |
 | D6 ⚠ | `src/features/app/hooks/useAppServerEvents.ts` | `inferRawMethodEngine()` switch（`"<engine>/raw"` 方法名 → engine）+ threadId 前缀推断 + reasoning delta 的 engineHint 分支 | 事件路由不到新引擎，live 投影静默丢失 |
 | D7 🔵 | `src/conversation-presentation/presentationProfile.ts` + `src/features/threads/assembly/conversationMigrationGates.ts` | 渲染节奏/throttle profile 与 assembly 迁移 gate | 缺省走 fallback profile，通常可接受；需要专属节奏时才加 |
 | D8 🔵 | `src/utils/threadItems.ts` | canonical item 归一化；一般免改，仅参照 codex generated-image / serverLabel 特例 | 只有新引擎有私制品类时才动 |
 | D9 🔵 | `TokenIndicator.tsx` / `ContextBar.tsx` | usage 展示；通用 `usedTokens/maxTokens` 路径自动可用 | 专属 usage 卡片（如 ClaudeContextCard）按需接线 |
 | D10 🔵 | User Input elicitation（AskUserQuestion / requestUserInput） | 需要中途问用户时：emit `item/tool/requestUserInput` + 结算走 `respond_to_server_request`；**UI 只挂** `RequestUserInputMessage` / `RequestUserInputSubmittedBlock`（禁止 per-engine 弹层） | 漏 emit → 永远无卡；自造 UI → 样式/结算分叉；静默 Ok 不交付 waiter → 跳过/提交后 CLI 永久 loading。能力矩阵：[`../reference/conversation/user-input-elicitation-capability-matrix.md`](../reference/conversation/user-input-elicitation-capability-matrix.md) |
+| D11 ⚠ | 附件/图片全链路（adapter 编码 → history loader 还原 → hydrate 气泡归属 → 侧栏标题投影） | **附件往返四跳**逐跳验证：发送编码（base64 `images[]` / 路径引用）→ 历史还原（RPC image block / jsonl）→ hydrate 后用户气泡不与助手尾巴粘连 → 侧栏标题剥离附件包装 tag（`<file name="...">` 不得泄漏）；**非 ASCII 路径按字符边界处理**（中文路径字节切片 panic → 会话永远打不开，PI 实证） | 每跳单独看都「差不多」，串起来全是静默事故：图丢、气泡粘连、标题泄漏 tag、会话永远打不开（PI 2026-08-24 批次实证） |
 
 自检（哨兵）：`rg -n '"<new-engine>"' src/features/messages src/features/threads src/conversation-presentation src/features/app/hooks/useAppServerEvents.ts` —— 返回不应为空；再跑 `pnpm vitest run src/features/threads/adapters/realtimeAdapters.test.ts src/features/threads/loaders` 验证 live/history parity。
 
@@ -87,7 +91,7 @@ status: active
 | # | 文件 | 职责 | 漏掉的后果 |
 |---|------|------|------------|
 | E1 ⚠ | `src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.tsx` | `engineToProvider()` switch + `engineDisplayName: Record<EngineType, string>` + `providerModelCatalogs` | **漏了 switch 分支 → provider 图标/模型组静默落到 claude** |
-| E2 ⚠ | `src/features/composer/components/ChatInputBox/types.ts` | `AVAILABLE_PROVIDERS` 硬编码数组 + `enabled` flag | 新引擎不出现在 provider picker |
+| E2 ⚠ | `src/features/composer/components/ChatInputBox/types.ts` | `AVAILABLE_PROVIDERS` 硬编码数组 + `enabled` flag；**多分发变体（如 `qoder-cn`）是独立条目** | 新引擎（或某分发变体）不出现在 provider picker |
 | E3 🔵 | `src/features/composer/components/ChatInputBox/modelOptions.ts` | `MODEL_CONFIG_PROVIDERS` + 自定义模型存储（`features/models/<engine>CustomModels.ts`） | 仅当该引擎要"自定义模型"能力时接 |
 | E4 🔵 | `src/features/engine/hooks/engineControllerCatalog.ts` | model catalog 投影分支（claude/gemini 有特判） | 需要 fallback 模型目录合并时接 |
 | E5 ⚠ | `src/features/engine/components/EngineIcon.tsx` + `src/assets/model-icons/` + `src/features/vendors/providerBrandIcon.ts` | engine→图标 switch；provider 品牌图标正则映射 | 落到默认图标（不报错但品牌识别错误） |
@@ -100,7 +104,7 @@ status: active
 
 | # | 文件 | 职责 | 漏掉的后果 |
 |---|------|------|------------|
-| F1 ⚠ | `src/features/shared-session/utils/sharedSessionEngines.ts` **↔** `src-tauri/src/shared_sessions.rs` | `SHARED_SESSION_SUPPORTED_ENGINES` Set ↔ `is_supported_shared_session_engine()` **双集合手工同步**（当前均为 claude/codex/kimi/grok/opencode，排除 gemini） | 前端漏加 → `normalizeSharedSessionEngine()` **把新引擎静默改写成 claude**；后端漏加 → Shared 发送报 Unsupported |
+| F1 ⚠ | `src/features/shared-session/utils/sharedSessionEngines.ts` **↔** `src-tauri/src/shared_sessions.rs` | `SHARED_SESSION_SUPPORTED_ENGINES` Set ↔ `is_supported_shared_session_engine()` **双集合手工同步**（2026-08 校准：claude/codex/kimi/grok/opencode/pi/qoder，排除 gemini 与 dsh） | 前端漏加 → `normalizeSharedSessionEngine()` **把新引擎静默改写成 claude**；后端漏加 → Shared 发送报 Unsupported |
 | F2 ⚠ | `src-tauri/src/shared_session_v2.rs` | `context_capabilities()` / `engine_runtime_key()` / native session id 恢复三处 per-engine match | Shared V2 对新引擎落到 `_` fallback 或直接缺能力画像 |
 | F3 ⚠ | `src-tauri/src/shared_runtime_coordinator.rs` | `shared_pending_id` normalize match + engine→字符串 match | pending-id 归属错乱 |
 | F4 ⚠ | `src-tauri/src/shared_projection/commands.rs` | 投影能力 match + 支持引擎数组 | Shared 投影对新引擎不可用 |
@@ -115,12 +119,13 @@ status: active
 | # | 文件 | 职责 | 漏掉的后果 |
 |---|------|------|------------|
 | G1 ⚠ | `src/features/vendors/components/VendorSettingsPanel.tsx` + per-engine `*ProviderList/Dialog` + provider management hooks | CLI 配置管理主面板 | Settings 里该引擎无配置入口 |
-| G2 ⚠ | `src/features/vendors/components/CliCustomPathDialog.tsx` | `CliCustomPathEngine` union（当前五引擎，无 gemini） | 无法配置自定义 CLI 路径 |
+| G2 ⚠ | `src/features/vendors/components/CliCustomPathDialog.tsx` | `CliCustomPathEngine` union（2026-08 校准：九项，含 `qoder-cn` 分发变体，无 gemini） | 无法配置自定义 CLI 路径 |
 | G3 ⚠ | `src/features/settings/components/SettingsView.tsx` | per-engine doctor handlers（`onRun<Engine>Doctor`）+ `resolveSessionEngine()` + session counts | doctor 与 session 统计缺该引擎 |
 | G4 ⚠ | `src/features/app/hooks/useSidebarMenus.ts` | `iconKind` union（`engine-<id>`）+ 每引擎 new-session 条目块 + `sharedEngineLabels` | 侧栏新建入口缺该引擎 |
 | G5 ⚠ | `src/features/app/components/Sidebar.tsx` icon switch + `src/features/app/components/ThreadList.tsx` `baseEngineTitle` + badge | 侧栏/会话列表的引擎标识 | 会话行无引擎徽章或显示错误名 |
-| G6 ⚠ | `src/features/settings/components/settings-view/sections/SessionManagementSection.tsx` | per-engine 历史解析器 import / filter label / 加载分支 | Session 管理页过滤缺该引擎（**已知现存缺口：grok/kimi 当前也未覆盖**，接入时参照现状决定是否补齐） |
+| G6 ⚠ | `src/features/settings/components/settings-view/sections/SessionManagementSection.tsx` | per-engine 历史解析器 import / filter label / 加载分支 | Session 管理页过滤缺该引擎（2026-08 校准：kimi/grok/pi/qoder 已覆盖；接入时按现状补齐 filter label + 加载分支） |
 | G7 ⚠ | `src/features/home/components/HomeChat.tsx`（`getEngineLabel`）+ `ChatInputBox/PromptEnhancerDialog.tsx`（同名局部函数） | 首页与 prompt 增强对话框的引擎标签 | 显示原始 id |
+| G8 ⚠ | `src-tauri/src/session_index/writers.rs` + 侧栏行管线（`useThreadRows.ts` / live disk list） | **派生会话治理**（引擎有 fork/compact 等派生行时）：派生行写入 `parentSessionId`；侧栏顶层分页窗口**排除派生行**（不挤占 main 槽位）；first-paint 索引与后台全量盘扫**双通道归一**（缺一即泄漏顶层行）；fork 失败禁止静默 no-op 误藏主线 | 派生行挤爆侧栏分页、主线凭空消失、fork 后「会话丢了」（PI fork/tree 接入实证，2026-08） |
 
 ### H. i18n 层（10 语言 × N namespace）
 
@@ -136,7 +141,7 @@ status: active
 
 1. **逐行勾选，🔵 项写决策记录**："不需要"也是结论，写在 PR 描述里，防止后人以为漏了。
 2. ⚠ 行全部人工核对——**它们没有编译器/测试兜底**，是历次"缺东少西"事故的全部来源。
-3. 完整接入样例参照 `openspec/changes/archive/2026-07-24-add-kimi-engine/`（proposal/design/tasks/specs 四件套）。
+3. 完整接入样例参照 `openspec/changes/archive/2026-07-24-add-kimi-engine/`（proposal/design/tasks/specs 四件套）；2026-08 新样例：`add-qoder-engine`（新协议族 `acp-stdio`）、`add-qoder-dual-distribution`（多分发 identity）、`enable-qoder-shared-target`（Shared 后置准入）、`enhance-pi-native-rpc-session`（spawn-per-turn → RPC 长驻迁移）。
 
 ---
 
@@ -190,6 +195,7 @@ status: active
 - [ ] 协议形态：stream-json / JSON-RPC / ACP / 私有 stdio / HTTP？
 - [ ] 协议版本获取方式：`--help`、握手响应、schema 文件？
 - [ ] Schema fingerprint 可计算吗（用于 §14.3.1 的 Capability Cache Key）
+- [ ] **控制面形态**：除 spawn-per-turn 外有多轮长驻模式吗（RPC / server / daemon）？长驻模式独有命令面是什么（mid-turn steer / compact / fork / session tree）？——PI 的一等能力全在 `pi --mode rpc`，spawn-per-turn 永远拿不到；发现即记录，哪怕首期不接
 
 #### B. Session 生命周期
 
@@ -197,11 +203,13 @@ status: active
 - [ ] Session Identity 以什么形式、在哪个事件/响应中返回？
 - [ ] 如何 Resume：`--resume` / `session/load` / 其他？Resume 后历史如何呈现？
 - [ ] 支持 Fork/Clone 吗（`--fork-session` 类能力）？→ 决定 §9.2 的 `native-history-clone` 可用性
+- [ ] **Session id 跨分发 / 跨 Provider Profile 唯一吗**？同一 CLI 存在多分发（区域版 / 国际版 / 自建渠道）吗？不唯一 → durable identity 必须 profile-qualified（A7）
+- [ ] **派生关系**（fork / compact / summary）在原生存储里如何表达（如文件头 `parentSession`）？派生行会被侧栏顶层列表误当主线吗（G8）？
 
 #### C. Input / Output 通道
 
 - [ ] User input 投递方式：stdin prompt、JSON-RPC method、文件？
-- [ ] 支持 image/attachment 输入吗？格式？
+- [ ] 支持 image/attachment 输入吗？格式？**附件往返四跳实测**：发送编码 → 历史还原 → hydrate 气泡归属 → 侧栏标题（包装 tag 剥离）；**非 ASCII（中文）路径必测**（字节切片 panic 实证，D11）
 - [ ] Output event 流格式：NDJSON event 类型清单、thinking/tool/error 各如何表达？
 
 #### D. ACK 语义（最重要，逐条实测）
@@ -213,6 +221,8 @@ status: active
 - [ ] **Duplicate Final**：typed final、cumulative full snapshot、process-exit fallback 是否可能重复表达同一结果？
 - [ ] **Pending Probe**：投递后 ACK 丢失时，能按 client-supplied id 或 native history 查询"刚才的输入到底进没进去"吗？
 - [ ] **Cancel**：能取消一个已投递但未确认的 delivery 吗？取消有 ACK 吗？（→ `pendingCancel` 枚举）
+- [ ] **长 turn 存活**：>5min 任务的终态证据何时到达？固定 timeout 会误杀吗？看门狗如何与进程活性 / 事件推进对账？
+- [ ] **长驻进程语义**（若有）：进程作用域 = workspace 还是 session？配置（模型 / 凭据）变更后旧 resident 如何对账？进程退出码与 typed terminal 冲突时谁为准（必须 typed 优先——退出码误判已完成 turn 曾引发 Shared 续跑死循环）？
 
 #### E. History 能力
 
@@ -223,6 +233,8 @@ status: active
 #### F. Provider / Model / 配置
 
 - [ ] Provider 配置机制：env、config file、CLI flag？支持多套并行配置吗（同一 CLI 两个 Provider 进程隔离）？
+- [ ] **凭据优先级**：stored 配置与进程环境变量谁覆盖谁？env 遮蔽会导致「换新 token 仍被要求重新认证」吗（Qoder PAT 实证，B11）？
+- [ ] **安装探测矩阵**：覆盖哪些 平台 × 渠道（PATH / npm global / 官方安装目录）？Windows 官方安装目录实测过吗？
 - [ ] Model 列表获取方式：CLI 命令、API、静态？
 - [ ] Reasoning/thinking 配置入口？
 - [ ] MCP / tools 支持矩阵
@@ -254,6 +266,7 @@ status: active
 - **别忘了 A5 daemon 平行枚举**——`engine_bridge.rs` 用 `#[path]` include 每个 per-engine 文件，主 crate 编译过不代表 daemon 编译过。
 - Provider Profile 是**配置数据**不是代码（基石设计 §10）；Runtime Owner key = `Workspace Owner + Engine + Provider Profile`，用两个 Provider 并行各发一个 Turn 验证隔离（§17.2）。
 - Credential resolution 遵守 `Turn explicit managed binding > Session persisted managed binding > explicit local/default`（§10.3）。
+- **Identity qualification 决策**（A7）：raw session id 跨分发 / 跨 profile 不唯一时，durable identity 一律 `<engine>:<providerProfileId>:<raw>`（Qoder F17 形态），raw 只留 transport 边界；identity 迁移要贯穿 Session Index writer、history metadata、Shared binding 与 hide 集合，任何一处沿用 raw 即串台。
 
 ### Step 2（B10）：Delivery 语义（Adapter 核心纪律）
 
@@ -272,7 +285,8 @@ status: active
 - 不得为了让 matrix 好看而上报未实测的能力；
 - 不得在 Adapter 内做自动重试/自动 failover（重试决策属于内核 + 用户）；
 - 不得把 accepted start ACK 当作 completed；Shared completion 由 exact Attempt waiter 等待 logical terminal；
-- 不得让 frontend 根据 Engine 名称、inline event 是否到达或 timeout 猜测 terminal。
+- 不得让 frontend 根据 Engine 名称、inline event 是否到达或 timeout 猜测 terminal；
+- 不得把**进程退出码**置于 typed terminal 之上——已完成 turn 被非零退出翻成失败，会被 Shared provider-retry 放大为续跑死循环（单 session 106 连发，2026-08-25 `fix-turn-false-failure-retry-storm` 实证）；长 turn 的 settle 迟到用看门狗对账（进程活性 + 事件推进），禁止固定 timeout 一刀切误杀。
 
 ### Step 3（C 层）：Capability 治理
 
@@ -289,6 +303,7 @@ status: active
 - **D4/D5/D6 三组渲染白名单逐个加新引擎**——这是本层唯一没有编译器兜底的部分，加完后在真实会话里目视验证：streaming 光标、reasoning 折叠、usage 收尾、tool 块四件套全部出现。
 - 新 CLI 不拥有 Canonical persistence：Adapter 只输出 typed ACK/terminal/usage/control evidence，Canonical Fact 由 Shared core 统一序列化落盘；禁止 Adapter/delivery/frontend 手工构造 `NewCanonicalEvent`。
 - Shared 与 Native 可复用底层 CLI protocol parser，但不能复用 recovery owner。
+- **长驻 / RPC 形态追加纪律**（B12）：resident map key = workspace × session；RPC pending 先注册后写；extension UI request 一律 auto-cancel（headless 安全边界）；spawn/handshake 失败回退 spawn-per-turn 时，fallback 路径拒绝同会话并发（防双进程交叉写 session 文件）；删除会话只 drop 本会话 resident。
 
 ### Step 5（E+G+H 层）：选择器 / Settings / i18n
 
@@ -337,12 +352,15 @@ status: active
 | 14 | Shared projection failure | 保持可重试，不调用 Native recovery，不显示 Native recovery card |
 | 15 | Native Session 对照 | Native history、live terminal、stop 与 recovery 行为不变 |
 
-另外两项接入级验收：
+除 15 项 Contract Tests 外，还有以下接入级验收：
 
 - **Fault injection**：复用 A1.5 的强杀测试台，在 Tx 2a（provisioning）/ Tx 3（delivery）/ Tx 4（ACK）/ Tx 5（commit）四个边界各杀一次，验证新 CLI 路径不丢输入、不重复投递、不盲建第二 Binding；
-- **存量 fixture 回归**：跑 Claude/Codex/Kimi 的 golden fixtures（`src-tauri/tests/fixtures/session-foundation/`）与 live/history parity 测试（`realtimeAdapters.test.ts`、`historyLoaders*.test.ts`、`realtimeHistoryParity.test.ts`），证明新 CLI 的接入对存量引擎零影响。
+- **存量 fixture 回归**：跑 Claude/Codex/Kimi 的 golden fixtures（`src-tauri/tests/fixtures/session-foundation/`）与 live/history parity 测试（`realtimeAdapters.test.ts`、`historyLoaders*.test.ts`、`realtimeHistoryParity.test.ts`），证明新 CLI 的接入对存量引擎零影响；
+- **附件往返验收**（D11）：带图 / 带附件发送 → 历史 reload → 侧栏标题三跳一致；非 ASCII（中文）路径实测不 panic；
+- **长 turn 与并行验收**（B12，仅长驻形态）：>5min 任务不被误杀；同 workspace 两会话并行发送互不串线；resident 配置漂移后发送前对账生效；
+- **多分发 identity 验收**（A7，仅多分发形态）：两个分发各跑一个 turn，durable identity、hide 集合、Shared 认主互不串台。
 
-**渲染层目视验收（D 层补充，无自动化兜底）**：用新引擎跑一个真实会话，目视确认 ① streaming 光标/进行态 ② reasoning 块折叠 ③ tool 块渲染 ④ usage 收尾 ⑤ 历史 reload 后与 live 一致。五项缺任意一项，回 §0 D 组找漏掉的白名单。
+**渲染层目视验收（D 层补充，无自动化兜底）**：用新引擎跑一个真实会话，目视确认 ① streaming 光标/进行态 ② reasoning 块折叠 ③ tool 块渲染 ④ usage 收尾 ⑤ 历史 reload 后与 live 一致 ⑥ 带图提问 reload 后用户气泡独立、不与助手尾巴粘连 ⑦ 侧栏标题无附件包装 tag 泄漏。七项缺任意一项，回 §0 D 组找漏掉的白名单。
 
 ---
 
@@ -359,6 +377,8 @@ status: active
 - [ ] 新 CLI 的 weak ACK 没有污染全局 exactly-once 语义（降级显式可见）
 - [ ] Shared history error 不进入 Native recovery；Shared title 变化后仍按同一 `shared:<UUID>` 恢复
 - [ ] 既有引擎的渲染白名单分支未被顺手"重构"（接入 PR 只做 additive，白名单里只追加不重排）
+- [ ] 既有引擎的进程生命周期 / resident 语义未被新引擎的公共抽象顺手改写（如 PI resident 按 session 拆分只影响 pi，不外溢到 claude/codex 路径）
+- [ ] 新引擎的派生会话（fork/compact）不挤占侧栏顶层分页窗口；first-paint 索引与后台盘扫归一后无派生行泄漏为顶层行
 
 ---
 
@@ -402,6 +422,13 @@ Phase S Spike 实测（假想结论）:
   - 存量 fixtures 全绿
 ```
 
+真实样例（2026-08，含踩坑记录）：
+
+- `openspec/changes/add-qoder-engine/`：第四条协议族 `acp-stdio` 的 L1 接入（spawn-per-turn + `session/resume`）；
+- `openspec/changes/add-qoder-dual-distribution/`：多分发 identity 限定（A7 完整落地：Global/CN 双分发 + `qoder:<profile>:<raw>` 迁移）；
+- `openspec/changes/enable-qoder-shared-target/`：Shared 资格后置准入（先 Native 后 Shared 的决策与前后端双集合同步）；
+- `openspec/changes/enhance-pi-native-rpc-session/`：spawn-per-turn → RPC 长驻迁移（B12 全部纪律的来源：resident 拆分 / 看门狗对账 / 附件链路 / fork-tree-compact）。
+
 ---
 
 ## 七、常见反模式（接入时自我检查）
@@ -420,6 +447,15 @@ Phase S Spike 实测（假想结论）:
 12. **"主 crate 编译过了就是接完了"** → daemon 平行枚举（A5）、gate 脚本硬编码列表（C2/C3/C4）都不在主编译路径上，必须单独核对。
 13. **"测试全绿 = 渲染没问题"** → D4/D5/D6 渲染白名单没有任何自动化兜底；测试全绿但幕布缺 streaming 态是真实发生过的接入形态，必须目视验收。
 14. **"前端加了 Shared 集合就够了"** → F1 是双写集合，只加一边会出现"目标被静默改写成 claude"或"发送报 Unsupported"的幽灵 bug。
+15. **"进程退出码非零 = turn 失败"** → typed terminal 优先，退出码只作缺失 terminal 的错误兜底；已完成 turn 被退出码翻成失败，会被 Shared provider-retry 放大成续跑死循环（单 session 106 连发实证，`fix-turn-false-failure-retry-storm`）。
+16. **"resident 按 workspace 单飞 + `switch_session` 切换就行"** → 同 workspace 第二个会话被「另一 turn 仍在进行中」误伤；resident 作用域 = workspace × session（PI RPC 2026-08-24 实证）。
+17. **"长 turn 加个固定 timeout 兜底"** → timeout 不是 terminal authority；看门狗必须与进程活性 / 事件推进对账，否则长任务被误杀（PI 看门狗对账改造实证）。
+18. **"raw sessionId 直接当 durable identity"** → 多分发 / 多 profile 下跨域撞 id，会话串台；durable identity 必须 profile-qualified（Qoder F17）。
+19. **"进程 env 凭据优先，stored 兜底"** → Windows 持久环境变量会永久遮蔽设置页新凭证；stored 必须优先，并用 auth status 暴露 `envPresent` 共存态（Qoder PAT 实证）。
+20. **"附件路径 / 文本按字节切片"** → 非 ASCII（中文）路径字节切片直接 panic，会话永远打不开；一律按字符边界处理并实测中文路径（PI 实证）。
+21. **"侧栏标题直接取首条用户消息原文"** → 附件包装 `<file name="...">` tag 会泄漏进标题；投影前必须剥离包装（PI 实证）。
+22. **"fork 失败静默 no-op"** → 主线被误藏、用户以为会话丢了；fork 必须显式报错并让派生隐藏可自愈（PI 实证）。
+23. **"daemon 只同步 EngineType 枚举"** → daemon 侧 payload struct（如 `ModelInfo.reasoning`）字段缺失不报错；A5 核对必须包含 struct 字段对齐。
 
 ---
 
@@ -428,7 +464,8 @@ Phase S Spike 实测（假想结论）:
 - 基石设计（契约与红线）：[`mossx-multi-cli-provider-session-foundation-design.md`](./mossx-multi-cli-provider-session-foundation-design.md)
   - §3.2 Provider/Protocol 正交 · §9.1.1 NativeHistoryReader · §9.2 五种 Projection Mode · §14.2 Canonical Turn Contract · §14.3 Capability/ACK Matrix · §14.4.4.1 Canonical envelope · §14.4.7.1 Recovery ownership · §19 设计红线
 - 实施任务清单（Wave 0 Spike 模板来源）：[`../plans/2026-07-27-multi-cli-provider-session-foundation-task-checklist.md`](../plans/2026-07-27-multi-cli-provider-session-foundation-task-checklist.md)
-- 完整接入 change 样例（四件套模板）：`openspec/changes/archive/2026-07-24-add-kimi-engine/`
+- 完整接入 change 样例（四件套模板）：`openspec/changes/archive/2026-07-24-add-kimi-engine/`；2026-08 新样例：`add-qoder-engine` / `add-qoder-dual-distribution` / `enable-qoder-shared-target` / `enhance-pi-native-rpc-session`
+- Capability Spike 落档样例：[`mossx-qoder-capability-spike.md`](./mossx-qoder-capability-spike.md)、[`mossx-dsh-capability-spike.md`](./mossx-dsh-capability-spike.md)
 - 相关 specs：`openspec/specs/engine-capability-matrix/`、`engine-adapter-protocol-registry/`、`engine-runtime-identity/`、`shared-session-engine-selection/`、`cli-engine-visibility/`、`engine-plugin-onboarding-kit/`
 - 现有 Adapter 参照实现：`src-tauri/src/engine/claude.rs`、`src-tauri/src/engine/kimi.rs`、`src-tauri/src/engine/grok.rs`、`src-tauri/src/shared/codex_core.rs`
 - Golden fixtures：`src-tauri/tests/fixtures/session-foundation/`
