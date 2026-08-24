@@ -2467,6 +2467,134 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(skippedEntry?.payload.quarantineReason).toBe("turn-completed");
   });
 
+  // fix-turn-terminal-live-text-commit-loss：codex 正常完成即 quarantine，
+  // 非空终稿必须能越过 quarantine 走 salvage，否则迟到终稿永远被丢。
+  it("salvages a late codex completion past the settled-turn quarantine", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    const mockedItemHook = vi.mocked(useThreadItemEvents);
+    const latestReturn = mockedItemHook.mock.results.at(-1)?.value;
+    vi.mocked(latestReturn?.onNormalizedRealtimeEvent).mockClear();
+    options.markProcessing.mockClear();
+
+    act(() => {
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        eventId: "late-complete-1",
+        itemKind: "message",
+        timestampMs: Date.now(),
+        item: {
+          kind: "message",
+          id: "assistant-late-complete",
+          role: "assistant",
+          text: "迟到的完整终稿",
+        },
+        operation: "completeAgentMessage",
+        sourceMethod: "item/completed",
+        rawItem: null,
+        rawUsage: null,
+        turnId: "turn-1",
+      });
+    });
+
+    expect(latestReturn?.onNormalizedRealtimeEvent).toHaveBeenCalledTimes(1);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", true);
+  });
+
+  it("still quarantines late codex deltas after the turn has settled", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    const mockedItemHook = vi.mocked(useThreadItemEvents);
+    const latestReturn = mockedItemHook.mock.results.at(-1)?.value;
+    vi.mocked(latestReturn?.onNormalizedRealtimeEvent).mockClear();
+
+    act(() => {
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        eventId: "late-delta-1",
+        itemKind: "message",
+        timestampMs: Date.now(),
+        item: {
+          kind: "message",
+          id: "assistant-late-delta",
+          role: "assistant",
+          text: "迟到的增量",
+        },
+        operation: "appendAgentMessageDelta",
+        sourceMethod: "item/agentMessage/delta",
+        delta: "迟到的增量",
+        rawItem: null,
+        rawUsage: null,
+        turnId: "turn-1",
+      });
+    });
+
+    expect(latestReturn?.onNormalizedRealtimeEvent).not.toHaveBeenCalled();
+    const skippedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:quarantined-codex-event-skipped",
+    );
+    expect(skippedEntry?.payload.eventTurnId).toBe("turn-1");
+  });
+
+  it("does not salvage an empty codex completion body past quarantine", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    const mockedItemHook = vi.mocked(useThreadItemEvents);
+    const latestReturn = mockedItemHook.mock.results.at(-1)?.value;
+    vi.mocked(latestReturn?.onNormalizedRealtimeEvent).mockClear();
+
+    act(() => {
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        eventId: "late-empty-complete-1",
+        itemKind: "message",
+        timestampMs: Date.now(),
+        item: {
+          kind: "message",
+          id: "assistant-late-empty",
+          role: "assistant",
+          text: "",
+        },
+        operation: "completeAgentMessage",
+        sourceMethod: "item/completed",
+        rawItem: null,
+        rawUsage: null,
+        turnId: "turn-1",
+      });
+    });
+
+    expect(latestReturn?.onNormalizedRealtimeEvent).not.toHaveBeenCalled();
+  });
+
   it("does not revive a settled Codex turn from a late duplicate turn start", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);

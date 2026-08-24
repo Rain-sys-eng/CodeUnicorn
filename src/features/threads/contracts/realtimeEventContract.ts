@@ -102,6 +102,26 @@ export const REALTIME_CONTRACT_MATRIX: readonly RealtimeContractMatrixEntry[] = 
   },
 ] as const;
 
+/**
+ * terminal barrier 之后到达的 `completeAgentMessage` 是否值得 salvage：
+ * 仅当它是非空 assistant 正文终稿时放行（cross-channel 乱序下，item 事件可能
+ * 晚于 turn/completed 到达）。增量 delta 仍按迟到事件丢弃，避免复燃流式态。
+ *
+ * 放在 contracts 层而非 hook 模块：useThreadEventHandlers / useThreadItemEvents
+ * 共用，且避免被 hook 级 vi.mock 工厂遮蔽成 undefined。
+ * 见 openspec/changes/fix-turn-terminal-live-text-commit-loss。
+ */
+export function isSalvageableTerminalAssistantComplete(
+  event: NormalizedThreadEvent,
+): boolean {
+  return (
+    event.operation === "completeAgentMessage" &&
+    event.item.kind === "message" &&
+    event.item.role === "assistant" &&
+    (event.item.text ?? "").trim().length > 0
+  );
+}
+
 type CanonicalRealtimeFixture = {
   semantic: RealtimeContractSemantic;
   engine: ConversationEngine;

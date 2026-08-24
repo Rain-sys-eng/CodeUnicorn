@@ -9,6 +9,7 @@ import {
   type RealtimeBatcherFlush,
   type RealtimeBatcherFlushReason,
 } from "../contracts/realtimeEventBatcher";
+import { isSalvageableTerminalAssistantComplete } from "../contracts/realtimeEventContract";
 import { asString } from "../utils/threadNormalize";
 import type { ConversationItem, DebugEntry } from "../../../types";
 import type { ThreadAction } from "./useThreadsReducer";
@@ -934,6 +935,7 @@ export function useThreadItemEvents({
         ensuredThreads?: Set<string>;
         markedProcessingThreads?: Set<string>;
         useTransitionForDispatch?: boolean;
+        allowTerminalCompleteSalvage?: boolean;
       } = {},
     ) => {
       const {
@@ -961,7 +963,17 @@ export function useThreadItemEvents({
         markedProcessingThreads?.add(normalizedEvent.threadId);
       };
       const run = (runOptions: { skipProcessingMark?: boolean } = {}) => {
-        if (isEventTurnTerminal()) {
+        // fix-turn-terminal-live-text-commit-loss：terminal barrier 之后到达的
+        // 非空 assistant 终稿改为 salvage 落盘（reducer merge 取更长者），不再
+        // 静默丢全文。processing 复燃由 markProcessingIfNeeded 内部的
+        // isEventTurnTerminal 早退天然防住。
+        if (
+          isEventTurnTerminal() &&
+          !(
+            options.allowTerminalCompleteSalvage === true &&
+            isSalvageableTerminalAssistantComplete(normalizedEvent)
+          )
+        ) {
           droppedLateRealtimeEventCountRef.current += 1;
           return;
         }
@@ -1085,11 +1097,17 @@ export function useThreadItemEvents({
         skipMessageActivity?: boolean;
       } = {},
     ) => {
+      // fix-turn-terminal-live-text-commit-loss：非空 assistant 终稿即使在
+      // terminal barrier 之后到达也要放行，由 dispatch 层按 salvage 同步合入，
+      // 避免 normalized 路由（codex/shared/agent-canvas）终稿被静默丢弃。
+      const allowTerminalCompleteSalvage =
+        isSalvageableTerminalAssistantComplete(operation.event);
       if (
         isRealtimeTurnTerminal(
           operation.event.threadId,
           extractTurnIdFromNormalizedRealtimeEvent(operation.event),
-        )
+        ) &&
+        !allowTerminalCompleteSalvage
       ) {
         return;
       }
@@ -1097,6 +1115,7 @@ export function useThreadItemEvents({
         ensuredThreads: options.ensuredThreads,
         markedProcessingThreads: options.markedProcessingThreads,
         useTransitionForDispatch: options.useTransitionForDispatch,
+        allowTerminalCompleteSalvage,
       });
       runNormalizedRealtimeEventSideEffects(operation.event, {
         skipMessageActivity: options.skipMessageActivity,
@@ -1350,7 +1369,40 @@ export function useThreadItemEvents({
   const flushPendingRealtimeEvents = useCallback(() => {
     flushRealtimeDeltaOps();
     flushNormalizedRealtimeOps();
-  }, [flushNormalizedRealtimeOps, flushRealtimeDeltaOps]);
+    // fix-turn-terminal-live-text-commit-loss：contract batcher 的积压 delta
+    // 也必须在 terminal barrier 建立前同步落 durable。此前只有 legacy 两条
+    // 队列被 flush，batcher 的 cadence flush（startTransition）在 barrier 之后
+    // 会被 isRealtimeTurnTerminal 静默丢弃，导致末段正文冻结在 first-token 壳。
+    const batcherFlush = normalizedRealtimeBatcherRef.current.flush("terminal");
+    if (batcherFlush && batcherFlush.events.length > 0) {
+      const ensuredThreads = new Set<string>();
+      const markedProcessingThreads = new Set<string>();
+      for (const event of batcherFlush.events) {
+        applyNormalizedRealtimeEventNow(
+          {
+            event,
+            // drain 时现算 custom-name（比 push 时闭包捕获更新鲜），
+            // 避免把错误线程的命名状态带进 auto-rename。
+            hasCustomName: Boolean(
+              getCustomName(event.workspaceId, event.threadId),
+            ),
+          },
+          {
+            ensuredThreads,
+            markedProcessingThreads,
+            useTransitionForDispatch: false,
+          },
+        );
+      }
+      safeMessageActivity();
+    }
+  }, [
+    applyNormalizedRealtimeEventNow,
+    flushNormalizedRealtimeOps,
+    flushRealtimeDeltaOps,
+    getCustomName,
+    safeMessageActivity,
+  ]);
 
 
   // \u00a76.3 / \u00a76.4: dispatch \u8c03\u5ea6\u4e0e\u4eea\u8868\u62ee\u53d6

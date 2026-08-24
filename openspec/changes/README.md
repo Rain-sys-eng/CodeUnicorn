@@ -2,7 +2,7 @@
 
 本页是 `mossx` OpenSpec proposal 的当前入口。它只维护 active change 的执行状态，并把 archived change 路由到完整历史索引；详细治理快照仍以 [`../project.md`](../project.md) 为准。
 
-- Updated At: `2026-08-21`
+- Updated At: `2026-08-25`
 - Active proposals: `5+`（以磁盘 `openspec/changes/*` 为准）
 - Archived proposals: `850+`
 - Main capability specs: `494`
@@ -11,6 +11,7 @@
 
 | Change | Progress | Current gate | Artifacts |
 | ------ | -------: | ------------ | --------- |
+| [`fix-turn-terminal-live-text-commit-loss`](fix-turn-terminal-live-text-commit-loss/proposal.md) | implemented / committed / await hand-test | 回合结束小概率「缺渲染」：terminal barrier 前不 drain contract batcher + 迟到 complete 无 salvage（含 codex quarantine 拦截）。Fix 1 drain + Fix 2 salvage 已落地，8 回归测试全绿、threads/app 全量零新增红；commit `19e264c97`；**待 codex-native/shared 真机手测后 verify + sync specs** | [proposal](fix-turn-terminal-live-text-commit-loss/proposal.md) · [design](fix-turn-terminal-live-text-commit-loss/design.md) · [tasks](fix-turn-terminal-live-text-commit-loss/tasks.md) · [specs](fix-turn-terminal-live-text-commit-loss/specs/) · [分析](../../docs/analysis/turn-terminal-live-text-commit-loss-2026-08-25.md) |
 | [`redesign-session-delete-architecture`](redesign-session-delete-architecture/proposal.md) | implemented / await hand-test 3.3 | 删除链路 v2：Index First O(1) 定位 + marker-first tombstone + 受控并发执行 + 事件通道 + 前端乐观删除；会话管理全选 / 右键菜单链接已接；H1 settled 竞态 + H2 panic 兜底 + R1 rollback 竞态已修；cargo/vitest/tsc/governance 绿；**待真机 3.3 验收后 verify** | [proposal](redesign-session-delete-architecture/proposal.md) · [design](redesign-session-delete-architecture/design.md) · [tasks](redesign-session-delete-architecture/tasks.md) · [specs](redesign-session-delete-architecture/specs/) · [plan](../../docs/plans/2026-08-24-session-delete-architecture-redesign.md) |
 | [`add-qoder-engine`](add-qoder-engine/proposal.md) | implemented / await code review | 第 9 引擎 Qoder（`acp-stdio` spawn-per-turn）Native L1；不进 Shared；双 target 编译 0 error、cargo 20/20、tsc 0、前端零回归；目视验收 blocked（本机模型 API 不可达）；**不 commit，待 code review** | [proposal](add-qoder-engine/proposal.md) · [design](add-qoder-engine/design.md) · [tasks](add-qoder-engine/tasks.md) · [specs](add-qoder-engine/specs/) · [verification](add-qoder-engine/verification.md) · [spike](../../docs/research/mossx-qoder-capability-spike.md) |
 | [`add-workspace-wallpaper-market`](add-workspace-wallpaper-market/proposal.md) | implemented / await visual | 选择弹窗加 Wallhaven 市场 tab：浏览/搜索/下载到 `~/.ccgui/wallpapers/`；SFW only；focused vitest + Rust wallpaper 7 测 + tsc 绿；**待外观页手测后 archive** | [proposal](add-workspace-wallpaper-market/proposal.md) · [design](add-workspace-wallpaper-market/design.md) · [tasks](add-workspace-wallpaper-market/tasks.md) · [specs](add-workspace-wallpaper-market/specs/) |
