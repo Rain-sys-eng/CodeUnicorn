@@ -1480,13 +1480,30 @@ impl GeminiSession {
         }
         if let Some(status) = status {
             if !status.success() {
-                let error_msg = if !error_output.trim().is_empty() {
-                    error_output.trim().to_string()
+                if saw_turn_completed {
+                    // Turn 在流内已有 terminal TurnCompleted：退出码只作诊断，不否决结算
+                    //（对齐 claude.rs 的 fix-turn-false-failure-retry-storm 修复）。
+                    let stderr_sample = error_output.trim();
+                    let stderr_sample: &str = if stderr_sample.chars().count() > 400 {
+                        "(stderr sample truncated)"
+                    } else {
+                        stderr_sample
+                    };
+                    log::warn!(
+                        "[gemini] turn={} saw in-stream TurnCompleted but process exited non-zero ({}); settling as completed. stderr_sample={}",
+                        turn_id,
+                        status,
+                        stderr_sample
+                    );
                 } else {
-                    format!("Gemini exited with status: {}", status)
-                };
-                self.emit_error(turn_id, error_msg.clone());
-                return Err(error_msg);
+                    let error_msg = if !error_output.trim().is_empty() {
+                        error_output.trim().to_string()
+                    } else {
+                        format!("Gemini exited with status: {}", status)
+                    };
+                    self.emit_error(turn_id, error_msg.clone());
+                    return Err(error_msg);
+                }
             }
         }
 

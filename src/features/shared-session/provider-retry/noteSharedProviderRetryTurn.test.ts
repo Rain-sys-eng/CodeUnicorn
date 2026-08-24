@@ -148,4 +148,93 @@ describe("noteSharedProviderRetryTurn", () => {
     expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)?.phase).toBe("stopped");
     cancelSharedProviderRetry(WORKSPACE, THREAD, "idle");
   });
+
+  it("trips the circuit breaker after three identical-signature failures", () => {
+    const submit = vi.fn();
+    registerSharedProviderRetrySubmitter(WORKSPACE, THREAD, submit);
+    setSharedProviderRetrySettings(WORKSPACE, THREAD, "claude", { maxAttempts: 10 });
+    const message =
+      "Claude exited with status: exit code: 1. Diagnostics: input_format=stream-json. No stdout/stderr diagnostics were observed.";
+
+    noteSharedProviderRetryTurnSettled(failedNotice(message));
+    expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)).toMatchObject({
+      phase: "wait",
+      attempt: 1,
+      kind: "soft-cancel",
+    });
+
+    noteSharedProviderRetryTurnSettled({
+      ...failedNotice(message),
+      originKind: "shared-provider-retry",
+      attemptId: "resume-1",
+    });
+    expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)?.phase).toBe("wait");
+
+    noteSharedProviderRetryTurnSettled({
+      ...failedNotice(message),
+      originKind: "shared-provider-retry",
+      attemptId: "resume-2",
+    });
+    const overlay = getSharedProviderRetryOverlay(WORKSPACE, THREAD);
+    expect(overlay?.phase).toBe("exhausted");
+    expect(overlay?.kind).toBe("soft-cancel");
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("does not trip the circuit breaker when failure signatures differ", () => {
+    registerSharedProviderRetrySubmitter(WORKSPACE, THREAD, vi.fn());
+    setSharedProviderRetrySettings(WORKSPACE, THREAD, "claude", { maxAttempts: 10 });
+
+    noteSharedProviderRetryTurnSettled(
+      failedNotice("API Key is not assigned to any group"),
+    );
+    noteSharedProviderRetryTurnSettled({
+      ...failedNotice("API Key is not assigned to any group"),
+      originKind: "shared-provider-retry",
+      attemptId: "resume-1",
+    });
+    noteSharedProviderRetryTurnSettled({
+      ...failedNotice("API Error: 429 Too Many Requests"),
+      originKind: "shared-provider-retry",
+      attemptId: "resume-2",
+    });
+    // 三次失败但第三次签名不同：不熔断，按既有 backoff 继续
+    expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)).toMatchObject({
+      phase: "wait",
+      attempt: 3,
+      kind: "rate",
+    });
+  });
+
+  it("allows a fresh series after the user sends manually post-circuit-break", () => {
+    registerSharedProviderRetrySubmitter(WORKSPACE, THREAD, vi.fn());
+    setSharedProviderRetrySettings(WORKSPACE, THREAD, "claude", { maxAttempts: 10 });
+    const message = "502 bad gateway";
+
+    noteSharedProviderRetryTurnSettled(failedNotice(message));
+    noteSharedProviderRetryTurnSettled({
+      ...failedNotice(message),
+      originKind: "shared-provider-retry",
+      attemptId: "resume-1",
+    });
+    noteSharedProviderRetryTurnSettled({
+      ...failedNotice(message),
+      originKind: "shared-provider-retry",
+      attemptId: "resume-2",
+    });
+    expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)?.phase).toBe("exhausted");
+
+    noteSharedProviderRetryUserSend({
+      workspaceId: WORKSPACE,
+      threadId: THREAD,
+      originKind: null,
+    });
+    expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)).toBeNull();
+
+    noteSharedProviderRetryTurnSettled(failedNotice(message));
+    expect(getSharedProviderRetryOverlay(WORKSPACE, THREAD)).toMatchObject({
+      phase: "wait",
+      attempt: 1,
+    });
+  });
 });

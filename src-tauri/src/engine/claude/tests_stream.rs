@@ -20,6 +20,13 @@ fn claude_settings_with_curated_skill() -> crate::types::AppSettings {
 }
 
 fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, PathBuf) {
+    create_fake_claude_stream_environment_with_exit_code(lines, 0)
+}
+
+fn create_fake_claude_stream_environment_with_exit_code(
+    lines: &[&str],
+    exit_code: i32,
+) -> (PathBuf, PathBuf, PathBuf) {
     let root = std::env::temp_dir().join(format!("ccgui-claude-stream-{}", uuid::Uuid::new_v4()));
     let workspace_path = root.join("workspace");
     std::fs::create_dir_all(&workspace_path).expect("create fake claude workspace");
@@ -37,7 +44,7 @@ fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, P
             script.push_str(line);
             script.push_str("\r\n");
         }
-        script.push_str("exit /b 0\r\n");
+        script.push_str(&format!("exit /b {exit_code}\r\n"));
         std::fs::write(&script_path, script).expect("write fake claude cmd");
     }
 
@@ -52,6 +59,7 @@ fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, P
             script.push('\n');
         }
         script.push_str("EOF\n");
+        script.push_str(&format!("exit {exit_code}\n"));
         std::fs::write(&script_path, script).expect("write fake claude shell");
 
         let mut permissions = std::fs::metadata(&script_path)
@@ -1601,6 +1609,127 @@ async fn send_message_reports_exit_metadata_when_claude_fails_without_output() {
     let (turn_error, code) = turn_error_event(&events).expect("turn error event");
     assert!(turn_error.contains("input_format=stream-json"));
     assert!(code.is_none());
+}
+
+#[tokio::test]
+async fn send_message_settles_successfully_when_success_result_arrives_but_process_exits_non_zero()
+{
+    let stream_lines = [
+        r#"{"type":"result","subtype":"success","is_error":false,"session_id":"11111111-1111-4111-8111-111111111111","message":{"content":[{"type":"text","text":"final answer"}]}}"#,
+    ];
+    let (root, workspace_path, script_path) =
+        create_fake_claude_stream_environment_with_exit_code(&stream_lines, 1);
+
+    let session = ClaudeSession::new(
+        "test-workspace".to_string(),
+        workspace_path,
+        Some(EngineConfig {
+            bin_path: Some(script_path.to_string_lossy().to_string()),
+            home_dir: None,
+            custom_args: None,
+            default_model: None,
+        }),
+    );
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let response = session
+        .send_message(params, "turn-result-exit-nonzero")
+        .await
+        .expect("success result must outrank non-zero exit code");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(response, "final answer");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.event, EngineEvent::TurnCompleted { .. }))
+            .count(),
+        1
+    );
+    assert!(
+        turn_error_event(&events).is_none(),
+        "a turn with a success result must not emit TurnError on non-zero exit"
+    );
+}
+
+#[tokio::test]
+async fn send_message_settles_successfully_when_success_result_arrives_with_stderr_noise_and_non_zero_exit(
+) {
+    let result_line = r#"{"type":"result","subtype":"success","is_error":false,"session_id":"11111111-1111-4111-8111-111111111111","message":{"content":[{"type":"text","text":"noisy answer"}]}}"#;
+    #[cfg(windows)]
+    let script = format!(
+        "@echo off\r\necho {result_line}\r\necho hook warning: noisy environment 1>&2\r\nexit /b 1\r\n"
+    );
+    #[cfg(not(windows))]
+    let script = format!(
+        "#!/bin/sh\ncat <<'EOF'\n{result_line}\nEOF\necho 'hook warning: noisy environment' >&2\nexit 1\n"
+    );
+    let (root, workspace_path, script_path) = create_fake_claude_script(&script);
+
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let response = session
+        .send_message(params, "turn-result-stderr-noise-exit-nonzero")
+        .await
+        .expect("success result must outrank non-zero exit even with stderr noise");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(response, "noisy answer");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.event, EngineEvent::TurnCompleted { .. }))
+            .count(),
+        1
+    );
+    assert!(turn_error_event(&events).is_none());
+}
+
+#[tokio::test]
+async fn send_message_still_fails_when_error_result_arrives_and_process_exits_non_zero() {
+    let stream_lines = [
+        r#"{"type":"result","subtype":"error_during_execution","is_error":true,"session_id":"11111111-1111-4111-8111-111111111111"}"#,
+    ];
+    let (root, workspace_path, script_path) =
+        create_fake_claude_stream_environment_with_exit_code(&stream_lines, 1);
+
+    let session = ClaudeSession::new(
+        "test-workspace".to_string(),
+        workspace_path,
+        Some(EngineConfig {
+            bin_path: Some(script_path.to_string_lossy().to_string()),
+            home_dir: None,
+            custom_args: None,
+            default_model: None,
+        }),
+    );
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let error = session
+        .send_message(params, "turn-error-result-exit-nonzero")
+        .await
+        .expect_err("error result + non-zero exit must stay a failure");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(!error.is_empty());
+    assert!(
+        events
+            .iter()
+            .filter(|event| matches!(event.event, EngineEvent::TurnCompleted { .. }))
+            .count()
+            == 0,
+        "error result turns must not emit TurnCompleted"
+    );
 }
 
 #[tokio::test]

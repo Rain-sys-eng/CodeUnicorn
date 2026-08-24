@@ -35,6 +35,8 @@ function reasonKey(kind: SharedProviderRetryKind | null): string {
       return "providerRetryReasonConfig";
     case "overflow":
       return "providerRetryReasonOverflow";
+    case "quota":
+      return "providerRetryReasonQuota";
     case "permission":
       return "providerRetryReasonPermission";
     case "user-stop":
@@ -74,6 +76,7 @@ export function SharedProviderRetryHint({
   } else if (overlay.phase === "exhausted") {
     copy = t("sharedSend.providerRetryExhausted", {
       cli,
+      n: overlay.attempt,
       max: overlay.maxAttempts,
     });
   } else if (overlay.phase === "permanent") {

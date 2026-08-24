@@ -10,6 +10,7 @@ export type SharedProviderRetryKind =
   | "soft-cancel"
   | "config"
   | "overflow"
+  | "quota"
   | "permission"
   | "user-stop"
   | "recovery"
@@ -30,6 +31,7 @@ export type SharedProviderRetryReason =
   | "暂时中断"
   | "配置错误"
   | "上下文过长"
+  | "配额不足"
   | "权限拒绝"
   | "已停止";
 
@@ -57,6 +59,14 @@ function normalizeMessage(value: string | null | undefined): string {
 }
 
 function classifyPermanent(text: string): SharedProviderRetryClassification | null {
+  // 配额 / 余额不足必须先于 pool 的 401/403 规则判定：同 key 重试治不好余额不足。
+  if (
+    /预扣费|余额不足|剩余额度不足|insufficient[_ -]?(?:balance|credit|quota)|quota(?:\s+is)?\s+exceeded|balance\s+insufficient/.test(
+      text,
+    )
+  ) {
+    return { disposition: "permanent", kind: "quota", reason: "配额不足" };
+  }
   if (
     /invalid_request_error/.test(text) &&
     /required reasoning item/.test(text)
@@ -175,6 +185,14 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
     return { disposition: "retryable", kind: "soft-cancel", reason: "暂时中断" };
   }
   return null;
+}
+
+/** identical-failure 熔断签名：kind + normalized message 前缀。 */
+export function sharedProviderRetryFailureSignature(
+  kind: SharedProviderRetryKind,
+  message: string | null | undefined,
+): string {
+  return `${kind}:${normalizeMessage(message).slice(0, 120)}`;
 }
 
 export function classifySharedProviderRetryError(

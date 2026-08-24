@@ -2,6 +2,7 @@ import type { EngineType } from "../../../types";
 import { getSharedSendState } from "../runtime/sharedSendStateStore";
 import {
   classifySharedProviderRetryError,
+  sharedProviderRetryFailureSignature,
   type SharedProviderRetryClassification,
 } from "./classifySharedProviderRetryError";
 import {
@@ -18,6 +19,7 @@ import {
   isSharedProviderRetryAutoSendEnabled,
   resolveSharedProviderRetryDelaySec,
   resolveSharedProviderRetryResumePrompt,
+  SHARED_PROVIDER_RETRY_CIRCUIT_LIMIT,
 } from "./providerRetryPolicy";
 import { getSharedProviderRetrySettings } from "./providerRetrySettingsStore";
 
@@ -422,6 +424,37 @@ export function noteSharedProviderRetryTurnSettled(
 
   const nextAttempt = inSeries && current.series ? current.series.attempt + 1 : 1;
   const now = Date.now();
+  const signature = sharedProviderRetryFailureSignature(
+    classification.kind,
+    notice.message,
+  );
+  const sameSignatureCount =
+    inSeries && current.series && current.series.failureSignature === signature
+      ? current.series.sameSignatureCount + 1
+      : 1;
+  if (sameSignatureCount >= SHARED_PROVIDER_RETRY_CIRCUIT_LIMIT) {
+    // identical-failure 熔断：同签名连败说明重试改变不了结果（典型：引擎侧误判
+    // 或上游确定性拒绝），直接 exhausted 停跑，防止 maxAttempts 高配额下空烧 token。
+    setSharedProviderRetryState(notice.workspaceId, notice.threadId, {
+      series: null,
+      overlay: {
+        phase: "exhausted",
+        attempt: current.series?.attempt ?? nextAttempt,
+        maxAttempts: settings.maxAttempts,
+        seconds: 0,
+        kind: classification.kind,
+        engine: notice.engine,
+        seriesId: current.series?.seriesId ?? "circuit-breaker",
+        lastAttemptId: notice.attemptId ?? current.series?.lastAttemptId ?? null,
+        lastMessage: notice.message ?? null,
+        providerProfileId: notice.providerProfileId ?? null,
+        model: notice.model ?? null,
+        seriesStartedAtMs: current.series?.startedAtMs ?? now,
+        batchStartedAtMs: now,
+      },
+    });
+    return;
+  }
   const series: SharedProviderRetrySeries = {
     seriesId:
       inSeries && current.series
@@ -434,6 +467,8 @@ export function noteSharedProviderRetryTurnSettled(
     lastAttemptId: notice.attemptId ?? null,
     originUserMessageId: current.series?.originUserMessageId ?? null,
     startedAtMs: current.series?.startedAtMs ?? now,
+    failureSignature: signature,
+    sameSignatureCount,
   };
   enterWait(notice, series, classification);
 }

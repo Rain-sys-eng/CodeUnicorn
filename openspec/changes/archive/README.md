@@ -2,7 +2,7 @@
 
 本页为 `mossx` 已归档 OpenSpec proposal 的完整可点击索引。目录名中的日期是 archive date，不代表 proposal 首次创建时间。
 
-- Updated At: `2026-08-21`
+- Updated At: `2026-08-25`
 - Indexed proposals: `851+`
 - Source of truth: `openspec/changes/archive/<archive-date>-<change-id>/proposal.md`
 - Back to current changes: [`../README.md`](../README.md)
@@ -12,6 +12,7 @@
 
 ### 2026-08-24
 
+- [`2026-08-24-fix-turn-false-failure-retry-storm`](2026-08-24-fix-turn-false-failure-retry-storm/proposal.md) — verified implementation，已同步 `claude-turn-settlement-stream-lifecycle`、`shared-provider-retry`；用户 transcript 实证「已完成 turn 被进程非零退出误判失败 → shared auto-resume 死循环烧 token」；Claude/Gemini 成功 result 优先于退出码（对齐基石 §14.3.2 既有设计）+ 配额 403 判 permanent「配额不足」+ identical-failure 三连熔断；cargo/vitest/tsc/validate 绿；基石 ADR 校准已回写；3.2 yuzu 侧 evidence 为 documented waiver（待回填 TurnError 原文）
 - [`2026-08-24-show-workspace-home-on-last-tab-close`](2026-08-24-show-workspace-home-on-last-tab-close/proposal.md) — verified implementation，已同步 `workspace-topbar-session-tabs`；关完全部 topbar 页签落 workspace home 首页（HomeChat），不再是裸空画布；`handleClearActiveThread` 追加 `setWorkspaceHomeWorkspaceId` + `setHomeOpen(false)`；反向由 `commitThreadSelection` 既有复位覆盖；用户手测通过
 - [`2026-08-24-fix-topbar-tab-close-empty-canvas`](2026-08-24-fix-topbar-tab-close-empty-canvas/proposal.md) — verified implementation，已同步 `workspace-topbar-session-tabs`；关最后一个 topbar 页签不再经 `handleSelectWorkspace` 恢复 workspace last thread（幽灵内容 + tab 复活），改为 `handleClearActiveThread` 清空选择落空画布（方案 A，选款稿 `docs/designs/session-close-behavior/`）；hook 3 测 + policy 测试 + tsc / app-shell governance / openspec validate 绿；mac 手测通过，Win/Linux 同 renderer 路径覆盖
 - [`2026-08-24-fix-qoder-pat-env-precedence`](2026-08-24-fix-qoder-pat-env-precedence/proposal.md) — verified implementation，已同步 `qoder-dual-distribution`；Qoder PAT spawn 注入优先级反转为 stored PAT > 进程 env（修 Windows 持久 env 遮蔽设置页新 PAT 导致「换新 token 仍被要求重新认证」）；status 新增 `envPresent` + 10 语言 hint；基石设计文档校准行已回写

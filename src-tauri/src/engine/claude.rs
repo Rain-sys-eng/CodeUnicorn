@@ -659,6 +659,20 @@ impl ClaudeSession {
         sample.lock().map(|value| value.clone()).unwrap_or_default()
     }
 
+    /// 成功 terminal result 判定：`is_error == true` 或 subtype 以 `error` 开头一律不算成功；
+    /// 缺省 subtype / `success` 视为成功（fix-turn-false-failure-retry-storm）。
+    fn is_success_result_event(event: &Value) -> bool {
+        if event.get("is_error").and_then(|v| v.as_bool()) == Some(true) {
+            return false;
+        }
+        if let Some(subtype) = event.get("subtype").and_then(|v| v.as_str()) {
+            if subtype.starts_with("error") {
+                return false;
+            }
+        }
+        true
+    }
+
     fn is_valid_claude_stream_event(event: &Value) -> bool {
         matches!(
             event.get("type").and_then(|value| value.as_str()),
@@ -1751,6 +1765,9 @@ impl ClaudeSession {
         let mut stream_runtime_error: Option<String> = None;
         let mut stream_error_event_emitted = false;
         let mut saw_valid_stream_event = false;
+        // 成功 terminal result（is_error != true 且 subtype 非 error*）已到达的 turn，
+        // 进程非零退出不得否决结算（fix-turn-false-failure-retry-storm）。
+        let mut saw_success_result = false;
         let first_event_deadline = Instant::now() + CLAUDE_STREAM_FIRST_EVENT_TIMEOUT;
         let stream_diagnostic_sample = Arc::new(StdMutex::new(String::new()));
         let text_delta_coalesce_window = if cfg!(windows) {
@@ -2087,6 +2104,9 @@ impl ClaudeSession {
                     if result_seen_at.is_none()
                         && event.get("type").and_then(|v| v.as_str()) == Some("result")
                     {
+                        if Self::is_success_result_event(&event) {
+                            saw_success_result = true;
+                        }
                         result_seen_at = Some(Instant::now());
                         if active_background_task_ids.is_empty() {
                             post_result_grace_deadline =
@@ -2353,45 +2373,65 @@ impl ClaudeSession {
         // caused silent failures when the CLI produced partial output before crashing.
         if let Some(status) = status {
             if !status.success() {
-                let error_msg = Self::build_process_exit_error(
-                    status,
-                    &error_output,
-                    &Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample),
-                    use_stream_json_input,
-                    include_hook_events,
-                    params.access_mode.as_deref(),
-                );
+                if saw_success_result {
+                    // Turn 在流内已逻辑完成（成功 result）：退出码只作诊断，不否决结算。
+                    // 典型来源：Windows / 中转渠道 / hooks 环境下 CLI 成功轮次后非零退出。
+                    let stderr_sample = error_output.trim();
+                    let stderr_sample: &str = if stderr_sample.chars().count() > 400 {
+                        // 截断防爆日志
+                        "(stderr sample truncated)"
+                    } else {
+                        stderr_sample
+                    };
+                    log::warn!(
+                        "[claude] turn={} saw success result but process exited non-zero ({}); settling as completed. stderr_sample={}",
+                        turn_id,
+                        status,
+                        stderr_sample
+                    );
+                } else {
+                    let error_msg = Self::build_process_exit_error(
+                        status,
+                        &error_output,
+                        &Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample),
+                        use_stream_json_input,
+                        include_hook_events,
+                        params.access_mode.as_deref(),
+                    );
 
-                if include_hook_events && Self::is_unknown_include_hook_events_error(&error_msg) {
+                    if include_hook_events
+                        && Self::is_unknown_include_hook_events_error(&error_msg)
+                    {
+                        self.clear_turn_ephemeral_state(turn_id);
+                        return Err(error_msg);
+                    }
+
+                    log::error!("Claude process failed: {}", error_msg);
+                    self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
+
+                    if Self::is_prompt_too_long_error(&error_msg) {
+                        self.clear_turn_ephemeral_state(turn_id);
+                        return Err(Self::mark_retryable_prompt_too_long_error(&error_msg));
+                    }
+
+                    if let Some(mode_blocked_event) =
+                        self.build_mode_blocked_signal_from_error(turn_id, &error_msg)
+                    {
+                        self.emit_turn_event(turn_id, mode_blocked_event);
+                    }
+
+                    self.emit_turn_event(
+                        turn_id,
+                        EngineEvent::TurnError {
+                            workspace_id: self.workspace_id.clone(),
+                            error: error_msg.clone(),
+                            code: None,
+                        },
+                    );
+
                     self.clear_turn_ephemeral_state(turn_id);
                     return Err(error_msg);
                 }
-
-                log::error!("Claude process failed: {}", error_msg);
-                self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
-
-                if Self::is_prompt_too_long_error(&error_msg) {
-                    self.clear_turn_ephemeral_state(turn_id);
-                    return Err(Self::mark_retryable_prompt_too_long_error(&error_msg));
-                }
-
-                if let Some(mode_blocked_event) =
-                    self.build_mode_blocked_signal_from_error(turn_id, &error_msg)
-                {
-                    self.emit_turn_event(turn_id, mode_blocked_event);
-                }
-
-                self.emit_turn_event(
-                    turn_id,
-                    EngineEvent::TurnError {
-                        workspace_id: self.workspace_id.clone(),
-                        error: error_msg.clone(),
-                        code: None,
-                    },
-                );
-
-                self.clear_turn_ephemeral_state(turn_id);
-                return Err(error_msg);
             }
         } else if !settled_by_grace {
             // Process handle was taken by interrupt() or missing.

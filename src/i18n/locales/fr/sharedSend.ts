@@ -155,7 +155,7 @@ const sharedSend = {
     providerRetryWait:
       "{{cli}} failed ({{reason}}) · retrying in {{seconds}}s {{n}}/{{max}}",
     providerRetrySending: "Sending to {{cli}} · {{n}}/{{max}}",
-    providerRetryExhausted: "{{cli}} still failed after {{max}} retries",
+    providerRetryExhausted: "{{cli}} still failed after {{n}} retries",
     providerRetryPermanent: "{{reason}}. Will not retry automatically",
     providerRetryStopped: "Automatic retries stopped",
     providerRetrySuccess: "Connected on attempt {{n}}",
@@ -171,6 +171,7 @@ const sharedSend = {
     providerRetryReasonSoftCancel: "interrupted",
     providerRetryReasonConfig: "config error",
     providerRetryReasonOverflow: "context too long",
+    providerRetryReasonQuota: "quota exhausted",
     providerRetryReasonPermission: "permission denied",
     providerRetryReasonStopped: "stopped",
     providerRetryReasonUnknown: "temporary failure",

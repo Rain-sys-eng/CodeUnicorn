@@ -145,6 +145,43 @@ describe("classifySharedProviderRetryError", () => {
     ).toMatchObject({ disposition: "ignore", kind: "recovery" });
   });
 
+  it("classifies quota-insufficiency as permanent before pool rules", () => {
+    // yuzu 实例：预扣费 403 必须判 permanent，不能进 pool retryable 空转烧余额
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          "Failed to authenticate. API Error: 403 预扣费额度失败, 用户剩余额度: ＄0.378004, 需要预扣费额度: ＄0.800000 (request id: abc)",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota", reason: "配额不足" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "API Error: 403 insufficient balance for this request",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "user quota exceeded, please top up",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "余额不足，请充值后重试",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota" });
+    // 反例：无配额关键词的 401 / bare 403 仍走 pool retryable
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          '会话失败：unexpected status 401 Unauthorized: {"code":"INVALID_API_KEY","message":"Invalid API key"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "Failed to authenticate. API Error: 403",
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool" });
+  });
+
   it("fails closed on unrecognized errors", () => {
     expect(
       classifySharedProviderRetryError({
