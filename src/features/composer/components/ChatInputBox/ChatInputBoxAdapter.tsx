@@ -921,6 +921,8 @@ function normalizeReasoningEffort(effort?: string | null): ReasoningEffort | nul
   switch (normalizedEffort) {
     case 'off':
       return 'off';
+    case 'minimal':
+      return 'minimal';
     case 'low':
       return 'low';
     case 'medium':

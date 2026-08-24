@@ -11,6 +11,10 @@ const reasoning = {
       label: "关闭 (Off)",
       description: "关闭思考，快速响应",
     },
+    minimal: {
+      label: "最低 (Minimal)",
+      description: "最低思考强度",
+    },
     low: {
       label: "较少 (Low)",
       description: "快速响应，基础推理",

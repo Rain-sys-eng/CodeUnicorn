@@ -850,7 +850,7 @@ impl EngineFeatures {
 
     pub fn pi() -> Self {
         Self {
-            reasoning_effort: false,
+            reasoning_effort: true,
             collaboration_mode: false,
             image_input: true,
             session_resume: true,

@@ -43,7 +43,8 @@ export const ReasoningSelect = memo(({
   const [isOpen, setIsOpen] = useState(false);
   const visibleLevels = REASONING_LEVELS.filter((level) => {
     if (options === undefined) {
-      return true;
+      // PI-only `minimal` must not leak into unspecified menus.
+      return level.id !== 'minimal';
     }
     return options.includes(level.id);
   });

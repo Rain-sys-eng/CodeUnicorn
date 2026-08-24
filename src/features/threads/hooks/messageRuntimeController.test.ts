@@ -17,6 +17,10 @@ describe("messageRuntimeController", () => {
     expect(normalizeEngineScopedEffort("dsh", "high")).toBe("high");
     expect(normalizeEngineScopedEffort("dsh", "medium")).toBeNull();
     expect(normalizeEngineScopedEffort("gemini", "high")).toBeNull();
+    expect(normalizeEngineScopedEffort("pi", "low")).toBe("low");
+    expect(normalizeEngineScopedEffort("pi", "high")).toBe("high");
+    expect(normalizeEngineScopedEffort("pi", "minimal")).toBe("minimal");
+    expect(normalizeEngineScopedEffort("pi", "ultra")).toBeNull();
   });
 
   it("ignores pending Claude session candidates", () => {

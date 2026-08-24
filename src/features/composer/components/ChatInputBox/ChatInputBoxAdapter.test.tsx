@@ -1092,6 +1092,22 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.reasoningOptions).toEqual(['high', 'ultra', 'max']);
   });
 
+  it('keeps the PI minimal effort while dropping unknown values', async () => {
+    renderAdapter({
+      selectedEffort: 'minimal',
+      reasoningOptions: ['off', 'minimal', 'low', 'turbo', 'high'],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      reasoningEffort?: string | null;
+      reasoningOptions?: string[];
+    };
+    expect(latest.reasoningEffort).toBe('minimal');
+    expect(latest.reasoningOptions).toEqual(['off', 'minimal', 'low', 'high']);
+  });
+
   it('keeps the DSH off effort while dropping unknown values', async () => {
     renderAdapter({
       selectedEffort: 'off',

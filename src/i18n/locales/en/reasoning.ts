@@ -10,6 +10,10 @@ const reasoning = {
       label: "Off",
       description: "Thinking disabled",
     },
+    minimal: {
+      label: "Minimal",
+      description: "Lightest thinking",
+    },
     low: {
       label: "Low",
       description: "Quick responses with basic reasoning",

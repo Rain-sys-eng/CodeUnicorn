@@ -13,6 +13,10 @@ const reasoning = {
       "label": "オフ (Off)",
       "description": "思考を無効化"
     },
+    "minimal": {
+      "label": "最小 (Minimal)",
+      "description": "最も軽い思考"
+    },
     "low": {
       "label": "低",
       "description": "基本的な推論による素早い応答"

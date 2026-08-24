@@ -13,6 +13,10 @@ const reasoning = {
       "label": "끄기 (Off)",
       "description": "추론 비활성화"
     },
+    "minimal": {
+      "label": "최소 (Minimal)",
+      "description": "가장 가벼운 사고"
+    },
     "low": {
       "label": "낮음",
       "description": "기본 추론으로 빠른 응답"

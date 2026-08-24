@@ -390,9 +390,9 @@ export const AVAILABLE_PROVIDERS: ProviderInfo[] = [
 /**
  * Reasoning effort (thinking depth)
  * Controls the depth of reasoning for engines that expose a runtime effort option.
- * Valid values: low, medium, high, xhigh, max, ultra
+ * Valid values: off, minimal, low, medium, high, xhigh, max, ultra
  */
-export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+export type ReasoningEffort = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Reasoning level information
@@ -413,6 +413,12 @@ export const REASONING_LEVELS: ReasoningInfo[] = [
     label: 'Off',
     icon: 'codicon-circle-outline',
     description: 'Thinking disabled',
+  },
+  {
+    id: 'minimal',
+    label: 'Minimal',
+    icon: 'codicon-circle-small',
+    description: 'Lightest thinking',
   },
   {
     id: 'low',

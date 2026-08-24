@@ -538,6 +538,95 @@ describe("modelSelection", () => {
     ).toBeNull();
   });
 
+  it("exposes PI reasoning support only when the model declares efforts", () => {
+    expect(getEffectiveReasoningSupported("pi", true)).toBe(true);
+    expect(getEffectiveReasoningSupported("pi", false)).toBe(false);
+    expect(
+      isReasoningEffortSupportedForEngine("pi", ["off", "minimal", "low", "medium", "high"]),
+    ).toBe(true);
+    expect(isReasoningEffortSupportedForEngine("pi", [])).toBe(false);
+    expect(
+      getEffectiveReasoningOptions("pi", ["off", "minimal", "low", "medium", "high"]),
+    ).toEqual(["off", "minimal", "low", "medium", "high"]);
+  });
+
+  it("keeps a valid PI thread effort and falls back to the model allowlist otherwise", () => {
+    const options = ["off", "minimal", "low", "medium", "high"];
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "pi",
+        hasActiveThread: true,
+        selectedEffort: "low",
+        activeThreadSelection: {
+          modelId: "openai/gpt-5.2",
+          effort: "high",
+        },
+        reasoningOptions: options,
+      }),
+    ).toBe("high");
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "pi",
+        hasActiveThread: false,
+        selectedEffort: "minimal",
+        activeThreadSelection: null,
+        reasoningOptions: options,
+      }),
+    ).toBe("minimal");
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "pi",
+        hasActiveThread: true,
+        selectedEffort: "medium",
+        activeThreadSelection: {
+          modelId: "openai/gpt-5.2",
+          effort: "xhigh",
+        },
+        reasoningOptions: options,
+      }),
+    ).toBe("off");
+  });
+
+  it("keeps PI Default (null) instead of colliding into Off", () => {
+    const options = ["off", "minimal", "low", "medium", "high"];
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "pi",
+        hasActiveThread: true,
+        selectedEffort: null,
+        activeThreadSelection: {
+          modelId: "my-relay/grok-4.6",
+          effort: null,
+        },
+        reasoningOptions: options,
+      }),
+    ).toBeNull();
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "pi",
+        hasActiveThread: false,
+        selectedEffort: null,
+        activeThreadSelection: null,
+        reasoningOptions: options,
+      }),
+    ).toBeNull();
+  });
+
+  it("does not let a previous engine's medium leak onto a PI model with no medium", () => {
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "pi",
+        hasActiveThread: true,
+        selectedEffort: "medium",
+        activeThreadSelection: {
+          modelId: "my-relay/special",
+          effort: "medium",
+        },
+        reasoningOptions: ["off", "high", "max"],
+      }),
+    ).toBe("off");
+  });
+
   it("exposes DSH reasoning support only when the model declares efforts", () => {
     expect(getEffectiveReasoningSupported("dsh", true)).toBe(true);
     expect(getEffectiveReasoningSupported("dsh", false)).toBe(false);

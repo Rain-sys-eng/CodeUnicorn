@@ -3,13 +3,14 @@
 //! Detects installed CLI tools and their capabilities.
 
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 use tokio::time::timeout;
 
+use super::pi_rpc::PiRpcClient;
 use super::{disabled_engine_status, EngineFeatures, EngineStatus, EngineType, ModelInfo};
 use crate::app_paths;
 use crate::backend::app_server::{build_codex_path_env, find_claude_code_binary, find_cli_binary};
@@ -1092,6 +1093,167 @@ pub async fn detect_qoder_distribution_status(
     }
 }
 
+const PI_STANDARD_THINKING_LEVELS: &[&str] =
+    &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// Port of pi `getSupportedThinkingLevels`.
+/// Non-reasoning models return empty so the composer hides the selector.
+pub(crate) fn supported_thinking_levels_for_pi_model(
+    reasoning: bool,
+    thinking_level_map: Option<&Value>,
+) -> Vec<String> {
+    if !reasoning {
+        return Vec::new();
+    }
+    PI_STANDARD_THINKING_LEVELS
+        .iter()
+        .copied()
+        .filter(|level| {
+            let mapped = thinking_level_map.and_then(|map| map.get(*level));
+            if mapped.map(Value::is_null).unwrap_or(false) {
+                return false;
+            }
+            if *level == "xhigh" || *level == "max" {
+                return mapped.is_some();
+            }
+            true
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+fn pi_model_catalog_id(provider: &str, model_id: &str) -> String {
+    if provider.is_empty() {
+        model_id.to_string()
+    } else {
+        format!("{provider}/{model_id}")
+    }
+}
+
+fn apply_pi_thinking_levels(info: ModelInfo, levels: Vec<String>) -> ModelInfo {
+    if levels.is_empty() {
+        info
+    } else {
+        info.with_reasoning(levels, None)
+    }
+}
+
+/// Parse RPC `get_available_models` `data` into catalog rows.
+pub(crate) fn parse_pi_available_models(data: &Value) -> Vec<ModelInfo> {
+    let models = data
+        .get("models")
+        .and_then(Value::as_array)
+        .or_else(|| data.as_array())
+        .into_iter()
+        .flatten();
+    let mut parsed = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for model in models {
+        let provider = model
+            .get("provider")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("");
+        let model_id = model
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("");
+        if model_id.is_empty() {
+            continue;
+        }
+        let id = pi_model_catalog_id(provider, model_id);
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        let name = model
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(model_id);
+        let reasoning = model
+            .get("reasoning")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let levels =
+            supported_thinking_levels_for_pi_model(reasoning, model.get("thinkingLevelMap"));
+        let mut details = Vec::new();
+        if let Some(ctx) = model.get("contextWindow").and_then(Value::as_u64) {
+            details.push(format!("ctx {ctx}"));
+        }
+        if reasoning {
+            details.push("thinking".to_string());
+        }
+        let images = model
+            .get("input")
+            .and_then(Value::as_array)
+            .map(|input| input.iter().any(|value| value.as_str() == Some("image")))
+            .unwrap_or(false);
+        if images {
+            details.push("vision".to_string());
+        }
+        let description = if details.is_empty() {
+            id.clone()
+        } else {
+            details.join(" · ")
+        };
+        let mut info = ModelInfo::new(id.clone(), name.to_string())
+            .with_description(description)
+            .with_protocol("pi")
+            .with_provenance("cli:pi-available-models")
+            .with_source("detected");
+        if !provider.is_empty() {
+            info = info.with_provider(provider.to_string());
+        }
+        parsed.push(apply_pi_thinking_levels(info, levels));
+    }
+    if parsed.is_empty() {
+        parsed.push(
+            ModelInfo::new("auto", "PI Auto")
+                .with_description("Use PI CLI default model")
+                .with_provider("pi")
+                .with_protocol("pi")
+                .with_source("fallback")
+                .as_default(),
+        );
+    } else if let Some(first) = parsed.first_mut() {
+        first.default = true;
+    }
+    parsed
+}
+
+async fn fetch_pi_models_via_rpc(
+    bin: &str,
+    home_dir: Option<&str>,
+) -> Result<Vec<ModelInfo>, String> {
+    let cwd = std::env::temp_dir();
+    let client = PiRpcClient::spawn(bin, &cwd, None, None, home_dir, Some("--no-session")).await?;
+    let data = match timeout(
+        DETECTION_TIMEOUT,
+        client.request(json!({"type": "get_available_models"})),
+    )
+    .await
+    {
+        Ok(result) => {
+            client.kill().await;
+            result?
+        }
+        Err(_) => {
+            client.kill().await;
+            return Err("pi get_available_models timed out".to_string());
+        }
+    };
+    let models = parse_pi_available_models(&data);
+    if models.is_empty() || models.iter().all(|model| model.source == "fallback") {
+        Err("pi get_available_models returned no models".to_string())
+    } else {
+        Ok(models)
+    }
+}
+
 /// Parse `pi --list-models` fixed-width table into ModelInfo entries.
 pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
     let mut models = Vec::new();
@@ -1159,14 +1321,16 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
         } else {
             details.join(" · ")
         };
-        models.push(
-            ModelInfo::new(id.clone(), id.clone())
-                .with_description(description)
-                .with_provider(provider.clone())
-                .with_protocol("pi")
-                .with_provenance("cli:pi-list-models")
-                .with_source("detected"),
-        );
+        let info = ModelInfo::new(id.clone(), id.clone())
+            .with_description(description)
+            .with_provider(provider.clone())
+            .with_protocol("pi")
+            .with_provenance("cli:pi-list-models")
+            .with_source("detected");
+        models.push(apply_pi_thinking_levels(
+            info,
+            supported_thinking_levels_for_pi_model(thinking, None),
+        ));
     }
     if models.is_empty() {
         models.push(
@@ -1184,6 +1348,12 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
 }
 
 async fn get_pi_models(bin: &str, path_env: Option<&String>) -> (Vec<ModelInfo>, Option<String>) {
+    match fetch_pi_models_via_rpc(bin, None).await {
+        Ok(models) => return (models, None),
+        Err(error) => {
+            log::info!("[pi] catalog rpc unavailable ({error}); falling back to --list-models");
+        }
+    }
     let mut cmd = crate::backend::app_server::build_command_for_binary(bin);
     cmd.arg("--list-models");
     if let Some(path) = path_env {
@@ -2294,9 +2464,144 @@ anthropic claude-opus    200k   32k    no       yes
         assert_eq!(models[0].id, "openai/gpt-5.2");
         assert!(models[0].default);
         assert_eq!(models[0].description, "ctx 400k · thinking · vision");
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
         assert_eq!(models[1].id, "anthropic/claude-opus");
         assert!(!models[1].default);
         assert_eq!(models[1].description, "ctx 200k · vision");
+        assert!(models[1].supported_reasoning_efforts.is_empty());
+    }
+
+    #[test]
+    fn supported_thinking_levels_follow_pi_map_rules() {
+        assert!(supported_thinking_levels_for_pi_model(false, None).is_empty());
+        assert_eq!(
+            supported_thinking_levels_for_pi_model(true, None),
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
+        let map = json!({
+            "off": null,
+            "minimal": null,
+            "low": null,
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+        });
+        assert_eq!(
+            supported_thinking_levels_for_pi_model(true, Some(&map)),
+            vec!["high", "max"]
+        );
+    }
+
+    #[test]
+    fn parse_pi_available_models_projects_thinking_levels() {
+        let models = parse_pi_available_models(&json!({
+            "models": [
+                {
+                    "id": "gpt-5.2",
+                    "name": "GPT-5.2",
+                    "provider": "openai",
+                    "reasoning": true,
+                    "input": ["text", "image"],
+                    "contextWindow": 400000,
+                    "thinkingLevelMap": {
+                        "off": null,
+                        "minimal": "low",
+                        "xhigh": "xhigh"
+                    }
+                },
+                {
+                    "id": "gpt-4.1",
+                    "provider": "openai",
+                    "reasoning": false,
+                    "input": ["text"]
+                }
+            ]
+        }));
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "openai/gpt-5.2");
+        assert!(models[0].default);
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["minimal", "low", "medium", "high", "xhigh"]
+        );
+        assert_eq!(models[1].id, "openai/gpt-4.1");
+        assert!(models[1].supported_reasoning_efforts.is_empty());
+    }
+
+    #[test]
+    fn custom_relay_reasoning_model_without_map_uses_pi_default_five_levels() {
+        // models.json: { id, reasoning: true } and no thinkingLevelMap.
+        // Screenshot collision: my-relay/grok-4.6 shows Off/Minimal/Low/Medium/High.
+        let models = parse_pi_available_models(&json!({
+            "models": [{
+                "id": "grok-4.6",
+                "name": "Grok 4.6",
+                "provider": "my-relay",
+                "reasoning": true,
+                "input": ["text", "image"]
+            }]
+        }));
+        assert_eq!(models[0].id, "my-relay/grok-4.6");
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
+        assert_eq!(
+            models[0].provenance.as_deref(),
+            Some("cli:pi-available-models")
+        );
+    }
+
+    #[test]
+    fn official_grok_thinking_map_hides_off_minimal_and_extended_levels() {
+        let map = json!({
+            "off": null,
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": "high"
+        });
+        assert_eq!(
+            supported_thinking_levels_for_pi_model(true, Some(&map)),
+            vec!["low", "medium", "high"]
+        );
+        let models = parse_pi_available_models(&json!({
+            "models": [{
+                "id": "grok-4.5",
+                "provider": "xai",
+                "reasoning": true,
+                "thinkingLevelMap": {
+                    "off": null,
+                    "minimal": null,
+                    "low": "low",
+                    "medium": "medium",
+                    "high": "high"
+                }
+            }]
+        }));
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["low", "medium", "high"]
+        );
+    }
+
+    #[test]
+    fn list_models_thinking_yes_over_approximates_official_grok_allowlist() {
+        let models = parse_pi_models_output(
+            "provider model          ctx  max     thinking images
+xai      grok-4.5        256k   64k    yes      yes
+",
+        );
+        assert_eq!(models[0].id, "xai/grok-4.5");
+        assert_eq!(models[0].provenance.as_deref(), Some("cli:pi-list-models"));
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
     }
 
     #[test]
