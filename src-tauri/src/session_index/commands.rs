@@ -1013,7 +1013,7 @@ pub async fn list_session_index_for_workspace(
         let index_empty = force_sync
             || tokio::task::spawn_blocking(move || {
                 let connection = open_connection()?;
-                let existing = list_for_workspace_path(&connection, &path_for_check, 1)?;
+                let existing = list_for_workspace_path(&connection, &path_for_check, 1, false)?;
                 if existing.is_empty() {
                     return Ok(true);
                 }
@@ -1045,6 +1045,7 @@ pub async fn list_session_index_for_workspace(
                     &path_for_list,
                     limit.saturating_add(1),
                     Some((before_updated_at, before_session_id)),
+                    true,
                 )?;
                 let more = rows.len() > limit;
                 if more {
@@ -1053,8 +1054,10 @@ pub async fn list_session_index_for_workspace(
                 Ok::<(Vec<SessionIndexRow>, bool), String>((rows, more))
             }
             None => {
-                let rows = list_for_workspace_path(&connection, &path_for_list, limit)?;
-                let total = count_for_workspace_path(&connection, &path_for_list)?;
+                // 侧栏分页路径：排除 pi fork 派生行（渲染层本就隐藏，
+                // 不能让它占分页槽位把 main 挤出可见窗口）。
+                let rows = list_for_workspace_path(&connection, &path_for_list, limit, true)?;
+                let total = count_for_workspace_path(&connection, &path_for_list, true)?;
                 let more = total > rows.len() as i64;
                 Ok((rows, more))
             }

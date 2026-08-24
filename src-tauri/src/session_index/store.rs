@@ -551,29 +551,57 @@ const INDEX_LIST_ENGINES: &[&str] = &[
     "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
 ];
 
+/// 侧栏分页过滤（for_sidebar=true 时启用）：pi fork 派生行（parent_session_id
+/// 非空）从不渲染在侧栏——设计使然（分支由会话树面板统一控制，渲染层
+/// useThreadRows 再兜底）——但它们占据 per-engine 首页预算与 keyset 页槽位，
+/// 把 main 挤出可见窗口（2026-08-24 ai-reach 取证：pi 首页 5 槽被 3 条 fork
+/// 吃掉，只剩 2 个 main 可见，其余 7 个 main 全部「丢失」）。
+/// GC / 会话管理等全量读路径一律传 false，行为不变。
+fn sidebar_exclude_pi_derived_sql(for_sidebar: bool) -> &'static str {
+    if for_sidebar {
+        "AND (engine != 'pi' OR parent_session_id IS NULL OR trim(parent_session_id) = '')"
+    } else {
+        ""
+    }
+}
+
+/// Rust 侧同款判定（merge_equivalent_workspace_rows / count 的内存过滤用）。
+fn row_is_sidebar_hidden_pi_derived(row: &SessionIndexRow) -> bool {
+    row.engine == "pi"
+        && row
+            .parent_session_id
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+}
+
 fn list_slice_for_workspace_engine(
     connection: &Connection,
     workspace_key: &str,
     engine: &str,
     limit: usize,
+    for_sidebar: bool,
 ) -> Result<Vec<SessionIndexRow>, String> {
     let fetch_limit = if engine == "codex" {
         (limit.saturating_mul(8)).clamp(limit, 500)
     } else {
         limit
     };
+    let sql = format!(
+        "SELECT engine, session_id, title, native_title, updated_at, created_at,
+                cwd, workspace_path, physical_path, parent_session_id, size_bytes,
+                provider_profile_id, provider_profile_name
+         FROM session_index
+         WHERE (workspace_path = ?1 OR cwd = ?1)
+           AND engine = ?2
+           AND tombstoned_at IS NULL
+           {sidebar_filter}
+         ORDER BY updated_at DESC, session_id ASC
+         LIMIT ?3",
+        sidebar_filter = sidebar_exclude_pi_derived_sql(for_sidebar),
+    );
     let mut statement = connection
-        .prepare(
-            "SELECT engine, session_id, title, native_title, updated_at, created_at,
-                    cwd, workspace_path, physical_path, parent_session_id, size_bytes,
-                    provider_profile_id, provider_profile_name
-             FROM session_index
-             WHERE (workspace_path = ?1 OR cwd = ?1)
-               AND engine = ?2
-               AND tombstoned_at IS NULL
-             ORDER BY updated_at DESC, session_id ASC
-             LIMIT ?3",
-        )
+        .prepare(&sql)
         .map_err(|error| error.to_string())?;
     let mut rows = statement
         .query_map(params![workspace_key, engine, fetch_limit as i64], map_row)
@@ -676,6 +704,7 @@ fn merge_equivalent_workspace_rows(
     existing: &mut std::collections::HashSet<(String, String)>,
     rows: &mut Vec<SessionIndexRow>,
     before: Option<(i64, String)>,
+    for_sidebar: bool,
 ) -> Result<(), String> {
     let scan_limit = (limit.saturating_mul(20).max(100)) as i64;
     let mut fallback = connection
@@ -708,6 +737,9 @@ fn merge_equivalent_workspace_rows(
         if !INDEX_LIST_ENGINES.contains(&row.engine.as_str()) {
             continue;
         }
+        if for_sidebar && row_is_sidebar_hidden_pi_derived(&row) {
+            continue;
+        }
         let identity = (row.engine.clone(), row.session_id.clone());
         if !existing.insert(identity) {
             continue;
@@ -726,6 +758,7 @@ pub(crate) fn list_for_workspace_path(
     connection: &Connection,
     workspace_path: &str,
     limit: usize,
+    for_sidebar: bool,
 ) -> Result<Vec<SessionIndexRow>, String> {
     let limit = limit.clamp(1, 500);
     let key = normalize_path_key(workspace_path);
@@ -737,7 +770,7 @@ pub(crate) fn list_for_workspace_path(
     let mut rows = Vec::new();
     let mut existing = std::collections::HashSet::<(String, String)>::new();
     for engine in INDEX_LIST_ENGINES {
-        for row in list_slice_for_workspace_engine(connection, &key, engine, limit)? {
+        for row in list_slice_for_workspace_engine(connection, &key, engine, limit, for_sidebar)? {
             let identity = (row.engine.clone(), row.session_id.clone());
             if existing.insert(identity) {
                 rows.push(row);
@@ -745,7 +778,7 @@ pub(crate) fn list_for_workspace_path(
         }
     }
 
-    merge_equivalent_workspace_rows(connection, &key, limit, &mut existing, &mut rows, None)?;
+    merge_equivalent_workspace_rows(connection, &key, limit, &mut existing, &mut rows, None, for_sidebar)?;
     rows.sort_by(|left, right| {
         right
             .updated_at
@@ -760,6 +793,7 @@ pub(crate) fn list_for_workspace_path_before(
     workspace_path: &str,
     limit: usize,
     before: Option<(i64, String)>,
+    for_sidebar: bool,
 ) -> Result<Vec<SessionIndexRow>, String> {
     let limit = limit.clamp(1, 500);
     let key = normalize_path_key(workspace_path);
@@ -767,22 +801,25 @@ pub(crate) fn list_for_workspace_path_before(
         return Ok(Vec::new());
     }
     let fetch_limit = (limit.saturating_add(1)) as i64;
+    let sql = format!(
+        "SELECT engine, session_id, title, native_title, updated_at, created_at,
+                cwd, workspace_path, physical_path, parent_session_id, size_bytes,
+                provider_profile_id, provider_profile_name
+         FROM session_index
+         WHERE (workspace_path = ?1 OR cwd = ?1)
+           AND tombstoned_at IS NULL
+           {sidebar_filter}
+           AND (
+             ?3 IS NULL
+             OR updated_at < ?3
+             OR (updated_at = ?3 AND session_id > ?4)
+           )
+         ORDER BY updated_at DESC, session_id ASC
+         LIMIT ?2",
+        sidebar_filter = sidebar_exclude_pi_derived_sql(for_sidebar),
+    );
     let mut statement = connection
-        .prepare(
-            "SELECT engine, session_id, title, native_title, updated_at, created_at,
-                    cwd, workspace_path, physical_path, parent_session_id, size_bytes,
-                    provider_profile_id, provider_profile_name
-             FROM session_index
-             WHERE (workspace_path = ?1 OR cwd = ?1)
-               AND tombstoned_at IS NULL
-               AND (
-                 ?3 IS NULL
-                 OR updated_at < ?3
-                 OR (updated_at = ?3 AND session_id > ?4)
-               )
-             ORDER BY updated_at DESC, session_id ASC
-             LIMIT ?2",
-        )
+        .prepare(&sql)
         .map_err(|error| error.to_string())?;
     let before_updated = before.as_ref().map(|(updated_at, _)| *updated_at);
     let before_id = before
@@ -802,7 +839,7 @@ pub(crate) fn list_for_workspace_path_before(
         .iter()
         .map(|row| (row.engine.clone(), row.session_id.clone()))
         .collect();
-    merge_equivalent_workspace_rows(connection, &key, limit, &mut existing, &mut rows, before)?;
+    merge_equivalent_workspace_rows(connection, &key, limit, &mut existing, &mut rows, before, for_sidebar)?;
     rows.sort_by(|left, right| {
         right
             .updated_at
@@ -819,25 +856,29 @@ pub(crate) fn list_for_workspace_path_before(
 pub(crate) fn count_for_workspace_path(
     connection: &Connection,
     workspace_path: &str,
+    for_sidebar: bool,
 ) -> Result<i64, String> {
     let key = normalize_path_key(workspace_path);
     if key.is_empty() {
         return Ok(0);
     }
     let mut statement = connection
-        .prepare("SELECT cwd, workspace_path FROM session_index WHERE tombstoned_at IS NULL")
+        .prepare("SELECT cwd, workspace_path, engine, parent_session_id FROM session_index WHERE tombstoned_at IS NULL")
         .map_err(|error| error.to_string())?;
     let mapped = statement
         .query_map([], |row| {
             Ok((
                 row.get::<_, Option<String>>(0)?,
                 row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
             ))
         })
         .map_err(|error| error.to_string())?;
     let mut count = 0i64;
     for item in mapped {
-        let (cwd, workspace) = item.map_err(|error| error.to_string())?;
+        let (cwd, workspace, engine, parent_session_id) =
+            item.map_err(|error| error.to_string())?;
         let matches = workspace
             .as_deref()
             .is_some_and(|value| paths_equivalent(value, &key))
@@ -845,6 +886,16 @@ pub(crate) fn count_for_workspace_path(
                 .as_deref()
                 .is_some_and(|value| paths_equivalent(value, &key));
         if matches {
+            // 与侧栏分页同一口径：pi fork 派生行不计入 hasMore 基数
+            if for_sidebar
+                && engine.as_deref() == Some("pi")
+                && parent_session_id
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|value| !value.is_empty())
+            {
+                continue;
+            }
             count += 1;
         }
     }
@@ -1299,6 +1350,55 @@ mod tests {
     }
 
     #[test]
+    fn sidebar_pages_exclude_pi_derived_rows_but_keep_mains() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        let mut fork = index_row("pi", "pi-fork-1", 500);
+        fork.parent_session_id = Some("pi-main-1".into());
+        let mut fork2 = index_row("pi", "pi-fork-2", 400);
+        fork2.parent_session_id = Some("pi-main-1".into());
+        let rows = [
+            index_row("pi", "pi-main-1", 600),
+            index_row("pi", "pi-main-2", 300),
+            fork,
+            fork2,
+            index_row("claude", "claude-1", 550),
+        ];
+        upsert_rows(&connection, &rows).expect("upsert");
+
+        // 侧栏首页：fork 派生行不占 pi 预算，main 全保留，其它引擎不受影响
+        let sidebar = list_for_workspace_path(&connection, "/tmp/proj", 10, true).expect("list");
+        let ids: Vec<&str> = sidebar.iter().map(|row| row.session_id.as_str()).collect();
+        assert_eq!(ids, vec!["pi-main-1", "claude-1", "pi-main-2"]);
+
+        // 侧栏 keyset 更多页：同样排除 fork（游标语义不变）
+        let page = list_for_workspace_path_before(
+            &connection,
+            "/tmp/proj",
+            10,
+            Some((600, "pi-main-1".into())),
+            true,
+        )
+        .expect("keyset");
+        let ids: Vec<&str> = page.iter().map(|row| row.session_id.as_str()).collect();
+        assert_eq!(ids, vec!["claude-1", "pi-main-2"]);
+
+        // hasMore 基数同口径排除 fork
+        assert_eq!(
+            count_for_workspace_path(&connection, "/tmp/proj", true).expect("count"),
+            3
+        );
+
+        // 全量读路径（GC / 会话管理）不受影响：fork 行仍可见
+        let all = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
+        assert_eq!(all.len(), 5);
+        assert_eq!(
+            count_for_workspace_path(&connection, "/tmp/proj", false).expect("count"),
+            5
+        );
+    }
+
+    #[test]
     fn provider_columns_roundtrip_and_survive_reupsert_without_provider() {
         let connection = Connection::open_in_memory().expect("open");
         connection.execute_batch(DDL).expect("ddl");
@@ -1324,7 +1424,7 @@ mod tests {
         stripped.title = "Hello v2".into();
         upsert_rows(&connection, &[stripped]).expect("re-upsert without provider");
 
-        let rows = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let rows = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].title, "Hello v2");
         assert_eq!(rows[0].provider_profile_id.as_deref(), Some("profile-a"));
@@ -1353,7 +1453,7 @@ mod tests {
             }],
         )
         .expect("upsert");
-        let rows = list_for_workspace_path(&connection, "/Users/me/proj/", 10).expect("list");
+        let rows = list_for_workspace_path(&connection, "/Users/me/proj/", 10, false).expect("list");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].session_id, "s1");
         assert_eq!(
@@ -1439,7 +1539,7 @@ mod tests {
             provider_profile_name: None,
         };
         upsert_rows(&connection, &[refresh]).expect("refresh");
-        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].created_at, Some(1_000));
         assert_eq!(listed[0].updated_at, 20 * 60 * 1000);
@@ -1481,7 +1581,7 @@ mod tests {
             provider_profile_name: None,
         };
         upsert_rows(&connection, &[refresh]).expect("refresh");
-        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].created_at, Some(1_000));
         assert_eq!(listed[0].updated_at, 9_000);
@@ -1514,7 +1614,7 @@ mod tests {
         let updated =
             tombstone_session_ids(&connection, &["pi:ses_pi_1".into()]).expect("tombstone");
         assert_eq!(updated, 1);
-        let listed = list_for_workspace_path(&connection, "/tmp/codex", 10).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/codex", 10, false).expect("list");
         assert!(
             listed.is_empty(),
             "tombstoned PI rows must leave the sidebar page"
@@ -1533,7 +1633,7 @@ mod tests {
         cn.provider_profile_name = Some("Qoder CN".into());
 
         upsert_rows(&connection, &[global, cn]).expect("upsert both distributions");
-        let rows = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let rows = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().any(|row| {
             row.session_id == "qoder:__qoder_global__:same-qoder-session"
@@ -1550,7 +1650,7 @@ mod tests {
         )
         .expect("tombstone Global only");
         assert_eq!(updated, 1);
-        let remaining = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let remaining = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert_eq!(remaining.len(), 1);
         assert_eq!(
             remaining[0].session_id,
@@ -1618,7 +1718,7 @@ mod tests {
         assert_eq!(updated, 0);
         // 重启后 rescan 重新 upsert 同一个 (engine, session_id)
         upsert_rows(&connection, &[index_row("pi", "ses_ghost", 300)]).expect("upsert");
-        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert!(
             listed.is_empty(),
             "tombstone marker must block rescan resurrection"
@@ -1632,7 +1732,7 @@ mod tests {
         // 裸 id（codex 等不带 engine 前缀的 threadId）
         tombstone_session_ids(&connection, &["ses_bare".into()]).expect("tombstone");
         upsert_rows(&connection, &[index_row("codex", "ses_bare", 300)]).expect("upsert");
-        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert!(
             listed.is_empty(),
             "bare-id tombstone markers must cover every known engine"
@@ -1665,7 +1765,7 @@ mod tests {
         }
         rows.push(index_row("claude", "claude-recent", 500));
         upsert_rows(&connection, &rows).expect("upsert");
-        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2, false).expect("list");
         assert!(
             listed.iter().any(|row| row.session_id == parent_id),
             "parent must survive newer Codex philosopher pups"
@@ -1691,7 +1791,7 @@ mod tests {
             rows.push(child);
         }
         upsert_rows(&connection, &rows).expect("upsert");
-        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2, false).expect("list");
         assert!(
             listed.iter().any(|row| row.session_id == parent_id),
             "parent outside the mtime window must still be hydrated"
@@ -1715,7 +1815,7 @@ mod tests {
         }
         rows.push(index_row("pi", "pi-old", 1));
         upsert_rows(&connection, &rows).expect("upsert");
-        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2).expect("list");
+        let listed = list_for_workspace_path(&connection, "/tmp/proj", 2, false).expect("list");
         let claude = listed.iter().filter(|row| row.engine == "claude").count();
         let pi = listed.iter().filter(|row| row.engine == "pi").count();
         assert_eq!(claude, 2);
@@ -1803,14 +1903,14 @@ mod tests {
             ],
         )
         .expect("upsert");
-        let listed = list_for_workspace_path(&connection, r"C:\Users\me\proj", 10).expect("list");
+        let listed = list_for_workspace_path(&connection, r"C:\Users\me\proj", 10, false).expect("list");
         let engines: Vec<_> = listed.iter().map(|row| row.engine.as_str()).collect();
         assert!(engines.contains(&"claude"), "{engines:?}");
         assert!(engines.contains(&"grok"), "{engines:?}");
         assert!(engines.contains(&"pi"), "{engines:?}");
         assert!(engines.contains(&"dsh"), "{engines:?}");
         assert_eq!(
-            count_for_workspace_path(&connection, r"C:\Users\me\proj").expect("count"),
+            count_for_workspace_path(&connection, r"C:\Users\me\proj", false).expect("count"),
             4
         );
     }
@@ -1833,6 +1933,7 @@ mod tests {
             r"C:\Users\me\proj",
             10,
             Some((300, "claude-new".into())),
+            false,
         )
         .expect("keyset");
         assert!(page.iter().any(|row| row.session_id == "grok-old"));

@@ -2089,7 +2089,7 @@ mod tests {
                 .expect("must not stay fresh")
         );
         let listed =
-            super::super::store::list_for_workspace_path(&connection, r"C:\Users\me\proj", 10)
+            super::super::store::list_for_workspace_path(&connection, r"C:\Users\me\proj", 10, false)
                 .expect("list");
         assert!(
             listed.iter().any(|row| row.session_id == "grok-keep"),
