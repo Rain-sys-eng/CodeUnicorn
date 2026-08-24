@@ -437,6 +437,25 @@ async fn file_mtime_ms(path: &Path) -> i64 {
         .unwrap_or(0)
 }
 
+/// 纯附件首条消息的标题标记（对齐 gemini `[image]` 惯例）：
+/// 全图片扩展名给 `[图片]`，否则 `[附件]`，多个带 xN。
+fn attachment_title_marker(paths: &[String]) -> String {
+    let all_images = paths.iter().all(|path| {
+        let ext = path
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp")
+    });
+    let label = if all_images { "[图片" } else { "[附件" };
+    if paths.len() > 1 {
+        format!("{label} x{}]", paths.len())
+    } else {
+        format!("{label}]")
+    }
+}
+
 async fn read_session_summary(file: &Path) -> Option<PiSessionSummary> {
     let file_handle = fs::File::open(file).await.ok()?;
     let mut lines = AsyncBufReader::new(file_handle).lines();
@@ -483,8 +502,28 @@ async fn read_session_summary(file: &Path) -> Option<PiSessionSummary> {
             message_count += 1;
             if first_user_prompt.is_none() {
                 let text = extract_text_blocks(message.get("content"));
-                if !text.trim().is_empty() {
-                    first_user_prompt = Some(text);
+                // 侧栏标题必须剥 <file name="..."> 附件包装（截图/文件首条消息
+                // 会泄漏原始 tag，与其它引擎不一致——2026-08-24 用户报告）；
+                // 与 load_pi_session 展示路径同纪律：先 legacy 注入标记，再
+                // @file 附件拆分。纯附件消息用 [图片]/[附件] 标记兜底。
+                let (visible, attachments) = {
+                    let (legacy_text, legacy_images) =
+                        crate::engine::cli_image_input::split_pi_prompt_for_display(&text);
+                    if !legacy_images.is_empty() {
+                        (legacy_text, legacy_images)
+                    } else {
+                        crate::engine::cli_image_input::split_pi_file_attachments_for_display(
+                            &legacy_text,
+                        )
+                    }
+                };
+                let title_source = if visible.trim().is_empty() && !attachments.is_empty() {
+                    attachment_title_marker(&attachments)
+                } else {
+                    visible
+                };
+                if !title_source.trim().is_empty() {
+                    first_user_prompt = Some(title_source);
                 }
             }
         } else if role == "assistant" {
@@ -1346,6 +1385,75 @@ mod tests {
         assert_eq!(legacy_turn.text, "legacy text");
         assert_eq!(legacy_turn.images, Some(vec!["/abs/legacy.png".to_string()]));
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod title_attachment_tests {
+    use super::*;
+    use std::io::Write;
+
+    async fn write_session(dir: &std::path::Path, session_id: &str, first_user_text: &str) -> std::path::PathBuf {
+        let sessions = dir.join("sessions");
+        let cwd_dir = sessions.join("--tmp-project--");
+        std::fs::create_dir_all(&cwd_dir).expect("mkdir");
+        let file = cwd_dir.join(format!("2026-08-24T01-00-00-000Z_{session_id}.jsonl"));
+        let project = dir.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        let mut handle = std::fs::File::create(&file).expect("create");
+        writeln!(
+            handle,
+            r#"{{"type":"session","version":3,"id":"{session_id}","timestamp":"2026-08-24T01:00:00.000Z","cwd":"{}"}}"#,
+            project.display()
+        )
+        .unwrap();
+        writeln!(
+            handle,
+            r#"{{"type":"message","id":"m1","timestamp":"2026-08-24T01:00:01.000Z","message":{{"role":"user","content":[{{"type":"text","text":{}}}]}}}}"#,
+            serde_json::to_string(first_user_text).unwrap()
+        )
+        .unwrap();
+        file
+    }
+
+    #[tokio::test]
+    async fn title_strips_file_attachment_wrapper_and_keeps_text() {
+        let dir = std::env::temp_dir().join(format!(
+            "pi-title-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let file = write_session(
+            &dir,
+            "019fe705-27fd-712e-a1be-f972ef3773aa",
+            "<file name=\"/Users/me/二期文档/设计报告.md\"></file>\n分析这份文档",
+        )
+        .await;
+        let summary = read_session_summary(&file).await.expect("summary");
+        assert_eq!(summary.first_message, "分析这份文档");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn title_falls_back_to_marker_for_attachment_only_message() {
+        let dir = std::env::temp_dir().join(format!(
+            "pi-title-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let file = write_session(
+            &dir,
+            "019fe705-27fd-712e-a1be-f972ef3773ab",
+            "<file name=\"/Users/me/截图/paste.png\"></file>\n",
+        )
+        .await;
+        let summary = read_session_summary(&file).await.expect("summary");
+        assert_eq!(summary.first_message, "[图片]");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

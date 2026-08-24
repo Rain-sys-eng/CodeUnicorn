@@ -236,3 +236,9 @@
 - [x] 31.2 **根因（结构性，非数据）**：`cli_image_input::split_pi_file_attachments_for_display` 的 `open_tag_end` 相对 `after_open`（已去 `<file name="` 前缀）计算，却直接用于切完整 `rest`（少算 `start+12` 字节）。附件在串首且 ASCII 路径时两处偏移恰好抵消（既有测试因此全绿）；**路径含多字节字符（中文目录名）时 `rest[quote_end+1..]` 落在汉字 UTF-8 字节中间 → panic** → Tauri command 任务被杀 → invoke 永不 resolve → 前端永远卡「快照 12%」。两条打不开的会话首条用户消息都带中文路径 `<file name="...">` 附件
 - [x] 31.3 **修复**：`inner_start` 换算为 rest 绝对位置（`start + 前缀长 + open_tag_end + 1`）；新增回归 `split_pi_file_attachments_multibyte_path_does_not_panic`（中文路径单附件 + 前缀文本多附件混合）；真实文件直调两条会话 0.06s 加载成功。cli_image_input 16 绿 / pi_history 3 绿 / commands 65 绿 / check 0 错误
 - [x] 31.4 附注（另案，未动）：排查中发现 er-qi turn 曾零 delta 挂起 ~1h（upstream-pending ×5），600s turn 超时的兜底是进程死亡 settle——turn 超时未生效的机理（调用方 future 被弃时 timeout 不求值）留作后续；与本 bug 无关
+
+## 32. 侧栏标题泄漏修复（2026-08-24 中午，截图/附件首条消息泄漏 `<file name="...">` 原始 tag）
+
+- [x] 32.1 用户报告：pi 会话带截图/文件附件时首条消息的侧栏标题显示原始 `<file name="...">` 包装，与其它引擎不一致。根因：`read_session_summary` 提取首条用户消息直接 `extract_text_blocks` + 截断，未剥附件包装——index 与磁盘 list 两条侧栏标题通道同受此害
+- [x] 32.2 修复：标题提取与 `load_pi_session` 展示路径同纪律——先 legacy 注入标记拆分、再 `@file` 附件拆分取 visible 文本；纯附件消息兜底 `[图片]`（全图片扩展名）/ `[附件]`，多个带 xN（对齐 gemini `[image]` 惯例）。index upsert 冲突时 `title = excluded.title` 覆盖写，存量泄漏标题随下次 sync 自愈；thread_titles 自动改名通道核查无泄漏
+- [x] 32.3 验证：新增回归 ×2（附件+文本剥包装 / 纯图片附件兜底 `[图片]`）；pi_history 5 绿 / commands 65 绿 / check 0 错误 / tsc 0 错误
