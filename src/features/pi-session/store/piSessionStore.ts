@@ -50,12 +50,51 @@ export function markPiDerivedThread(threadId: string): void {
   const trimmed = threadId.trim();
   if (trimmed) {
     derivedThreadIds.add(trimmed);
+    console.debug(`[pi-session] derived-hide registered: ${trimmed}`);
   }
 }
 
 /** 侧栏过滤用：该 pi thread 是否已确证为 fork 派生（应隐藏）。 */
 export function isPiDerivedThreadHidden(threadId: string): boolean {
   return derivedThreadIds.has(threadId.trim());
+}
+
+/**
+ * 自愈 reconcile：权威列表（session-index 行 / pi 磁盘 list）证明某 session
+ * 没有 parentSession（= 主线 root）时，立刻把它从内存派生集合移除——
+ * 不等重启。堵住「fork 静默 no-op 把源主线误登记为派生」的整局隐藏窗口
+ * （2026-08-24 侧栏主线丢失取证：静态层全清白，唯一能把主线藏掉的就是
+ * 这个进程级集合）。
+ * 安全论证：真实 fork 分支是全新文件/全新 id，权威行要么缺席（不触发）、
+ * 要么带 parentSessionId（保持隐藏）——不会出现「旧的无 parent 行」误放归。
+ */
+export function reconcilePiDerivedHideWithAuthoritativeRows(
+  rows: ReadonlyArray<{
+    engine?: string | null;
+    sessionId?: unknown;
+    parentSessionId?: unknown;
+  }>,
+): void {
+  for (const row of rows) {
+    // 调用方两类：index 行（带 engine，只取 pi）/ pi 磁盘 list（无 engine）。
+    if (row.engine != null && String(row.engine).trim() !== "pi") {
+      continue;
+    }
+    const sessionId = String(row.sessionId ?? "").trim();
+    if (!sessionId) {
+      continue;
+    }
+    const parent = String(row.parentSessionId ?? "").trim();
+    if (parent) {
+      continue; // 权威确认为 fork 派生：保持隐藏
+    }
+    const threadId = `pi:${sessionId}`;
+    if (derivedThreadIds.delete(threadId)) {
+      console.debug(
+        `[pi-session] derived-hide reconciled (authoritative root): ${threadId}`,
+      );
+    }
+  }
 }
 
 const listeners = new Set<() => void>();
@@ -94,7 +133,13 @@ export async function refreshPiSessionTree(
     // 树投影是派生血缘的权威快照：lane>0 的 laneSessionIds 全部是派生会话
     // （lane 0 = 主线 root），登记进侧栏隐藏集合——覆盖 live 窗口。
     for (const [lane, sessionId] of Object.entries(projection.laneSessionIds)) {
-      if (Number(lane) > 0 && sessionId) {
+      if (
+        Number(lane) > 0 &&
+        sessionId &&
+        // 双保险：root 主线永远可见——即便投影 lane 编号异常，也禁止把
+        // 家族 root 登记进隐藏集合（误登记会把主线从侧栏整局藏掉）。
+        sessionId !== tree.rootSessionId
+      ) {
         derivedThreadIds.add(`pi:${sessionId}`);
       }
     }

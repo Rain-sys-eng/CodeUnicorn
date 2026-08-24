@@ -1668,3 +1668,39 @@ fn flatten_pi_tree_for_ipc_strips_images_truncates_text_and_preserves_order() {
     assert!(flat.iter().all(|item| item.get("children").is_none()));
 }
 
+
+#[test]
+fn pi_forked_session_id_noop_guard() {
+    use super::resolve_pi_forked_session_id;
+    // 正常 fork：文件切换到新文件 → 放行新会话 id
+    let state = json!({"sessionId": "new-branch", "sessionFile": "/tmp/sessions/2026-08-24_new-branch.jsonl"});
+    assert_eq!(
+        resolve_pi_forked_session_id(
+            Some("/tmp/sessions/2026-08-22_main.jsonl"),
+            Some(&state),
+        ),
+        Some("new-branch".to_string()),
+    );
+    // 静默 no-op：文件未切换 → None（前端不得登记/跳转，主线保持可见）
+    let noop = json!({"sessionId": "main", "sessionFile": "/tmp/sessions/2026-08-22_main.jsonl"});
+    assert_eq!(
+        resolve_pi_forked_session_id(
+            Some("/tmp/sessions/2026-08-22_main.jsonl"),
+            Some(&noop),
+        ),
+        None,
+    );
+    // 拿不到 fork 后文件信息：保持旧行为放行（不挡正常 fork）
+    let no_file = json!({"sessionId": "new-branch"});
+    assert_eq!(
+        resolve_pi_forked_session_id(
+            Some("/tmp/sessions/2026-08-22_main.jsonl"),
+            Some(&no_file),
+        ),
+        Some("new-branch".to_string()),
+    );
+    // 状态缺失 / 空 id → None
+    assert_eq!(resolve_pi_forked_session_id(Some("/tmp/a.jsonl"), None), None);
+    let empty = json!({"sessionId": "  "});
+    assert_eq!(resolve_pi_forked_session_id(Some("/tmp/a.jsonl"), Some(&empty)), None);
+}

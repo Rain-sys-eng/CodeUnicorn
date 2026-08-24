@@ -202,3 +202,11 @@
 - [x] 26.3 **压缩成功零反馈修复**：手动 compact 无 active run，pump 的 `compaction_start/end` 拿不到 turn_id 静默丢弃，`onCompacted` 又是 no-op——成功后 dialog 直接关窗，用户无任何确认。修复：`PiCompactDialog` 成功后原地展示 `tokensBefore → estimatedTokensAfter` 并重拉 stats 三连，取消键变「关闭」，不再静默关窗
 - [x] 26.4 **「太短」提示补原因**：pi 默认 `keepRecentTokens = 20000`，短会话整体落在保留窗口内属预期拒绝；中性提示补明「pi 会完整保留最近约 20k tokens」，避免用户误判为故障。错误分类抽为 `compactErrorToNotice` 纯函数
 - [x] 26.5 验证：`cargo test --lib pi_rpc` 10 全绿（新增 `compact_command_trims_and_omits_blank_instructions` + `compact_timeout_exceeds_generic_request_budget` 纪律测试）；`PiCompactDialog.test.tsx` 2 全绿（分类映射 / 其它错误保持红色路径）；`tsc --noEmit` 0 错误
+
+## 27. 验收修复 round 9（2026-08-24，侧栏主线被误藏：fork 静默 no-op 登记 + 内存集合自愈）
+
+- [x] 27.1 **取证（真实数据）**：用户报告新逻辑侧栏丢 native pi main（`帮我执行打包` 01a02977 / `这回可以了` 01a02952 等）。全层核查——磁盘文件头 `parentSession` 全 None（25/25 无 fork 血缘）；session-index 行 parent/tombstone/cwd 干净；shared-sessions 无 `pi:` 绑定；archive/catalog 无记录；真实 index 数据跑 `sessionIndexRowsToThreadSummaries` + `useThreadRows` 纯管线 **25/25 全部 visible**。结论：静态层全清白，误藏只能来自运行时内存态。截图中非 pi 行（∅ 图标）同缺 → 那部分指向列表快照/分页暂态（cfce6da7a 窗口 12→5 后更易见），非会话树藏匿逻辑
+- [x] 27.2 **根因（运行时唯一能把主线藏掉的通道）**：`pi_fork` 的 `forkedSessionId` 取 fork 后 resident `get_state().sessionId`——pi 侧静默 no-op（未 cancelled/未报错但文件未切换）时返回的是**源主线 id**；`PiForkDialog` 无校验直接 `markPiDerivedThread` → 主线被当成自己的分支，进程级集合整局隐藏、重启才恢复。与 08-23 深夜密集 fork 测试 + 丢主线的时间线吻合
+- [x] 27.3 **修复（三层）**：① Rust `resolve_pi_forked_session_id` 纯函数——fork 前后 sessionFile 相同即返回 None（视为未分叉，warn 日志），拿不到文件信息保持旧行为放行；② 前端 `PiForkDialog` 登记/跳转前判 `forkedSessionId !== sessionId`，`refreshPiSessionTree` 树投影登记跳过 `rootSessionId`；③ **自愈 reconcile**：`reconcilePiDerivedHideWithAuthoritativeRows` 接到全部权威数据点（index early-paint / index merge / index 更多翻页 / pi 磁盘 list / pi 缓存合并）——权威行无 `parentSessionId` 立即从内存派生集合放归，不等重启；安全性：真 fork 分支是全新 id，权威行要么缺席（不触发）要么带 parent（保持隐藏），无「旧无 parent 行」误放归窗口。另在 mark/reconcile 加 `console.debug` 诊断（兑现 24.2「复现则加诊断日志」）
+- [x] 27.4 验证：`cargo test --lib pi_forked_session_id_noop_guard`（四态矩阵）绿；`useThreadRows.test.ts` 新增 reconcile 回归（误登记放归 / 真派生保持 / 非 pi 行不触碰集合）10 全绿；pi-session + threadList + LoadOlder vitest 28 绿；`tsc --noEmit` 0 错误；eslint 干净；`useThreadActions.test.tsx`（3 败）/ `thread-list-recovery`（7 败）为基线既有失败（stash 对照同数），与本改动无关
+

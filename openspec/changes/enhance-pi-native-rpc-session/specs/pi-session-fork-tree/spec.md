@@ -40,6 +40,7 @@
 - **THEN** 侧栏 MUST NOT 将派生会话渲染为顶层行或嵌套行（`useThreadRows` 过滤；thread 本体保留在 store 供跳转选择）
 - **AND** 派生血缘 MUST 在两条侧栏数据通道上都成立：session-index 行与 live disk list（`list_pi_sessions` → `normalizePiSessionSummaries`）都 MUST 携带 `parentSessionId` → `parentThreadId`（缺任一通道，index 快照后新建的派生会话会泄漏成顶层行）
 - **AND** live 窗口（fork 跳转 / `thread/started` 新建的分支行，`parentThreadId` 尚未就位）MUST 经内存级派生登记即时隐藏：fork 成功时与树投影加载时（lane>0 的 laneSessionIds）登记，`useThreadRows` 过滤时与 parentThreadId 并列查询（进程内存级，重启后由上述双通道接管）
+- **AND** 内存派生登记 MUST 防误伤主线：① fork 返回的 `forkedSessionId` 等于源 sessionId 或 fork 前后 sessionFile 未变（静默 no-op）时 MUST NOT 登记/跳转（Rust `resolve_pi_forked_session_id` 返回 null）；② 树投影登记 MUST 跳过 `rootSessionId`（主线 root 永远可见）；③ index 行 / pi 磁盘 list 等权威通道证明某 session 无 `parentSessionId` 时 MUST 立即将其移出内存派生集合（`reconcilePiDerivedHideWithAuthoritativeRows` 自愈，不等重启）
 - **AND** 已泄漏的 live 行 MUST 在下轮 list 刷新时经 merge backfill 补回 parent 并重新隐藏
 - **AND** 派生会话 MUST NOT 使用 subagent 嵌套视觉、MUST NOT 计入子代理数（`collectCanvasChildSubagentThreads` / `Composer.stripChildThreads` / `useStatusPanelData.seedSubagentsFromChildTree` 三处分域）
 - **AND** 分支线路 MUST 由会话树面板统一控制

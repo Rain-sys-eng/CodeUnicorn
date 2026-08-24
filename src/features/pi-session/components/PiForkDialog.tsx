@@ -203,7 +203,10 @@ export function usePiForkFlow({
       }
       const forkedText = result.text ?? state.quote;
       onForked(forkedText, result.forkedSessionId);
-      if (result.forkedSessionId) {
+      // forkedSessionId == 源 sessionId = fork 静默 no-op（旧后端/remote
+      // 未返回 cancelled 但也没切换文件）：禁止登记禁止跳转——否则会把
+      // 主线自己误登记为派生，整局从侧栏隐藏（2026-08-24 取证）。
+      if (result.forkedSessionId && result.forkedSessionId !== sessionId) {
         // fork 成功 = 用户明确的「去新分支继续」意图：跳转分叉幕布（草稿
         // 已在新会话 composer）；同时保留成功确认态——跳转若因会话索引
         // 延迟尚未生效，用户也有明确去向反馈，不会「没有反应」。

@@ -24,6 +24,7 @@ import {
   projectNativeIndexRowsToSummaries,
   shouldRememberHideUnreadiness,
 } from "./useThreadActions.nativeIndexProjection";
+import { reconcilePiDerivedHideWithAuthoritativeRows } from "../../pi-session/store/piSessionStore";
 import {
   expandVisibilityHideSet,
   isFullyVerifiedSharedNativeVisibility,
@@ -604,6 +605,9 @@ export function useThreadActions({
           if (shouldRememberHideUnreadiness(canProjectIndexNatives)) {
             rememberPartialSource("shared-visibility-unavailable");
           }
+          // 自愈：index 权威行证明无 parent 的 pi 主线，立即从内存派生
+          // 隐藏集合放归（堵住 fork 静默 no-op 误登记的整局隐藏）。
+          reconcilePiDerivedHideWithAuthoritativeRows(sessionIndexPage.data);
           const earlyIndexSummaries = buildNativeIndexEarlyPaintSummaries({
             rows: sessionIndexPage.data,
             workspaceId: workspace.id,
@@ -1158,6 +1162,9 @@ export function useThreadActions({
               }
             });
           }
+          reconcilePiDerivedHideWithAuthoritativeRows(
+            sessionIndexPage.data ?? [],
+          );
           const indexSummaries = projectNativeIndexRowsToSummaries(
             sessionIndexPage.data ?? [],
             {
@@ -1741,6 +1748,7 @@ export function useThreadActions({
           );
         }
         if (hasFreshPiCache && cachedPi.sessions.length > 0) {
+          reconcilePiDerivedHideWithAuthoritativeRows(cachedPi.sessions);
           allSummaries = mergePiSessionSummaries(
             allSummaries,
             cachedPi.sessions.filter(
@@ -2544,6 +2552,8 @@ export function useThreadActions({
               return;
             }
             const normalizedPiSessions = normalizePiSessionSummaries(piResult);
+            // 自愈：磁盘 list 是 pi 血缘权威——无 parentSession 的主线立即放归。
+            reconcilePiDerivedHideWithAuthoritativeRows(normalizedPiSessions);
             piSessionCacheRef.current[workspace.id] = {
               fetchedAt: Date.now(),
               sessions: normalizedPiSessions,

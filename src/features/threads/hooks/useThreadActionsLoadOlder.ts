@@ -13,6 +13,7 @@ import {
   listSessionIndexForWorkspace as listSessionIndexForWorkspaceService,
 } from "../../../services/tauri";
 import { sessionIndexRowsToThreadSummaries } from "./sessionIndexThreadSummaries";
+import { reconcilePiDerivedHideWithAuthoritativeRows } from "../../pi-session/store/piSessionStore";
 import { expandHiddenSharedBindingIds } from "../../shared-session/runtime/sharedSessionSummaries";
 import { getCollabWorkerNativeHideIds } from "../../multi-agent/runtime/collabNativeHideRegistry";
 import {
@@ -186,6 +187,7 @@ export function useLoadOlderThreadsForWorkspace({
             // Hide unreadiness must not drop indexed natives to PI-only.
             // ThreadList expands the in-memory page first; this IPC only
             // runs after that page is exhausted.
+            reconcilePiDerivedHideWithAuthoritativeRows(pageRows);
             const indexSummaries = sessionIndexRowsToThreadSummaries(pageRows, {
               workspaceId: workspace.id,
               mappedTitles,

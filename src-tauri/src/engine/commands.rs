@@ -4926,6 +4926,32 @@ pub async fn pi_compact(
     client.compact(custom_instructions.as_deref()).await
 }
 
+/// fork 后身份判定：fork 成功会切换 resident 的会话文件；若 fork 前后
+/// sessionFile 相同（pi 侧静默 no-op——未分叉但也没返回 cancelled/报错），
+/// get_state 拿到的是源会话身份。把它当 forkedSessionId 返回会让前端把
+/// 主线误登记为派生、整局从侧栏隐藏（2026-08-24 侧栏主线丢失取证）。
+/// 文件未变 ⇒ 返回 None（视为未分叉）；拿不到文件信息时保持旧行为放行。
+pub(crate) fn resolve_pi_forked_session_id(
+    pre_session_file: Option<&str>,
+    forked_state: Option<&Value>,
+) -> Option<String> {
+    let state = forked_state?;
+    let session_id = state.get("sessionId")?.as_str()?.trim();
+    if session_id.is_empty() {
+        return None;
+    }
+    let post_file = state.get("sessionFile").and_then(Value::as_str);
+    if let (Some(pre), Some(post)) = (pre_session_file, post_file) {
+        if pre == post {
+            log::warn!(
+                "[pi/rpc] fork returned without switching session file; treating as no-op"
+            );
+            return None;
+        }
+    }
+    Some(session_id.to_string())
+}
+
 #[tauri::command]
 pub async fn pi_fork(
     workspace_id: String,
@@ -4975,23 +5001,13 @@ pub async fn pi_fork(
     // 「源会话不受污染」是硬约束——旧 thread 的后续发送必须落回旧文件，
     // 新文件以干净副本出现在侧栏（fork-to-new-file 语义）。
     let forked_state = client.get_state().await.ok();
-    // 静默 no-op 防护：fork 未真正切换会话文件（pi 侧未分叉但未返回
-    // cancelled/未报错）时，get_state 拿到的是源会话身份——把它当
-    // forkedSessionId 返回会让前端把主线误登记为派生并整局隐藏
-    // （2026-08-24 侧栏主线丢失取证）。文件未变 ⇒ 视为未分叉。
+    // 静默 no-op 防护（函数内含 warn 日志）：fork 未真正切换会话文件时，
+    // get_state 拿到的是源会话身份——把它当 forkedSessionId 返回会让前端
+    // 把主线误登记为派生并整局隐藏（2026-08-24 侧栏主线丢失取证）。
     let forked_session_id = resolve_pi_forked_session_id(
         pre_session_file.as_deref(),
         forked_state.as_ref(),
     );
-    if forked_session_id.is_none()
-        && forked_state
-            .as_ref()
-            .and_then(|state| state.get("sessionId"))
-            .and_then(Value::as_str)
-            .is_some()
-    {
-        log::warn!("[pi/rpc] fork returned without switching session file; treating as no-op");
-    }
     if let Some(ref path) = pre_session_file {
         if let Err(error) = client.switch_session(path).await {
             log::warn!("[pi/rpc] switch back after fork failed: {error}");
