@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import {
   piCompact,
   piGetSessionStats,
@@ -10,23 +11,32 @@ import {
 type PiCompactEntryProps = {
   workspaceId: string;
   threadId: string;
+  disabled?: boolean;
 };
 
 /**
  * Composer footer entry for PI RPC manual compaction: a small ghost button
  * next to the usage indicator that opens PiCompactDialog.
  */
-export function PiCompactEntry({ workspaceId, threadId }: PiCompactEntryProps) {
+export function PiCompactEntry({
+  workspaceId,
+  threadId,
+  disabled = false,
+}: PiCompactEntryProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <>
       <button
         type="button"
         className="pi-compact-entry"
-        title="压缩上下文（pi RPC: compact）"
-        onClick={() => setOpen(true)}
+        title={t("piSession.compact.entryTitle")}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setOpen(true);
+        }}
       >
-        ⤓ 压缩
+        ⤓ {t("piSession.compact.entryLabel")}
       </button>
       <PiCompactDialog
         open={open}
@@ -82,6 +92,7 @@ export function PiCompactDialog({
   onClose,
   onCompacted,
 }: PiCompactDialogProps) {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<PiSessionStats | null>(null);
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState(false);
@@ -133,11 +144,11 @@ export function PiCompactDialog({
         className="pi-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="压缩上下文"
+        aria-label={t("piSession.compact.dialogAria")}
         onClick={(event) => event.stopPropagation()}
       >
         <h3>
-          ⤓ 压缩上下文
+          ⤓ {t("piSession.compact.dialogTitle")}
           <span className="mono">pi RPC: compact</span>
         </h3>
         <div className="pi-stat-row">
@@ -145,29 +156,31 @@ export function PiCompactDialog({
             <div className={`v${(percent ?? 0) >= 80 ? " warn" : ""}`}>
               {percent !== null ? `${Math.round(percent)}%` : "—"}
             </div>
-            <div className="k">当前上下文占用</div>
+            <div className="k">{t("piSession.compact.occupancy")}</div>
           </div>
           <div className="pi-stat">
             <div className="v">{messageCount}</div>
-            <div className="k">会话消息</div>
+            <div className="k">{t("piSession.compact.messages")}</div>
           </div>
           <div className="pi-stat">
             <div className="v">
               {formatTokens(stats?.contextUsage?.tokens ?? null)}
             </div>
-            <div className="k">上下文 tokens</div>
+            <div className="k">{t("piSession.compact.tokens")}</div>
           </div>
         </div>
-        <label htmlFor="pi-compact-instructions">压缩指令（可选）</label>
+        <label htmlFor="pi-compact-instructions">
+          {t("piSession.compact.instructionsLabel")}
+        </label>
         <textarea
           id="pi-compact-instructions"
           rows={2}
           value={instructions}
-          placeholder="例如：保留根因结论与文件清单，压缩试错过程"
+          placeholder={t("piSession.compact.instructionsPlaceholder")}
           onChange={(event) => setInstructions(event.target.value)}
         />
         <div className="hint">
-          压缩是有损的：完整历史保留在 pi 会话文件中，可在会话树中回溯。
+          {t("piSession.compact.hint")}
         </div>
         {error ? <p className="pi-dialog-error">{error}</p> : null}
         {notice ? <p className="pi-dialog-notice">{notice}</p> : null}
@@ -178,7 +191,7 @@ export function PiCompactDialog({
             onClick={onClose}
             disabled={busy}
           >
-            {done ? "关闭" : "取消"}
+            {done ? t("piSession.compact.close") : t("piSession.compact.cancel")}
           </button>
           <button
             type="button"
@@ -228,7 +241,9 @@ export function PiCompactDialog({
                 });
             }}
           >
-            {busy ? "压缩中…" : "压缩上下文"}
+            {busy
+              ? t("piSession.compact.confirming")
+              : t("piSession.compact.confirm")}
           </button>
         </div>
       </div>

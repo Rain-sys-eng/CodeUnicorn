@@ -199,7 +199,7 @@ export function DesktopLayout({
     isNoteCardsSplitMode ||
     subagentInspectorOpen ||
     agentInspectorOpen ||
-    piTreeOpen;
+    (piTreeOpen && centerMode === "chat");
   const hasBottomPanel = Boolean(planPanelNode);
   const shouldShowComposerBelowContent =
     centerMode !== "projectMap" &&

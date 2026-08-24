@@ -1,19 +1,47 @@
 export default {
   piSession: {
     fork: {
-      title: "इस संदेश से फ़ोर्क करें",
+      title: "Fork from this message",
       description:
-        "इस संदेश से पहले के बिंदु पर नई सेशन फ़ाइल बनाई जाएगी: यह संदेश ड्राफ़्ट के रूप में भरा जाएगा और मूल सेशन अपरिवर्तित रहेगा। नई शाखा सेशन ट्री पैनल में दिखेगी (साइडबार में नहीं), और बनते ही आप उस पर जंप कर जाएँगे।",
-      cancel: "रद्द करें",
-      confirm: "फ़ोर्क बनाएँ",
-      confirming: "फ़ोर्क हो रहा है…",
-      successTitle: "✓ फ़ोर्क बन गया",
+        "Creates a new session file from the point before this message: the message becomes a draft you rewrite, and the source session stays untouched. The new branch appears in the session tree panel (not in the sidebar), and you jump to it automatically.",
+      cancel: "Cancel",
+      confirm: "Create fork",
+      confirming: "Forking…",
+      successTitle: "✓ Fork created",
       successBody:
-        "नई शाखा दाईं ओर सेशन ट्री पैनल में दिख रही है, और मूल संदेश उसके इनपुट ड्राफ़्ट में भर चुका है — जंप करके जारी रखें।",
+        "The new branch is in the session tree panel on the right, with the source message pre-filled as its composer draft — jump over to continue.",
       errorEntryNotFound:
-        "pi सेशन में यह संदेश नहीं मिला (शायद कॉम्पैक्ट हो गया है)।",
+        "Couldn't locate this message in the pi session (it may have been compacted).",
       errorEntryNotForkable:
-        "यह संदेश मौजूदा सेशन फ़ाइल में नहीं है — यह सेशन ट्री की किसी दूसरी शाखा का हिस्सा है (या कॉम्पैक्ट हो चुका है), इसलिए यहाँ से फ़ोर्क नहीं किया जा सकता। पहले सेशन ट्री में उस शाखा पर 「↪ जंप」 करें जिसमें यह संदेश है, फिर वहाँ फ़ोर्क करें।",
+        "This message isn't in the current session file — it belongs to another branch in the session tree (or was compacted), so it can't be forked from here. In the session tree, jump to the branch that owns this message first (↪), then fork it there.",
+    },
+    compact: {
+      entryTitle: "Compact context (pi RPC: compact)",
+      entryLabel: "Compact",
+      dialogTitle: "Compact context",
+      dialogAria: "Compact context",
+      occupancy: "Context used",
+      messages: "Messages",
+      tokens: "Context tokens",
+      instructionsLabel: "Instructions (optional)",
+      instructionsPlaceholder:
+        "e.g. keep root-cause conclusions and file lists; compress trial-and-error",
+      hint: "Compaction is lossy. Full history stays in the pi session file and can be traced in the session tree.",
+      cancel: "Cancel",
+      close: "Close",
+      confirm: "Compact context",
+      confirming: "Compacting…",
+      tooShort:
+        "This session is still short — nothing to compact (pi keeps the last ~20k tokens intact).",
+      done: "Compacted: {{before}} → {{after}} (estimate).",
+    },
+    tree: {
+      panelAria: "Session tree",
+      badge: "PI session tree",
+      resizeAria: "Resize session tree panel",
+      chipTitle:
+        "Session branches ({{count}} lanes) · open the session tree (pi RPC has no lane-switch command)",
+      sidebarBadgeTitle: "Session tree has {{count}} branches · click to view",
     },
   },
 };

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   shallowEqual,
   useActiveCanvasSelector,
@@ -35,6 +36,7 @@ function readStoredDockWidth(): number {
  * 分隔条拖拽调宽（pi 自有实现，宽度持久化到 clientStore）。
  */
 export function PiConversationTreeSplit({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const scope = useActiveCanvasSelector(
     (state) => ({
       threadId: state.threadId,
@@ -169,7 +171,7 @@ export function PiConversationTreeSplit({ children }: { children: ReactNode }) {
             className="pi-tree-dock-divider"
             role="separator"
             aria-orientation="vertical"
-            aria-label="调整会话树面板宽度"
+            aria-label={t("piSession.tree.resizeAria")}
             onPointerDown={handleDividerPointerDown}
             onPointerMove={handleDividerPointerMove}
             onPointerUp={handleDividerPointerUp}

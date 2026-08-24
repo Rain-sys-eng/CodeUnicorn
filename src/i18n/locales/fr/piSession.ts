@@ -1,19 +1,47 @@
 export default {
   piSession: {
     fork: {
-      title: "Créer une bifurcation depuis ce message",
+      title: "Fork from this message",
       description:
-        "Crée un nouveau fichier de session à partir du point situé avant ce message : le message devient un brouillon à réécrire et la session source reste intacte. La nouvelle branche apparaît dans le panneau d'arborescence des sessions (pas dans la barre latérale), avec bascule automatique après création.",
-      cancel: "Annuler",
-      confirm: "Créer la bifurcation",
-      confirming: "Bifurcation…",
-      successTitle: "✓ Bifurcation créée",
+        "Creates a new session file from the point before this message: the message becomes a draft you rewrite, and the source session stays untouched. The new branch appears in the session tree panel (not in the sidebar), and you jump to it automatically.",
+      cancel: "Cancel",
+      confirm: "Create fork",
+      confirming: "Forking…",
+      successTitle: "✓ Fork created",
       successBody:
-        "La nouvelle branche est visible dans le panneau d'arborescence à droite, et le message source est pré-rempli dans son champ de saisie — basculez pour continuer.",
+        "The new branch is in the session tree panel on the right, with the source message pre-filled as its composer draft — jump over to continue.",
       errorEntryNotFound:
-        "Impossible de localiser ce message dans la session pi (il a peut-être été compacté).",
+        "Couldn't locate this message in the pi session (it may have been compacted).",
       errorEntryNotForkable:
-        "Ce message n'est pas dans le fichier de session actuel — il appartient à une autre branche de l'arborescence (ou a été compacté) et ne peut pas être bifurqué d'ici. Dans l'arborescence, basculez d'abord vers la branche qui contient ce message (« ↪ »), puis bifurquez-le là-bas.",
+        "This message isn't in the current session file — it belongs to another branch in the session tree (or was compacted), so it can't be forked from here. In the session tree, jump to the branch that owns this message first (↪), then fork it there.",
+    },
+    compact: {
+      entryTitle: "Compact context (pi RPC: compact)",
+      entryLabel: "Compact",
+      dialogTitle: "Compact context",
+      dialogAria: "Compact context",
+      occupancy: "Context used",
+      messages: "Messages",
+      tokens: "Context tokens",
+      instructionsLabel: "Instructions (optional)",
+      instructionsPlaceholder:
+        "e.g. keep root-cause conclusions and file lists; compress trial-and-error",
+      hint: "Compaction is lossy. Full history stays in the pi session file and can be traced in the session tree.",
+      cancel: "Cancel",
+      close: "Close",
+      confirm: "Compact context",
+      confirming: "Compacting…",
+      tooShort:
+        "This session is still short — nothing to compact (pi keeps the last ~20k tokens intact).",
+      done: "Compacted: {{before}} → {{after}} (estimate).",
+    },
+    tree: {
+      panelAria: "Session tree",
+      badge: "PI session tree",
+      resizeAria: "Resize session tree panel",
+      chipTitle:
+        "Session branches ({{count}} lanes) · open the session tree (pi RPC has no lane-switch command)",
+      sidebarBadgeTitle: "Session tree has {{count}} branches · click to view",
     },
   },
 };

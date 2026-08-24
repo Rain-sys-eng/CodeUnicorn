@@ -245,6 +245,44 @@ fn image_data_url(mime: &str, data: &str) -> Option<String> {
     Some(format!("data:{mime};base64,{trimmed}"))
 }
 
+/// Large RPC inline images must not enter the timeline as multi-MB data URLs.
+/// Spill above 8KiB encoded payload to a temp file; thumbs still load by path.
+fn image_display_ref(mime: &str, data: &str) -> Option<String> {
+    const INLINE_LIMIT: usize = 8 * 1024;
+    let trimmed = data.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.len() <= INLINE_LIMIT {
+        return image_data_url(mime, trimmed);
+    }
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(trimmed.split(',').next_back().unwrap_or(trimmed))
+        .ok()?;
+    let ext = if mime.to_ascii_lowercase().contains("jpeg")
+        || mime.to_ascii_lowercase().contains("jpg")
+    {
+        "jpg"
+    } else if mime.to_ascii_lowercase().contains("gif") {
+        "gif"
+    } else if mime.to_ascii_lowercase().contains("webp") {
+        "webp"
+    } else {
+        "png"
+    };
+    let dir = std::env::temp_dir().join("mossx-pi-inline-images");
+    std::fs::create_dir_all(&dir).ok()?;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    trimmed.hash(&mut hasher);
+    let path = dir.join(format!("{:016x}.{ext}", hasher.finish()));
+    if !path.exists() {
+        std::fs::write(&path, bytes).ok()?;
+    }
+    Some(path.to_string_lossy().into_owned())
+}
+
 /// RPC-era Pi user turns store screenshots as `{type:"image", data, mimeType}`
 /// content blocks with no `<file name>` wrapper. Print-json `@file` history
 /// still uses wrappers; those paths win when present. Image blocks are the
@@ -272,17 +310,14 @@ fn extract_image_content_display_refs(content: Option<&Value>) -> Vec<String> {
             push_unique_image(&mut out, url.to_string());
             continue;
         }
-        if let Some(data) = part
-            .get("data")
-            .and_then(Value::as_str)
-        {
+        if let Some(data) = part.get("data").and_then(Value::as_str) {
             let mime = part
                 .get("mimeType")
                 .or_else(|| part.get("mime_type"))
                 .or_else(|| part.get("media_type"))
                 .and_then(Value::as_str)
                 .unwrap_or("image/png");
-            if let Some(url) = image_data_url(mime, data) {
+            if let Some(url) = image_display_ref(mime, data) {
                 push_unique_image(&mut out, url);
             }
             continue;
@@ -298,7 +333,7 @@ fn extract_image_content_display_refs(content: Option<&Value>) -> Vec<String> {
                     .or_else(|| source.get("mimeType"))
                     .and_then(Value::as_str)
                     .unwrap_or("image/png");
-                if let Some(url) = image_data_url(mime, data) {
+                if let Some(url) = image_display_ref(mime, data) {
                     push_unique_image(&mut out, url);
                 }
             }
@@ -321,10 +356,7 @@ fn split_pi_user_content_for_display(
     if !wrapper_images.is_empty() {
         return (display_text, wrapper_images);
     }
-    (
-        display_text,
-        extract_image_content_display_refs(content),
-    )
+    (display_text, extract_image_content_display_refs(content))
 }
 
 fn extract_text_blocks(content: Option<&Value>) -> String {
@@ -345,10 +377,7 @@ fn extract_text_blocks(content: Option<&Value>) -> String {
             }
             let kind = part.get("type").and_then(Value::as_str).unwrap_or("");
             match kind {
-                "text" => part
-                    .get("text")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
+                "text" => part.get("text").and_then(Value::as_str).map(str::to_string),
                 "thinking" => part
                     .get("thinking")
                     .and_then(Value::as_str)
@@ -379,9 +408,14 @@ fn find_pi_file_with_suffix(dir: &Path, suffix: &str) -> Option<PathBuf> {
 
 /// Locate `*_{sessionId}.jsonl` under the workspace encoded-cwd, then a bounded
 /// root scan. Session ids are globally unique; miss must stay unconfirmed.
-pub(crate) fn locate_pi_session_file(
+pub(crate) fn locate_pi_session_file(workspace_path: &Path, session_id: &str) -> Option<PathBuf> {
+    locate_pi_session_file_with_home(workspace_path, session_id, None)
+}
+
+fn locate_pi_session_file_with_home(
     workspace_path: &Path,
     session_id: &str,
+    home_dir: Option<&str>,
 ) -> Option<PathBuf> {
     let session_id = session_id.trim();
     if session_id.is_empty()
@@ -392,7 +426,7 @@ pub(crate) fn locate_pi_session_file(
         return None;
     }
     let suffix = format!("_{session_id}.jsonl");
-    let root = resolve_pi_sessions_root(None);
+    let root = resolve_pi_sessions_root(home_dir);
     for variant in build_workspace_path_variants(workspace_path) {
         let encoded = encode_pi_cwd_dir_name(&variant);
         if let Some(found) = find_pi_file_with_suffix(&root.join(encoded), &suffix) {
@@ -560,12 +594,11 @@ async fn file_mtime_ms(path: &Path) -> i64 {
 /// 全图片扩展名给 `[图片]`，否则 `[附件]`，多个带 xN。
 fn attachment_title_marker(paths: &[String]) -> String {
     let all_images = paths.iter().all(|path| {
-        let ext = path
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp")
+        let ext = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+        matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp"
+        )
     });
     let label = if all_images { "[图片" } else { "[附件" };
     if paths.len() > 1 {
@@ -608,10 +641,13 @@ async fn read_session_summary(file: &Path) -> Option<PiSessionSummary> {
             .and_then(Value::as_str)
             .map(parse_iso_millis)
             .or_else(|| {
-                message
-                    .get("timestamp")
-                    .and_then(|v| v.as_i64())
-                    .map(|n| if n < 1_000_000_000_000 { n * 1000 } else { n })
+                message.get("timestamp").and_then(|v| v.as_i64()).map(|n| {
+                    if n < 1_000_000_000_000 {
+                        n * 1000
+                    } else {
+                        n
+                    }
+                })
             })
             .unwrap_or(0);
         if ts > last_ts {
@@ -786,6 +822,9 @@ pub async fn resolve_pi_session_file_by_id(
     session_id: &str,
     workspace_path: &Path,
 ) -> Result<Option<PathBuf>, String> {
+    if let Some(path) = locate_pi_session_file_with_home(workspace_path, session_id, home_dir) {
+        return Ok(Some(path));
+    }
     let root = resolve_pi_sessions_root(home_dir);
     resolve_session_file(&root, session_id, workspace_path, true).await
 }
@@ -837,11 +876,7 @@ pub async fn parse_pi_session_entries(file: &Path) -> Result<Vec<PiDerivedLaneEn
         if entry_type == "session" {
             continue;
         }
-        let Some(id) = value
-            .get("id")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-        else {
+        let Some(id) = value.get("id").and_then(Value::as_str).map(str::to_string) else {
             continue;
         };
         let parent_id = value
@@ -1024,12 +1059,7 @@ pub async fn list_pi_sessions(
             let cwd = first_line
                 .as_deref()
                 .and_then(|line| serde_json::from_str::<Value>(line.trim()).ok())
-                .and_then(|value| {
-                    value
-                        .get("cwd")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                });
+                .and_then(|value| value.get("cwd").and_then(Value::as_str).map(str::to_string));
             if let Some(cwd) = cwd {
                 if !paths_match(&cwd, &workspace_variants) {
                     continue;
@@ -1493,7 +1523,10 @@ mod tests {
 
         let legacy_turn = &loaded.messages[1];
         assert_eq!(legacy_turn.text, "legacy text");
-        assert_eq!(legacy_turn.images, Some(vec!["/abs/legacy.png".to_string()]));
+        assert_eq!(
+            legacy_turn.images,
+            Some(vec!["/abs/legacy.png".to_string()])
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1563,7 +1596,11 @@ mod title_attachment_tests {
     use super::*;
     use std::io::Write;
 
-    async fn write_session(dir: &std::path::Path, session_id: &str, first_user_text: &str) -> std::path::PathBuf {
+    async fn write_session(
+        dir: &std::path::Path,
+        session_id: &str,
+        first_user_text: &str,
+    ) -> std::path::PathBuf {
         let sessions = dir.join("sessions");
         let cwd_dir = sessions.join("--tmp-project--");
         std::fs::create_dir_all(&cwd_dir).expect("mkdir");

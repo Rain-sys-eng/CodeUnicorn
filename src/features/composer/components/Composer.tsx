@@ -3920,6 +3920,7 @@ function ComposerImpl({
                           <PiCompactEntry
                             workspaceId={activeWorkspaceId}
                             threadId={activeThreadId}
+                            disabled={Boolean(isProcessing)}
                           />
                         ) : null}
                       </div>

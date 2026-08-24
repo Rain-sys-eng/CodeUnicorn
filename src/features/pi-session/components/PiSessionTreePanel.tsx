@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   refreshPiSessionTree,
   requestPiThreadJump,
@@ -100,6 +101,7 @@ export function PiSessionTreePanel({
   workspaceId,
   threadId,
 }: PiSessionTreePanelProps) {
+  const { t } = useTranslation();
   const tree = usePiSessionTree(workspaceId, threadId);
   const [focusId, setFocusId] = useState<string | null>(null);
 
@@ -379,7 +381,7 @@ export function PiSessionTreePanel({
   const renderEnd = virtualized ? viewRange.end : visibleNodes.length;
 
   return (
-    <div className="pi-tree-panel" role="region" aria-label="会话树">
+    <div className="pi-tree-panel" role="region" aria-label={t("piSession.tree.panelAria")}>
       <div className="pi-fs-body" ref={bodyRef}>
         {tree === null ? (
           <div className="pi-fs-empty">加载中…</div>
@@ -568,9 +570,9 @@ export function PiSessionTreePanel({
         )}
       </div>
       <div className="pi-fs-foot">
-        <span className="pi-badge" title="Pi 会话树（pi RPC: get_tree）">
+        <span className="pi-badge" title={t("piSession.tree.badge")}>
           <GitFork size={11} aria-hidden />
-          PI 会话树
+          {t("piSession.tree.badge")}
         </span>
         <span className="stats">
           {tree

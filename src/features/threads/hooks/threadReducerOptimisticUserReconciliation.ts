@@ -72,13 +72,14 @@ function bindTailTurnOptimisticReplacement(
     (item) => !localItems.some((localItem) => localItem.id === item.id),
   );
   if (
-    unmatchedOptimisticUsers.length !== 1 ||
-    incomingNewUsers.length !== 1
+    unmatchedOptimisticUsers.length === 0 ||
+    incomingNewUsers.length === 0
   ) {
     return;
   }
-  const tailOptimistic = unmatchedOptimisticUsers[0]!;
-  const incomingCandidate = incomingNewUsers[0]!;
+  const tailOptimistic =
+    unmatchedOptimisticUsers[unmatchedOptimisticUsers.length - 1]!;
+  const incomingCandidate = incomingNewUsers[incomingNewUsers.length - 1]!;
   let lastRealUserIndex = -1;
   for (let index = localItems.length - 1; index >= 0; index -= 1) {
     const candidate = localItems[index];
@@ -222,12 +223,12 @@ export function buildOptimisticUserReplacementMap(
   );
   if (
     !hasLocalRealUser &&
-    unmatchedOptimisticUsers.length === 1 &&
-    unmatchedIncomingUsers.length === 1
+    unmatchedOptimisticUsers.length > 0 &&
+    unmatchedIncomingUsers.length > 0
   ) {
     replacementByOptimisticId.set(
-      unmatchedOptimisticUsers[0]!.id,
-      unmatchedIncomingUsers[0]!.id,
+      unmatchedOptimisticUsers[unmatchedOptimisticUsers.length - 1]!.id,
+      unmatchedIncomingUsers[unmatchedIncomingUsers.length - 1]!.id,
     );
     return replacementByOptimisticId;
   }

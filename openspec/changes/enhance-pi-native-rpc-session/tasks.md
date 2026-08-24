@@ -251,3 +251,18 @@
 - [x] 33.2 删除跨会话「另一 PI 会话的 turn 仍在进行中」拒绝；同会话仍 steer；tree/stats/compact/fork 按 session 取 resident；fork/compact 只挡本会话 run
 - [x] 33.3 删除会话 `drop_resident`（v2 + `delete_pi_session` 命令）；Drop 杀全部；interrupt_turn 按 turn_id 找对应 resident
 - [x] 33.4 spec/design 回写「真并行」；`pi_resident_map_key` 单测（同 session 共用 / 新发送隔离 / `pi:` 前缀不进 session 槽）
+
+## 34. RPC 内联回归漏点收口（G1–G25，2026-08-24）
+
+- [x] 34.1 G1 失败 turn waiter Err 走 Settled，禁止 Failed 再 emit
+- [x] 34.2 G3 不再持 run 写锁 await prompt/steer；pump 频道 8192；settle 前 `get_last_assistant_text` 补洞
+- [x] 34.3 G5 fallback 前 drop_resident；print-json 守卫同时看本会话 RPC run
+- [x] 34.4 G8 fork/compact 走 `with_exclusive_rpc_command`（op_lock）
+- [x] 34.5 G9 switch-back 失败回写旧 session id 并报错
+- [x] 34.6 G4 align 先 locate cwd 目录再全量扫盘
+- [x] 34.7 G6 RPC 路径展开 `@file`（图片进 images[]，文本注入 prompt，截断 128k）
+- [x] 34.8 G13 大于 8KiB 的 RPC image 落临时文件路径，不再 data URL 打进 timeline
+- [x] 34.9 G16 RPC 单图硬顶 10MB
+- [x] 34.10 G2 daemon 注册五个 `pi_*` 命令
+- [x] 34.11 G10/G11/G12/G15/G17/G18/G19/G21/G25：压缩入口 disable、store 修剪、optimistic 末条配对、in-flight interrupt、Drop 读锁兜底、fork 120s、命令不再重置 rpc_disabled、i18n、文件模式不把 composer 塞进隐藏 chat 列
+- [x] 34.12 G7/G14/G22/G23/G24：fusion 静态准入保留（fallback 已拒并发）；compact 无 run 仍发合成 turn_id（幕布 forwarder 仍可能看不到）；capability/OpenSpec 归档不在本刀；auto_retry 看门狗 last_event 已覆盖

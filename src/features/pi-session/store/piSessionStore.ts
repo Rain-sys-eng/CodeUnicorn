@@ -143,7 +143,17 @@ export async function refreshPiSessionTree(
         derivedThreadIds.add(`pi:${sessionId}`);
       }
     }
-    setState({ treeByKey: { ...state.treeByKey, [key]: projection } });
+    const nextTree = { ...state.treeByKey, [key]: projection };
+    const keys = Object.keys(nextTree);
+    if (keys.length > 48) {
+      const prefix = `${workspaceId}:`;
+      for (const existing of keys) {
+        if (!existing.startsWith(prefix) && existing !== key) {
+          delete nextTree[existing];
+        }
+      }
+    }
+    setState({ treeByKey: nextTree });
   } catch (error) {
     // RPC unavailable (print-json fallback / old pi): keep last-good snapshot.
     console.warn("[pi-session] refreshTree failed", error);
