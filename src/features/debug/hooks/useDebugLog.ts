@@ -8,6 +8,7 @@ import { appendClientErrorLog } from "../../../services/tauri";
 import {
   buildClientErrorLogSignature,
   buildClientErrorLogEntry,
+  createKnownSafeStderrDailyBudget,
   getSafeClientStderrReasonCode,
   shouldPersistClientErrorLogEntry,
 } from "../utils/clientErrorLog";
@@ -307,6 +308,21 @@ export function useDebugLog() {
       // 错误日志本身是 best-effort 通道，失败不能递归制造新的 DebugEntry。
     });
   }, []);
+  const knownSafeStderrBudgetRef = useRef(createKnownSafeStderrDailyBudget());
+  const persistStderrAggregate = useCallback(
+    (aggregate: PendingStderrAggregate) => {
+      if (
+        !knownSafeStderrBudgetRef.current.consume(
+          aggregate.reasonCode,
+          aggregate.count,
+        )
+      ) {
+        return;
+      }
+      persistClientErrorEntry(buildStderrAggregateDebugEntry(aggregate));
+    },
+    [persistClientErrorEntry],
+  );
 
   const flushPendingStderrAggregates = useCallback(() => {
     if (stderrAggregationTimerRef.current !== null) {
@@ -319,9 +335,9 @@ export function useDebugLog() {
     }
     pendingStderrAggregatesRef.current = new Map();
     for (const aggregate of pending.values()) {
-      persistClientErrorEntry(buildStderrAggregateDebugEntry(aggregate));
+      persistStderrAggregate(aggregate);
     }
-  }, [persistClientErrorEntry]);
+  }, [persistStderrAggregate]);
 
   const queueStderrAggregate = useCallback(
     (entry: DebugEntry) => {
@@ -335,7 +351,7 @@ export function useDebugLog() {
           const oldest = pending.values().next().value;
           if (oldest) {
             pending.delete(oldest.signature);
-            persistClientErrorEntry(buildStderrAggregateDebugEntry(oldest));
+            persistStderrAggregate(oldest);
           }
         }
         pending.set(signature, createPendingStderrAggregate(entry));
@@ -347,7 +363,7 @@ export function useDebugLog() {
         );
       }
     },
-    [flushPendingStderrAggregates, persistClientErrorEntry],
+    [flushPendingStderrAggregates, persistStderrAggregate],
   );
 
   const flushPendingDebugEntries = useCallback(() => {

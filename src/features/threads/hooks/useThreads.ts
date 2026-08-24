@@ -93,13 +93,14 @@ import {
 import {
   collectCanonicalActiveThreadRebindings,
   makeCustomNameKey,
+  persistCustomNames,
   saveCustomName,
+  saveCustomNamesBatch,
 } from "../utils/threadStorage";
 import { publishWorkspaceLastThreadMap } from "../utils/workspaceLastThreadMap";
 import {
   isClientStoreReady,
   subscribeClientStoreHydrated,
-  writeClientStoreValue,
 } from "../../../services/clientStorage";
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { isWebServiceRuntime } from "../../../services/tauri/runtimeMode";
@@ -902,8 +903,7 @@ export function useThreads({
       const next = { ...customNamesRef.current };
       delete next[fromKey];
       next[toKey] = value;
-      customNamesRef.current = next;
-      writeClientStoreValue("threads", "customNames", next);
+      customNamesRef.current = persistCustomNames(next);
     },
     [customNamesRef],
   );
@@ -1076,13 +1076,11 @@ export function useThreads({
     clearThreadAlias,
     resolveWorkspacePath,
     onThreadTitleMappingsLoaded: (workspaceId, titles) => {
+      customNamesRef.current = saveCustomNamesBatch(workspaceId, titles);
       Object.entries(titles).forEach(([threadId, title]) => {
         if (!threadId.trim() || !title.trim()) {
           return;
         }
-        saveCustomName(workspaceId, threadId, title);
-        const key = makeCustomNameKey(workspaceId, threadId);
-        customNamesRef.current[key] = title;
         dispatch({ type: "setThreadName", workspaceId, threadId, name: title });
       });
     },

@@ -34,6 +34,7 @@ import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics"
 import { MessagesTimeline } from "./MessagesTimeline";
 import { MemoryPickGateHost } from "../../project-memory/components/MemoryPickGateHost";
 import { MessagesAnchorRail } from "./conversation/MessagesAnchorRail";
+import { resolveAnchorSchedulePlan } from "./conversation/messagesAnchorSchedule";
 import { ScrollControl, type ConversationScrollEdge } from "./conversation/ScrollControl";
 import {
   MessagesInlineApproval,
@@ -1379,6 +1380,26 @@ export const MessagesCore = memo(function MessagesCore({
       if (!hasAnchorRail) {
         return;
       }
+      // W1（2026-08-25）：钉底时 active anchor 恒为 latest。已是 latest 的触发
+      // 直接跳过（并取消排队中的 rAF），否则流式追底每帧 scroll/sync 都会空转
+      // 一次 rAF + DOM 解析，overlay-loop-guard 只能拦 setState。
+      // 真正要改 active 时仍走 rAF：与既有测试/跟随时序对齐，避免在 effect 里同步 setState。
+      const container = containerRef.current;
+      const latestAnchorId = messageAnchors[messageAnchors.length - 1]?.id ?? null;
+      if (
+        container &&
+        resolveAnchorSchedulePlan({
+          isNearBottom: isCanvasNearBottom(container),
+          latestAnchorId,
+          activeAnchorId: activeAnchorIdRef.current,
+        }).action === "skip"
+      ) {
+        if (anchorUpdateRafRef.current !== null) {
+          window.cancelAnimationFrame(anchorUpdateRafRef.current);
+          anchorUpdateRafRef.current = null;
+        }
+        return;
+      }
       if (anchorUpdateRafRef.current !== null) {
         return;
       }
@@ -1386,12 +1407,22 @@ export const MessagesCore = memo(function MessagesCore({
         anchorUpdateRafRef.current = null;
         const anchorStartedAt =
           typeof performance === "undefined" ? 0 : performance.now();
-        const container = containerRef.current;
-        const latestAnchorId = messageAnchors[messageAnchors.length - 1]?.id ?? null;
+        const containerNow = containerRef.current;
+        const latestNow = messageAnchors[messageAnchors.length - 1]?.id ?? null;
+        const plan = resolveAnchorSchedulePlan({
+          isNearBottom: Boolean(
+            containerNow && isCanvasNearBottom(containerNow),
+          ),
+          latestAnchorId: latestNow,
+          activeAnchorId: activeAnchorIdRef.current,
+        });
+        if (plan.action === "skip") {
+          return;
+        }
         const nextActiveAnchor =
-          container && isCanvasNearBottom(container)
-            ? latestAnchorId
-            : computeActiveAnchor() ?? latestAnchorId;
+          plan.action === "commit"
+            ? plan.nextActiveAnchor
+            : computeActiveAnchor() ?? latestNow;
         const elapsedMs =
           typeof performance === "undefined"
             ? 0

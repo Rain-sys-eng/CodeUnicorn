@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  classifyFastMarkdownWorkerRuntimeError,
   compileFastMarkdownInWorker,
   compileFastMarkdownWithWorkerFallback,
   disposeFastMarkdownWorker,
@@ -50,6 +51,27 @@ describe("fastMarkdownRenderer worker adapter diagnostics", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  it("classifies worker runtime errors without retaining the raw message", () => {
+    expect(classifyFastMarkdownWorkerRuntimeError("")).toBe("script-error");
+    expect(classifyFastMarkdownWorkerRuntimeError("Script error.")).toBe(
+      "script-error",
+    );
+    expect(classifyFastMarkdownWorkerRuntimeError("Uncaught RangeError: out of memory")).toBe(
+      "out-of-memory",
+    );
+    expect(
+      classifyFastMarkdownWorkerRuntimeError("Failed to fetch worker script"),
+    ).toBe("worker-load-failed");
+    expect(
+      classifyFastMarkdownWorkerRuntimeError(
+        "Cannot read properties of undefined (reading 'upload')",
+      ),
+    ).toBe("worker-uncaught");
+    expect(classifyFastMarkdownWorkerRuntimeError("private source content")).toBe(
+      "worker-uncaught",
+    );
   });
 
   it("records a fallback when the worker is not available", async () => {

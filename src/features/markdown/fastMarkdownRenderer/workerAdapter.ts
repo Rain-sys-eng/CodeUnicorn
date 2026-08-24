@@ -245,6 +245,28 @@ function handleWorkerMessage(event: MessageEvent<unknown>) {
   pending.resolve(message.result);
 }
 
+export function classifyFastMarkdownWorkerRuntimeError(
+  message: string | null | undefined,
+): string {
+  const text = (message ?? "").trim().toLowerCase();
+  if (!text || text === "script error." || text === "script error") {
+    return "script-error";
+  }
+  if (text.includes("out of memory") || /\boom\b/.test(text)) {
+    return "out-of-memory";
+  }
+  if (
+    text.includes("failed to fetch") ||
+    text.includes("failed to load") ||
+    text.includes("loading chunk") ||
+    text.includes("networkerror") ||
+    text.includes("network error")
+  ) {
+    return "worker-load-failed";
+  }
+  return "worker-uncaught";
+}
+
 function handleWorkerError(event: ErrorEvent) {
   const message = event.message || "Fast Markdown worker failed";
   disposeBrokenWorker(new Error(message));
@@ -259,7 +281,10 @@ function disposeBrokenWorker(error: Error) {
   rejectAllPendingRequests(error);
   workerDiagnostics.recordFallback("worker-disposed-after-error");
   workerDiagnostics.setHasWorker(false);
-  persistWorkerFailureDiagnostic("worker-runtime-error");
+  persistWorkerFailureDiagnostic(
+    "worker-runtime-error",
+    classifyFastMarkdownWorkerRuntimeError(error.message),
+  );
 }
 
 function rejectAllPendingRequests(error: Error) {
@@ -407,7 +432,10 @@ function throwIfWorkerRequestIsStale(
   throw new Error("fast-markdown-worker-result-stale");
 }
 
-function persistWorkerFailureDiagnostic(reasonCode: string) {
+function persistWorkerFailureDiagnostic(
+  reasonCode: string,
+  errorClass?: string,
+) {
   const now = Date.now();
   const previousAt = persistedWorkerFailureAtByReason.get(reasonCode);
   if (
@@ -420,6 +448,7 @@ function persistWorkerFailureDiagnostic(reasonCode: string) {
   const snapshot = workerDiagnostics.snapshot();
   appendRendererDiagnostic("fast-markdown-worker/failed", {
     reasonCode,
+    errorClass: errorClass ?? reasonCode,
     fallbackCount: snapshot.fallbackCount,
     pendingRequestCount: snapshot.pendingRequestCount,
     postMessageFailureCount: snapshot.postMessageFailureCount,

@@ -347,7 +347,7 @@ function isSensitiveDiagnosticField(
     return false;
   }
   if (
-    /(?:^|_)(?:id|code|state|kind|category|mode|source|label|profile|engine|status|type|name)(?:_|$)/.test(
+    /(?:^|_)(?:id|code|state|kind|category|mode|source|label|profile|engine|status|type|name|class)(?:_|$)/.test(
       normalized,
     ) &&
     isSafeDiagnosticToken(value)
@@ -1424,10 +1424,25 @@ export function appendMediaOwnerDiagnostic(input: MediaOwnerDiagnosticInput) {
   });
 }
 
+export const MARKDOWN_PRECOMPUTE_DIAGNOSTIC_MIN_DURATION_MS = 8;
+
+export function shouldAppendMarkdownPrecomputeDiagnostic(input: {
+  durationMs: number;
+  evidenceClass: ClientInteractionPerfEvidenceKind;
+}): boolean {
+  if (input.evidenceClass !== "unsupported") {
+    return true;
+  }
+  return input.durationMs >= MARKDOWN_PRECOMPUTE_DIAGNOSTIC_MIN_DURATION_MS;
+}
+
 export function appendMarkdownPrecomputeDiagnostic(
   input: MarkdownPrecomputeDiagnosticInput,
 ) {
   if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  if (!shouldAppendMarkdownPrecomputeDiagnostic(input)) {
     return;
   }
   appendRendererDiagnostic("perf.messages.markdown.precompute", {

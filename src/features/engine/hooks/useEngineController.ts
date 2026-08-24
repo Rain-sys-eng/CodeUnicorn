@@ -372,7 +372,10 @@ export function useEngineController({
           timestamp: Date.now(),
           source: "error",
           label: "engine/switch error",
-          payload: `Engine ${engineType} is disabled`,
+          payload: {
+            reasonCode: "engine-disabled",
+            engineType,
+          },
         });
         return;
       }
@@ -428,7 +431,10 @@ export function useEngineController({
           timestamp: Date.now(),
           source: "error",
           label: "engine/switch error",
-          payload: `Engine ${engineType} is not installed`,
+          payload: {
+            reasonCode: "engine-not-installed",
+            engineType,
+          },
         });
         return;
       }
@@ -482,7 +488,10 @@ export function useEngineController({
           timestamp: Date.now(),
           source: "error",
           label: "engine/switch error",
-          payload: error instanceof Error ? error.message : String(error),
+          payload: {
+            reasonCode: "engine-switch-exception",
+            engineType,
+          },
         });
       }
     },

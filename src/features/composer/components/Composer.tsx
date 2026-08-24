@@ -1421,6 +1421,33 @@ function ComposerImpl({
     },
     [createSessionTargetPicker, onSelectEngine, selectedEngine],
   );
+  // W2（2026-08-25）：effort 回调必须是稳定 identity。原先 JSX 里每次 render 新建
+  // `(effort) => handleSharedTargetChange({...})`，ComposerImpl 任意一次重渲都会
+  // 打穿 ChatInputBoxAdapter memo（线上 idle 态 renderCount 冲到 318）。
+  const handleSharedEffortChange = useCallback(
+    (effort: string | null) => {
+      if (!isResolvedExecutionTarget(selectedSharedTarget)) {
+        return;
+      }
+      handleSharedTargetChange({
+        ...selectedSharedTarget,
+        reasoning: effort ? { effort } : null,
+      });
+    },
+    [handleSharedTargetChange, selectedSharedTarget],
+  );
+  const handleCreationEffortChange = useCallback(
+    (effort: string | null) => {
+      if (!isAtomicExecutionTarget(effectiveCreationTarget)) {
+        return;
+      }
+      setSelectedCreationTarget({
+        ...effectiveCreationTarget,
+        reasoning: effort ? { effort } : null,
+      });
+    },
+    [effectiveCreationTarget],
+  );
   // 草稿值直接订阅模块级 store(而非经 app-shell 根 prop 灌入):按键写 store 时
   // 只有 Composer 自身重渲染,不再把整个 app-shell 拖下水。
   const draftText = useComposerDraft(activeThreadId);
@@ -3730,18 +3757,10 @@ function ComposerImpl({
                   ? undefined
                   : isSharedSessionResolved &&
                       isResolvedExecutionTarget(selectedSharedTarget)
-                    ? (effort) =>
-                        handleSharedTargetChange({
-                          ...selectedSharedTarget,
-                          reasoning: effort ? { effort } : null,
-                        })
+                    ? handleSharedEffortChange
                     : createSessionTargetPicker &&
                         isAtomicExecutionTarget(effectiveCreationTarget)
-                      ? (effort) =>
-                          setSelectedCreationTarget({
-                            ...effectiveCreationTarget,
-                            reasoning: effort ? { effort } : null,
-                          })
+                      ? handleCreationEffortChange
                       : onSelectEffort
               }
               reasoningSupported={reasoningSupported}

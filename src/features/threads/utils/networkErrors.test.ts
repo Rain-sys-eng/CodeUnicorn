@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyNetworkError,
+  classifyTurnStartReasonCode,
   parseFirstPacketTimeoutSeconds,
   stripBackendErrorPrefix,
 } from "./networkErrors";
@@ -28,5 +29,20 @@ describe("networkErrors", () => {
       ),
     ).toBe("Timed out waiting for initial response");
     expect(stripBackendErrorPrefix("plain message")).toBe("plain message");
+  });
+
+  it("classifies turn/start errors into persistable reason codes", () => {
+    expect(
+      classifyTurnStartReasonCode("FIRST_PACKET_TIMEOUT:35:Timed out"),
+    ).toBe("first-packet-timeout");
+    expect(classifyTurnStartReasonCode("connect ETIMEDOUT")).toBe(
+      "network-timeout",
+    );
+    expect(
+      classifyTurnStartReasonCode("getaddrinfo ENOTFOUND api.openai.com"),
+    ).toBe("network-dns");
+    expect(classifyTurnStartReasonCode("business logic failed")).toBe(
+      "turn-start-unclassified",
+    );
   });
 });

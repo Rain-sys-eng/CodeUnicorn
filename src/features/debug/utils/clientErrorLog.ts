@@ -8,9 +8,10 @@ const TEXT_SUMMARY_KEY_PATTERN =
   /(prompt|content|text|output|stdout|stderr|raw|delta|messageBody|error|message|detail|diagnosticMessage)/i;
 const SECRET_KEY_PATTERN =
   /(token|password|secret|apiKey|api_key|authorization|cookie|credential)/i;
-const CODEX_MODEL_REFRESH_TIMEOUT_REASON_CODE =
+export const CODEX_MODEL_REFRESH_TIMEOUT_REASON_CODE =
   "codex-model-refresh-child-exit-timeout";
-const UNCLASSIFIED_STDERR_REASON_CODE = "unclassified-stderr";
+export const UNCLASSIFIED_STDERR_REASON_CODE = "unclassified-stderr";
+export const KNOWN_SAFE_STDERR_SUMMARY_EVERY = 100;
 const SAFE_STDERR_REASON_CODES = new Set([
   CODEX_MODEL_REFRESH_TIMEOUT_REASON_CODE,
   UNCLASSIFIED_STDERR_REASON_CODE,
@@ -77,6 +78,65 @@ export function shouldPersistClientErrorLogEntry(entry: DebugEntry): boolean {
     label.includes("three-evidence-reconciliation-cleanup-applied") ||
     label.includes("three-evidence-reconciliation-cleanup-skipped")
   );
+}
+
+export function shouldPersistKnownSafeStderrAggregate(input: {
+  reasonCode: string;
+  rawCountTodayBefore: number;
+  incomingCount: number;
+}): boolean {
+  if (input.reasonCode !== CODEX_MODEL_REFRESH_TIMEOUT_REASON_CODE) {
+    return true;
+  }
+  const incoming = Math.max(0, input.incomingCount);
+  if (incoming === 0) {
+    return false;
+  }
+  const before = Math.max(0, input.rawCountTodayBefore);
+  if (before === 0) {
+    return true;
+  }
+  return (
+    Math.floor((before + incoming) / KNOWN_SAFE_STDERR_SUMMARY_EVERY) >
+    Math.floor(before / KNOWN_SAFE_STDERR_SUMMARY_EVERY)
+  );
+}
+
+function formatLocalDayKey(nowMs: number): string {
+  const date = new Date(nowMs);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function createKnownSafeStderrDailyBudget(
+  now: () => number = Date.now,
+) {
+  let dayKey = "";
+  const rawCountByReason = new Map<string, number>();
+
+  const resolveDay = () => {
+    const nextKey = formatLocalDayKey(now());
+    if (nextKey !== dayKey) {
+      dayKey = nextKey;
+      rawCountByReason.clear();
+    }
+  };
+
+  return {
+    consume(reasonCode: string, incomingCount: number): boolean {
+      resolveDay();
+      const before = rawCountByReason.get(reasonCode) ?? 0;
+      const shouldPersist = shouldPersistKnownSafeStderrAggregate({
+        reasonCode,
+        rawCountTodayBefore: before,
+        incomingCount,
+      });
+      rawCountByReason.set(reasonCode, before + Math.max(0, incomingCount));
+      return shouldPersist;
+    },
+  };
 }
 
 export function classifyClientStderr(
