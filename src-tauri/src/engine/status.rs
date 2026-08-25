@@ -1297,9 +1297,10 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
         if provider == "provider" && model == "model" {
             continue;
         }
+        // 跳过表头/分隔线等杂音行,但 provider 允许 Unicode(中文自定义供应商名)。
         if provider
             .chars()
-            .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+            .any(|c| !c.is_alphanumeric() && c != '-' && c != '_')
         {
             continue;
         }
@@ -2605,6 +2606,22 @@ xai      grok-4.5        256k   64k    yes      yes
             models[0].supported_reasoning_efforts,
             vec!["off", "minimal", "low", "medium", "high"]
         );
+    }
+
+    #[test]
+    fn parse_pi_models_output_keeps_cjk_and_mixed_provider_rows() {
+        let models = parse_pi_models_output(
+            "provider  model          ctx   max  thinking images
+智谱      glm-5.2         200k  64k  yes      no
+123nhh-gpt gpt-5.6-sol   256k  64k  no       no
+",
+        );
+        let cjk = models
+            .iter()
+            .find(|m| m.id == "智谱/glm-5.2")
+            .expect("CJK provider row must survive parsing");
+        assert_eq!(cjk.provider.as_deref(), Some("智谱"));
+        assert!(models.iter().any(|m| m.id == "123nhh-gpt/gpt-5.6-sol"));
     }
 
     #[test]

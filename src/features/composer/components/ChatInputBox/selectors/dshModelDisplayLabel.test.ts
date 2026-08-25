@@ -83,6 +83,41 @@ describe("formatDshModelDisplayLabel", () => {
       formatDshModelDisplayLabel({ id: "grok-4.6" }, { closed: true }),
     ).toBe("grok-4.6");
   });
+
+  it("keeps the middle path on colliding rows (PI custom providers)", () => {
+    // cpa 自定义供应商下 cline / fb2api 两个上游的同名模型
+    expect(
+      formatDshModelDisplayLabel(
+        {
+          id: "cpa/cline/deepseek-v4-flash-0731",
+          label: "cline/deepseek-v4-flash-0731",
+        },
+        { disambiguate: true },
+      ),
+    ).toBe("cline/deepseek-v4-flash-0731");
+    // 两段 id 去掉首段没有新增信息时,保留完整 catalog id
+    expect(
+      formatDshModelDisplayLabel(
+        { id: "fb2api/deepseek-v4-flash-0731" },
+        { disambiguate: true },
+      ),
+    ).toBe("fb2api/deepseek-v4-flash-0731");
+    // 无斜杠 id 没有更多信息可展示
+    expect(
+      formatDshModelDisplayLabel({ id: "grok-4.6" }, { disambiguate: true }),
+    ).toBe("grok-4.6");
+    // 不带 disambiguate 时保持 last-segment 简洁展示
+    expect(
+      formatDshModelDisplayLabel({ id: "cpa/cline/deepseek-v4-flash-0731" }),
+    ).toBe("deepseek-v4-flash-0731");
+    // closed trigger 不受 disambiguate 影响
+    expect(
+      formatDshModelDisplayLabel(
+        { id: "cpa/cline/deepseek-v4-flash-0731" },
+        { closed: true, disambiguate: true },
+      ),
+    ).toBe("cpa / deepseek-v4-flash-0731");
+  });
 });
 
 describe("groupDshModelsByVendor", () => {

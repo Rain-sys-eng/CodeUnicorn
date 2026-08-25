@@ -3209,6 +3209,78 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
     });
   });
 
+  it("disambiguates PI custom-provider rows that share the same last segment", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const piGroup: ProviderTargetGroup = {
+      providerId: "pi",
+      providerLabel: "PI CLI",
+      enabled: true,
+      profiles: [
+        {
+          id: "__local_pi__",
+          label: "本地配置",
+          source: "disk",
+          loading: false,
+          error: null,
+          models: [
+            {
+              id: "cpa/cline/deepseek-v4-flash-0731",
+              label: "cline/deepseek-v4-flash-0731",
+              provider: "cpa",
+              description: "ctx 200K · thinking",
+            },
+            {
+              id: "cpa/fb2api/deepseek-v4-flash-0731",
+              label: "fb2api/deepseek-v4-flash-0731",
+              provider: "cpa",
+              description: "ctx 200K · thinking",
+            },
+            {
+              id: "cpa/deepseek-v4-pro-0813",
+              label: "deepseek-v4-pro-0813",
+              provider: "cpa",
+              description: "ctx 200K · thinking",
+            },
+          ],
+        },
+      ],
+    };
+    const groups: ProviderTargetGroup[] = [...buildAtomicGroups(), piGroup];
+
+    render(
+      <ModelSelect
+        value="claude-opus-4-8"
+        currentProvider="claude"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onExecutionTargetChange={vi.fn()}
+        executionTarget={atomicExecutionTarget}
+        targetGroups={groups}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:Opus 4.8" }),
+    );
+    await screen.findByRole("menuitem", { name: /PI CLI/ });
+    openPickerSubmenu(/PI CLI/);
+
+    const clineRow = document.querySelector(
+      '[data-model-id="cpa/cline/deepseek-v4-flash-0731"]',
+    );
+    const fb2apiRow = document.querySelector(
+      '[data-model-id="cpa/fb2api/deepseek-v4-flash-0731"]',
+    );
+    const proRow = document.querySelector(
+      '[data-model-id="cpa/deepseek-v4-pro-0813"]',
+    );
+    expect(clineRow?.textContent).toContain("cline/deepseek-v4-flash-0731");
+    expect(fb2apiRow?.textContent).toContain("fb2api/deepseek-v4-flash-0731");
+    // 无冲突的行保持 last-segment 简洁展示
+    expect(proRow?.textContent).toContain("deepseek-v4-pro-0813");
+    expect(proRow?.textContent).not.toContain("cpa/deepseek-v4-pro-0813");
+  });
+
   it("keeps the PI closed trigger prefixed so it cannot collide with DSH last-segment names", async () => {
     const piTarget: ExecutionTarget = {
       engine: "pi",

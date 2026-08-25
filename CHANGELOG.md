@@ -2,11 +2,11 @@
 
 ---
 
-### **2026年8月24日（v0.9.3）**
+### **2026年8月25日（v0.9.3）**
 
 中文：
 
-这一版升到 **0.9.3**，两件大事：**PI 引擎更快更能干，删会话终于删得干净**。PI 会话从「每句话都重启一次进程」改成常驻连接，响应明显更快，并一次带来四个新能力：从任意消息**分叉**新分支、**会话树**纵览分支结构、多会话**融合**、上下文太长一键**压缩**；PI 启动失败会自动回退旧模式，其余 8 个引擎完全不受影响。删除与归档彻底重做：点删除立刻从列表消失、后台真正清理文件，之前「删了过几分钟又刷出来」的幽灵会话被根除；归档即时生效，不再整表刷新。另外，侧栏默认显示的会话数可以全局调节，供应商报错后的自动重试上限从 10 次放宽到 999 次，并修复了 PI 长会话打不开、中文路径崩溃、回合结尾丢字、Windows 数字错位等问题。
+这一版升到 **0.9.3**，主线是 **PI 引擎更快更能干、删会话终于删得干净，外加一轮全界面提速**。PI 会话从「每句话都重启一次进程」改成常驻连接，响应明显更快，并一次带来四个新能力：从任意消息**分叉**新分支、**会话树**纵览分支结构、多会话**融合**、上下文太长一键**压缩**；PI 启动失败会自动回退旧模式，其余 8 个引擎完全不受影响。删除与归档彻底重做：点删除立刻从列表消失、后台真正清理文件，之前「删了过几分钟又刷出来」的幽灵会话被根除；归档即时生效，不再整表刷新。对话幕布新增**极简模式**，按回合整段折叠过程叙述、只留正文；侧栏置顶拆成**全局 / 项目内**两个互斥作用域；模型菜单支持**搜索筛选**，PI 也能按模型选**思考强度**；供应商认证支持**自定义供应商**直接读写 models.json。设置页、搜索、布局等重面板做了一轮系统提速，并修复中转断流回合永挂、PI 长任务被误杀、Linux 通知音崩溃、回合结尾丢字、Windows 数字错位等问题。
 
 ✨ Features
 
@@ -17,6 +17,11 @@
 - **归档即时生效**：归档 / 取消归档秒完成，侧栏立刻摘行，不再整个列表重新加载；快捷键「归档」之前实际执行的是删除，这次修正为真正的归档
 - **侧栏默认显示会话数可调**：全局默认显示 5 个会话，可在设置里调 1~20；每个工作区还可以单独设置覆盖全局值，已存的设置不会被改写
 - **自动重试上限放宽**：供应商断线 / 报错后的自动续跑上限从 10 次提高到 999 次
+- **幕布极简模式**：设置里开启后按回合整段折叠思考 / 工具过程，幕布只留正文；流式中的回合同样整段折叠，展开时内部仍按阶段逐段呈现，可随时切回常规模式
+- **置顶双作用域**：侧栏置顶拆成「全局置顶」与「项目内置顶」两个互斥作用域，并恢复总折叠行；已置顶会话的图钉常亮，区段头与工作区对齐
+- **模型菜单搜索筛选**：模型选择子菜单支持输入即筛，模型再多也一搜即得
+- **PI 按模型思考强度**：PI 引擎接入按模型的思考强度档位选择并打通发送闸门；Shared / Atomic 的思考档位联动同步扩展到 PI
+- **自定义供应商配置**：供应商认证新增自定义供应商区块，可在应用内直接读写 models.json
 
 🔧 Improvements
 
@@ -26,6 +31,11 @@
 - **超大终端输出不再拖慢界面**：终端工具输出设有上限，超大输出不会拖垮页面
 - **工作区别名弹窗重写**：打开更快、样式更顺手
 - **PI 会话丢失可诊断**：全链路增加埋点，遇到会话从列表里消失时更容易定位问题
+- **设置页按需加载**：6 个重 section 改为按需加载，打开设置明显更快
+- **大结果搜索虚拟化**：工作区搜索大结果集接入虚拟化，几千条结果也不卡
+- **重面板渲染收紧**：五个重面板节点补 memo，无关状态变化不再击穿整个布局
+- **运行时日志提速降噪**：收口本地 error / perf 日志链路中的 P0 卡顿点
+- **PI 输出口径校准**：tool-output 统计口径对齐、thinking 夹紧、技能目录补齐
 
 🐛 Fixes
 
@@ -39,10 +49,19 @@
 - **Qoder 登录凭证优先级**：修复已保存的 Qoder 凭证被系统环境变量覆盖导致登录异常的问题
 - **Windows 数字错位**：修复 Windows 上「改动文件」计数的前缀符号与首位数字重叠的问题
 - **网络盘文件面板加载失败**：网络驱动器 / 映射盘上的项目，Files 面板现在能正常打开
+- **中转断流回合永挂**：Claude 回合中途流静默时由看门狗接管结算，不再永远卡在「生成中」
+- **PI 长任务被误杀**：PI 回合结算改为看门狗对账，跑 long task 不再被当成失败杀掉
+- **Shared 续跑死循环**：已完成回合被进程退出码误判为失败导致的自动续跑死循环已修复
+- **Linux 通知音崩溃**：修复 Linux WebKitGTK 上播放通知音导致程序崩溃的问题
+- **新会话刷不出来**：侧栏「重新加载」现在强制索引重扫，在应用外新建的会话立刻出现
+- **PI 多会话并行恢复**：按会话隔离 RPC / fallback 忙锁，多个 PI 会话并行不再互相卡死；RPC 故障禁用后会冷却自恢复
+- **PI 历史附图还原**：从 RPC image block 还原历史中的用户附图；带图提问刷新后用户气泡不再接到助手回复的尾巴上
+- **Windows 文件链接打不开**：补齐 Windows 文件链接解析规则，Markdown 里的文件链接能正常在 Explorer 打开
+- **模型菜单空目录**：模型菜单打开时自动恢复只剩兜底条目的引擎 catalog
 
-English：
+English:
 
-This release moves the app to **0.9.3** with two big stories: **PI is faster and far more capable, and deleting sessions finally deletes them for good.** PI sessions keep a resident connection instead of relaunching a process for every message, and gain four new powers in one go: **fork** a branch from any message, a **session tree** view of the whole branch structure, **fusion** of multiple sessions into one, and one-click **compaction** for over-long contexts; if PI fails to start it falls back to the old mode automatically, leaving the other 8 engines untouched. Delete and archive were rebuilt from the ground up: confirming a delete removes the row instantly and cleans up files in the background, and the "deleted sessions that resurrect minutes later" ghost problem is gone; archiving takes effect immediately without a full-list reload. You can also set how many sessions the sidebar shows by default, the provider auto-retry cap goes from 10 to 999, and we fixed long PI sessions that wouldn't open, Chinese-path crashes, missing text at the end of replies, and misaligned digits on Windows.
+This release moves the app to **0.9.3** with three big stories: **PI is faster and far more capable, deleting sessions finally deletes them for good, and a broad UI speed-up.** PI sessions keep a resident connection instead of relaunching a process for every message, and gain four new powers in one go: **fork** a branch from any message, a **session tree** view of the whole branch structure, **fusion** of multiple sessions into one, and one-click **compaction** for over-long contexts; if PI fails to start it falls back to the old mode automatically, leaving the other 8 engines untouched. Delete and archive were rebuilt from the ground up: confirming a delete removes the row instantly and cleans up files in the background, and the "deleted sessions that resurrect minutes later" ghost problem is gone; archiving takes effect immediately without a full-list reload. The canvas gains a **minimal mode** that folds each turn's process narrative into a single block; sidebar pins split into mutually-exclusive **global / in-project** scopes; the model menu is **searchable**, PI gets per-model **thinking effort**, and vendor auth accepts **custom providers** backed by models.json. Settings, search, and layout hot paths were systematically sped up, and we fixed relay stalls that hung turns forever, PI long tasks being killed mid-run, a Linux notification-sound crash, missing text at the end of replies, and misaligned digits on Windows.
 
 ✨ Features
 
@@ -53,6 +72,11 @@ This release moves the app to **0.9.3** with two big stories: **PI is faster and
 - **Instant archiving**: archive / unarchive completes right away and the row leaves the sidebar without a full-list reload; the "archive" shortcut used to actually delete — it now truly archives
 - **Adjustable sidebar session count**: the sidebar shows 5 sessions by default, adjustable 1–20 in settings; each workspace can still override the global value, and existing settings are never rewritten
 - **Higher auto-retry cap**: automatic continue after vendor failures goes from 10 attempts to 999
+- **Minimal canvas mode**: an optional minimal display folds each turn's thinking / tool process into one block, leaving only the body; live turns fold the same way, expanding reveals the per-phase breakdown, and you can switch back at any time
+- **Dual pin scopes**: sidebar pins split into mutually-exclusive "global" and "in-project" scopes with the fold-all row restored; pinned sessions keep a lit pin, and section headers align with workspaces
+- **Searchable model menu**: the model picker submenu filters as you type, so even a long model list is one search away
+- **Per-model thinking effort on PI**: PI gains per-model thinking-effort selection wired through the send gate; Shared / Atomic effort linking extends to PI as well
+- **Custom provider configs**: vendor auth gains a custom-provider section that reads and writes models.json in-app
 
 🔧 Improvements
 
@@ -62,6 +86,11 @@ This release moves the app to **0.9.3** with two big stories: **PI is faster and
 - **Huge terminal output no longer slows the UI**: terminal tool output is capped so large outputs can't bog the page down
 - **Workspace alias dialog rewritten**: opens faster with a cleaner look
 - **Diagnosable PI session loss**: end-to-end instrumentation makes it much easier to pinpoint why a session went missing from the list
+- **Lazy Settings sections**: six heavy settings sections load on demand so Settings opens noticeably faster
+- **Virtualized large search results**: workspace search virtualizes big result sets so thousands of hits stay smooth
+- **Heavy panels memoized**: five heavy layout panels are memoized so unrelated state no longer punches through the whole layout
+- **Quieter, faster runtime logging**: closes the P0 stalls in the local error / perf logging path
+- **PI output accounting calibrated**: tool-output accounting aligned, thinking clamped, and the skill catalog completed
 
 🐛 Fixes
 
@@ -75,6 +104,15 @@ This release moves the app to **0.9.3** with two big stories: **PI is faster and
 - **Qoder credential priority**: fixed saved Qoder credentials being overridden by system environment variables, which broke sign-in
 - **Misaligned digits on Windows**: fixed the "files changed" counter's prefix sign overlapping the first digit
 - **Files panel failing on network drives**: projects on network / mapped drives now open normally in the Files panel
+- **Turns hung forever on relay stalls**: a mid-turn silence watchdog settles the turn when a Claude stream goes quiet
+- **PI long tasks killed mid-run**: PI turn settlement now reconciles via watchdog, so long-running tasks are no longer reaped as failures
+- **Shared auto-continue death loop**: a finished turn misjudged as failed by its exit code no longer triggers endless continuation
+- **Linux notification-sound crash**: fixed a WebKitGTK crash caused by playing the notification sound
+- **New sessions not appearing**: sidebar "Reload" now forces an index rescan, so sessions created outside the app show up at once
+- **Parallel PI sessions restored**: per-session isolation of RPC / fallback busy locks so concurrent PI sessions no longer stall each other; the RPC circuit breaker self-recovers after a cooldown
+- **PI history images restored**: user attachments are recovered from RPC image blocks; image questions no longer glue the user bubble onto the assistant tail after a refresh
+- **Windows file links wouldn't open**: Windows file-link parsing rules completed, so Markdown file links open in Explorer as expected
+- **Empty model menus**: opening the model menu now restores catalogs for engines that only had fallback entries
 
 ---
 

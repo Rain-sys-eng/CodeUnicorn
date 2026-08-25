@@ -445,7 +445,7 @@ type PickerModelGroup = {
 
 type PickerModelRow =
   | { kind: 'heading'; key: string; sectionKey: string; label: string }
-  | { kind: 'model'; key: string; model: ModelInfo };
+  | { kind: 'model'; key: string; model: ModelInfo; disambiguate?: boolean };
 
 function pickerRowsForGroup(group: PickerModelGroup): PickerModelRow[] {
   if (!isSlashCatalogEngine(group.providerId)) {
@@ -456,19 +456,30 @@ function pickerRowsForGroup(group: PickerModelGroup): PickerModelRow[] {
     }));
   }
 
-  return groupDshModelsByVendor(group.models).flatMap((section) => [
-    {
-      kind: 'heading' as const,
-      key: `${group.providerId}-vendor:${section.key}`,
-      sectionKey: section.key,
-      label: section.label,
-    },
-    ...section.models.map((model) => ({
-      kind: 'model' as const,
-      key: `${group.providerId}:${section.key}:${model.id}`,
-      model,
-    })),
-  ]);
+  return groupDshModelsByVendor(group.models).flatMap((section) => {
+    // PI 自定义供应商常把多个上游路由进同一 provider（cpa/cline/x 与
+    // cpa/fb2api/x），last-segment 相同的行需保留中段路径才能区分。
+    const labelCounts = new Map<string, number>();
+    for (const model of section.models) {
+      const label = formatDshModelDisplayLabel(model);
+      labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+    }
+    return [
+      {
+        kind: 'heading' as const,
+        key: `${group.providerId}-vendor:${section.key}`,
+        sectionKey: section.key,
+        label: section.label,
+      },
+      ...section.models.map((model) => ({
+        kind: 'model' as const,
+        key: `${group.providerId}:${section.key}:${model.id}`,
+        model,
+        disambiguate:
+          (labelCounts.get(formatDshModelDisplayLabel(model)) ?? 0) > 1,
+      })),
+    ];
+  });
 }
 
 /**
@@ -790,7 +801,7 @@ export const ModelSelect = memo(({
   const getModelLabel = (
     model: ModelInfo,
     providerId?: string | null,
-    options?: { closed?: boolean },
+    options?: { closed?: boolean; disambiguate?: boolean },
   ): string => {
     if (!providerId || providerId === "claude") {
       const claudeLabel = resolveClaudeCatalogModelLabel(model, modelMapping);
@@ -807,7 +818,10 @@ export const ModelSelect = memo(({
     }
 
     if (isSlashCatalogEngine(providerId)) {
-      return formatDshModelDisplayLabel(model, { closed: options?.closed === true });
+      return formatDshModelDisplayLabel(model, {
+        closed: options?.closed === true,
+        disambiguate: options?.disambiguate === true,
+      });
     }
 
     const parentLabel = model.label?.trim() || "";
@@ -1597,7 +1611,9 @@ export const ModelSelect = memo(({
                             />
                             <div className="flex min-w-0 flex-1 flex-col">
                               <span className="truncate text-sm">
-                                {getModelLabel(model, group.providerId)}
+                                {getModelLabel(model, group.providerId, {
+                                  disambiguate: entry.disambiguate,
+                                })}
                               </span>
                               {description && (
                                 <span className="text-xs text-muted-foreground whitespace-normal">
