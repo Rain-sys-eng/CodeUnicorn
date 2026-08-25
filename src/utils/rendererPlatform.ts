@@ -33,6 +33,24 @@ export function detectRendererPlatform(
   return "unknown";
 }
 
+/**
+ * Linux Tauri uses WebKitGTK. HTMLMediaElement audio goes through GStreamer;
+ * missing appsink/autoaudiosink aborts WebKitWebProcess (desktop-cc-gui#1125).
+ * Linux web-service (regular browser) is not affected.
+ */
+export function isLinuxWebKitGtkHtmlMediaUnsafe(
+  navigatorLike: NavigatorLike | undefined = globalThis.navigator,
+  webServiceRuntime?: boolean,
+): boolean {
+  const isWebService =
+    webServiceRuntime ??
+    (typeof window !== "undefined" && window.__MOSSX_WEB_SERVICE__ === true);
+  if (isWebService) {
+    return false;
+  }
+  return detectRendererPlatform(navigatorLike) === "linux";
+}
+
 export function getRevealInOsFileManagerLabelKey(
   platform: RendererPlatform = detectRendererPlatform(),
 ): RevealInOsFileManagerLabelKey {
@@ -46,7 +64,9 @@ export function getRevealInOsFileManagerLabelKey(
 }
 
 export function installRendererPlatformAttribute(
-  documentLike: Pick<Document, "documentElement"> | undefined = globalThis.document,
+  documentLike:
+    | Pick<Document, "documentElement">
+    | undefined = globalThis.document,
   navigatorLike?: NavigatorLike,
 ) {
   documentLike?.documentElement.setAttribute(

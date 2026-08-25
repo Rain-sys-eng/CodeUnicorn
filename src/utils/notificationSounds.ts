@@ -1,5 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { DebugEntry } from "../types";
+import { isLinuxWebKitGtkHtmlMediaUnsafe } from "./rendererPlatform";
 
 type DebugLogger = (entry: DebugEntry) => void;
 
@@ -85,13 +86,15 @@ const resolveSoundId = (soundId?: string | null): NotificationSoundId => {
     : "default";
 };
 
-const resolveCustomSoundUrl = (customSoundPath?: string | null): string | null => {
+const resolveCustomSoundUrl = (
+  customSoundPath?: string | null,
+): string | null => {
   const rawPath = customSoundPath?.trim() ?? "";
   if (!rawPath) {
     return null;
   }
   const normalizedPath =
-    rawPath.length >= 2 && rawPath.startsWith("\"") && rawPath.endsWith("\"")
+    rawPath.length >= 2 && rawPath.startsWith('"') && rawPath.endsWith('"')
       ? rawPath.slice(1, -1).trim()
       : rawPath;
   if (!normalizedPath) {
@@ -106,11 +109,32 @@ const resolveCustomSoundUrl = (customSoundPath?: string | null): string | null =
   return convertFileSrc(normalizedPath);
 };
 
+const skipHtmlAudioIfLinuxWebKit = (
+  label: NotificationSoundLabel,
+  onDebug?: DebugLogger,
+): boolean => {
+  if (!isLinuxWebKitGtkHtmlMediaUnsafe()) {
+    return false;
+  }
+  onDebug?.({
+    id: `${Date.now()}-audio-${label}-linux-webkit-skip`,
+    timestamp: Date.now(),
+    source: "client",
+    label: `audio/${label} linux webkit skip`,
+    payload:
+      "Skipped HTMLAudioElement on Linux WebKitGTK to avoid GStreamer WebKitWebProcess abort",
+  });
+  return true;
+};
+
 const playNotificationAudioUrl = (
   url: string,
   label: NotificationSoundLabel,
   onDebug?: DebugLogger,
 ) => {
+  if (skipHtmlAudioIfLinuxWebKit(label, onDebug)) {
+    return;
+  }
   try {
     const audio = new Audio(url);
     audio.volume = 1;
@@ -170,6 +194,9 @@ export function playNotificationSoundBySelection({
   label,
   onDebug,
 }: PlayNotificationSoundBySelectionParams) {
+  if (skipHtmlAudioIfLinuxWebKit(label, onDebug)) {
+    return;
+  }
   const resolvedSoundId = resolveSoundId(soundId);
   if (resolvedSoundId === "custom") {
     const customUrl = resolveCustomSoundUrl(customSoundPath);
