@@ -102,6 +102,18 @@ const APP_SHELL_LAYOUT_NODES_GIT_DOMAIN_NAMES =
 
 // Stable empty-array sentinel so optional `string[]` fallbacks keep a constant
 // reference across renders (avoids defeating downstream React.memo shields).
+/**
+ * 用户显式「重新加载」会话列表 = 强制发现意图：first-paint 默认温读
+ * （syncIfNeeded:false / forceSync:false）只翻 SQLite 快照，新会话进索引靠
+ * 后端 importer 90s 轮询——窗口内（或被 omit/导入失败时）点多少次重载都
+ * 刷不出来（0.9.3 测试版用户反馈）。强制写者 rescan 但保持 first-paint
+ * kind，不升级 full-catalog 多引擎扇出。
+ * OpenSpec change：fix-sidebar-reload-force-index-sync。
+ */
+const USER_RELOAD_THREAD_LIST_OPTIONS = {
+  forceSessionIndexSync: true,
+} as const;
+
 function reportMainFileExternalChangeMonitorCleanupError(error: unknown) {
   console.warn(
     "[files] Failed to clear main file external change monitor",
@@ -1527,7 +1539,12 @@ export function useAppShellLayoutNodesSection(
             ]
           : [workspace];
       await Promise.allSettled(
-        targets.map((target) => listThreadsForWorkspaceTracked(target)),
+        targets.map((target) =>
+          listThreadsForWorkspaceTracked(
+            target,
+            USER_RELOAD_THREAD_LIST_OPTIONS,
+          ),
+        ),
       );
     },
   );
@@ -1568,7 +1585,12 @@ export function useAppShellLayoutNodesSection(
             ]
           : [workspace];
       void Promise.allSettled(
-        targets.map((target) => listThreadsForWorkspaceTracked(target)),
+        targets.map((target) =>
+          listThreadsForWorkspaceTracked(
+            target,
+            USER_RELOAD_THREAD_LIST_OPTIONS,
+          ),
+        ),
       );
     },
   );
