@@ -90,6 +90,8 @@ const sidebar = {
     "workspaceAliasBadgeTitle": "Псевдоним рабочей области. Исходное имя: {{name}}",
     "emptyWorkspaceSessions": "Пока нет сессий.",
     "loadingWorkspaceSessions": "Загрузка…",
+    "loadingWorkspaceSessionsIndex": "Чтение индекса сессий…",
+    "loadingWorkspaceSessionsDeep": "Полное сканирование локальных сессий…",
     "newSessionFolder": "Новая папка",
     "newSessionFolderIn": "Новая папка в {{name}}",
     "renameSessionFolder": "Переименовать {{name}}",

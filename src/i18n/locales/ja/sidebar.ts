@@ -90,6 +90,8 @@ const sidebar = {
     "workspaceAliasBadgeTitle": "ワークスペースのエイリアス。元の名前: {{name}}",
     "emptyWorkspaceSessions": "セッションはまだありません。",
     "loadingWorkspaceSessions": "読み込み中…",
+    "loadingWorkspaceSessionsIndex": "セッションインデックスを読み込み中…",
+    "loadingWorkspaceSessionsDeep": "ローカルセッションを完全スキャン中…",
     "newSessionFolder": "新しいフォルダ",
     "newSessionFolderIn": "{{name}} に新しいフォルダ",
     "renameSessionFolder": "{{name}} の名前を変更",

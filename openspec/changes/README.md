@@ -2,9 +2,9 @@
 
 本页是 `mossx` OpenSpec proposal 的当前入口。它只维护 active change 的执行状态，并把 archived change 路由到完整历史索引；详细治理快照仍以 [`../project.md`](../project.md) 为准。
 
-- Updated At: `2026-08-25`
+- Updated At: `2026-08-26`
 - Active proposals: `51`（以磁盘 `openspec/changes/*` 为准）
-- Archived proposals: `917`
+- Archived proposals: `919`
 - Main capability specs: `539`
 
 ## Active Proposals

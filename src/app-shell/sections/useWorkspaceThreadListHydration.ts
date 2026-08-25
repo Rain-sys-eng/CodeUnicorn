@@ -188,6 +188,15 @@ export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_WAIT_MS = IS_VITEST ? 0 : 8_
 export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFERS = 3;
 export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFER_WINDOW_MS = 8_000;
 
+/**
+ * unconfirmed-empty settle 未证实（失败 / 超时 / 仍非权威空）后，保持 loading
+ * 等 importer 填行（session-index-imported → ensure 会合行并标 hydrated）的
+ * 宽限期；到期仍未见行则兜底标 hydrated 终态——真空 workspace 不永生 loading
+ * （「暂无会话」占位已下线，终态即空白）。
+ * @internal exported for tests
+ */
+export const EMPTY_SETTLE_LOADING_GRACE_MS = IS_VITEST ? 50 : 20_000;
+
 /** @deprecated Prefer COLD_START_IDLE_* / WORKSPACE_SWITCH_INTENT_DELAY_MS */
 export const COLD_START_FIRST_PAINT_DELAY_MS = COLD_START_IDLE_MIN_DELAY_MS;
 
@@ -380,6 +389,50 @@ export function useWorkspaceThreadListHydration({
     useState<ReadonlySet<string>>(
       () => hydratedThreadListWorkspaceIdsRef.current,
     );
+  // loading 阶段文案由 ThreadLoadingState 本地计时切换，此处不维护 phase 状态。
+  /** settle 未证实后的宽限定时器（兜底终态，防永生 loading）。 */
+  const emptySettleGraceCleanupByWorkspaceIdRef = useRef(
+    new Map<string, () => void>(),
+  );
+
+  const cancelEmptySettleGrace = useCallback((workspaceId: string) => {
+    const cancel =
+      emptySettleGraceCleanupByWorkspaceIdRef.current.get(workspaceId);
+    if (cancel) {
+      cancel();
+      emptySettleGraceCleanupByWorkspaceIdRef.current.delete(workspaceId);
+    }
+  }, []);
+
+  /** hydrated 终态统一出口：标 hydrated + 取消宽限。 */
+  const markWorkspaceThreadListHydrated = useCallback(
+    (workspaceId: string) => {
+      cancelEmptySettleGrace(workspaceId);
+      const nextHydrated = publishHydratedWorkspaceId(
+        hydratedThreadListWorkspaceIdsRef,
+        workspaceId,
+      );
+      publishHydrationUiState(setHydratedThreadListWorkspaceIds, nextHydrated);
+    },
+    [cancelEmptySettleGrace],
+  );
+
+  const armEmptySettleGrace = useCallback(
+    (workspaceId: string) => {
+      cancelEmptySettleGrace(workspaceId);
+      if (hydratedThreadListWorkspaceIdsRef.current.has(workspaceId)) {
+        return;
+      }
+      const timer = setTimeout(() => {
+        emptySettleGraceCleanupByWorkspaceIdRef.current.delete(workspaceId);
+        markWorkspaceThreadListHydrated(workspaceId);
+      }, EMPTY_SETTLE_LOADING_GRACE_MS);
+      emptySettleGraceCleanupByWorkspaceIdRef.current.set(workspaceId, () =>
+        clearTimeout(timer),
+      );
+    },
+    [cancelEmptySettleGrace, markWorkspaceThreadListHydrated],
+  );
   const renderScheduler = useRenderScheduler({
     budgetMs: 0,
     idleTimeoutMs: IDLE_PREWARM_DELAY_MS,
@@ -481,18 +534,30 @@ export function useWorkspaceThreadListHydration({
         }),
       )
         .catch(() => undefined)
-        .finally(() => {
-          const nextHydrated = publishHydratedWorkspaceId(
-            hydratedThreadListWorkspaceIdsRef,
-            id,
-          );
-          publishHydrationUiState(
-            setHydratedThreadListWorkspaceIds,
-            nextHydrated,
-          );
+        .then((settleResult) => {
+          // 放行后续（如 session-index-imported 触发的 ensure）再次 settle。
+          unconfirmedEmptySettleArmedIdsRef.current.delete(id);
+          const confirmed =
+            settleResult != null &&
+            settleResult.applied === true &&
+            ((settleResult.visibleCount ?? 0) > 0 ||
+              settleResult.authoritativeEmpty === true);
+          if (confirmed) {
+            markWorkspaceThreadListHydrated(id);
+            return;
+          }
+          // settle 未证实（失败 / 超时 / 仍非权威空）：不标 hydrated、不闪
+          // 空白——保持「深度扫描」loading 等 importer 填行，宽限到期仍未见行
+          // 才兜底终态（armEmptySettleGrace 内部处理）。
+          armEmptySettleGrace(id);
         });
     },
-    [listThreadsForWorkspace, workspacesById],
+    [
+      armEmptySettleGrace,
+      listThreadsForWorkspace,
+      markWorkspaceThreadListHydrated,
+      workspacesById,
+    ],
   );
 
   /**
@@ -666,6 +731,13 @@ export function useWorkspaceThreadListHydration({
       // Keep maps aligned for concurrent ensure/skip guards.
       hydrationKindByWorkspaceIdRef.current.set(workspace.id, kind);
       hydrationPhaseByWorkspaceIdRef.current.set(workspace.id, phase);
+      if (
+        kind === "first-paint" &&
+        !hydratedThreadListWorkspaceIdsRef.current.has(workspace.id)
+      ) {
+        // 新一轮 first-paint：取消可能残留的 settle 宽限（新周期接管终态）。
+        cancelEmptySettleGrace(workspace.id);
+      }
 
       let hydrationResult: ThreadListHydrationResult = undefined;
       const finishedKind = kind;
@@ -719,18 +791,11 @@ export function useWorkspaceThreadListHydration({
             visibleCount <= 0 &&
             !authoritativeEmpty;
           if (firstPaintUnconfirmedEmpty) {
-            // Index 空还不是「暂无会话」：importer / 二次 sync 马上会填行。
+            // Index 空还未证实：importer / 二次 sync 马上会填行。
             // 保持 加载中，不要先闪空。
             scheduleUnconfirmedEmptyFirstPaintSettle(workspace.id);
           } else {
-            const nextHydrated = publishHydratedWorkspaceId(
-              hydratedThreadListWorkspaceIdsRef,
-              workspace.id,
-            );
-            publishHydrationUiState(
-              setHydratedThreadListWorkspaceIds,
-              nextHydrated,
-            );
+            markWorkspaceThreadListHydrated(workspace.id);
           }
           if (finishedKind !== "first-paint") {
             // Mark full attempted so sidebar drops loading; cooldown on timeout.
@@ -780,7 +845,9 @@ export function useWorkspaceThreadListHydration({
       }
     },
     [
+      cancelEmptySettleGrace,
       listThreadsForWorkspace,
+      markWorkspaceThreadListHydrated,
       schedulePostFirstPaintIndexSoftResync,
       scheduleUnconfirmedEmptyFirstPaintSettle,
     ],
@@ -1203,9 +1270,13 @@ export function useWorkspaceThreadListHydration({
 
   useEffect(() => {
     const cleanupByWorkspaceId = idleHydrationCleanupByWorkspaceIdRef.current;
+    const graceCleanupByWorkspaceId =
+      emptySettleGraceCleanupByWorkspaceIdRef.current;
     return () => {
       cleanupByWorkspaceId.forEach((cleanup) => cleanup());
       cleanupByWorkspaceId.clear();
+      graceCleanupByWorkspaceId.forEach((cleanup) => cleanup());
+      graceCleanupByWorkspaceId.clear();
       cancelPendingPostFirstPaintIndexSoftResync();
     };
   }, [cancelPendingPostFirstPaintIndexSoftResync]);

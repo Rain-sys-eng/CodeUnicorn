@@ -90,6 +90,8 @@ const sidebar = {
     "workspaceAliasBadgeTitle": "워크스페이스 별칭. 원래 이름: {{name}}",
     "emptyWorkspaceSessions": "아직 세션이 없습니다.",
     "loadingWorkspaceSessions": "불러오는 중…",
+    "loadingWorkspaceSessionsIndex": "세션 인덱스 읽는 중…",
+    "loadingWorkspaceSessionsDeep": "로컬 세션 전체 스캔 중…",
     "newSessionFolder": "새 폴더",
     "newSessionFolderIn": "{{name}}에 새 폴더",
     "renameSessionFolder": "{{name}} 이름 변경",

@@ -29,7 +29,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: "cursor" }}
@@ -69,7 +68,7 @@ describe("WorktreeSection", () => {
     ).toBeNull();
   });
 
-  it("shows an empty session message instead of a loading skeleton for empty worktrees", () => {
+  it("shows neither an empty session message nor a loading skeleton for empty worktrees", () => {
     render(
       <WorktreeSection
         parentWorkspaceId="workspace-1"
@@ -79,7 +78,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set([worktree.id])}
         threadListLoadingByWorkspace={{ [worktree.id]: true }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -111,13 +109,14 @@ describe("WorktreeSection", () => {
       />,
     );
 
+    // 「暂无会话」占位已下线：空 worktree 不再渲染任何占位文案。
     expect(
-      screen.getByText(/No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i),
-    ).toBeTruthy();
+      screen.queryByText(/No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i),
+    ).toBeNull();
     expect(screen.queryByLabelText("Loading agents")).toBeNull();
   });
 
-  it("does not show the empty session message before worktree sessions hydrate", () => {
+  it("renders no placeholder before worktree sessions hydrate", () => {
     render(
       <WorktreeSection
         parentWorkspaceId="workspace-1"
@@ -127,7 +126,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: true }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -176,7 +174,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -232,7 +229,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -287,7 +283,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -349,7 +344,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [thread] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set([worktree.id])}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -412,7 +406,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -473,7 +466,6 @@ describe("WorktreeSection", () => {
           ],
         }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListPagingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListCursorByWorkspace={{ [degradedWorktree.id]: null }}
@@ -520,7 +512,6 @@ describe("WorktreeSection", () => {
           ],
         }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListPagingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListCursorByWorkspace={{ [degradedWorktree.id]: null }}
@@ -575,7 +566,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [windowsWorktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [windowsWorktree.id]: false }}
         threadListPagingByWorkspace={{ [windowsWorktree.id]: false }}
         threadListCursorByWorkspace={{ [windowsWorktree.id]: null }}

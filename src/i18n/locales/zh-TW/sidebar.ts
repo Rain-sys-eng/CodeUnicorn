@@ -90,6 +90,8 @@ const sidebar = {
     "workspaceAliasBadgeTitle": "工作區別名。原始名稱：{{name}}",
     "emptyWorkspaceSessions": "尚無工作階段。",
     "loadingWorkspaceSessions": "載入中…",
+    "loadingWorkspaceSessionsIndex": "正在讀取工作階段索引…",
+    "loadingWorkspaceSessionsDeep": "正在完整掃描本機工作階段…",
     "newSessionFolder": "新增資料夾",
     "newSessionFolderIn": "在 {{name}} 中新增資料夾",
     "renameSessionFolder": "重新命名 {{name}}",

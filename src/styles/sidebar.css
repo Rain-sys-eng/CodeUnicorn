@@ -2427,17 +2427,6 @@
   line-height: 1.4;
 }
 
-.thread-empty-state {
-  padding: 6px 10px 4px;
-  color: var(--text-faint, var(--text-muted));
-  font-size: var(--sidebar-meta-font-size);
-  line-height: 1.4;
-}
-
-.thread-empty-state-nested {
-  margin-left: 4px;
-}
-
 .thread-loading-state {
   display: flex;
   align-items: center;

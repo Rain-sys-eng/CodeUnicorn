@@ -90,6 +90,8 @@ const sidebar = {
     "workspaceAliasBadgeTitle": "Workspace उपनाम। मूल नाम: {{name}}",
     "emptyWorkspaceSessions": "अभी तक कोई सत्र नहीं।",
     "loadingWorkspaceSessions": "लोड हो रहा है…",
+    "loadingWorkspaceSessionsIndex": "सत्र इंडेक्स पढ़ा जा रहा है…",
+    "loadingWorkspaceSessionsDeep": "स्थानीय सत्रों का पूर्ण स्कैन चल रहा है…",
     "newSessionFolder": "नया फ़ोल्डर",
     "newSessionFolderIn": "{{name}} में नया फ़ोल्डर",
     "renameSessionFolder": "{{name}} का नाम बदलें",

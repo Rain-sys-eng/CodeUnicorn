@@ -2,13 +2,17 @@
 
 本页为 `mossx` 已归档 OpenSpec proposal 的完整可点击索引。目录名中的日期是 archive date，不代表 proposal 首次创建时间。
 
-- Updated At: `2026-08-25`
-- Indexed proposals: `918`
+- Updated At: `2026-08-26`
+- Indexed proposals: `919`
 - Source of truth: `openspec/changes/archive/<archive-date>-<change-id>/proposal.md`
 - Back to current changes: [`../README.md`](../README.md)
 - Back to workspace overview: [`../../project.md`](../../project.md)
 
 ## 2026-08
+
+### 2026-08-26
+
+- [`2026-08-26-retire-sidebar-empty-session-placeholder`](2026-08-26-retire-sidebar-empty-session-placeholder/proposal.md) — verified implementation，已同步 `workspace-sidebar-session-loading`；侧栏「暂无会话」空态占位下线（曾谎报：settle 无条件标 hydrated 导致 加载中→暂无会话（假）→会话出现）；loading 终态对齐行到达（settle 看结果 + 20s grace 兜底 + armed 集合可重试）；loading 分阶段文案（读索引→完整扫描，组件内 4s 本地计时，刻意不做跨层 plumbing）；vitest 103/103 + tsc 绿；用户目视验收通过
 
 ### 2026-08-25
 

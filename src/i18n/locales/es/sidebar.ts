@@ -90,6 +90,8 @@ const sidebar = {
     "workspaceAliasBadgeTitle": "Alias del espacio de trabajo. Nombre original: {{name}}",
     "emptyWorkspaceSessions": "Aún no hay sesiones.",
     "loadingWorkspaceSessions": "Cargando…",
+    "loadingWorkspaceSessionsIndex": "Leyendo el índice de sesiones…",
+    "loadingWorkspaceSessionsDeep": "Análisis completo de las sesiones locales…",
     "newSessionFolder": "Nueva carpeta",
     "newSessionFolderIn": "Nueva carpeta en {{name}}",
     "renameSessionFolder": "Renombrar {{name}}",

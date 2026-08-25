@@ -5,7 +5,6 @@ import type { MouseEvent } from "react";
 import { resolveVisibleThreadRootLimit } from "../constants";
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
 import { ThreadList } from "./ThreadList";
-import { ThreadEmptyState } from "./ThreadEmptyState";
 import { WorktreeCard } from "./WorktreeCard";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
@@ -34,7 +33,6 @@ type WorktreeSectionProps = {
   deletingWorktreeIds: Set<string>;
   threadsByWorkspace: Record<string, ThreadSummary[]>;
   threadStatusById: ThreadStatusMap;
-  hydratedThreadListWorkspaceIds: ReadonlySet<string>;
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
@@ -114,7 +112,6 @@ export function WorktreeSection({
   deletingWorktreeIds,
   threadsByWorkspace,
   threadStatusById,
-  hydratedThreadListWorkspaceIds,
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
   threadListCursorByWorkspace,
@@ -254,10 +251,6 @@ export function WorktreeSection({
             const showWorktreeThreadList =
               !worktreeCollapsed &&
               (worktreeThreads.length > 0 || Boolean(worktreeNextCursor));
-            const showWorktreeEmptyState =
-              !worktreeCollapsed &&
-              !showWorktreeThreadList &&
-              hydratedThreadListWorkspaceIds.has(worktree.id);
             const isWorktreePaging =
               threadListPagingByWorkspace[worktree.id] ?? false;
             const isThreadListRefreshing = threadListLoadingByWorkspace[worktree.id] ?? false;
@@ -364,7 +357,6 @@ export function WorktreeSection({
                     onRenameConfirm={onRenameConfirm}
                   />
                 )}
-                {showWorktreeEmptyState ? <ThreadEmptyState nested /> : null}
               </WorktreeCard>
             );
           })}

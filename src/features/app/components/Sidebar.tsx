@@ -20,7 +20,6 @@ import type {
 import { useTranslation } from "react-i18next";
 
 import { ThreadList } from "./ThreadList";
-import { ThreadEmptyState } from "./ThreadEmptyState";
 import { ThreadLoadingState } from "./ThreadLoadingState";
 import { WorktreeSection } from "./WorktreeSection";
 import { PinnedThreadList } from "./PinnedThreadList";
@@ -2045,11 +2044,6 @@ function SidebarImpl({
       !showThreadLoadingState && hasCachedThreadList;
     const isWorktreeSectionCollapsed =
       collapsedWorktreeSections.has(entry.id);
-    const showThreadEmptyState =
-      !showThreadList &&
-      !showThreadLoadingState &&
-      worktrees.length === 0 &&
-      (isThreadListHydrated || !entry.connected);
     const hasPrimaryActiveThread =
       entry.id === activeWorkspaceId && Boolean(activeThreadId);
     const hasRunningSession = hasRunningSessionByProjectId.get(entry.id) ?? false;
@@ -2102,7 +2096,6 @@ function SidebarImpl({
             deletingWorktreeIds={deletingWorktreeIds}
             threadsByWorkspace={threadsByWorkspace}
             threadStatusById={threadStatusById}
-            hydratedThreadListWorkspaceIds={hydratedThreadListWorkspaceIds}
             threadListLoadingByWorkspace={_threadListLoadingByWorkspace}
             threadListPagingByWorkspace={threadListPagingByWorkspace}
             threadListCursorByWorkspace={threadListCursorByWorkspace}
@@ -2245,7 +2238,6 @@ function SidebarImpl({
           </div>
         ) : null}
         {showThreadLoadingState ? <ThreadLoadingState /> : null}
-        {showThreadEmptyState ? <ThreadEmptyState /> : null}
       </WorkspaceCard>
     );
   }, [

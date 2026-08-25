@@ -47,6 +47,8 @@ vi.mock("react-i18next", () => ({
         "sidebar.workspaceAliasBadgeTitle": "Workspace alias. Original name: service",
         "sidebar.emptyWorkspaceSessions": "No sessions yet.",
         "sidebar.loadingWorkspaceSessions": "Loading…",
+        "sidebar.loadingWorkspaceSessionsIndex": "Reading session index…",
+        "sidebar.loadingWorkspaceSessionsDeep": "Deep-scanning local sessions…",
         "sidebar.newSessionFolder": "New folder",
         "sidebar.newSessionFolderIn": "New folder in project",
         "sidebar.renameSessionFolder": "Rename folder",

@@ -1219,7 +1219,7 @@ describe("Sidebar", () => {
     expect(onRenameWorkspaceAlias).toHaveBeenCalledWith(workspace);
   });
 
-  it("shows an empty session message instead of a loading skeleton for empty workspaces", () => {
+  it("shows neither an empty session message nor a loading skeleton for empty workspaces", () => {
     const workspace = {
       id: "ws-empty",
       name: "empty-workspace",
@@ -1248,7 +1248,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.getByText("No sessions yet.")).toBeTruthy();
+    // 「暂无会话」占位已下线：空工作区不再渲染任何占位文案。
+    expect(screen.queryByText("No sessions yet.")).toBeNull();
     expect(screen.queryByLabelText("Loading agents")).toBeNull();
   });
 
@@ -1310,7 +1311,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.getByText("Reading session index…")).toBeTruthy();
     expect(screen.queryByText("No sessions yet.")).toBeNull();
   });
 
@@ -1351,10 +1352,10 @@ describe("Sidebar", () => {
     );
 
     expect(screen.getByText("Cached session")).toBeTruthy();
-    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(screen.queryByText("Reading session index…")).toBeNull();
   });
 
-  it("shows empty state for disconnected workspaces instead of spinning forever", () => {
+  it("shows neither loading nor an empty message for disconnected workspaces", () => {
     const workspace = {
       id: "ws-disconnected",
       name: "disconnected-workspace",
@@ -1381,8 +1382,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.queryByText("Loading…")).toBeNull();
-    expect(screen.getByText("No sessions yet.")).toBeTruthy();
+    expect(screen.queryByText("Reading session index…")).toBeNull();
+    expect(screen.queryByText("No sessions yet.")).toBeNull();
   });
 
   it("does not render workspace or worktree session count badges", () => {
