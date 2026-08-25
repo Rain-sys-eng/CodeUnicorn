@@ -34,6 +34,8 @@ type WorkspaceSessionFolderTreeProps = {
   workspacePath: string;
   folders: WorkspaceSessionFolderNode[];
   rootRows: WorkspaceSessionThreadRow[];
+  /** 项目内置顶行：不参与 folder 投影，渲染在 folder 树最上方。 */
+  workspacePinnedRows?: WorkspaceSessionThreadRow[];
   totalThreadRoots: number;
   isExpanded: boolean;
   rootDraftRequestKey?: number;
@@ -56,6 +58,7 @@ export function WorkspaceSessionFolderTree({
   workspacePath,
   folders,
   rootRows,
+  workspacePinnedRows = [],
   totalThreadRoots,
   isExpanded,
   rootDraftRequestKey = 0,
@@ -557,6 +560,41 @@ export function WorkspaceSessionFolderTree({
       className="workspace-session-folder-tree"
       role="tree"
     >
+      {workspacePinnedRows.length > 0 ? (
+        <ThreadList
+          {...threadListProps}
+          onShowThreadMenu={(
+            event,
+            rowWorkspaceId,
+            threadId,
+            canPin,
+            sizeBytes,
+            _moveFolderTargets,
+            _currentFolderId,
+            canArchive,
+          ) =>
+            threadListProps.onShowThreadMenu(
+              event,
+              rowWorkspaceId,
+              threadId,
+              canPin,
+              sizeBytes,
+              moveFolderTargets,
+              null,
+              canArchive,
+            )
+          }
+          workspaceId={workspaceId}
+          workspacePath={workspacePath}
+          pinnedRows={workspacePinnedRows}
+          unpinnedRows={[]}
+          totalThreadRoots={workspacePinnedRows.length}
+          isExpanded
+          nextCursor={null}
+          isPaging={false}
+          showPagingControls={false}
+        />
+      ) : null}
       {renderFolderDraft(null)}
       {folders.map((folder) => renderFolder(folder, 0))}
       {rootRows.length > 0 ? (

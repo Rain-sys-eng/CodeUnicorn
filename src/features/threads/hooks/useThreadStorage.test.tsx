@@ -6,8 +6,10 @@ import {
   loadPinnedThreads,
   loadThreadAliases,
   loadThreadActivity,
+  loadWorkspacePinnedThreads,
   savePinnedThreads,
   saveThreadActivity,
+  saveWorkspacePinnedThreads,
 } from "../utils/threadStorage";
 import { useThreadStorage } from "./useThreadStorage";
 
@@ -18,9 +20,11 @@ vi.mock("../utils/threadStorage", async (importOriginal) => {
     MAX_PINS_SOFT_LIMIT: 2,
     loadCustomNames: vi.fn(),
     loadPinnedThreads: vi.fn(),
+    loadWorkspacePinnedThreads: vi.fn(),
     loadThreadAliases: vi.fn(),
     loadThreadActivity: vi.fn(),
     savePinnedThreads: vi.fn(),
+    saveWorkspacePinnedThreads: vi.fn(),
     saveThreadActivity: vi.fn(),
   };
 });
@@ -29,6 +33,7 @@ describe("useThreadStorage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(loadThreadAliases).mockReturnValue({});
+    vi.mocked(loadWorkspacePinnedThreads).mockReturnValue({});
   });
 
   it("loads initial data and custom names from store", async () => {
@@ -102,6 +107,79 @@ describe("useThreadStorage", () => {
     expect(result.current.getPinTimestamp).not.toBe(beforeUnpinGetTimestamp);
     expect(result.current.isThreadPinned("ws-1", "thread-1")).toBe(false);
     expect(savePinnedThreads).toHaveBeenCalledWith({});
+    expect(result.current.pinnedThreadsVersion).toBe(versionAfterPin + 1);
+  });
+
+  it("pins to workspace scope and persists separately from global pins", () => {
+    vi.mocked(loadThreadActivity).mockReturnValue({});
+    vi.mocked(loadPinnedThreads).mockReturnValue({});
+    vi.mocked(loadCustomNames).mockReturnValue({});
+
+    const { result } = renderHook(() => useThreadStorage());
+
+    let pinResult = false;
+    act(() => {
+      pinResult = result.current.pinThread("ws-1", "thread-1", "workspace");
+    });
+
+    expect(pinResult).toBe(true);
+    expect(result.current.isThreadPinned("ws-1", "thread-1", "workspace")).toBe(true);
+    expect(result.current.isThreadPinned("ws-1", "thread-1")).toBe(false);
+    expect(saveWorkspacePinnedThreads).toHaveBeenCalledWith({
+      "ws-1:thread-1": expect.any(Number),
+    });
+    expect(result.current.getPinTimestamp("ws-1", "thread-1", "workspace")).not.toBeNull();
+    expect(savePinnedThreads).not.toHaveBeenCalled();
+  });
+
+  it("migrates between pin scopes mutually exclusively", () => {
+    vi.mocked(loadThreadActivity).mockReturnValue({});
+    vi.mocked(loadPinnedThreads).mockReturnValue({});
+    vi.mocked(loadCustomNames).mockReturnValue({});
+
+    const { result } = renderHook(() => useThreadStorage());
+
+    act(() => {
+      result.current.pinThread("ws-1", "thread-1");
+    });
+    expect(result.current.isThreadPinned("ws-1", "thread-1")).toBe(true);
+
+    // global → workspace：清 global、写 workspace
+    act(() => {
+      result.current.pinThread("ws-1", "thread-1", "workspace");
+    });
+    expect(result.current.isThreadPinned("ws-1", "thread-1")).toBe(false);
+    expect(result.current.isThreadPinned("ws-1", "thread-1", "workspace")).toBe(true);
+    expect(savePinnedThreads).toHaveBeenLastCalledWith({});
+
+    // workspace → global：清 workspace、写 global
+    act(() => {
+      result.current.pinThread("ws-1", "thread-1");
+    });
+    expect(result.current.isThreadPinned("ws-1", "thread-1")).toBe(true);
+    expect(result.current.isThreadPinned("ws-1", "thread-1", "workspace")).toBe(false);
+    expect(saveWorkspacePinnedThreads).toHaveBeenLastCalledWith({});
+  });
+
+  it("unpin clears whichever scope holds the thread", () => {
+    vi.mocked(loadThreadActivity).mockReturnValue({});
+    vi.mocked(loadPinnedThreads).mockReturnValue({});
+    vi.mocked(loadCustomNames).mockReturnValue({});
+
+    const { result } = renderHook(() => useThreadStorage());
+
+    act(() => {
+      result.current.pinThread("ws-1", "thread-1", "workspace");
+    });
+    const versionAfterPin = result.current.pinnedThreadsVersion;
+
+    act(() => {
+      result.current.unpinThread("ws-1", "thread-1");
+    });
+
+    expect(result.current.isThreadPinned("ws-1", "thread-1", "workspace")).toBe(false);
+    expect(result.current.isThreadPinned("ws-1", "thread-1")).toBe(false);
+    expect(saveWorkspacePinnedThreads).toHaveBeenLastCalledWith({});
     expect(result.current.pinnedThreadsVersion).toBe(versionAfterPin + 1);
   });
 

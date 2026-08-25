@@ -17,6 +17,8 @@ const threads = {
     "deleteThreadMessage": "「{{name}}」を削除してもよろしいですか？",
     "deleteThreadHint": "この操作は元に戻せず、ローカルのセッション記録が削除されます。",
     "pin": "ピン留め",
+    "pinToGlobal": "グローバルにピン留め",
+    "pinToProject": "プロジェクト内にピン留め",
     "unpin": "ピン留めを解除",
     "sync": "同期",
     "reload": "再読み込み",

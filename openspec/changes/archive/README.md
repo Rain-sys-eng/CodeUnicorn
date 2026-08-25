@@ -3,7 +3,7 @@
 本页为 `mossx` 已归档 OpenSpec proposal 的完整可点击索引。目录名中的日期是 archive date，不代表 proposal 首次创建时间。
 
 - Updated At: `2026-08-25`
-- Indexed proposals: `915`
+- Indexed proposals: `916`
 - Source of truth: `openspec/changes/archive/<archive-date>-<change-id>/proposal.md`
 - Back to current changes: [`../README.md`](../README.md)
 - Back to workspace overview: [`../../project.md`](../../project.md)
@@ -12,6 +12,7 @@
 
 ### 2026-08-25
 
+- [`2026-08-25-add-thread-pin-scope-and-section-fold`](2026-08-25-add-thread-pin-scope-and-section-fold/proposal.md) — verified implementation，已同步 `sidebar-pinned-calendar-fold` / `sidebar-thread-pin-scope`（新增）/ `workspace-sidebar-visual-harmony`；置顶区总折叠行回归 + 置顶拆 global/workspace 互斥双作用域（右键 submenu + hover 2 选菜单，菜单坐标存原始值不预 clamp）；项目内置顶排项目列表顶部不占分页；AppShell 零新增 domain key（scope 参数化既有 key）；tsc/governance 22/22/focused vitest 151/validate 绿；用户手测通过
 - [`2026-08-25-add-message-minimal-transcript-mode`](2026-08-25-add-message-minimal-transcript-mode/proposal.md) — verified implementation，已同步 `message-process-phase-collapse`；幕布「极简展示」开关（外观页布局切换下方，默认关）：完成 turn 把过程 + 中间叙述 prose 整段折成单 turn chip 锚定最终回答，活跃 turn 保持 per-phase 实时；view model 7 新测 + SettingsView 62 绿 + tsc/validate 过；用户目视通过
 
 ### 2026-08-24

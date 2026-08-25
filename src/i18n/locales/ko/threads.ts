@@ -17,6 +17,8 @@ const threads = {
     "deleteThreadMessage": "\"{{name}}\"을(를) 삭제하시겠습니까?",
     "deleteThreadHint": "이 작업은 되돌릴 수 없으며 로컬 세션 기록이 제거됩니다.",
     "pin": "고정",
+    "pinToGlobal": "전역에 고정",
+    "pinToProject": "프로젝트에 고정",
     "unpin": "고정 해제",
     "sync": "동기화",
     "reload": "다시 불러오기",

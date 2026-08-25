@@ -65,6 +65,8 @@ vi.mock("react-i18next", () => ({
         "threads.size": "Size",
         "threads.syncFromServer": "Sync from server",
         "threads.pin": "Pin",
+        "threads.pinToGlobal": "Pin to global",
+        "threads.pinToProject": "Pin in project",
         "threads.unpin": "Unpin",
         "threads.delete": "Delete",
         "threads.openSessionManagement": "Bulk Delete in Session Management…",
@@ -251,7 +253,9 @@ function createHandlers() {
     onPinThread: vi.fn(),
     onUnpinThread: vi.fn(),
     onProviderContinuationTargetReady: vi.fn(),
-    isThreadPinned: vi.fn(() => false),
+    isThreadPinned: vi.fn(
+      (_ws: string, _id: string, _scope?: "global" | "workspace") => false,
+    ),
     isThreadAutoNaming: vi.fn(() => false),
     onRenameThread: vi.fn(),
     onAutoNameThread: vi.fn(),
@@ -1276,6 +1280,125 @@ describe("useSidebarMenus", () => {
 
     expect(geminiAction).toBeUndefined();
     expect(handlers.onAddAgent).not.toHaveBeenCalled();
+  });
+
+  it("offers both pin scopes in a submenu and marks the active one", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    const openThreadMenu = async () => {
+      await act(async () => {
+        const event = {
+          clientX: 240,
+          clientY: 180,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+        await result.current.showThreadMenu(event, "ws-1", "thread-1", true);
+      });
+      const pinEntry = result.current.sidebarContextMenuState?.items.find(
+        (item) => item.type === "submenu" && item.id === "pin",
+      );
+      if (!pinEntry || pinEntry.type !== "submenu") {
+        throw new Error("Missing pin submenu");
+      }
+      return pinEntry.items;
+    };
+
+    // 未置顶：两个作用域选项，无标注
+    let scopeItems = await openThreadMenu();
+    expect(scopeItems.map((item) => (item.type === "item" ? item.label : ""))).toEqual([
+      "Pin to global",
+      "Pin in project",
+    ]);
+
+    // 点「置顶到项目内」→ onPinThread 带 workspace scope
+    await act(async () => {
+      const target = scopeItems[1];
+      if (target?.type === "item") {
+        await target.onSelect();
+      }
+    });
+    expect(handlers.onPinThread).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "workspace",
+    );
+
+    // 全局置顶：标注 ✓，点当前作用域 = 取消，点另一作用域 = 迁移
+    vi.mocked(handlers.isThreadPinned).mockImplementation(
+      (_ws, _id, scope) => scope !== "workspace",
+    );
+    scopeItems = await openThreadMenu();
+    expect(scopeItems.map((item) => (item.type === "item" ? item.label : ""))).toEqual([
+      "✓ Pin to global",
+      "Pin in project",
+    ]);
+    await act(async () => {
+      const target = scopeItems[0];
+      if (target?.type === "item") {
+        await target.onSelect();
+      }
+    });
+    expect(handlers.onUnpinThread).toHaveBeenCalledWith("ws-1", "thread-1");
+    await act(async () => {
+      const target = scopeItems[1];
+      if (target?.type === "item") {
+        await target.onSelect();
+      }
+    });
+    expect(handlers.onPinThread).toHaveBeenCalledTimes(2);
+    expect(handlers.onPinThread).toHaveBeenLastCalledWith(
+      "ws-1",
+      "thread-1",
+      "workspace",
+    );
+
+    // 项目内置顶：标注移到第二项，点它 = 取消
+    vi.mocked(handlers.isThreadPinned).mockImplementation(
+      (_ws, _id, scope) => scope === "workspace",
+    );
+    scopeItems = await openThreadMenu();
+    expect(scopeItems.map((item) => (item.type === "item" ? item.label : ""))).toEqual([
+      "Pin to global",
+      "✓ Pin in project",
+    ]);
+    await act(async () => {
+      const target = scopeItems[1];
+      if (target?.type === "item") {
+        await target.onSelect();
+      }
+    });
+    expect(handlers.onUnpinThread).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the pin scope menu from the hover pin toggle without pinning directly", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    const event = {
+      clientX: 120,
+      clientY: 96,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as Parameters<typeof result.current.showPinScopeMenu>[0];
+    await act(async () => {
+      result.current.showPinScopeMenu(event, "ws-1", "thread-1");
+    });
+
+    const menu = result.current.sidebarContextMenuState;
+    expect(menu).toBeTruthy();
+    // 菜单锚点 = 原始点击坐标（clamp/翻转由 RendererContextMenu 按实测高度处理）
+    expect(menu?.x).toBe(120);
+    expect(menu?.y).toBe(96);
+    expect(
+      menu?.items.map((item) => (item.type === "item" ? item.label : "")),
+    ).toEqual(["Pin to global", "Pin in project"]);
+    // 未选择前不改变任何置顶状态
+    expect(handlers.onPinThread).not.toHaveBeenCalled();
+    expect(handlers.onUnpinThread).not.toHaveBeenCalled();
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(event.stopPropagation).toHaveBeenCalled();
   });
 
   it("places archive before size and delete in the thread context menu", async () => {

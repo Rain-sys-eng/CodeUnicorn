@@ -274,6 +274,8 @@ export function buildClearedThreadAliases(
   return normalizeThreadAliases(normalizedCurrent);
 }
 
+export type ThreadPinScope = "global" | "workspace";
+
 export function makePinKey(workspaceId: string, threadId: string): string {
   return `${workspaceId}:${threadId}`;
 }
@@ -284,4 +286,15 @@ export function loadPinnedThreads(): PinnedThreadsMap {
 
 export function savePinnedThreads(pinned: PinnedThreadsMap) {
   writeClientStoreValue("threads", "pinnedThreads", pinned);
+}
+
+export function loadWorkspacePinnedThreads(): PinnedThreadsMap {
+  return (
+    getClientStoreSync<PinnedThreadsMap>("threads", "workspacePinnedThreads") ??
+    {}
+  );
+}
+
+export function saveWorkspacePinnedThreads(pinned: PinnedThreadsMap) {
+  writeClientStoreValue("threads", "workspacePinnedThreads", pinned);
 }

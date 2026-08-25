@@ -17,6 +17,8 @@ const threads = {
     "deleteThreadMessage": "確定要刪除「{{name}}」嗎？",
     "deleteThreadHint": "此操作無法復原，且本機工作階段紀錄將被移除。",
     "pin": "釘選",
+    "pinToGlobal": "釘選到全域",
+    "pinToProject": "釘選到專案內",
     "unpin": "取消釘選",
     "sync": "同步",
     "reload": "重新載入",

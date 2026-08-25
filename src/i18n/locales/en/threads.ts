@@ -15,6 +15,8 @@ const threads = {
     deleteThreadHint:
       "This cannot be undone and the local session record will be removed.",
     pin: "Pin",
+    pinToGlobal: "Pin to global",
+    pinToProject: "Pin in project",
     unpin: "Unpin",
     sync: "Sync",
     reload: "Reload",

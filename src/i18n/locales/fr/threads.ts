@@ -17,6 +17,8 @@ const threads = {
     "deleteThreadMessage": "Voulez-vous vraiment supprimer « {{name}} » ?",
     "deleteThreadHint": "Cette action est irréversible et l'enregistrement local de la session sera supprimé.",
     "pin": "Épingler",
+    "pinToGlobal": "Épingler globalement",
+    "pinToProject": "Épingler dans le projet",
     "unpin": "Désépingler",
     "sync": "Synchroniser",
     "reload": "Recharger",

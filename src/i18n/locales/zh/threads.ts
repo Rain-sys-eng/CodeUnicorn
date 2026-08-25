@@ -14,6 +14,8 @@ const threads = {
     deleteThreadMessage: "确定要删除“{{name}}”吗？",
     deleteThreadHint: "删除后将无法恢复，该会话的本地记录也会一并移除。",
     pin: "固定",
+    pinToGlobal: "置顶到全局",
+    pinToProject: "置顶到项目内",
     unpin: "取消固定",
     sync: "同步",
     reload: "重新加载",

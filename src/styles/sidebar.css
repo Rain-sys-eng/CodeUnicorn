@@ -2127,6 +2127,45 @@
   z-index: 3;
 }
 
+/* 总折叠行：置顶区唯一段头，sticky 置顶；日组头让位到其下方。 */
+.sidebar-pinned-section-header {
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  z-index: 4;
+}
+
+.sidebar-pinned-section-header:hover,
+.sidebar-pinned-section-header:focus-visible {
+  background: var(
+    --desktop-sidebar-background,
+    var(--surface-sidebar-opaque, var(--surface-sidebar))
+  );
+}
+
+.sidebar-pinned-section-icon {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.sidebar-pinned-section-count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-pinned-section-chevron {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+/* 段展开时日组头 sticky 偏移一个段头高度，避免盖住总折叠行。 */
+.sidebar-pinned-day-header {
+  top: 30px;
+}
+
 .sidebar-pinned-day-header:hover,
 .sidebar-pinned-day-header:focus-visible {
   background: var(

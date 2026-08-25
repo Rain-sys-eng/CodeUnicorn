@@ -108,11 +108,16 @@ describe("PinnedThreadList", () => {
       />,
     );
 
-    expect(container.querySelector("[data-sidebar-pinned-header]")).toBeNull();
-    expect(container.querySelector(".sidebar-pinned-header-pin")).toBeNull();
+    // 总折叠行回归：段头 = pin icon + "Pinned" + 数量 + chevron
+    const sectionHeader = container.querySelector(
+      "[data-sidebar-pinned-section-header]",
+    );
+    expect(sectionHeader).toBeTruthy();
+    expect(sectionHeader?.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Pinned")).toBeTruthy();
+    expect(screen.getByText("· 2")).toBeTruthy();
+    // 日期头仍无 chevron / 数量角标
     expect(container.querySelector(".sidebar-pinned-day-chevron")).toBeNull();
-    expect(screen.queryByText("Pinned")).toBeNull();
-    expect(screen.queryByText("· 2")).toBeNull();
 
     const latestHeader = container.querySelector(
       '[data-sidebar-pinned-day-header="2026-08-18"]',
@@ -128,6 +133,94 @@ describe("PinnedThreadList", () => {
     expect(screen.queryByText("今天")).toBeNull();
     expect(screen.queryByText("昨天")).toBeNull();
     expect(screen.queryByText("更早")).toBeNull();
+  });
+
+  it("collapses and expands the whole pinned section from the master row", () => {
+    const latestStamp = localStamp(2026, 8, 18);
+    const olderStamp = localStamp(2026, 8, 17);
+    const { container } = render(
+      <PinnedThreadList
+        {...baseProps}
+        activeThreadId={null}
+        rows={[
+          {
+            thread: { ...thread, id: "today", name: "Today pin", updatedAt: latestStamp },
+            depth: 0,
+            workspaceId: "ws-1",
+            workspacePath: "/tmp/ws-1",
+          },
+          {
+            thread: {
+              ...otherThread,
+              id: "yesterday",
+              name: "Yesterday pin",
+              updatedAt: olderStamp,
+            },
+            depth: 0,
+            workspaceId: "ws-1",
+            workspacePath: "/tmp/ws-1",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse pinned" }));
+
+    // 整区收起：只留总折叠行，日组头与会话行都不渲染
+    expect(
+      container.querySelector("[data-sidebar-pinned-section-header]"),
+    ).toBeTruthy();
+    expect(
+      container.querySelector("[data-sidebar-pinned-day-header]"),
+    ).toBeNull();
+    expect(screen.queryByText("Today pin")).toBeNull();
+
+    // 再点展开：日组恢复，且日折叠态不变（最新日开、更早收）
+    fireEvent.click(screen.getByRole("button", { name: "Expand pinned" }));
+    expect(screen.getByText("2026-08-18")).toBeTruthy();
+    expect(screen.getByText("Today pin")).toBeTruthy();
+    expect(screen.queryByText("Yesterday pin")).toBeNull();
+  });
+
+  it("persists the master fold state across remounts", () => {
+    const { unmount } = render(
+      <PinnedThreadList {...baseProps} activeThreadId={null} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Collapse pinned" }));
+    unmount();
+
+    const { container } = render(
+      <PinnedThreadList {...baseProps} activeThreadId={null} />,
+    );
+    // 重挂载后仍是折叠态，不先展开再闪回
+    expect(
+      container.querySelector("[data-sidebar-pinned-day-header]"),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Expand pinned" }).getAttribute(
+        "aria-expanded",
+      ),
+    ).toBe("false");
+  });
+
+  it("does not auto-expand the collapsed section for the active thread", () => {
+    const first = render(
+      <PinnedThreadList {...baseProps} activeThreadId="thread-1" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Collapse pinned" }));
+    first.unmount();
+
+    // 当前会话在置顶区也不冲开总折叠
+    const { container } = render(
+      <PinnedThreadList {...baseProps} activeThreadId="thread-1" />,
+    );
+    expect(
+      container.querySelector("[data-sidebar-pinned-day-header]"),
+    ).toBeNull();
+    expect(screen.queryByText("Pinned Alpha")).toBeNull();
+    expect(
+      container.querySelector("[data-sidebar-pinned-section-header]"),
+    ).toBeTruthy();
   });
 
   it("expands only the clicked calendar day", () => {
@@ -204,7 +297,9 @@ describe("PinnedThreadList", () => {
       expect(screen.getByText("Yesterday pin")).toBeTruthy();
     });
     expect(screen.getByText("Today pin")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Collapse pinned" })).toBeNull();
+    // 段保持展开：总折叠行在且 aria-expanded=true（日级 auto-expand 不动总折叠）
+    const sectionHeader = screen.getByRole("button", { name: "Collapse pinned" });
+    expect(sectionHeader.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("hydrates pinned rows in StrictMode without mounting Radix row anchors", () => {

@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import type { EngineType, ThreadSummary } from "../../../types";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { PiThreadBranchBadge } from "../../pi-session/components/PiThreadBranchBadge";
@@ -86,6 +87,11 @@ type ThreadRowItemProps = {
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onShowThreadMenu: ShowThreadMenuHandler;
   onToggleThreadPin?: (workspaceId: string, threadId: string) => void;
+  onShowPinScopeMenu?: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+  ) => void;
   relativeTime: string | null;
   renameName: string;
   selectTargetThreadId: string;
@@ -208,6 +214,7 @@ const ThreadRowItem = memo(function ThreadRowItem({
   onSelectThread,
   onShowThreadMenu,
   onToggleThreadPin,
+  onShowPinScopeMenu,
   relativeTime,
   renameName,
   selectTargetThreadId,
@@ -306,6 +313,16 @@ const ThreadRowItem = memo(function ThreadRowItem({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            if (isPinned) {
+              // 已置顶（任一作用域）：直接取消当前作用域置顶。
+              onToggleThreadPin(nestedWorkspaceId, thread.id);
+              return;
+            }
+            if (onShowPinScopeMenu) {
+              // 未置顶：弹「置顶到全局 / 置顶到项目内」2 选菜单。
+              onShowPinScopeMenu(event, nestedWorkspaceId, thread.id);
+              return;
+            }
             onToggleThreadPin(nestedWorkspaceId, thread.id);
           }}
           onMouseDown={(event) => {
@@ -527,9 +544,18 @@ export type ThreadListProps = {
   systemProxyUrl?: string | null;
   threadStatusById: ThreadStatusMap;
   getThreadTime: (thread: ThreadSummary) => string | null;
-  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadPinned: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   onToggleThreadPin?: (workspaceId: string, threadId: string) => void;
+  onShowPinScopeMenu?: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+  ) => void;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
@@ -574,6 +600,7 @@ export function ThreadList({
   isThreadPinned,
   isThreadAutoNaming,
   onToggleThreadPin,
+  onShowPinScopeMenu,
   onToggleExpanded,
   onLoadOlderThreads,
   onSelectThread,
@@ -790,7 +817,10 @@ export function ThreadList({
       workspaceId === activeWorkspaceId && thread.id === activeThreadId;
     const indentPx = depth > 0 ? depth * indentUnit : null;
     const canPin = depth === 0;
-    const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
+    const isPinned =
+      canPin &&
+      (isThreadPinned(workspaceId, thread.id) ||
+        isThreadPinned(workspaceId, thread.id, "workspace"));
     const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
     // id-first：shared: 前缀是 hard gate；threadKind 投影可丢/被 native 覆盖
     // （与 fix-shared-session-identity-id-first 同源；图标消费方此前漏迁）。
@@ -879,6 +909,7 @@ export function ThreadList({
         onSelectThread={onSelectThread}
         onShowThreadMenu={onShowThreadMenu}
         onToggleThreadPin={onToggleThreadPin}
+        onShowPinScopeMenu={onShowPinScopeMenu}
         relativeTime={relativeTime}
         renameName={isRenaming ? renameName : ""}
         selectTargetThreadId={selectTargetThreadId}

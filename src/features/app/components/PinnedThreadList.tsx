@@ -1,6 +1,9 @@
 import { useEffect, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Pin from "lucide-react/dist/esm/icons/pin";
 
 import type { ThreadSummary } from "../../../types";
 import { usePinnedSectionFold } from "../hooks/usePinnedSectionFold";
@@ -86,22 +89,52 @@ export function PinnedThreadList({
   onPinnedThreadRowRender,
 }: PinnedThreadListProps) {
   const { t } = useTranslation();
-  const { isDayExpanded, toggleDay, ensureDayExpanded } = usePinnedSectionFold();
+  const {
+    isSectionExpanded,
+    isDayExpanded,
+    toggleSection,
+    toggleDay,
+    ensureDayExpanded,
+  } = usePinnedSectionFold();
   const dayGroups = useMemo(() => groupPinnedRowsByCalendarDay(rows), [rows]);
   const latestDateKey = dayGroups[0]?.dateKey ?? null;
+  const totalRootCount = useMemo(
+    () =>
+      dayGroups.reduce(
+        (sum, dayGroup) =>
+          sum +
+          dayGroup.workspaceRuns.reduce(
+            (runSum, run) => runSum + run.rootCount,
+            0,
+          ),
+        0,
+      ),
+    [dayGroups],
+  );
   const activeDateKey = useMemo(
     () => findPinnedCalendarDateForThread(dayGroups, activeThreadId),
     [activeThreadId, dayGroups],
   );
 
   useEffect(() => {
+    // 总折叠是显式用户状态：段收起时不被 active thread 冲开，
+    // 日级 auto-expand 仅在段已展开时生效。
+    if (!isSectionExpanded) {
+      return;
+    }
     if (!activeDateKey) {
       return;
     }
     if (!isDayExpanded(activeDateKey, latestDateKey)) {
       ensureDayExpanded(activeDateKey, latestDateKey);
     }
-  }, [activeDateKey, ensureDayExpanded, isDayExpanded, latestDateKey]);
+  }, [
+    activeDateKey,
+    ensureDayExpanded,
+    isDayExpanded,
+    isSectionExpanded,
+    latestDateKey,
+  ]);
 
   if (dayGroups.length === 0) {
     return null;
@@ -109,7 +142,43 @@ export function PinnedThreadList({
 
   return (
     <div className="sidebar-pinned-list" data-sidebar-pinned-section="">
-      {dayGroups.map((dayGroup) => {
+      <button
+        type="button"
+        className={`sidebar-section-header sidebar-pinned-section-header${
+          isSectionExpanded ? "" : " is-collapsed"
+        }`}
+        data-sidebar-pinned-section-header=""
+        aria-expanded={isSectionExpanded}
+        aria-label={
+          isSectionExpanded
+            ? t("sidebar.collapsePinnedSection")
+            : t("sidebar.expandPinnedSection")
+        }
+        onClick={toggleSection}
+      >
+        <Pin size={12} className="sidebar-pinned-section-icon" aria-hidden />
+        <span className="sidebar-section-title sidebar-pinned-section-label">
+          {t("sidebar.pinned")}
+          <span className="sidebar-pinned-section-count">
+            {t("sidebar.pinnedCount", { count: totalRootCount })}
+          </span>
+        </span>
+        {isSectionExpanded ? (
+          <ChevronDown
+            size={12}
+            className="sidebar-pinned-section-chevron"
+            aria-hidden
+          />
+        ) : (
+          <ChevronRight
+            size={12}
+            className="sidebar-pinned-section-chevron"
+            aria-hidden
+          />
+        )}
+      </button>
+      {isSectionExpanded
+        ? dayGroups.map((dayGroup) => {
         const dayOpen = isDayExpanded(dayGroup.dateKey, latestDateKey);
         return (
           <div
@@ -188,7 +257,8 @@ export function PinnedThreadList({
               : null}
           </div>
         );
-      })}
+          })
+        : null}
     </div>
   );
 }

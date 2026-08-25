@@ -31,6 +31,7 @@ import {
   type RendererContextMenuLeafItem,
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 import {
   buildClaudeResumeCommand,
   extractClaudeNativeSessionId,
@@ -295,9 +296,17 @@ type SidebarMenuHandlers = {
   onArchiveThread: (workspaceId: string, threadId: string) => void;
   onOpenSessionManagement?: () => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
-  onPinThread: (workspaceId: string, threadId: string) => void;
+  onPinThread: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => void;
   onUnpinThread: (workspaceId: string, threadId: string) => void;
-  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadPinned: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onAutoNameThread: (workspaceId: string, threadId: string) => void;
@@ -2168,6 +2177,65 @@ export function useSidebarMenus({
     workspaceOpenCodeLoginState,
   ]);
 
+  // 两级置顶作用域菜单项：global（进全局置顶区）与 workspace（项目内置顶）互斥。
+  // 当前作用域以 `✓` 前缀标注；点当前作用域 = 取消置顶，点另一作用域 = 迁移
+  // （互斥由 useThreadStorage 写路径强制）。
+  const buildPinScopeItems = useCallback(
+    (workspaceId: string, threadId: string): RendererContextMenuLeafItem[] => {
+      const isGlobalPinned = isThreadPinned(workspaceId, threadId);
+      const isWorkspacePinned = isThreadPinned(
+        workspaceId,
+        threadId,
+        "workspace",
+      );
+      return [
+        {
+          type: "item",
+          id: "pin-global",
+          label: `${isGlobalPinned ? "✓ " : ""}${t("threads.pinToGlobal")}`,
+          onSelect: () => {
+            if (isGlobalPinned) {
+              onUnpinThread(workspaceId, threadId);
+            } else {
+              onPinThread(workspaceId, threadId, "global");
+            }
+          },
+        },
+        {
+          type: "item",
+          id: "pin-workspace",
+          label: `${isWorkspacePinned ? "✓ " : ""}${t("threads.pinToProject")}`,
+          onSelect: () => {
+            if (isWorkspacePinned) {
+              onUnpinThread(workspaceId, threadId);
+            } else {
+              onPinThread(workspaceId, threadId, "workspace");
+            }
+          },
+        },
+      ];
+    },
+    [t, isThreadPinned, onPinThread, onUnpinThread],
+  );
+
+  // hover pin 图标（未置顶）点击弹出的 2 选作用域菜单，与右键 pin submenu 同源。
+  // 存原始点击坐标：RendererContextMenu 自身会按估算/实测高度 clamp+翻转；
+  // 预 clamp 的默认 height=420 会把下半屏点击错误翻转成「弹在上方老远」。
+  const showPinScopeMenu = useCallback(
+    (event: MouseEvent, workspaceId: string, threadId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSidebarContextMenuState({
+        x: event.clientX,
+        y: event.clientY,
+        label: t("threads.pin"),
+        source: "thread",
+        items: buildPinScopeItems(workspaceId, threadId),
+      });
+    },
+    [t, buildPinScopeItems],
+  );
+
   const showThreadMenu = useCallback(
     (
       event: MouseEvent,
@@ -2245,18 +2313,11 @@ export function useSidebarMenus({
         });
       }
       if (canPin) {
-        const isPinned = isThreadPinned(workspaceId, threadId);
         items.push({
-          type: "item",
+          type: "submenu",
           id: "pin",
-          label: isPinned ? t("threads.unpin") : t("threads.pin"),
-          onSelect: () => {
-            if (isPinned) {
-              onUnpinThread(workspaceId, threadId);
-            } else {
-              onPinThread(workspaceId, threadId);
-            }
-          },
+          label: t("threads.pin"),
+          items: buildPinScopeItems(workspaceId, threadId),
         });
       }
       items.push({
@@ -2382,19 +2443,17 @@ export function useSidebarMenus({
     },
     [
       t,
-      isThreadPinned,
+      buildPinScopeItems,
       isThreadAutoNaming,
       onArchiveThread,
       onDeleteThread,
       onOpenSessionManagement,
       onOpenClaudeTui,
-      onPinThread,
       onAutoNameThread,
       onMoveThreadToFolder,
       onOpenThreadFolderPicker,
       onRenameThread,
       onSyncThread,
-      onUnpinThread,
       onSelectThread,
       isThreadAvailable,
       getThreadSummary,
@@ -2484,6 +2543,7 @@ export function useSidebarMenus({
 
   return {
     showThreadMenu,
+    showPinScopeMenu,
     showWorkspaceMenu,
     showWorkspaceSessionMenu,
     showWorktreeMenu,

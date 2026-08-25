@@ -9,6 +9,7 @@ import { ThreadEmptyState } from "./ThreadEmptyState";
 import { WorktreeCard } from "./WorktreeCard";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 
 const EMPTY_MOVE_FOLDER_TARGETS_BY_WORKSPACE_ID: Record<string, ThreadMoveFolderTarget[]> = {};
 
@@ -19,6 +20,7 @@ type ThreadStatusMap = Record<
 
 type ThreadRowsResult = {
   pinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
+  workspacePinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
   unpinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
   totalRoots: number;
   hasMoreRoots: boolean;
@@ -48,13 +50,26 @@ type WorktreeSectionProps = {
     threads: ThreadSummary[],
     isExpanded: boolean,
     workspaceId: string,
-    getPinTimestamp: (workspaceId: string, threadId: string) => number | null,
+    getPinTimestamp: (
+      workspaceId: string,
+      threadId: string,
+      scope?: ThreadPinScope,
+    ) => number | null,
     visibleThreadRootCount?: number,
   ) => ThreadRowsResult;
   getThreadTime: (thread: ThreadSummary) => string | null;
-  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadPinned: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   onToggleThreadPin: (workspaceId: string, threadId: string) => void;
+  onShowPinScopeMenu?: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+  ) => void;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onShowWorktreeSessionMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
@@ -116,6 +131,7 @@ export function WorktreeSection({
   isThreadPinned,
   isThreadAutoNaming,
   onToggleThreadPin,
+  onShowPinScopeMenu,
   getPinTimestamp,
   onConnectWorkspace,
   onShowWorktreeSessionMenu,
@@ -151,14 +167,18 @@ export function WorktreeSection({
   const threadRowsByWorktreeId = useMemo(() => {
     const rowsByWorktreeId = new Map<
       string,
-      { unpinnedRows: ThreadRowsResult["unpinnedRows"]; totalRoots: number }
+      { unpinnedRows: ThreadRowsResult["unpinnedRows"]; workspacePinnedRows: ThreadRowsResult["workspacePinnedRows"]; totalRoots: number }
     >();
     if (isSectionCollapsed || worktrees.length === 0) {
       return rowsByWorktreeId;
     }
     worktrees.forEach((worktree) => {
       if (worktree.settings.sidebarCollapsed) {
-        rowsByWorktreeId.set(worktree.id, { unpinnedRows: [], totalRoots: 0 });
+        rowsByWorktreeId.set(worktree.id, {
+          unpinnedRows: [],
+          workspacePinnedRows: [],
+          totalRoots: 0,
+        });
         return;
       }
       const worktreeThreads = threadsByWorkspace[worktree.id] ?? [];
@@ -167,14 +187,18 @@ export function WorktreeSection({
         threadListPageByWorkspace[worktree.id],
         defaultVisibleThreadRootCount,
       );
-      const { unpinnedRows, totalRoots } = getThreadRows(
+      const { unpinnedRows, workspacePinnedRows, totalRoots } = getThreadRows(
         worktreeThreads,
         false,
         worktree.id,
         getPinTimestamp,
         visibleThreadRootCount,
       );
-      rowsByWorktreeId.set(worktree.id, { unpinnedRows, totalRoots });
+      rowsByWorktreeId.set(worktree.id, {
+        unpinnedRows,
+        workspacePinnedRows,
+        totalRoots,
+      });
     });
     return rowsByWorktreeId;
   }, [
@@ -250,6 +274,8 @@ export function WorktreeSection({
             const isThreadListDegraded = hasDegradedThreadList(worktreeThreads);
             const threadRows = threadRowsByWorktreeId.get(worktree.id);
             const worktreeThreadRows = threadRows?.unpinnedRows ?? [];
+            const worktreeWorkspacePinnedRows =
+              threadRows?.workspacePinnedRows ?? [];
             const moveFolderTargets = moveFolderTargetsByWorkspaceId[worktree.id];
             const totalWorktreeRoots = threadRows?.totalRoots ?? 0;
             const visibleThreadRootCount = resolveVisibleThreadRootLimit(
@@ -299,7 +325,7 @@ export function WorktreeSection({
                   <ThreadList
                     workspaceId={worktree.id}
                     workspacePath={worktree.path}
-                    pinnedRows={[]}
+                    pinnedRows={worktreeWorkspacePinnedRows}
                     unpinnedRows={worktreeThreadRows}
                     totalThreadRoots={totalWorktreeRoots}
                     visibleThreadRootCount={visibleThreadRootCount}
@@ -320,6 +346,7 @@ export function WorktreeSection({
                     isThreadPinned={isThreadPinned}
                     isThreadAutoNaming={isThreadAutoNaming}
                     onToggleThreadPin={onToggleThreadPin}
+                    onShowPinScopeMenu={onShowPinScopeMenu}
                     onToggleExpanded={onToggleExpanded}
                     onLoadOlderThreads={onLoadOlderThreads}
                     onSelectThread={onSelectThread}

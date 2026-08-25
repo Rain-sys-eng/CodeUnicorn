@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
+import {
+  getClientStoreSync,
+  writeClientStoreValue,
+} from "../../../services/clientStorage";
 import { useEventCallback } from "../../../utils/useEventCallback";
 import type { QoderSettingsHighlightTarget } from "../../../features/app/hooks/useSettingsModalState";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -185,8 +188,10 @@ export function useAppShellLayoutNodesSection(
   const clientUiVisibility = useClientUiVisibility();
   const { isExitedSessionsHidden, toggleExitedSessionsHidden } =
     useExitedSessionVisibility();
-  const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] =
-    useState<Record<string, number>>({});
+  const [
+    rootSessionFolderDraftRequestByWorkspaceId,
+    setRootSessionFolderDraftRequestByWorkspaceId,
+  ] = useState<Record<string, number>>({});
   const onRequestRootSessionFolderDraft = useCallback((workspaceId: string) => {
     setRootSessionFolderDraftRequestByWorkspaceId((current) => ({
       ...current,
@@ -775,7 +780,18 @@ export function useAppShellLayoutNodesSection(
   );
 
   const handleSelectConversationEngine = useCallback(
-    async (engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder") => {
+    async (
+      engine:
+        | "claude"
+        | "codex"
+        | "gemini"
+        | "grok"
+        | "kimi"
+        | "opencode"
+        | "pi"
+        | "dsh"
+        | "qoder",
+    ) => {
       const thread =
         activeWorkspaceId && activeThreadId
           ? (threadsByWorkspace[activeWorkspaceId] ?? []).find(
@@ -794,12 +810,7 @@ export function useAppShellLayoutNodesSection(
         return;
       }
     },
-    [
-      activeThreadId,
-      activeWorkspaceId,
-      setActiveEngine,
-      threadsByWorkspace,
-    ],
+    [activeThreadId, activeWorkspaceId, setActiveEngine, threadsByWorkspace],
   );
   const mainFileExternalChangeAwarenessEnabled =
     appSettings.detachedExternalChangeAwarenessEnabled !== false;
@@ -990,7 +1001,8 @@ export function useAppShellLayoutNodesSection(
     rightPanelCollapsed,
     sidebarToggleProps: mainHeaderSidebarToggleProps,
     showRuntimeConsoleButton:
-      !isCompact && clientUiVisibility.isControlVisible("topTool.runtimeConsole"),
+      !isCompact &&
+      clientUiVisibility.isControlVisible("topTool.runtimeConsole"),
     isRuntimeConsoleVisible: runtimeRunState.runtimeConsoleVisible,
     onToggleRuntimeConsole: handleToggleRuntimeConsole,
     showTerminalButton:
@@ -1002,7 +1014,9 @@ export function useAppShellLayoutNodesSection(
     isSoloMode,
     onToggleSoloMode: toggleSoloMode,
     isBrowserDockOpen: browserDockOpen,
-    onToggleBrowserDock: clientUiVisibility.isControlVisible("topTool.browserDock")
+    onToggleBrowserDock: clientUiVisibility.isControlVisible(
+      "topTool.browserDock",
+    )
       ? handleToggleBrowserDock
       : undefined,
     showClientDocumentationButton:
@@ -1218,10 +1232,9 @@ export function useAppShellLayoutNodesSection(
   const handleOpenPromptSettings = useEventCallback(() =>
     openSettings("agent-prompt-management", "prompt-library"),
   );
-  const handleOpenCliSettings = useEventCallback((
-    highlightTarget?: QoderSettingsHighlightTarget,
-  ) =>
-    openSettings("providers", highlightTarget),
+  const handleOpenCliSettings = useEventCallback(
+    (highlightTarget?: QoderSettingsHighlightTarget) =>
+      openSettings("providers", highlightTarget),
   );
   // Manual git panel refresh should dismiss stale commit/push/sync error banners.
   const handleManualGitStatusRefresh = useCallback(() => {
@@ -1333,8 +1346,7 @@ export function useAppShellLayoutNodesSection(
             : undefined;
           if (!byCatalogId && runtimeHint) {
             const byRuntime = models.find(
-              (model) =>
-                (model.model?.trim() || model.id) === runtimeHint,
+              (model) => (model.model?.trim() || model.id) === runtimeHint,
             );
             if (byRuntime) {
               resolvedModelId = byRuntime.id;
@@ -1439,10 +1451,7 @@ export function useAppShellLayoutNodesSection(
             mutationResult?.error ?? t("workspace.archiveConversationFailed"),
           );
         }
-        if (
-          activeWorkspaceId === workspaceId &&
-          activeThreadId === threadId
-        ) {
+        if (activeWorkspaceId === workspaceId && activeThreadId === threadId) {
           setActiveThreadId(null, workspaceId);
         }
         // 本地摘行（不触发 full-catalog 重扫；归档证据由 metadata 持久化，
@@ -2401,7 +2410,8 @@ export function useAppShellLayoutNodesSection(
       accessMode,
       onSelectAccessMode: handleSetAccessMode,
       skills,
-      customSkillDirectories: appSettings.customSkillDirectories ?? EMPTY_STRING_ARRAY,
+      customSkillDirectories:
+        appSettings.customSkillDirectories ?? EMPTY_STRING_ARRAY,
       prompts,
       commands,
       files,

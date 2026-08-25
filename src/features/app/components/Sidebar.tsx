@@ -53,6 +53,7 @@ import {
 import { registerKeydownHandler } from "../hooks/keyboardDispatcher";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { debugPiSidebarDrop } from "../../pi-session/store/piSidebarDropDiagnostics";
@@ -236,11 +237,23 @@ type SidebarProps = {
   onRenameCancel?: () => void;
   onRenameConfirm?: () => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
-  pinThread: (workspaceId: string, threadId: string) => boolean;
+  pinThread: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   unpinThread: (workspaceId: string, threadId: string) => void;
-  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadPinned: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
-  getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  getPinTimestamp: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => number | null;
   pinnedThreadsVersion: number;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onAutoNameThread: (workspaceId: string, threadId: string) => void;
@@ -1062,6 +1075,7 @@ function SidebarImpl({
   );
   const {
     showThreadMenu,
+    showPinScopeMenu,
     showWorkspaceMenu,
     showWorkspaceSessionMenu,
     showWorktreeMenu,
@@ -1395,7 +1409,11 @@ function SidebarImpl({
       }
       group.workspaces.forEach((workspace) => {
         if (workspace.settings.sidebarCollapsed) {
-          rowsByWorkspace.set(workspace.id, { unpinnedRows: [], totalRoots: 0 });
+          rowsByWorkspace.set(workspace.id, {
+            unpinnedRows: [],
+            workspacePinnedRows: [],
+            totalRoots: 0,
+          });
           return;
         }
         const threads = getProjectedThreads(workspace.id);
@@ -1404,14 +1422,18 @@ function SidebarImpl({
           threadListPageByWorkspace[workspace.id],
           resolvedDefaultVisibleThreadRootCount,
         );
-        const { unpinnedRows, totalRoots } = getThreadRows(
+        const { unpinnedRows, workspacePinnedRows, totalRoots } = getThreadRows(
           threads,
           false,
           workspace.id,
           getPinTimestamp,
           visibleThreadRootCount,
         );
-        rowsByWorkspace.set(workspace.id, { unpinnedRows, totalRoots });
+        rowsByWorkspace.set(workspace.id, {
+          unpinnedRows,
+          workspacePinnedRows,
+          totalRoots,
+        });
       });
     });
     return rowsByWorkspace;
@@ -1733,7 +1755,12 @@ function SidebarImpl({
   }, [debouncedQuery, searchQuery]);
 
   const handleToggleThreadPin = useCallback((workspaceId: string, threadId: string) => {
-    if (isThreadPinned(workspaceId, threadId)) {
+    // 两作用域互斥：已置顶（全局或项目内）→ 取消当前作用域；未置顶 → 兜底全局置顶
+    // （未置顶的正常入口是 onShowPinScopeMenu 的 2 选菜单，此分支仅兜底）。
+    if (
+      isThreadPinned(workspaceId, threadId) ||
+      isThreadPinned(workspaceId, threadId, "workspace")
+    ) {
       unpinThread(workspaceId, threadId);
       return;
     }
@@ -1993,6 +2020,7 @@ function SidebarImpl({
     const isExpanded = threadListPage > 1;
     const threadRows = threadRowsByWorkspace.get(entry.id);
     const unpinnedRows = threadRows?.unpinnedRows ?? [];
+    const workspacePinnedRows = threadRows?.workspacePinnedRows ?? [];
     const totalThreadRoots = threadRows?.totalRoots ?? 0;
     const nextCursor =
       threadListCursorByWorkspace[entry.id] ?? null;
@@ -2091,6 +2119,7 @@ function SidebarImpl({
             isThreadPinned={isThreadPinned}
             isThreadAutoNaming={isThreadAutoNaming}
             onToggleThreadPin={handleToggleThreadPin}
+            onShowPinScopeMenu={showPinScopeMenu}
             getPinTimestamp={getPinTimestamp}
             onConnectWorkspace={onConnectWorkspace}
             onShowWorktreeSessionMenu={showWorkspaceSessionMenu}
@@ -2123,6 +2152,7 @@ function SidebarImpl({
             workspacePath={entry.path}
             folders={folderProjection.folders}
             rootRows={folderProjection.rootRows}
+            workspacePinnedRows={workspacePinnedRows}
             totalThreadRoots={totalThreadRoots}
             isExpanded={isExpanded}
             rootDraftRequestKey={rootFolderDraftRequestKey}
@@ -2146,6 +2176,7 @@ function SidebarImpl({
               isThreadPinned,
               isThreadAutoNaming,
               onToggleThreadPin: handleToggleThreadPin,
+              onShowPinScopeMenu: showPinScopeMenu,
               onToggleExpanded: handleCollapseThreadList,
               onLoadOlderThreads: handleShowMoreThreads,
               onSelectThread,
@@ -2171,7 +2202,7 @@ function SidebarImpl({
           <ThreadList
             workspaceId={entry.id}
             workspacePath={entry.path}
-            pinnedRows={[]}
+            pinnedRows={workspacePinnedRows}
             unpinnedRows={unpinnedRows}
             totalThreadRoots={totalThreadRoots}
             visibleThreadRootCount={visibleThreadRootCount}
@@ -2190,6 +2221,7 @@ function SidebarImpl({
             isThreadPinned={isThreadPinned}
             isThreadAutoNaming={isThreadAutoNaming}
             onToggleThreadPin={handleToggleThreadPin}
+            onShowPinScopeMenu={showPinScopeMenu}
             onToggleExpanded={handleCollapseThreadList}
             onLoadOlderThreads={handleShowMoreThreads}
             onSelectThread={onSelectThread}
@@ -2257,6 +2289,7 @@ function SidebarImpl({
     onSelectWorkspace,
     onSelectThread,
     showThreadMenu,
+    showPinScopeMenu,
     showWorkspaceSessionMenu,
     showWorkspaceMenu,
     showWorktreeMenu,

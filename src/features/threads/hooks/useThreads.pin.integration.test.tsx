@@ -157,4 +157,64 @@ describe("useThreads pin integration", () => {
       "thread-a",
     ]);
   });
+
+  it("keeps project-scoped pins at the workspace list top and out of the global bucket", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+    await act(async () => {});
+    const rowsHook = renderHook(() =>
+      useThreadRows(result.current.threadParentById),
+    );
+
+    const threads = [
+      { id: "thread-a", name: "A", updatedAt: 10 },
+      { id: "thread-b", name: "B", updatedAt: 20 },
+      { id: "thread-c", name: "C", updatedAt: 30 },
+    ];
+
+    let pinResult = false;
+    await act(async () => {
+      pinResult = result.current.pinThread(
+        workspace.id,
+        "thread-a",
+        "workspace",
+      );
+    });
+    expect(pinResult).toBe(true);
+    expect(
+      result.current.isThreadPinned(workspace.id, "thread-a", "workspace"),
+    ).toBe(true);
+    expect(result.current.isThreadPinned(workspace.id, "thread-a")).toBe(false);
+
+    const rows = rowsHook.result.current.getThreadRows(
+      threads,
+      true,
+      workspace.id,
+      result.current.getPinTimestamp,
+    );
+    // 项目内置顶：不进全局桶，排 workspace 列表顶部，不占 unpinned 序
+    expect(rows.pinnedRows).toHaveLength(0);
+    expect(mapThreadIds(rows.workspacePinnedRows)).toEqual(["thread-a"]);
+    expect(mapThreadIds(rows.unpinnedRows)).toEqual(["thread-c", "thread-b"]);
+
+    // 互斥：迁入全局后离开项目内置顶桶
+    await act(async () => {
+      result.current.pinThread(workspace.id, "thread-a");
+    });
+    const migrated = rowsHook.result.current.getThreadRows(
+      threads,
+      true,
+      workspace.id,
+      result.current.getPinTimestamp,
+    );
+    expect(mapThreadIds(migrated.pinnedRows)).toEqual(["thread-a"]);
+    expect(migrated.workspacePinnedRows).toHaveLength(0);
+    expect(
+      result.current.isThreadPinned(workspace.id, "thread-a", "workspace"),
+    ).toBe(false);
+  });
 });

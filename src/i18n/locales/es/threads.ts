@@ -17,6 +17,8 @@ const threads = {
     "deleteThreadMessage": "¿Seguro que quieres eliminar \"{{name}}\"?",
     "deleteThreadHint": "Esto no se puede deshacer y se eliminará el registro local de la sesión.",
     "pin": "Fijar",
+    "pinToGlobal": "Fijar globalmente",
+    "pinToProject": "Fijar en el proyecto",
     "unpin": "Desfijar",
     "sync": "Sincronizar",
     "reload": "Recargar",

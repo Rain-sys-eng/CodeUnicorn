@@ -25,6 +25,7 @@ import type {
 import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
 import type { SharedSessionSupportedEngine } from "../../shared-session/utils/sharedSessionEngines";
 import type { HistoryLoadingProgress } from "../../threads/utils/historyLoadingProgress";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 import type { OpenAppMenuExtraAction } from "../../app/components/OpenAppMenu";
 import type {
   AccessMode,
@@ -276,11 +277,23 @@ export type LayoutNodesFlatOptions = {
   onRenameCancel?: () => void;
   onRenameConfirm?: () => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
-  pinThread: (workspaceId: string, threadId: string) => boolean;
+  pinThread: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   unpinThread: (workspaceId: string, threadId: string) => void;
-  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadPinned: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
-  getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  getPinTimestamp: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => number | null;
   pinnedThreadsVersion: number;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onAutoNameThread: (workspaceId: string, threadId: string) => void;

@@ -11,6 +11,7 @@ import { isPiDerivedThreadHidden } from "../../pi-session/store/piSessionStore";
 import { debugPiSidebarDrop } from "../../pi-session/store/piSidebarDropDiagnostics";
 import { lastVerifiedSharedHide } from "../../threads/hooks/sharedNativeVisibility";
 import { compareThreadSummariesByCreatedAtDesc } from "../../threads/utils/threadSummarySort";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 
 type ThreadRow = {
   thread: ThreadSummary;
@@ -20,6 +21,7 @@ type ThreadRow = {
 
 type ThreadRowResult = {
   pinnedRows: ThreadRow[];
+  workspacePinnedRows: ThreadRow[];
   unpinnedRows: ThreadRow[];
   totalRoots: number;
   hasMoreRoots: boolean;
@@ -74,7 +76,11 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       threads: ThreadSummary[],
       isExpanded: boolean,
       workspaceId: string,
-      getPinTimestamp: (workspaceId: string, threadId: string) => number | null,
+      getPinTimestamp: (
+        workspaceId: string,
+        threadId: string,
+        scope?: ThreadPinScope,
+      ) => number | null,
       visibleThreadRootCount = DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
     ): ThreadRowResult => {
       const byIdentity = new Map<string, string>();
@@ -137,12 +143,22 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       roots.sort(compareThreadSummariesByCreatedAtDesc);
 
       const pinnedRoots: ThreadSummary[] = [];
+      const workspacePinnedRoots: ThreadSummary[] = [];
       const unpinnedRoots: ThreadSummary[] = [];
 
       roots.forEach((thread) => {
         const pinTime = getPinTimestamp(workspaceId, thread.id);
         if (pinTime !== null) {
           pinnedRoots.push(thread);
+          return;
+        }
+        const workspacePinTime = getPinTimestamp(
+          workspaceId,
+          thread.id,
+          "workspace",
+        );
+        if (workspacePinTime !== null) {
+          workspacePinnedRoots.push(thread);
         } else {
           unpinnedRoots.push(thread);
         }
@@ -151,6 +167,15 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       pinnedRoots.sort((a, b) => {
         const aTime = getPinTimestamp(workspaceId, a.id) ?? 0;
         const bTime = getPinTimestamp(workspaceId, b.id) ?? 0;
+        if (aTime !== bTime) {
+          return aTime - bTime;
+        }
+        return compareThreadSummariesByCreatedAtDesc(a, b);
+      });
+
+      workspacePinnedRoots.sort((a, b) => {
+        const aTime = getPinTimestamp(workspaceId, a.id, "workspace") ?? 0;
+        const bTime = getPinTimestamp(workspaceId, b.id, "workspace") ?? 0;
         if (aTime !== bTime) {
           return aTime - bTime;
         }
@@ -175,11 +200,17 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       const pinnedRows: ThreadRow[] = [];
       pinnedRoots.forEach((thread) => appendThread(thread, 0, pinnedRows));
 
+      const workspacePinnedRows: ThreadRow[] = [];
+      workspacePinnedRoots.forEach((thread) =>
+        appendThread(thread, 0, workspacePinnedRows),
+      );
+
       const unpinnedRows: ThreadRow[] = [];
       visibleRoots.forEach((thread) => appendThread(thread, 0, unpinnedRows));
 
       return {
         pinnedRows,
+        workspacePinnedRows,
         unpinnedRows,
         totalRoots: unpinnedRoots.length,
         hasMoreRoots: unpinnedRoots.length > visibleRootCount,

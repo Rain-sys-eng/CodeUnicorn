@@ -38,6 +38,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -87,6 +88,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -134,6 +136,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -182,6 +185,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -237,6 +241,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -291,6 +296,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -356,6 +362,7 @@ describe("WorktreeSection", () => {
         }}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [{ thread, depth: 0 }],
           totalRoots: 1,
           hasMoreRoots: false,
@@ -414,6 +421,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -474,6 +482,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 1,
           hasMoreRoots: false,
@@ -520,6 +529,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 1,
           hasMoreRoots: false,
@@ -574,6 +584,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
