@@ -749,14 +749,13 @@ async fn detect_opencode_status_with_options(
     // OpenCode CLI in GUI-launched environments can intermittently fail `--version`
     // due to startup env quirks. Use a lightweight second probe to avoid false
     // "not installed" states in engine selector.
-    if !installed
-        && probe_opencode_cli_help(&bin, path_env.as_ref()).await {
-            installed = true;
-            if version.is_none() {
-                version = Some("unknown".to_string());
-            }
-            error = None;
+    if !installed && probe_opencode_cli_help(&bin, path_env.as_ref()).await {
+        installed = true;
+        if version.is_none() {
+            version = Some("unknown".to_string());
         }
+        error = None;
+    }
 
     if !installed {
         return not_installed_status(EngineType::OpenCode, error);
