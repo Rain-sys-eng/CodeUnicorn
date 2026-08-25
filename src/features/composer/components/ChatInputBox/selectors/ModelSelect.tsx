@@ -1170,6 +1170,19 @@ export const ModelSelect = memo(({
         return;
       }
       if (!hasTargetGroups) {
+        // Native/legacy：catalog 只剩静态兜底（如 PI 的 auto）时，打开菜单自动补拉一次，
+        // 复用刷新按钮的 spinner / error 位；每次打开最多一次，失败不循环。
+        // 空 catalog 走自定义模型引导，不触发。
+        const currentGroup = pickerGroups.find(
+          (group) => group.providerId === currentProvider,
+        );
+        const groupModels = currentGroup?.models ?? [];
+        const isFallbackOnly =
+          groupModels.length > 0 &&
+          groupModels.every((model) => (model.source ?? '') === 'fallback');
+        if (isFallbackOnly) {
+          handleRefreshConfig();
+        }
         return;
       }
       void onOpenTargetCatalog?.();
@@ -1180,6 +1193,8 @@ export const ModelSelect = memo(({
       });
     },
     [
+      currentProvider,
+      handleRefreshConfig,
       hasTargetGroups,
       onOpenTargetCatalog,
       onOpenProviderProfile,

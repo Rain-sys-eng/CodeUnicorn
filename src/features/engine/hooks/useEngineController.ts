@@ -124,7 +124,11 @@ export function useEngineController({
           priority: phase === "on-demand" ? 85 : 30,
           dedupeKey: `engine-models:${engineType}:${catalogScope}:${options.forceRefresh ? "force" : "cached"}`,
           concurrencyKey: "engine-model-catalog",
-          timeoutMs: 8_000,
+          // on-demand（打开菜单 / 显式刷新）必须覆盖后端最坏探测链（PI 并行化后
+          // ~20s：max(version 10s, RPC 10s + list-models 10s 回退)）；idle-prewarm
+          // 保持 8s 快速让路。on-demand 均为 fire-and-forget / 菜单内 spinner，
+          // 拉长 timeout 不阻塞点击路径。
+          timeoutMs: phase === "on-demand" ? 22_000 : 8_000,
           workspaceScope: "global",
           cancelPolicy: "yield-only",
           traceLabel: "engine/models",

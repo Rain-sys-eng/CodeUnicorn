@@ -7,6 +7,7 @@
 ## 事故三段论（背下来）
 
 1. **直接原因**：`get_engine_models` 走 `startupOrchestrator`，`phase: "on-demand"` 时 **priority 85、timeout 8s**。点一条会话如果触发这次 IPC，主线程 / WebView 就像死了。
+   （2026-08-25 `auto-recover-fallback-model-catalog` 起 on-demand timeout 调整为 22s，只对「打开模型选择器 / 显式刷新」生效；切会话路径仍然零 catalog IPC，本文件红线不变。）
 2. **放大原因**：标签补齐前，大量会话 `providerProfileId` 为空，`useProviderModelCatalogSync` 的 catalog key 停在 `__global__`，连续点击是空转。标签补齐后 **每条会话都有 binding**（含 `__local_pi__` / `__dsh_host_catalog__` / 托管 id），每次点击都是新 key → 必打 IPC。PI / DSH 还被加进 `PROVIDER_SCOPED_ENGINES`，官方本地 sentinel 再传给 composer 当新 catalog 作用域，等于 **点一次扫两遍**。
 3. **流程原因**：把「绑回独立配置」理解成「点会话就要 switch L1 + 刷 catalog」。发送其实只认 `thread.providerProfileId`。点击路径注释写着 *identity + chrome only*，接线却加了 `refreshEngineModels` 和 `vendor_switch_*`。
 
@@ -34,7 +35,7 @@
 叠加：
 
 | 接线 | 效果 |
-|---|---|
+| --- | --- |
 | `handleSelectThread` 里再调一次 `refreshEngineModels` | 点击路径双发 |
 | `activateEngineProviderProfile` / `vendor_switch_*` | 改 L1 全局 home，绑回错 + 更卡 |
 | composer `providerProfileId={thread.providerProfileId}` 含本地 sentinel | ChatInputBox 再按 profile 拉一遍 catalog |
@@ -55,6 +56,7 @@
 1. 切会话：`useProviderModelCatalogSync` **不得** `refreshEngineModels`。最多记 catalog key / debug，禁止 IPC。
 2. `ChatInputBox` 的 `providerProfileId`：仅托管 id；本地 sentinel 传 `null`（`isManagedEngineProviderProfileId`）。
 3. catalog 拉取只允许：打开模型选择器、用户显式刷新、发送前确缺 catalog。
+   打开模型选择器时若当前引擎 catalog 为 fallback-only（全部 `source === "fallback"`），允许自动触发一次 forced refresh（见 `auto-recover-fallback-model-catalog`）。
 4. 改动必须带手测：连点 PI / DSH / Grok / Claude 托管会话，手感应接近「补标签之前」。
 
 ## 改这些文件前先重读本文

@@ -3337,3 +3337,105 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
     expect(onProviderModelChange).toHaveBeenCalledWith("pi", "kimi-coding/k3-256k");
   });
 });
+
+describe("fallback-only legacy catalog auto recovery", () => {
+  const piFallbackGroup = {
+    providerId: "pi" as const,
+    providerLabel: "PI CLI",
+    enabled: true,
+    models: [
+      {
+        id: "auto",
+        label: "auto",
+        description: "Use PI CLI default model",
+        source: "fallback",
+      },
+    ],
+  };
+
+  it("auto-triggers one refresh when the opened group is fallback-only", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onRefreshConfig = vi.fn();
+
+    render(
+      <ModelSelect
+        value="auto"
+        currentProvider="pi"
+        providerLabel="PI CLI"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        models={piFallbackGroup.models}
+        modelGroups={[piFallbackGroup]}
+        onRefreshConfig={onRefreshConfig}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:auto" }),
+    );
+    await screen.findByRole("menu");
+
+    expect(onRefreshConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not auto-refresh when the group already has live models", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onRefreshConfig = vi.fn();
+    const liveModels = [
+      {
+        id: "ark/deepseek-v4-flash",
+        label: "deepseek-v4-flash",
+        source: "detected",
+        provider: "ark",
+      },
+    ];
+
+    render(
+      <ModelSelect
+        value="ark/deepseek-v4-flash"
+        currentProvider="pi"
+        providerLabel="PI CLI"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        models={liveModels}
+        modelGroups={[{ ...piFallbackGroup, models: liveModels }]}
+        onRefreshConfig={onRefreshConfig}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "chat.currentModel:ark / deepseek-v4-flash",
+      }),
+    );
+    await screen.findByRole("menu");
+
+    expect(onRefreshConfig).not.toHaveBeenCalled();
+  });
+
+  it("does not double-fire while a refresh is already in flight", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onRefreshConfig = vi.fn();
+
+    render(
+      <ModelSelect
+        value="auto"
+        currentProvider="pi"
+        providerLabel="PI CLI"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        models={piFallbackGroup.models}
+        modelGroups={[piFallbackGroup]}
+        onRefreshConfig={onRefreshConfig}
+        isRefreshingConfig
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:auto" }),
+    );
+    await screen.findByRole("menu");
+
+    expect(onRefreshConfig).not.toHaveBeenCalled();
+  });
+});

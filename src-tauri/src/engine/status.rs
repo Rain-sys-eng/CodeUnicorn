@@ -889,12 +889,17 @@ pub async fn detect_pi_status(custom_bin: Option<&str>) -> EngineStatus {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| "pi".to_string());
     let path_env = build_codex_path_env(custom_bin);
-    let (installed, version, error) = probe_cli_version(&bin, "pi", path_env.as_ref()).await;
+    // version 与 models 探测无数据依赖：并行发起，最坏路径 30s → 20s
+    // （max(version 10s, RPC 10s + list-models 10s 回退)），与 FE on-demand
+    // timeout 对齐。未安装时 models 探测 spawn 立即失败，结果被丢弃。
+    let version_probe = probe_cli_version(&bin, "pi", path_env.as_ref());
+    let models_probe = get_pi_models(&bin, path_env.as_ref());
+    let ((installed, version, error), (models, config_diagnostic)) =
+        tokio::join!(version_probe, models_probe);
     if !installed {
         return not_installed_status(EngineType::Pi, error);
     }
     let home_dir = get_pi_home_dir();
-    let (models, config_diagnostic) = get_pi_models(&bin, path_env.as_ref()).await;
     let default_model = models.iter().find(|m| m.default).map(|m| m.id.clone());
     EngineStatus {
         engine_type: EngineType::Pi,
