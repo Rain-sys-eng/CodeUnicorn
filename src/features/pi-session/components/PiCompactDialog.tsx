@@ -1,6 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import {
+  ContextUsageIcon,
+  formatContextPercent,
+} from "@/components/ai-elements/context";
 import {
   piCompact,
   piGetSessionStats,
@@ -12,36 +23,49 @@ type PiCompactEntryProps = {
   workspaceId: string;
   threadId: string;
   disabled?: boolean;
+  /** 当前上下文占用百分比（0-100），用于渲染圆环；null 显示空环 */
+  percentage?: number | null;
 };
 
 /**
- * Composer footer entry for PI RPC manual compaction: a small ghost button
- * next to the usage indicator that opens PiCompactDialog.
+ * Composer footer entry for PI RPC manual compaction（native pi cli 专属展现）：
+ * 直接复用上下文圆圈作为触发器——没有 hover 用量卡，点击圆圈即打开
+ * PiCompactDialog（占用统计 + 压缩指令），替换其他引擎的「上下文 等待回传」弹层。
  */
 export function PiCompactEntry({
   workspaceId,
   threadId,
   disabled = false,
+  percentage = null,
 }: PiCompactEntryProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const percentLabel = formatContextPercent(percentage);
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         className="pi-compact-entry"
         title={t("piSession.compact.entryTitle")}
+        aria-label={t("piSession.compact.entryLabel")}
         disabled={disabled}
         onClick={() => {
           if (!disabled) setOpen(true);
         }}
       >
-        ⤓ {t("piSession.compact.entryLabel")}
+        {percentLabel ? (
+          <span className="pi-compact-entry-percent">{percentLabel}</span>
+        ) : null}
+        <ContextUsageIcon usedPercent={percentage} />
       </button>
       <PiCompactDialog
         open={open}
         workspaceId={workspaceId}
         threadId={threadId}
+        variant="popover"
+        anchorRef={triggerRef}
         onClose={() => setOpen(false)}
         onCompacted={() => {
           // compact 后下一次打开 dialog 时会重新拉 stats；不留 store 切片。
@@ -56,6 +80,10 @@ type PiCompactDialogProps = {
   workspaceId: string;
   threadId: string;
   onClose: () => void;
+  /** popover: 锚定在触发按钮上方的无遮罩弹层；缺省为居中模态 */
+  variant?: "popover";
+  /** popover 模式下的锚点元素（触发按钮） */
+  anchorRef?: RefObject<HTMLElement | null>;
   onCompacted: (result: {
     tokensBefore: number | null;
     estimatedTokensAfter: number | null;
@@ -90,6 +118,8 @@ export function PiCompactDialog({
   workspaceId,
   threadId,
   onClose,
+  variant,
+  anchorRef,
   onCompacted,
 }: PiCompactDialogProps) {
   const { t } = useTranslation();
@@ -135,118 +165,184 @@ export function PiCompactDialog({
     return total !== null && total !== undefined ? `${total} 条` : "—";
   }, [stats]);
 
+  // ===== popover 模式：锚定在触发按钮上方，无遮罩 =====
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{
+    bottom: number;
+    right: number;
+  } | null>(null);
+  const isPopover = variant === "popover";
+
+  useLayoutEffect(() => {
+    if (!open || !isPopover) {
+      setPopoverPos(null);
+      return;
+    }
+    const update = () => {
+      const rect = anchorRef?.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+      setPopoverPos({
+        bottom: window.innerHeight - rect.top + 8,
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [open, isPopover, anchorRef]);
+
+  useEffect(() => {
+    if (!open || !isPopover) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+      if (dialogRef.current?.contains(target)) {
+        return;
+      }
+      if (anchorRef?.current?.contains(target)) {
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [open, isPopover, anchorRef, onClose]);
+
   if (!open) {
     return null;
   }
-  return createPortal(
-    <div className="pi-overlay" onClick={onClose} role="presentation">
-      <div
-        className="pi-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("piSession.compact.dialogAria")}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3>
-          ⤓ {t("piSession.compact.dialogTitle")}
-          <span className="mono">pi RPC: compact</span>
-        </h3>
-        <div className="pi-stat-row">
-          <div className="pi-stat">
-            <div className={`v${(percent ?? 0) >= 80 ? " warn" : ""}`}>
-              {percent !== null ? `${Math.round(percent)}%` : "—"}
-            </div>
-            <div className="k">{t("piSession.compact.occupancy")}</div>
+  const dialogBody = (
+    <div
+      ref={dialogRef}
+      className={`pi-dialog${isPopover ? " pi-dialog--popover" : ""}`}
+      role="dialog"
+      aria-modal={isPopover ? undefined : "true"}
+      aria-label={t("piSession.compact.dialogAria")}
+      onClick={(event) => event.stopPropagation()}
+      style={
+        isPopover
+          ? popoverPos
+            ? { bottom: popoverPos.bottom, right: popoverPos.right }
+            : { visibility: "hidden" }
+          : undefined
+      }
+    >
+      <h3>
+        ⤓ {t("piSession.compact.dialogTitle")}
+        <span className="mono">pi RPC: compact</span>
+      </h3>
+      <div className="pi-stat-row">
+        <div className="pi-stat">
+          <div className={`v${(percent ?? 0) >= 80 ? " warn" : ""}`}>
+            {percent !== null ? `${Math.round(percent)}%` : "—"}
           </div>
-          <div className="pi-stat">
-            <div className="v">{messageCount}</div>
-            <div className="k">{t("piSession.compact.messages")}</div>
-          </div>
-          <div className="pi-stat">
-            <div className="v">
-              {formatTokens(stats?.contextUsage?.tokens ?? null)}
-            </div>
-            <div className="k">{t("piSession.compact.tokens")}</div>
-          </div>
+          <div className="k">{t("piSession.compact.occupancy")}</div>
         </div>
-        <label htmlFor="pi-compact-instructions">
-          {t("piSession.compact.instructionsLabel")}
-        </label>
-        <textarea
-          id="pi-compact-instructions"
-          rows={2}
-          value={instructions}
-          placeholder={t("piSession.compact.instructionsPlaceholder")}
-          onChange={(event) => setInstructions(event.target.value)}
-        />
-        <div className="hint">
-          {t("piSession.compact.hint")}
+        <div className="pi-stat">
+          <div className="v">{messageCount}</div>
+          <div className="k">{t("piSession.compact.messages")}</div>
         </div>
-        {error ? <p className="pi-dialog-error">{error}</p> : null}
-        {notice ? <p className="pi-dialog-notice">{notice}</p> : null}
-        <div className="pi-dialog-foot">
-          <button
-            type="button"
-            className="pi-btn-plain"
-            onClick={onClose}
-            disabled={busy}
-          >
-            {done ? t("piSession.compact.close") : t("piSession.compact.cancel")}
-          </button>
-          <button
-            type="button"
-            className="pi-btn-primary"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              setError(null);
-              setNotice(null);
-              void piCompact({
-                workspaceId,
-                sessionId: piSessionIdFromThreadId(threadId),
-                customInstructions: instructions,
-              })
-                .then((result) => {
-                  setBusy(false);
-                  setDone(true);
-                  setInstructions("");
-                  // 成功后原地展示结果并重拉统计（手动压缩无 active run，
-                  // compaction_start/end 事件不会上屏，dialog 是唯一反馈面）。
-                  setNotice(
-                    `压缩完成：${formatTokens(result.tokensBefore)} → ${formatTokens(result.estimatedTokensAfter)}（估算）。`,
-                  );
-                  onCompacted({
-                    tokensBefore: result.tokensBefore,
-                    estimatedTokensAfter: result.estimatedTokensAfter,
-                  });
-                  void piGetSessionStats({
-                    workspaceId,
-                    sessionId: piSessionIdFromThreadId(threadId),
-                  })
-                    .then(setStats)
-                    .catch(() => {
-                      // 统计刷新失败不影响压缩结果本身
-                    });
-                })
-                .catch((err) => {
-                  setBusy(false);
-                  const message =
-                    err instanceof Error ? err.message : String(err);
-                  const neutral = compactErrorToNotice(message);
-                  if (neutral !== null) {
-                    setNotice(neutral);
-                  } else {
-                    setError(message);
-                  }
-                });
-            }}
-          >
-            {busy
-              ? t("piSession.compact.confirming")
-              : t("piSession.compact.confirm")}
-          </button>
+        <div className="pi-stat">
+          <div className="v">
+            {formatTokens(stats?.contextUsage?.tokens ?? null)}
+          </div>
+          <div className="k">{t("piSession.compact.tokens")}</div>
         </div>
       </div>
+      <label htmlFor="pi-compact-instructions">
+        {t("piSession.compact.instructionsLabel")}
+      </label>
+      <textarea
+        id="pi-compact-instructions"
+        rows={2}
+        value={instructions}
+        placeholder={t("piSession.compact.instructionsPlaceholder")}
+        onChange={(event) => setInstructions(event.target.value)}
+      />
+      <div className="hint">
+        {t("piSession.compact.hint")}
+      </div>
+      {error ? <p className="pi-dialog-error">{error}</p> : null}
+      {notice ? <p className="pi-dialog-notice">{notice}</p> : null}
+      <div className="pi-dialog-foot">
+        <button
+          type="button"
+          className="pi-btn-plain"
+          onClick={onClose}
+          disabled={busy}
+        >
+          {done
+            ? t("piSession.compact.close")
+            : t("piSession.compact.cancel")}
+        </button>
+        <button
+          type="button"
+          className="pi-btn-primary"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            setError(null);
+            setNotice(null);
+            void piCompact({
+              workspaceId,
+              sessionId: piSessionIdFromThreadId(threadId),
+              customInstructions: instructions,
+            })
+              .then((result) => {
+                setBusy(false);
+                setDone(true);
+                setInstructions("");
+                // 成功后原地展示结果并重拉统计（手动压缩无 active run，
+                // compaction_start/end 事件不会上屏，dialog 是唯一反馈面）。
+                setNotice(
+                  `压缩完成：${formatTokens(result.tokensBefore)} → ${formatTokens(result.estimatedTokensAfter)}（估算）。`,
+                );
+                onCompacted({
+                  tokensBefore: result.tokensBefore,
+                  estimatedTokensAfter: result.estimatedTokensAfter,
+                });
+                void piGetSessionStats({
+                  workspaceId,
+                  sessionId: piSessionIdFromThreadId(threadId),
+                })
+                  .then(setStats)
+                  .catch(() => {
+                    // 统计刷新失败不影响压缩结果本身
+                  });
+              })
+              .catch((err) => {
+                setBusy(false);
+                const message =
+                  err instanceof Error ? err.message : String(err);
+                const neutral = compactErrorToNotice(message);
+                if (neutral !== null) {
+                  setNotice(neutral);
+                } else {
+                  setError(message);
+                }
+              });
+          }}
+        >
+          {busy
+            ? t("piSession.compact.confirming")
+            : t("piSession.compact.confirm")}
+        </button>
+      </div>
+    </div>
+  );
+  if (isPopover) {
+    return createPortal(dialogBody, document.body);
+  }
+  return createPortal(
+    <div className="pi-overlay" onClick={onClose} role="presentation">
+      {dialogBody}
     </div>,
     document.body,
   );

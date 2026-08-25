@@ -3929,6 +3929,15 @@ function ComposerImpl({
                             }
                             currentProvider="codex"
                           />
+                        ) : selectedEngine === "pi" && // capability-router-allow-engine-branch: pi-only /compact entry, 见 enhance-pi-native-rpc-session
+                        activeWorkspaceId &&
+                        activeThreadId ? (
+                          <PiCompactEntry
+                            percentage={footerUsagePercentage}
+                            workspaceId={activeWorkspaceId}
+                            threadId={activeThreadId}
+                            disabled={Boolean(isProcessing)}
+                          />
                         ) : (
                           <TokenIndicator
                             percentage={footerUsagePercentage}
@@ -3942,15 +3951,6 @@ function ComposerImpl({
                             }
                           />
                         )}
-                        {selectedEngine === "pi" && // capability-router-allow-engine-branch: pi-only /compact entry, 见 enhance-pi-native-rpc-session
-                        activeWorkspaceId &&
-                        activeThreadId ? (
-                          <PiCompactEntry
-                            workspaceId={activeWorkspaceId}
-                            threadId={activeThreadId}
-                            disabled={Boolean(isProcessing)}
-                          />
-                        ) : null}
                       </div>
                     ) : null}
                   </div>
