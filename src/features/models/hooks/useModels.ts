@@ -536,11 +536,6 @@ export function useModels({
     return next;
   }, [rawModels, modelMappingVersion]);
 
-  const modelsFingerprint = useMemo(
-    () => modelOptionsFingerprint(models),
-    [models],
-  );
-
   // 原子幂等写入：语义相等保持同一 state 引用
   const commitSelection = useCallback(
     (nextModelId: string | null, nextEffort: string | null) => {
@@ -641,7 +636,7 @@ export function useModels({
       };
       commitSelection(nextModelId, nextEffort);
     },
-    [commitSelection, modelsFingerprint],
+    [commitSelection],
   );
 
   // Listen for localStorage changes (cross-tab sync + custom events)
