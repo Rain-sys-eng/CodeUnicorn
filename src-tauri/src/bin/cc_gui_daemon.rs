@@ -189,6 +189,36 @@ mod session_index {
             Ok(Vec::new())
         }
     }
+
+    // tombstone_filter no-op：daemon 无本地 index，过滤器恒空（与桌面端
+    // fail-open 语义一致，共享的 session_management 出口过滤编译可用）。
+    pub(crate) mod tombstone_filter {
+        #[derive(Debug, Default)]
+        pub(crate) struct TombstoneFilter;
+
+        impl TombstoneFilter {
+            pub(crate) fn load_fail_open() -> Self {
+                Self
+            }
+
+            pub(crate) fn is_empty(&self) -> bool {
+                true
+            }
+
+            pub(crate) fn is_tombstoned(&self, _engine: &str, _session_id: &str) -> bool {
+                false
+            }
+
+            #[allow(dead_code)]
+            pub(crate) fn retain<T>(
+                &self,
+                _engine: &str,
+                _sessions: &mut Vec<T>,
+                _id_of: impl Fn(&T) -> &str,
+            ) {
+            }
+        }
+    }
 }
 
 #[allow(dead_code)]
