@@ -1565,13 +1565,45 @@ pub(crate) fn grok_home_fingerprint() -> String {
 }
 
 pub(crate) fn opencode_source_fingerprint(workspace_path: &Path) -> String {
-    // OpenCode has no durable local index file we control; use wall-clock bucket
-    // so soft re-sync can refresh without force while still de-duping storms.
-    let bucket = now_ms_fallback() / 15_000;
+    // Fingerprint the OpenCode datastore (opencode.db) mtime so a workspace
+    // with no opencode sessions (or an idle opencode) stays fresh and is not
+    // re-scanned every list. Falls back to the data-root mtime when no db
+    // exists yet. This replaces the old wall-clock bucket, which made the
+    // source never fresh and forced a 2s CLI probe on every single query.
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Some(home) = std::env::var_os("OPENCODE_HOME") {
+        roots.push(PathBuf::from(home));
+    }
+    if let Some(data_home) = dirs::data_local_dir() {
+        roots.push(data_home.join("opencode"));
+    }
+    if let Some(data_dir) = dirs::data_dir() {
+        roots.push(data_dir.join("opencode"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        roots.push(home.join(".local").join("share").join("opencode"));
+    }
+    roots.push(workspace_path.join(".opencode"));
+    let mut deduped: Vec<PathBuf> = Vec::new();
+    for root in roots {
+        if !deduped.contains(&root) {
+            deduped.push(root);
+        }
+    }
+    let db_fingerprint = deduped
+        .iter()
+        .map(|root| root.join("opencode.db"))
+        .find(|db| db.exists())
+        .map(|db| mtime_fingerprint(&db));
+    let root_fingerprint = deduped
+        .iter()
+        .find(|root| root.exists())
+        .map(|root| mtime_fingerprint(root));
     format!(
-        "opencode:{}:{}",
+        "opencode:{}:{}:{}",
         normalize_path_key(&workspace_path.to_string_lossy()),
-        bucket
+        db_fingerprint.unwrap_or_else(|| "0:0".to_string()),
+        root_fingerprint.unwrap_or_else(|| "0:0".to_string()),
     )
 }
 

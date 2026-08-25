@@ -584,6 +584,20 @@ async fn sync_opencode_engine(
         Err(_) => (Vec::new(), Some("opencode-sync-timeout".into())),
     };
 
+    // 引擎隔离边界：CLI 失败（timeout / unavailable / error）时不 commit，
+    // 让 opencode 源保持上次状态，不 invalidate 自己——否则 workspace 级
+    // workspace_index_sources_invalidated 会命中失效源，每次 list 都连坐
+    // 触发全引擎磁盘扫描。仅 CLI 正常返回（含确认无 session 的空结果）时
+    // commit，把「权威空」落成 fresh，之后 skip 不再反复探测。
+    if partial.is_some() {
+        return WriterResult {
+            upserted: 0,
+            engines: vec!["opencode".into()],
+            partial_source: partial,
+            skipped_fresh: false,
+        };
+    }
+
     tokio::task::spawn_blocking(move || {
         let connection = open_connection()?;
         commit_engine_rows(
