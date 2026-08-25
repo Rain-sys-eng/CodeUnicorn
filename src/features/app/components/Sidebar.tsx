@@ -2447,35 +2447,33 @@ function SidebarImpl({
             viewportRef={sidebarBodyRef}
           >
             {pinnedThreadRows.length > 0 && (
-              <div className="pinned-section sidebar-pinned-section">
-                <PinnedThreadList
-                  rows={pinnedThreadRows}
-                  activeWorkspaceId={activeWorkspaceId}
-                  activeThreadId={activeThreadId}
-                  systemProxyEnabled={systemProxyEnabled}
-                  systemProxyUrl={systemProxyUrl}
-                  showProviderLabels={showProviderLabels}
-                  threadStatusById={threadStatusById}
-                  moveFolderTargetsByWorkspaceId={moveFolderTargetsByWorkspaceId}
-                  getThreadTime={getThreadTime}
-                  isThreadPinned={isThreadPinned}
-                  isThreadAutoNaming={isThreadAutoNaming}
-                  onToggleThreadPin={handleToggleThreadPin}
-                  onSelectThread={onSelectThread}
-                  onShowThreadMenu={showThreadMenu}
-                  deleteConfirmThreadId={deleteConfirmThreadId}
-                  deleteConfirmWorkspaceId={deleteConfirmWorkspaceId}
-                  deleteConfirmBusy={deleteConfirmBusy}
-                  onCancelDeleteConfirm={onCancelDeleteConfirm}
-                  onConfirmDeleteConfirm={onConfirmDeleteConfirm}
-                  renameThreadId={renameThreadId}
-                  renameWorkspaceId={renameWorkspaceId}
-                  renameName={renameName}
-                  onRenameChange={onRenameChange}
-                  onRenameCancel={onRenameCancel}
-                  onRenameConfirm={onRenameConfirm}
-                />
-              </div>
+              <PinnedThreadList
+                rows={pinnedThreadRows}
+                activeWorkspaceId={activeWorkspaceId}
+                activeThreadId={activeThreadId}
+                systemProxyEnabled={systemProxyEnabled}
+                systemProxyUrl={systemProxyUrl}
+                showProviderLabels={showProviderLabels}
+                threadStatusById={threadStatusById}
+                moveFolderTargetsByWorkspaceId={moveFolderTargetsByWorkspaceId}
+                getThreadTime={getThreadTime}
+                isThreadPinned={isThreadPinned}
+                isThreadAutoNaming={isThreadAutoNaming}
+                onToggleThreadPin={handleToggleThreadPin}
+                onSelectThread={onSelectThread}
+                onShowThreadMenu={showThreadMenu}
+                deleteConfirmThreadId={deleteConfirmThreadId}
+                deleteConfirmWorkspaceId={deleteConfirmWorkspaceId}
+                deleteConfirmBusy={deleteConfirmBusy}
+                onCancelDeleteConfirm={onCancelDeleteConfirm}
+                onConfirmDeleteConfirm={onConfirmDeleteConfirm}
+                renameThreadId={renameThreadId}
+                renameWorkspaceId={renameWorkspaceId}
+                renameName={renameName}
+                onRenameChange={onRenameChange}
+                onRenameCancel={onRenameCancel}
+                onRenameConfirm={onRenameConfirm}
+              />
             )}
             <div className="sidebar-section-header">
               <div className="sidebar-section-title">

@@ -293,7 +293,8 @@ const ThreadRowItem = memo(function ThreadRowItem({
   const rowClassName = `thread-row ${isActiveThread ? "active" : ""}${
     isDeleteConfirmOpen ? " has-delete-confirm" : ""
   }${isRenaming ? " is-renaming" : ""}${canPin ? " has-pin-toggle" : ""}${
-    hasChildren ? " has-child-threads" : ""
+    isPinned ? " is-pinned-thread" : ""
+  }${hasChildren ? " has-child-threads" : ""
   }${isSubagentParent ? " is-subagent-parent" : ""}${
     isActiveSubagentParent ? " is-active-subagent-parent" : ""
   }${isSubagentThread ? " is-subagent" : ""}${

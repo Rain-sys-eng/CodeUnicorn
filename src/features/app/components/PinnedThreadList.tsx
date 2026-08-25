@@ -3,7 +3,6 @@ import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
-import Pin from "lucide-react/dist/esm/icons/pin";
 
 import type { ThreadSummary } from "../../../types";
 import { usePinnedSectionFold } from "../hooks/usePinnedSectionFold";
@@ -156,7 +155,6 @@ export function PinnedThreadList({
         }
         onClick={toggleSection}
       >
-        <Pin size={12} className="sidebar-pinned-section-icon" aria-hidden />
         <span className="sidebar-section-title sidebar-pinned-section-label">
           {t("sidebar.pinned")}
           <span className="sidebar-pinned-section-count">
@@ -177,88 +175,90 @@ export function PinnedThreadList({
           />
         )}
       </button>
-      {isSectionExpanded
-        ? dayGroups.map((dayGroup) => {
-        const dayOpen = isDayExpanded(dayGroup.dateKey, latestDateKey);
-        return (
-          <div
-            key={dayGroup.dateKey}
-            className="sidebar-pinned-day"
-            data-sidebar-pinned-day={dayGroup.dateKey}
-          >
-            <button
-              type="button"
-              className={`sidebar-section-header sidebar-pinned-day-header${
-                dayOpen ? "" : " is-collapsed"
-              }`}
-              data-sidebar-pinned-day-header={dayGroup.dateKey}
-              aria-expanded={dayOpen}
-              aria-label={
-                dayOpen
-                  ? t("sidebar.collapsePinnedDay", {
-                      date: dayGroup.dateKey,
-                    })
-                  : t("sidebar.expandPinnedDay", {
-                      date: dayGroup.dateKey,
-                    })
-              }
-              onClick={() => toggleDay(dayGroup.dateKey, latestDateKey)}
-            >
-              <span className="sidebar-section-title sidebar-pinned-day-label">
-                {dayGroup.dateKey}
-              </span>
-            </button>
-            {dayOpen
-              ? dayGroup.workspaceRuns.map((run) => (
-                  <ThreadList
-                    key={`${dayGroup.dateKey}:${run.key}`}
-                    workspaceId={run.workspaceId}
-                    workspacePath={run.workspacePath}
-                    pinnedRows={run.rows}
-                    unpinnedRows={[]}
-                    totalThreadRoots={run.rootCount}
-                    visibleThreadRootCount={run.rootCount}
-                    isExpanded
-                    nextCursor={null}
-                    isPaging={false}
-                    showPagingControls={false}
-                    listClassName="pinned-thread-list"
-                    moveFolderTargets={
-                      moveFolderTargetsByWorkspaceId[run.workspaceId]
-                    }
-                    activeWorkspaceId={activeWorkspaceId}
-                    activeThreadId={activeThreadId}
-                    systemProxyEnabled={systemProxyEnabled}
-                    systemProxyUrl={systemProxyUrl}
-                    showProviderLabels={showProviderLabels}
-                    threadStatusById={threadStatusById}
-                    getThreadTime={getThreadTime}
-                    isThreadPinned={isThreadPinned}
-                    isThreadAutoNaming={isThreadAutoNaming}
-                    onToggleThreadPin={onToggleThreadPin}
-                    onToggleExpanded={() => undefined}
-                    onLoadOlderThreads={() => undefined}
-                    onSelectThread={onSelectThread}
-                    onShowThreadMenu={onShowThreadMenu}
-                    deleteConfirmThreadId={deleteConfirmThreadId}
-                    deleteConfirmWorkspaceId={deleteConfirmWorkspaceId}
-                    deleteConfirmBusy={deleteConfirmBusy}
-                    onCancelDeleteConfirm={onCancelDeleteConfirm}
-                    onConfirmDeleteConfirm={onConfirmDeleteConfirm}
-                    renameThreadId={renameThreadId}
-                    renameWorkspaceId={renameWorkspaceId}
-                    renameName={renameName}
-                    onRenameChange={onRenameChange}
-                    onRenameCancel={onRenameCancel}
-                    onRenameConfirm={onRenameConfirm}
-                    onThreadRowRender={onPinnedThreadRowRender}
-                  />
-                ))
-              : null}
-          </div>
-        );
-          })
-        : null}
+      {isSectionExpanded ? (
+        <div className="pinned-section sidebar-pinned-section">
+          {dayGroups.map((dayGroup) => {
+            const dayOpen = isDayExpanded(dayGroup.dateKey, latestDateKey);
+            return (
+              <div
+                key={dayGroup.dateKey}
+                className="sidebar-pinned-day"
+                data-sidebar-pinned-day={dayGroup.dateKey}
+              >
+                <button
+                  type="button"
+                  className={`sidebar-section-header sidebar-pinned-day-header${
+                    dayOpen ? "" : " is-collapsed"
+                  }`}
+                  data-sidebar-pinned-day-header={dayGroup.dateKey}
+                  aria-expanded={dayOpen}
+                  aria-label={
+                    dayOpen
+                      ? t("sidebar.collapsePinnedDay", {
+                          date: dayGroup.dateKey,
+                        })
+                      : t("sidebar.expandPinnedDay", {
+                          date: dayGroup.dateKey,
+                        })
+                  }
+                  onClick={() => toggleDay(dayGroup.dateKey, latestDateKey)}
+                >
+                  <span className="sidebar-section-title sidebar-pinned-day-label">
+                    {dayGroup.dateKey}
+                  </span>
+                </button>
+                {dayOpen
+                  ? dayGroup.workspaceRuns.map((run) => (
+                      <ThreadList
+                        key={`${dayGroup.dateKey}:${run.key}`}
+                        workspaceId={run.workspaceId}
+                        workspacePath={run.workspacePath}
+                        pinnedRows={run.rows}
+                        unpinnedRows={[]}
+                        totalThreadRoots={run.rootCount}
+                        visibleThreadRootCount={run.rootCount}
+                        isExpanded
+                        nextCursor={null}
+                        isPaging={false}
+                        showPagingControls={false}
+                        listClassName="pinned-thread-list"
+                        moveFolderTargets={
+                          moveFolderTargetsByWorkspaceId[run.workspaceId]
+                        }
+                        activeWorkspaceId={activeWorkspaceId}
+                        activeThreadId={activeThreadId}
+                        systemProxyEnabled={systemProxyEnabled}
+                        systemProxyUrl={systemProxyUrl}
+                        showProviderLabels={showProviderLabels}
+                        threadStatusById={threadStatusById}
+                        getThreadTime={getThreadTime}
+                        isThreadPinned={isThreadPinned}
+                        isThreadAutoNaming={isThreadAutoNaming}
+                        onToggleThreadPin={onToggleThreadPin}
+                        onToggleExpanded={() => undefined}
+                        onLoadOlderThreads={() => undefined}
+                        onSelectThread={onSelectThread}
+                        onShowThreadMenu={onShowThreadMenu}
+                        deleteConfirmThreadId={deleteConfirmThreadId}
+                        deleteConfirmWorkspaceId={deleteConfirmWorkspaceId}
+                        deleteConfirmBusy={deleteConfirmBusy}
+                        onCancelDeleteConfirm={onCancelDeleteConfirm}
+                        onConfirmDeleteConfirm={onConfirmDeleteConfirm}
+                        renameThreadId={renameThreadId}
+                        renameWorkspaceId={renameWorkspaceId}
+                        renameName={renameName}
+                        onRenameChange={onRenameChange}
+                        onRenameCancel={onRenameCancel}
+                        onRenameConfirm={onRenameConfirm}
+                        onThreadRowRender={onPinnedThreadRowRender}
+                      />
+                    ))
+                  : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

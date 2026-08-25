@@ -2146,11 +2146,6 @@
   );
 }
 
-.sidebar-pinned-section-icon {
-  color: var(--text-faint);
-  flex-shrink: 0;
-}
-
 .sidebar-pinned-section-count {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
@@ -2413,7 +2408,8 @@
 }
 
 .workspace-session-folder-children .thread-row.has-pin-toggle:hover,
-.workspace-session-folder-children .thread-row.has-pin-toggle:focus-within {
+.workspace-session-folder-children .thread-row.has-pin-toggle:focus-within,
+.workspace-session-folder-children .thread-row.has-pin-toggle.is-pinned-thread {
   padding-left: calc(16px + var(--thread-indent, 0px));
 }
 
@@ -2578,9 +2574,11 @@
 }
 
 /* Pin 图标仅在悬停/聚焦时淡入，左侧留白也随之腾出；
-   平时保持紧凑，不为按钮预留固定的一列空间 */
+   平时保持紧凑，不为按钮预留固定的一列空间。
+   例外：已置顶会话 pin 图标常亮（.is-pinned-thread），行首留白与悬停态一致。 */
 .thread-row.has-pin-toggle:hover,
-.thread-row.has-pin-toggle:focus-within {
+.thread-row.has-pin-toggle:focus-within,
+.thread-row.has-pin-toggle.is-pinned-thread {
   padding-left: calc(20px + var(--thread-indent, 0px));
 }
 
@@ -2699,7 +2697,8 @@
 }
 
 .thread-row:hover .thread-pin-toggle,
-.thread-row:focus-within .thread-pin-toggle {
+.thread-row:focus-within .thread-pin-toggle,
+.thread-pin-toggle.is-pinned {
   opacity: 1;
   pointer-events: auto;
 }

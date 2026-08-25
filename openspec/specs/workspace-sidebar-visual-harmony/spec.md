@@ -392,13 +392,20 @@
 
 ### Requirement: Thread Pin Toggle Interaction MUST Be Hover-Revealed and Non-Disruptive
 
-根线程行的 pin/unpin 入口 MUST 在悬停或键盘聚焦时显示，且 pin 操作不得误触发线程切换。置顶拆分为互斥的 `global` 与 `workspace` 两个作用域后，hover pin 图标在会话未置顶时点击 MUST 弹出包含「置顶到全局」「置顶到项目内」两个选项的作用域菜单；会话已置顶（任一作用域）时点击 MUST 直接取消当前作用域的置顶。
+根线程行的 pin/unpin 入口 MUST 在悬停或键盘聚焦时显示，且 pin 操作不得误触发线程切换。例外：会话已置顶（任一作用域）时，pin 图标 MUST 常亮显示（不依赖悬停/聚焦），行首留白 MUST 与悬停态一致；未置顶会话保持仅悬停/聚焦淡入。置顶拆分为互斥的 `global` 与 `workspace` 两个作用域后，hover pin 图标在会话未置顶时点击 MUST 弹出包含「置顶到全局」「置顶到项目内」两个选项的作用域菜单；会话已置顶（任一作用域）时点击 MUST 直接取消当前作用域的置顶。
 
 #### Scenario: root thread rows reveal pin toggle on hover/focus only
 
 - **WHEN** 用户悬停或聚焦根线程行
 - **THEN** 系统 MUST 显示图钉切换入口
 - **AND** 非根线程行 MUST NOT 显示该入口
+
+#### Scenario: pinned thread rows keep the pin toggle always visible
+
+- **WHEN** 根线程行对应会话已置顶（全局或项目内）且用户未悬停/聚焦该行
+- **THEN** 图钉切换入口 MUST 保持可见且可点击
+- **AND** 行首留白 MUST 与悬停态一致，文本不得与图标重叠
+- **AND** 取消置顶后该行 MUST 恢复仅悬停/聚焦淡入
 
 #### Scenario: clicking pin toggle on an unpinned thread opens the scope menu
 

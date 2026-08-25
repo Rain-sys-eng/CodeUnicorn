@@ -363,10 +363,13 @@ describe("PinnedThreadList", () => {
       throw new Error("Missing pinned row");
     }
     expect(row.classList.contains("active")).toBe(true);
+    expect(row.classList.contains("is-pinned-thread")).toBe(true);
     expect(row.querySelector(".thread-status")?.className).toContain(
       "reviewing",
     );
-    expect(row.querySelector(".thread-pin-toggle")).toBeTruthy();
+    const pinToggle = row.querySelector(".thread-pin-toggle");
+    expect(pinToggle).toBeTruthy();
+    expect(pinToggle?.classList.contains("is-pinned")).toBe(true);
 
     fireEvent.click(row);
     expect(onSelectThread).toHaveBeenCalledWith("ws-1", "thread-1");
