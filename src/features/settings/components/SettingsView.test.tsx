@@ -1559,10 +1559,14 @@ describe("SettingsView Display", () => {
     resetClientStorageForTests();
     renderDisplaySection();
 
-    const toggle = screen.getByRole("switch", { name: "Top session tabs" });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    // 默认开启（"开启顶部tab" radio active）
+    const showRadio = screen.getByRole("radio", { name: "Show top tabs" });
+    const hideRadio = screen.getByRole("radio", { name: "Hide top tabs" });
+    expect(showRadio.getAttribute("aria-checked")).toBe("true");
+    expect(hideRadio.getAttribute("aria-checked")).toBe("false");
 
-    fireEvent.click(toggle);
+    // 切到关闭
+    fireEvent.click(hideRadio);
 
     await waitFor(() => {
       expect(writeClientStoreValue).toHaveBeenCalledWith(
@@ -1574,9 +1578,11 @@ describe("SettingsView Display", () => {
         { immediate: true },
       );
     });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(hideRadio.getAttribute("aria-checked")).toBe("true");
+    expect(showRadio.getAttribute("aria-checked")).toBe("false");
 
-    fireEvent.click(toggle);
+    // 切回开启
+    fireEvent.click(showRadio);
 
     await waitFor(() => {
       expect(writeClientStoreValue).toHaveBeenCalledWith(
@@ -1588,7 +1594,8 @@ describe("SettingsView Display", () => {
         { immediate: true },
       );
     });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(showRadio.getAttribute("aria-checked")).toBe("true");
+    expect(hideRadio.getAttribute("aria-checked")).toBe("false");
   });
 
   it("updates user message color using reference-compatible format", async () => {
@@ -2101,12 +2108,16 @@ describe("SettingsView Display", () => {
 
     // 外观页：开关位于「顶部会话页签」行正上方（即布局切换之下）。
     const topTabsRow = screen.getByTestId("settings-top-session-tabs");
-    const toggle = screen.getByRole("switch", { name: "Minimal Transcript" });
-    const toggleRow = toggle.closest(".settings-pref-row") as HTMLElement | null;
+    const minimalRadio = screen.getByRole("radio", { name: "Minimal" });
+    const normalRadio = screen.getByRole("radio", { name: "Normal" });
+    const toggleRow = minimalRadio.closest(".settings-pref-row") as HTMLElement | null;
     if (!toggleRow) {
       throw new Error("Expected minimal transcript row");
     }
     expect(toggleRow.nextElementSibling).toBe(topTabsRow);
+    // 默认值为极简模式（true），极简 radio active
+    expect(minimalRadio.getAttribute("aria-checked")).toBe("true");
+    expect(normalRadio.getAttribute("aria-checked")).toBe("false");
 
     const events: Array<boolean | undefined> = [];
     const listener = (event: Event) => {
@@ -2116,11 +2127,14 @@ describe("SettingsView Display", () => {
       );
     };
     window.addEventListener("ccgui:messages-live-controls-updated", listener);
-    fireEvent.click(toggle);
+    // 切到常规模式
+    fireEvent.click(normalRadio);
     window.removeEventListener("ccgui:messages-live-controls-updated", listener);
 
-    expect(window.localStorage.getItem("ccgui.messages.minimalTranscript")).toBe("1");
-    expect(events).toEqual([true]);
+    expect(window.localStorage.getItem("ccgui.messages.minimalTranscript")).toBe(
+      "0",
+    );
+    expect(events).toEqual([false]);
     window.localStorage.removeItem("ccgui.messages.minimalTranscript");
   });
 

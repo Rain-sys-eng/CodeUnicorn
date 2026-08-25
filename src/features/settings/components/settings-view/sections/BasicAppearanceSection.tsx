@@ -400,7 +400,7 @@ export function BasicAppearanceSection({
   const { t } = useTranslation();
   const clientUiVisibility = useClientUiVisibility();
   const [minimalTranscriptEnabled, setMinimalTranscriptEnabled] = useState(() =>
-    readLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, false),
+    readLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, true),
   );
   const handleToggleMinimalTranscript = useCallback((checked: boolean) => {
     writeLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, checked);
@@ -1132,7 +1132,7 @@ export function BasicAppearanceSection({
           </div>
         </div>
 
-        {/* 幕布极简展示 */}
+        {/* 幕布展示模式：常规 / 极简 */}
         <div className="settings-pref-row">
           <div className="settings-pref-meta">
             <div className="settings-pref-title">
@@ -1142,12 +1142,33 @@ export function BasicAppearanceSection({
               {t("settings.minimalTranscriptDesc")}
             </div>
           </div>
-          <div className="settings-pref-control">
-            <Switch
-              checked={minimalTranscriptEnabled}
-              onCheckedChange={handleToggleMinimalTranscript}
-              aria-label={t("settings.minimalTranscript")}
-            />
+          <div
+            className="settings-pref-control settings-pref-segmented settings-pref-segmented--pair"
+            role="radiogroup"
+            aria-label={t("settings.minimalTranscript")}
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!minimalTranscriptEnabled}
+              className={`settings-pref-segment ${
+                !minimalTranscriptEnabled ? "is-active" : ""
+              }`}
+              onClick={() => handleToggleMinimalTranscript(false)}
+            >
+              <span>{t("settings.minimalTranscriptNormal")}</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={minimalTranscriptEnabled}
+              className={`settings-pref-segment ${
+                minimalTranscriptEnabled ? "is-active" : ""
+              }`}
+              onClick={() => handleToggleMinimalTranscript(true)}
+            >
+              <span>{t("settings.minimalTranscriptMinimal")}</span>
+            </button>
           </div>
         </div>
 
@@ -1163,14 +1184,41 @@ export function BasicAppearanceSection({
               {t("settings.clientUiVisibility.panelDescriptions.topSessionTabs")}
             </div>
           </div>
-          <div className="settings-pref-control">
-            <Switch
-              checked={clientUiVisibility.isPanelVisible("topSessionTabs")}
-              aria-label={t("settings.clientUiVisibility.panels.topSessionTabs")}
-              onCheckedChange={(checked) =>
-                clientUiVisibility.setPanelVisible("topSessionTabs", checked)
+          <div
+            className="settings-pref-control settings-pref-segmented settings-pref-segmented--pair"
+            role="radiogroup"
+            aria-label={t("settings.clientUiVisibility.panels.topSessionTabs")}
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!clientUiVisibility.isPanelVisible("topSessionTabs")}
+              className={`settings-pref-segment ${
+                !clientUiVisibility.isPanelVisible("topSessionTabs")
+                  ? "is-active"
+                  : ""
+              }`}
+              onClick={() =>
+                clientUiVisibility.setPanelVisible("topSessionTabs", false)
               }
-            />
+            >
+              <span>{t("settings.topSessionTabsHide")}</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={clientUiVisibility.isPanelVisible("topSessionTabs")}
+              className={`settings-pref-segment ${
+                clientUiVisibility.isPanelVisible("topSessionTabs")
+                  ? "is-active"
+                  : ""
+              }`}
+              onClick={() =>
+                clientUiVisibility.setPanelVisible("topSessionTabs", true)
+              }
+            >
+              <span>{t("settings.topSessionTabsShow")}</span>
+            </button>
           </div>
         </div>
 

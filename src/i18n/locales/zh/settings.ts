@@ -511,6 +511,10 @@ const settings = {
     minimalTranscript: "极简展示",
     minimalTranscriptDesc:
       "开启后，已完成的回复只保留最终答案，思考、工具调用与中间说明折叠成一条可展开的摘要。",
+    minimalTranscriptNormal: "常规模式",
+    minimalTranscriptMinimal: "极简模式",
+    topSessionTabsHide: "关闭顶部tab",
+    topSessionTabsShow: "开启顶部tab",
     systemNotification: "系统通知",
     systemNotificationDesc: "会话完成时发送系统级通知。",
     testSound: "测试",
