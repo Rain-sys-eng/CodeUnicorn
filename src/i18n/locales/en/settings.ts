@@ -519,6 +519,10 @@ const settings = {
     minimalTranscript: "Minimal Transcript",
     minimalTranscriptDesc:
       "When on, completed replies show only the final answer — thinking, tool calls, and interim notes fold into a single expandable summary.",
+    minimalTranscriptNormal: "Normal",
+    minimalTranscriptMinimal: "Minimal",
+    topSessionTabsHide: "Hide top tabs",
+    topSessionTabsShow: "Show top tabs",
     systemNotification: "System Notifications",
     systemNotificationDesc:
       "Send system-level notifications when sessions complete.",
