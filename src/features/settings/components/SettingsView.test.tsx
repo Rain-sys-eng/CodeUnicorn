@@ -2095,6 +2095,35 @@ describe("SettingsView Display", () => {
     });
   });
 
+  it("toggles minimal transcript display", async () => {
+    window.localStorage.removeItem("ccgui.messages.minimalTranscript");
+    renderDisplaySection();
+
+    // 外观页：开关位于「顶部会话页签」行正上方（即布局切换之下）。
+    const topTabsRow = screen.getByTestId("settings-top-session-tabs");
+    const toggle = screen.getByRole("switch", { name: "Minimal Transcript" });
+    const toggleRow = toggle.closest(".settings-pref-row") as HTMLElement | null;
+    if (!toggleRow) {
+      throw new Error("Expected minimal transcript row");
+    }
+    expect(toggleRow.nextElementSibling).toBe(topTabsRow);
+
+    const events: Array<boolean | undefined> = [];
+    const listener = (event: Event) => {
+      events.push(
+        (event as CustomEvent<{ minimalTranscriptEnabled?: boolean }>).detail
+          ?.minimalTranscriptEnabled,
+      );
+    };
+    window.addEventListener("ccgui:messages-live-controls-updated", listener);
+    fireEvent.click(toggle);
+    window.removeEventListener("ccgui:messages-live-controls-updated", listener);
+
+    expect(window.localStorage.getItem("ccgui.messages.minimalTranscript")).toBe("1");
+    expect(events).toEqual([true]);
+    window.localStorage.removeItem("ccgui.messages.minimalTranscript");
+  });
+
   it("updates selected notification sound option", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({

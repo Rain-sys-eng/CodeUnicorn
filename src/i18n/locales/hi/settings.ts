@@ -444,6 +444,8 @@ const settings = {
     "modelMappingClear": "साफ़ करें",
     "modelMappingNote": "बदलाव मॉडल चयनकर्ता ड्रॉपडाउन में दिखाई देंगे।",
     "notificationSounds": "सूचना ध्वनियाँ",
+    "minimalTranscript": "मिनिमल व्यू",
+    "minimalTranscriptDesc": "चालू होने पर, पूर्ण उत्तर केवल अंतिम उत्तर दिखाते हैं; विचार, टूल कॉल और बीच की टिप्पणियाँ एक विस्तार-योग्य सारांश में समेटी जाती हैं।",
     "systemNotification": "सिस्टम सूचनाएँ",
     "systemNotificationDesc": "सत्र पूरा होने पर सिस्टम-स्तरीय सूचनाएँ भेजें।",
     "testSound": "परीक्षण",

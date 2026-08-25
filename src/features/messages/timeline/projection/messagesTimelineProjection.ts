@@ -33,6 +33,7 @@ export type TimelineProjectionRow =
         reasoningCount: number;
         toolCount: number;
         exploreCount: number;
+        proseCount?: number;
       };
       /** Insert drawer header immediately before this process item. */
       insertBeforeItemId: string;
@@ -104,6 +105,7 @@ export type TimelineProcessPhaseChip = {
     reasoningCount: number;
     toolCount: number;
     exploreCount: number;
+    proseCount?: number;
   };
   /** First process item of the phase (present only when expanded / remounted). */
   insertBeforeItemId: string;

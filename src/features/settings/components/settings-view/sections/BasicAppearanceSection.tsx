@@ -36,6 +36,12 @@ import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
 import type { LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
+  MESSAGES_LIVE_CONTROLS_UPDATED_EVENT,
+  MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY,
+  readLocalBooleanFlag,
+  writeLocalBooleanFlag,
+} from "@/live-canvas/liveCanvasControls";
+import {
   DEFAULT_OPEN_APP_ID,
   DEFAULT_OPEN_APP_TARGETS,
 } from "@/features/app/constants";
@@ -393,6 +399,20 @@ export function BasicAppearanceSection({
 }: BasicAppearanceSectionProps) {
   const { t } = useTranslation();
   const clientUiVisibility = useClientUiVisibility();
+  const [minimalTranscriptEnabled, setMinimalTranscriptEnabled] = useState(() =>
+    readLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, false),
+  );
+  const handleToggleMinimalTranscript = useCallback((checked: boolean) => {
+    writeLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, checked);
+    setMinimalTranscriptEnabled(checked);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(MESSAGES_LIVE_CONTROLS_UPDATED_EVENT, {
+          detail: { minimalTranscriptEnabled: checked },
+        }),
+      );
+    }
+  }, []);
   // Built-in open-app PNGs load lazily; show the generic glyph until cached.
   const knownOpenAppIconsLoaded = useKnownOpenAppIcons();
   const selectedOpenAppIconSrc = knownOpenAppIconsLoaded
@@ -1109,6 +1129,25 @@ export function BasicAppearanceSection({
             >
               <span>{t("settings.layoutModeSwapped")}</span>
             </button>
+          </div>
+        </div>
+
+        {/* 幕布极简展示 */}
+        <div className="settings-pref-row">
+          <div className="settings-pref-meta">
+            <div className="settings-pref-title">
+              {t("settings.minimalTranscript")}
+            </div>
+            <div className="settings-pref-desc">
+              {t("settings.minimalTranscriptDesc")}
+            </div>
+          </div>
+          <div className="settings-pref-control">
+            <Switch
+              checked={minimalTranscriptEnabled}
+              onCheckedChange={handleToggleMinimalTranscript}
+              aria-label={t("settings.minimalTranscript")}
+            />
           </div>
         </div>
 

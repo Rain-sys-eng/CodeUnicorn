@@ -304,6 +304,7 @@ const messages = {
     "middleStepsStatReasoning": "思考 {{count}} 次",
     "middleStepsStatTool": "工具調用 {{count}} 次",
     "middleStepsStatExplore": "探索 {{count}} 次",
+    "middleStepsStatNarration": "敘述 {{count}} 段",
     "middleStepsProcessedAria": "{{state}}過程摘要：{{detail}}",
     "middleStepsExpandAction": "展開",
     "middleStepsCollapseAction": "收起",

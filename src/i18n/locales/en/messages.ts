@@ -382,6 +382,7 @@ const messages = {
     middleStepsStatReasoning: "thinking {{count}}×",
     middleStepsStatTool: "tool calls {{count}}×",
     middleStepsStatExplore: "explore {{count}}×",
+    middleStepsStatNarration: "notes {{count}}×",
     middleStepsProcessedAria: "{{state}} process summary: {{detail}}",
     middleStepsExpandAction: "Expand",
     middleStepsCollapseAction: "Collapse",

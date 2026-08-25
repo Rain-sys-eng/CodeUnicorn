@@ -444,6 +444,8 @@ const settings = {
     "modelMappingClear": "クリア",
     "modelMappingNote": "変更はモデルセレクターのドロップダウンに反映されます。",
     "notificationSounds": "通知音",
+    "minimalTranscript": "ミニマル表示",
+    "minimalTranscriptDesc": "有効にすると、完了した返信は最終回答のみ表示し、思考・ツール呼び出し・途中の説明は展開可能な1件のサマリーに折りたたみます。",
     "systemNotification": "システム通知",
     "systemNotificationDesc": "セッション完了時にシステムレベルの通知を送信します。",
     "testSound": "テスト",

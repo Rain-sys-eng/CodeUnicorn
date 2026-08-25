@@ -444,6 +444,8 @@ const settings = {
     "modelMappingClear": "Effacer",
     "modelMappingNote": "Les modifications seront reflétées dans le menu déroulant de sélection du modèle.",
     "notificationSounds": "Sons de notification",
+    "minimalTranscript": "Affichage minimal",
+    "minimalTranscriptDesc": "Si activé, les réponses terminées n'affichent que la réponse finale ; la réflexion, les appels d'outils et les notes intermédiaires se replient en un résumé extensible.",
     "systemNotification": "Notifications système",
     "systemNotificationDesc": "Envoyer des notifications au niveau du système lorsque les sessions se terminent.",
     "testSound": "Tester",

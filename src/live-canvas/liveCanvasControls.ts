@@ -1,6 +1,9 @@
 export const MESSAGES_LIVE_AUTO_FOLLOW_FLAG_KEY = "ccgui.messages.live.autoFollow";
 export const MESSAGES_LIVE_COLLAPSE_MIDDLE_STEPS_FLAG_KEY =
   "ccgui.messages.live.collapseMiddleSteps";
+/** 极简展示：完成后把整段 turn 过程（含中间叙述 prose）折成单个 turn chip。 */
+export const MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY =
+  "ccgui.messages.minimalTranscript";
 export const MESSAGES_LIVE_CONTROLS_UPDATED_EVENT = "ccgui:messages-live-controls-updated";
 /** 发送消息当场强制幕布贴底（对齐 jetbrains useMessageSender 发送路径钉底）。 */
 export const MESSAGES_FORCE_PIN_BOTTOM_EVENT = "ccgui:messages-force-pin-bottom";

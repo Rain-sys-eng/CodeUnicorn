@@ -39,6 +39,7 @@ export type TimelineSnapshotModel = {
       reasoningCount: number;
       toolCount: number;
       exploreCount: number;
+      proseCount?: number;
     };
     insertBeforeItemId: string;
     collapsedAnchorItemId?: string;

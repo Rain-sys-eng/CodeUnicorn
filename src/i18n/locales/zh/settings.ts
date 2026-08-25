@@ -508,6 +508,9 @@ const settings = {
     modelMappingClear: "清除",
     modelMappingNote: "更改将反映在模型选择器下拉菜单中。",
     notificationSounds: "通知声音",
+    minimalTranscript: "极简展示",
+    minimalTranscriptDesc:
+      "开启后，已完成的回复只保留最终答案，思考、工具调用与中间说明折叠成一条可展开的摘要。",
     systemNotification: "系统通知",
     systemNotificationDesc: "会话完成时发送系统级通知。",
     testSound: "测试",

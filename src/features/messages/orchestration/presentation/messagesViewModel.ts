@@ -69,6 +69,8 @@ export type ProcessPhaseBreakdown = {
   reasoningCount: number;
   toolCount: number;
   exploreCount: number;
+  /** 极简展示 turn chip 统计：被折叠的中间叙述 prose 段数（默认模式恒 0）。 */
+  proseCount: number;
 };
 
 export type ProcessPhaseCollapse = {
@@ -156,7 +158,7 @@ function resolvePhaseBreakdown(
       exploreCount += 1;
     }
   }
-  return { reasoningCount, toolCount, exploreCount };
+  return { reasoningCount, toolCount, exploreCount, proseCount: 0 };
 }
 
 export function findItemById(items: ConversationItem[], itemId: string | null) {
@@ -473,11 +475,15 @@ export function resolveCollapsedTimelineItems(options: {
   isThinking?: boolean;
   latestAssistantMessageId?: string | null;
   latestReasoningId?: string | null;
+  /** 极简展示：已完成 turn 整段折叠为单个 turn chip（含中间叙述 prose）。 */
+  minimalTranscriptEnabled?: boolean;
   timelineSourceItems: ConversationItem[];
 }): CollapsedTimelineItemsResult {
   const {
     activeEngine,
     expandedPhaseKeys = new Set<string>(),
+    isThinking = false,
+    minimalTranscriptEnabled = false,
     timelineSourceItems,
   } = options;
   // Shell/command tools stay off the canvas permanently (not only when collapsed)
@@ -496,7 +502,31 @@ export function resolveCollapsedTimelineItems(options: {
   if (canvasItems.length <= 2) {
     return emptyCollapsedTimelineResult(canvasItems);
   }
+  if (minimalTranscriptEnabled) {
+    return resolveMinimalTranscriptCollapsedTimeline({
+      activeEngine,
+      canvasItems,
+      expandedPhaseKeys,
+      isThinking,
+    });
+  }
+  return collectProcessPhaseCollapsedTimeline({
+    activeEngine,
+    canvasItems,
+    expandedPhaseKeys,
+  });
+}
 
+/**
+ * 默认模式：per-phase 折叠（既有行为，逻辑逐行保持，仅从
+ * resolveCollapsedTimelineItems 原函数体平移）。
+ */
+function collectProcessPhaseCollapsedTimeline(options: {
+  activeEngine: MessagesEngine;
+  canvasItems: ConversationItem[];
+  expandedPhaseKeys: ReadonlySet<string>;
+}): CollapsedTimelineItemsResult {
+  const { activeEngine, canvasItems, expandedPhaseKeys } = options;
   const phases: ProcessPhaseCollapse[] = [];
   const unmountedItemIds = new Set<string>();
 
@@ -606,6 +636,128 @@ export function resolveCollapsedTimelineItems(options: {
     };
   }
 
+  return {
+    timelineItems: canvasItems.filter((item) => !unmountedItemIds.has(item.id)),
+    phases,
+  };
+}
+
+/**
+ * 极简展示：按 user 消息切 turn，把每个已完成 turn 的「过程 + 中间叙述 prose」
+ * 整段折叠为单个 turn chip，锚定在该 turn 最终回答 prose 上方（复用投影层
+ * `phaseByAssistantId` 折叠放置路径，投影零改动）。
+ * 尾部活跃 turn（isThinking）回落既有 per-phase 逻辑，保证流式实时可见。
+ */
+function resolveMinimalTranscriptCollapsedTimeline(options: {
+  activeEngine: MessagesEngine;
+  canvasItems: ConversationItem[];
+  expandedPhaseKeys: ReadonlySet<string>;
+  isThinking: boolean;
+}): CollapsedTimelineItemsResult {
+  const { activeEngine, canvasItems, expandedPhaseKeys, isThinking } = options;
+  const phases: ProcessPhaseCollapse[] = [];
+  const unmountedItemIds = new Set<string>();
+
+  const foldCompletedTurn = (segmentItems: ConversationItem[]) => {
+    if (segmentItems.length === 0) {
+      return;
+    }
+    const proseItems = segmentItems.filter(isAssistantMessageWithVisibleText);
+    if (proseItems.length === 0) {
+      // 无 prose turn（纯工具/错误收尾）：不折叠、不产空 chip。
+      return;
+    }
+    let finalAnchor = proseItems.at(-1);
+    for (let index = proseItems.length - 1; index >= 0; index -= 1) {
+      const candidate = proseItems[index];
+      if (candidate && candidate.kind === "message" && candidate.isFinal === true) {
+        finalAnchor = candidate;
+        break;
+      }
+    }
+    if (!finalAnchor) {
+      return;
+    }
+    // 只隐藏 process + 中间叙述 prose；其它类型（如系统提示）保持可见。
+    const hiddenItems = segmentItems.filter(
+      (item) =>
+        item.id !== finalAnchor.id &&
+        (isCollapsibleProcessItem(item) || isAssistantMessageWithVisibleText(item)),
+    );
+    if (hiddenItems.length === 0) {
+      return;
+    }
+    const hiddenProseItems = hiddenItems.filter(isAssistantMessageWithVisibleText);
+    const processItems = hiddenItems.filter(isCollapsibleProcessItem);
+    const count =
+      countRenderableCollapsedEntries(processItems, activeEngine) +
+      hiddenProseItems.length;
+    if (count < 1) {
+      return;
+    }
+    const firstHiddenItem = hiddenItems[0];
+    if (!firstHiddenItem) {
+      return;
+    }
+    const phaseKey = `turn:${finalAnchor.id}`;
+    const expanded = expandedPhaseKeys.has(phaseKey);
+    if (!expanded) {
+      for (const hiddenItem of hiddenItems) {
+        unmountedItemIds.add(hiddenItem.id);
+      }
+    }
+    phases.push({
+      phaseKey,
+      assistantItemId: finalAnchor.id,
+      insertBeforeItemId: firstHiddenItem.id,
+      count,
+      breakdown: {
+        ...resolvePhaseBreakdown(processItems, activeEngine),
+        proseCount: hiddenProseItems.length,
+      },
+      durationMs: resolvePhaseDurationMs(processItems),
+      expanded,
+      hiddenItemIds: hiddenItems.map((item) => item.id),
+    });
+  };
+
+  // 以 user 消息为边界切 turn；每个边界之前的 segment 都是已完成 turn。
+  let tailSegmentStart = 0;
+  for (let index = 0; index < canvasItems.length; index += 1) {
+    const item = canvasItems[index];
+    if (!item || !isUserMessageItem(item)) {
+      continue;
+    }
+    foldCompletedTurn(canvasItems.slice(tailSegmentStart, index));
+    tailSegmentStart = index + 1;
+  }
+
+  if (isThinking) {
+    // 活跃尾部 turn：回落 per-phase 实时折叠。slice 带上 preceding user 消息，
+    // 保证 trailing phase key 与默认模式一致（`trailing:<userId>`）。
+    const sliceStart = tailSegmentStart > 0 ? tailSegmentStart - 1 : 0;
+    const tailResult = collectProcessPhaseCollapsedTimeline({
+      activeEngine,
+      canvasItems: canvasItems.slice(sliceStart),
+      expandedPhaseKeys,
+    });
+    const mountedIds = new Set(tailResult.timelineItems.map((item) => item.id));
+    for (const item of canvasItems.slice(sliceStart)) {
+      if (!mountedIds.has(item.id)) {
+        unmountedItemIds.add(item.id);
+      }
+    }
+    phases.push(...tailResult.phases);
+  } else {
+    foldCompletedTurn(canvasItems.slice(tailSegmentStart));
+  }
+
+  if (phases.length === 0) {
+    return emptyCollapsedTimelineResult(canvasItems);
+  }
+  if (unmountedItemIds.size === 0) {
+    return { timelineItems: canvasItems, phases };
+  }
   return {
     timelineItems: canvasItems.filter((item) => !unmountedItemIds.has(item.id)),
     phases,

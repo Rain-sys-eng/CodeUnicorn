@@ -360,6 +360,7 @@ const messages = {
     middleStepsStatReasoning: "思考 {{count}} 次",
     middleStepsStatTool: "工具调用 {{count}} 次",
     middleStepsStatExplore: "探索 {{count}} 次",
+    middleStepsStatNarration: "叙述 {{count}} 段",
     middleStepsProcessedAria: "{{state}}过程摘要：{{detail}}",
     middleStepsExpandAction: "展开",
     middleStepsCollapseAction: "收起",

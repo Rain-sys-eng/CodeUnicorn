@@ -444,6 +444,8 @@ const settings = {
     "modelMappingClear": "清除",
     "modelMappingNote": "變更將反映在模型選擇下拉選單中。",
     "notificationSounds": "通知音效",
+    "minimalTranscript": "極簡展示",
+    "minimalTranscriptDesc": "開啟後，已完成的回覆只保留最終答案，思考、工具呼叫與中間說明摺疊成一條可展開的摘要。",
     "systemNotification": "系統通知",
     "systemNotificationDesc": "工作階段完成時傳送系統層級通知。",
     "testSound": "測試",

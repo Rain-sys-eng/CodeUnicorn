@@ -516,6 +516,9 @@ const settings = {
     modelMappingNote:
       "Changes will be reflected in the model selector dropdown.",
     notificationSounds: "Notification Sounds",
+    minimalTranscript: "Minimal Transcript",
+    minimalTranscriptDesc:
+      "When on, completed replies show only the final answer — thinking, tool calls, and interim notes fold into a single expandable summary.",
     systemNotification: "System Notifications",
     systemNotificationDesc:
       "Send system-level notifications when sessions complete.",

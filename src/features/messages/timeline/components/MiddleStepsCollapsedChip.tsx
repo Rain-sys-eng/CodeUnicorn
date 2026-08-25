@@ -6,6 +6,8 @@ type ProcessPhaseBreakdown = {
   reasoningCount: number;
   toolCount: number;
   exploreCount: number;
+  /** 极简展示 turn chip：被折叠的中间叙述 prose 段数。 */
+  proseCount?: number;
 };
 
 type MiddleStepsCollapsedChipProps = {
@@ -40,6 +42,11 @@ export const MiddleStepsCollapsedChip = memo(function MiddleStepsCollapsedChip({
     }
     if (breakdown.exploreCount > 0) {
       stats.push(t("messages.middleStepsStatExplore", { count: breakdown.exploreCount }));
+    }
+    if ((breakdown.proseCount ?? 0) > 0) {
+      stats.push(
+        t("messages.middleStepsStatNarration", { count: breakdown.proseCount }),
+      );
     }
     // Fallback when kinds were filtered but a phase still exists.
     if (stats.length === 0 && count > 0) {
