@@ -636,17 +636,6 @@ function collectPerPhaseCollapsedInto(options: {
       });
     }
   }
-
-  if (phases.length === 0) {
-    return emptyCollapsedTimelineResult(canvasItems);
-  }
-
-  if (unmountedItemIds.size === 0) {
-    return {
-      timelineItems: canvasItems,
-      phases,
-    };
-  }
 }
 
 /**
@@ -668,6 +657,17 @@ function collectProcessPhaseCollapsedTimeline(options: {
     phases,
     unmountedItemIds,
   });
+
+  if (phases.length === 0) {
+    return emptyCollapsedTimelineResult(canvasItems);
+  }
+
+  if (unmountedItemIds.size === 0) {
+    return {
+      timelineItems: canvasItems,
+      phases,
+    };
+  }
 
   return {
     timelineItems: canvasItems.filter((item) => !unmountedItemIds.has(item.id)),
