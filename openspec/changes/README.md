@@ -4,7 +4,7 @@
 
 - Updated At: `2026-08-25`
 - Active proposals: `51`（以磁盘 `openspec/changes/*` 为准）
-- Archived proposals: `916`
+- Archived proposals: `917`
 - Main capability specs: `539`
 
 ## Active Proposals

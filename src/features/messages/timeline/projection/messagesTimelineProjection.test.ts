@@ -211,6 +211,79 @@ describe("messagesTimelineProjection", () => {
     });
   });
 
+  it("renders same-anchor chips in phases order (outer header above inner)", () => {
+    // 极简模式外层 turn chip 展开 + 内层 trailing chip 同锚第一个可见 entry：
+    // 两个 header 都要渲染，外层在上。
+    const entries = groupToolItems([
+      {
+        id: "tool-a",
+        kind: "tool",
+        toolType: "fileRead",
+        title: "Read a.ts",
+        detail: "a.ts",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "tool-b",
+        kind: "tool",
+        toolType: "toolCall",
+        title: "Tool: Grep",
+        detail: "pattern",
+        status: "completed",
+        output: "",
+      },
+    ]);
+    const rows = buildTimelineProjectionRows({
+      activeUserInputAnchorItemId: null,
+      approvalVisible: false,
+      claudeDockedReasoningItemIds: [],
+      processPhaseChips: [
+        {
+          phaseKey: "liveturn:u1",
+          count: 8,
+          expanded: true,
+          durationMs: 63_000,
+          breakdown: { reasoningCount: 2, toolCount: 6, exploreCount: 0 },
+          insertBeforeItemId: "tool-a",
+          assistantItemId: "liveturn:u1",
+          hiddenItemIds: ["tool-a", "tool-b"],
+        },
+        {
+          phaseKey: "trailing:start",
+          count: 5,
+          expanded: false,
+          durationMs: 40_000,
+          breakdown: { reasoningCount: 0, toolCount: 5, exploreCount: 0 },
+          insertBeforeItemId: "tool-x",
+          assistantItemId: "trailing:start",
+          collapsedAnchorItemId: "tool-a",
+          hiddenItemIds: ["tool-x"],
+        },
+      ],
+      effectiveItemsCount: 2,
+      groupedEntries: entries,
+      hasVisibleUserInputRequest: false,
+      hiddenClaudeReasoningOnly: false,
+      historyRecoveryFailureVisible: false,
+      isHistoryLoading: false,
+      isThinking: true,
+      shouldRenderUserInputAtTail: false,
+    });
+
+    const chipRows = rows.filter((row) => row.kind === "liveMiddleCollapsed");
+    expect(chipRows.map((row) => row.phaseKey)).toEqual([
+      "liveturn:u1",
+      "trailing:start",
+    ]);
+    const firstToolIndex = rows.findIndex(
+      (row) => row.kind === "entry" && row.itemIds.includes("tool-a"),
+    );
+    // 两个 header 都落在第一个可见 entry 之前，外层 chip 在上。
+    expect(rows[firstToolIndex - 2]?.kind).toBe("liveMiddleCollapsed");
+    expect(rows[firstToolIndex - 1]?.kind).toBe("liveMiddleCollapsed");
+  });
+
   it("parks a collapsed chip above each assistant segment", () => {
     const entries = groupToolItems([
       {
