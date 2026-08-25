@@ -15,6 +15,7 @@
 - renderer 生产代码调用 native `alert()` / `window.alert()`；错误反馈必须使用 application-owned Error Toast 或 domain dialog。
 - 复制粘贴相似逻辑，不做 reuse 评估。
 - 修改大样式文件不跑 large-file 检查。
+- 对未确认 prettier-clean 的前端文件直接 `npx prettier --write`（仓库无 prettier 配置，见下「Frontend Format」）。
 - 在核心流程里随意引入 `any`。
 - 禁止直接 `JSON.parse()` raw model output，例如 `response.text`、AI helper result、assistant final text；必须先走 shared structured-output normalization。
 
@@ -28,6 +29,15 @@
 - 关键行为变更必须补 tests 或 contract check。
 - 图标按钮 tooltip 激活后必须能关闭，禁止留下悬浮残影。
 - 动态创建 Tauri `WebviewWindow` 时，window label pattern 必须同步覆盖 `src-tauri/capabilities/*.json`，并用 contract test 锁定；DOM `data-tauri-drag-region` 只解决命中区域，不会自动授予动态窗口权限。
+
+## Frontend Format（Prettier）
+
+仓库未接入 Prettier：无 `.prettierrc*` 配置、`package.json` 无 format 脚本（2026-08-25 核实）。因此 `npx prettier --write` 会按**默认配置**重排整个文件，与既有风格不一致：
+
+- 禁止对未确认 prettier-clean 的 ts / tsx / css 文件直接 `npx prettier --write <file>`。实例：2026-08-25 对 `Sidebar.tsx` 跑一次 write 产生 1437 行无关重排 diff，差点混入业务提交，已 `git checkout` 回滚后用脚本外科式重放目标改动。
+- 缩进 / 换行修正优先外科式编辑（手工或脚本只动目标行）；确需格式化时，格式化后必须对照 `git diff` 确认每一处变更都在本意范围内。
+- 与 backend「Rust Format」同一原则：禁止把无关文件的格式噪音混进业务提交；整文件 / 全仓格式化只能单独开纯格式提交。
+- 若未来引入统一 prettier 配置并全仓刷干净，本条可参照 Rust Format Gate 反转为「保持 clean，改动文件须过 `prettier --check`」。
 
 ## Scenario: Renderer Error Feedback Must Not Use Native Alert
 
