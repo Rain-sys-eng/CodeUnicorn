@@ -348,10 +348,31 @@ fn split_pi_user_content_for_display(
 ) -> (String, Vec<String>) {
     let (legacy_text, legacy_images) =
         crate::engine::cli_image_input::split_pi_prompt_for_display(raw_text);
-    let (display_text, wrapper_images) = if !legacy_images.is_empty() {
+    let (display_text, wrapper_paths) = if !legacy_images.is_empty() {
         (legacy_text, legacy_images)
     } else {
         crate::engine::cli_image_input::split_pi_file_attachments_for_display(&legacy_text)
+    };
+    // Wrapper 路径分流：图片进 images（print-json 时代语义——路径优先，
+    // content-block base64 不二次投影）；非图片（RPC 时代 <file path="...">
+    // 文本附件）以 `@路径` 回到可见正文，禁止进 images（前端无扩展名过滤，
+    // 会渲染裂图 chip 并顶掉 content-block 真实图片——2026-08-25 用户报告）。
+    let (wrapper_images, file_refs): (Vec<String>, Vec<String>) = wrapper_paths
+        .into_iter()
+        .partition(|path| crate::engine::cli_image_input::is_image_attachment_path(path));
+    let display_text = if file_refs.is_empty() {
+        display_text
+    } else {
+        let refs = file_refs
+            .iter()
+            .map(|path| format!("@{path}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if display_text.is_empty() {
+            refs
+        } else {
+            format!("{display_text}\n{refs}")
+        }
     };
     if !wrapper_images.is_empty() {
         return (display_text, wrapper_images);
@@ -1590,6 +1611,58 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[tokio::test]
+    async fn loads_rpc_era_text_file_wrapper_without_leaking_body() {
+        // 2026-08-25 用户报告：RPC 时代 <file path="...">正文</file> 包装不被剥离，
+        // 整段文件正文泄漏进消息气泡。修复后：包装剥离、md 路径以 @ref 回正文、
+        // content-block 真实图片不丢。
+        let dir = std::env::temp_dir().join(format!(
+            "pi-history-rpc-file-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let sessions = dir.join("sessions");
+        let cwd_dir = sessions.join("--tmp-project--");
+        std::fs::create_dir_all(&cwd_dir).expect("mkdir");
+        let session_id = "019fe705-27fd-712e-a1be-f972ef3773f6";
+        let file = cwd_dir.join(format!("2026-08-25T08-00-00-000Z_{session_id}.jsonl"));
+        let project = dir.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        let mut handle = std::fs::File::create(&file).expect("create");
+        writeln!(
+            handle,
+            r#"{{"type":"session","version":3,"id":"{session_id}","timestamp":"2026-08-25T08:00:00.000Z","cwd":"{}"}}"#,
+            project.display()
+        )
+        .unwrap();
+        // RPC prompt with image content block + `<file path>` text attachment wrapper.
+        writeln!(
+            handle,
+            r#"{{"type":"message","id":"m-rpc-file","timestamp":"2026-08-25T08:00:01.000Z","message":{{"role":"user","content":[{{"type":"image","data":"aGVsbG8=","mimeType":"image/png"}},{{"type":"text","text":"重写发布记录\n\n<file path=\"/abs/CHANGELOG.md\">\n# Changelog\n---\n</file>"}}]}}}}"#
+        )
+        .unwrap();
+
+        let agent_dir = dir.to_string_lossy().to_string();
+        let loaded = load_pi_session(&project, session_id, Some(&agent_dir))
+            .await
+            .expect("load");
+        assert_eq!(loaded.messages.len(), 1);
+
+        let turn = &loaded.messages[0];
+        assert!(!turn.text.contains("<file"));
+        assert!(!turn.text.contains("# Changelog"));
+        assert!(turn.text.contains("重写发布记录"));
+        assert!(turn.text.contains("@/abs/CHANGELOG.md"));
+        assert_eq!(
+            turn.images,
+            Some(vec!["data:image/png;base64,aGVsbG8=".to_string()])
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn large_rpc_image_spills_to_temp_file_small_stays_data_url() {
         let small = image_display_ref("image/png", "AAAA").expect("small");
@@ -1663,6 +1736,27 @@ mod title_attachment_tests {
         .await;
         let summary = read_session_summary(&file).await.expect("summary");
         assert_eq!(summary.first_message, "分析这份文档");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn title_strips_rpc_era_path_wrapper_and_keeps_text() {
+        let dir = std::env::temp_dir().join(format!(
+            "pi-title-rpc-path-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let file = write_session(
+            &dir,
+            "019fe705-27fd-712e-a1be-f972ef3773f7",
+            "重写发布记录\n\n<file path=\"/abs/CHANGELOG.md\">\n# Changelog\n</file>",
+        )
+        .await;
+        let summary = read_session_summary(&file).await.expect("summary");
+        // 标题只取用户文本（@ref 回填仅 load 展示路径；design D4）。
+        assert_eq!(summary.first_message, "重写发布记录");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

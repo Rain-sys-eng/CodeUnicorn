@@ -342,16 +342,49 @@ pub(crate) fn split_pi_prompt_for_display(text: &str) -> (String, Vec<String>) {
 /// ahead of the user text; the inner content may hold processing hints. Image
 /// content blocks are ignored by history (display goes through paths), so only
 /// the text block needs splitting here.
+/// `<file name="` / `<file path="` 开标签前缀长度（两者等长：`<file ` + 4 + `="`）。
+const FILE_OPEN_TAG_PREFIX_LEN: usize = "<file name=\"".len();
+
+/// 定位下一个文件附件包装开标签。两种属性名并存：print-json 时代 pi CLI 用
+/// `<file name="...">` 包装附件；RPC 时代 mossx `expand_rpc_prompt_attachments`
+/// 自注入 `<file path="...">正文</file>`。历史回放必须同时剥两种，否则 RPC
+/// 时代会话的整段文件正文会泄漏进消息回显与侧栏标题（2026-08-25 用户报告）。
+fn find_file_wrapper_open(text: &str) -> Option<usize> {
+    let mut cursor = 0;
+    while let Some(at) = text[cursor..].find("<file ") {
+        let start = cursor + at;
+        let after = &text[start + "<file ".len()..];
+        if after.starts_with("name=\"") || after.starts_with("path=\"") {
+            return Some(start);
+        }
+        cursor = start + "<file ".len();
+    }
+    None
+}
+
+/// 附件路径是否图片（与 pi.rs `is_image_path` / pi_history
+/// `attachment_title_marker` 同一扩展名集合）。
+pub(crate) fn is_image_attachment_path(path: &str) -> bool {
+    matches!(
+        path.rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp"
+    )
+}
+
 pub(crate) fn split_pi_file_attachments_for_display(text: &str) -> (String, Vec<String>) {
-    if !text.contains("<file name=\"") {
+    if find_file_wrapper_open(text).is_none() {
         return (text.to_string(), Vec::new());
     }
     let mut paths: Vec<String> = Vec::new();
     let mut visible = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(start) = rest.find("<file name=\"") {
+    while let Some(start) = find_file_wrapper_open(rest) {
         visible.push_str(&rest[..start]);
-        let after_open = &rest[start + "<file name=\"".len()..];
+        let after_open = &rest[start + FILE_OPEN_TAG_PREFIX_LEN..];
         let Some(quote_end) = after_open.find('"') else {
             // Malformed tag: keep the remainder verbatim.
             visible.push_str(&rest[start..]);
@@ -364,11 +397,11 @@ pub(crate) fn split_pi_file_attachments_for_display(text: &str) -> (String, Vec<
             rest = "";
             break;
         };
-        // open_tag_end 相对 after_open（已去掉 `<file name="` 前缀）；切 rest
+        // open_tag_end 相对 after_open（已去掉 `<file xxx="` 前缀）；切 rest
         // 必须换算回绝对位置——直接用相对索引在多字节路径（中文目录名）下
         // 会切进 UTF-8 字符中间 panic（2026-08-24 er-qi 中文路径附件实测：
         // panic 杀 command 任务，invoke 永不 resolve，前端永远卡加载）。
-        let inner_start = start + "<file name=\"".len() + open_tag_end + 1;
+        let inner_start = start + FILE_OPEN_TAG_PREFIX_LEN + open_tag_end + 1;
         if let Some(close_at) = rest[inner_start..].find("</file>") {
             rest = &rest[inner_start + close_at + "</file>".len()..];
         } else {
@@ -597,6 +630,35 @@ mod tests {
         );
         assert_eq!(visible2, "看一下  和  的区别");
         assert_eq!(images2, vec!["/a/one.png", "/b/中文二.png"]);
+    }
+
+    #[test]
+    fn split_pi_file_attachments_strips_rpc_era_path_wrapper() {
+        // RPC 时代 mossx `expand_rpc_prompt_attachments` 注入
+        // `<file path="...">正文</file>`（2026-08-25 用户报告：不剥会泄漏整段正文）。
+        let (visible, paths) = split_pi_file_attachments_for_display(
+            "重写发布记录\n\n<file path=\"/abs/CHANGELOG.md\">\n# Changelog\n---\n</file>",
+        );
+        assert_eq!(visible, "重写发布记录");
+        assert_eq!(paths, vec!["/abs/CHANGELOG.md"]);
+    }
+
+    #[test]
+    fn split_pi_file_attachments_mixed_name_and_path_wrappers() {
+        let (visible, paths) = split_pi_file_attachments_for_display(
+            "<file name=\"/a/one.png\"></file>\n对比 <file path=\"/b/笔记.md\">内容</file>",
+        );
+        assert_eq!(visible, "对比");
+        assert_eq!(paths, vec!["/a/one.png", "/b/笔记.md"]);
+    }
+
+    #[test]
+    fn split_pi_file_attachments_rpc_era_multibyte_path_does_not_panic() {
+        let (visible, paths) = split_pi_file_attachments_for_display(
+            "<file path=\"/Users/me/二期文档/设计报告.md\">正文</file>\n分析",
+        );
+        assert_eq!(visible, "分析");
+        assert_eq!(paths, vec!["/Users/me/二期文档/设计报告.md"]);
     }
 
     #[test]
