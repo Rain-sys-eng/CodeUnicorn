@@ -2202,6 +2202,148 @@ describe("buildProviderExecutionTarget", () => {
       }),
     ).toBe(false);
   });
+
+  // ===== PI engine（expand-shared-atomic-reasoning-linkage-to-pi） =====
+
+  it("seeds PI model default effort when switching from Codex", () => {
+    // Cross-engine: Codex high MUST NOT inherit; PI model default is "low".
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "codex",
+          providerProfileId: null,
+          modelCatalogEntryId: "gpt-5.6-sol",
+          model: "gpt-5.6-sol",
+          reasoning: { effort: "high" },
+        },
+        "pi",
+        "__disk__",
+        "claude-sonnet-4.5",
+        "Local disk",
+        "disk",
+        true,
+        "claude-sonnet-4.5",
+        null,
+        {
+          supportedReasoningEfforts: [
+            { reasoningEffort: "off" },
+            { reasoningEffort: "low" },
+            { reasoningEffort: "medium" },
+            { reasoningEffort: "high" },
+          ],
+          defaultReasoningEffort: "low",
+        },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "claude-sonnet-4.5",
+        model: "claude-sonnet-4.5",
+        reasoning: { effort: "low" },
+      }),
+    );
+  });
+
+  it("keeps same-profile PI effort when next model still supports it", () => {
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "pi",
+          providerProfileId: "__disk__",
+          modelCatalogEntryId: "claude-sonnet-4.5",
+          model: "claude-sonnet-4.5",
+          reasoning: { effort: "high" },
+        },
+        "pi",
+        "__disk__",
+        "claude-opus-4.6",
+        "Local disk",
+        "disk",
+        true,
+        "claude-opus-4.6",
+        null,
+        {
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low" },
+            { reasoningEffort: "medium" },
+            { reasoningEffort: "high" },
+          ],
+          defaultReasoningEffort: "low",
+        },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "claude-opus-4.6",
+        reasoning: { effort: "high" },
+      }),
+    );
+  });
+
+  it("drops PI effort when next PI model does not support it", () => {
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "pi",
+          providerProfileId: null,
+          modelCatalogEntryId: "claude-sonnet-4.5",
+          model: "claude-sonnet-4.5",
+          reasoning: { effort: "xhigh" },
+        },
+        "pi",
+        "__disk__",
+        "thinking-holes-model",
+        "Local disk",
+        "disk",
+        true,
+        "thinking-holes-model",
+        null,
+        {
+          supportedReasoningEfforts: [
+            { reasoningEffort: "high" },
+            { reasoningEffort: "max" },
+          ],
+          defaultReasoningEffort: "high",
+        },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "thinking-holes-model",
+        reasoning: { effort: "high" },
+      }),
+    );
+  });
+
+  it("PI unknown model without metadata yields null effort", () => {
+    // Capability-neutral：runtime-only 模型不发明档位
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "codex",
+          providerProfileId: null,
+          modelCatalogEntryId: "gpt-5.6-sol",
+          model: "gpt-5.6-sol",
+          reasoning: { effort: "high" },
+        },
+        "pi",
+        "__disk__",
+        "runtime-only-pi",
+        "Local disk",
+        "disk",
+        true,
+        "runtime-only-pi",
+        null,
+        null,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "runtime-only-pi",
+        reasoning: null,
+      }),
+    );
+  });
 });
 
 describe("resolveClaudeCatalogModelLabel", () => {

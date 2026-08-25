@@ -981,7 +981,11 @@ function ComposerImpl({
     }
     const catalogEntryId = target.modelCatalogEntryId?.trim() || null;
     const runtimeModel = target.model?.trim() || null;
-    if (target.engine !== "codex") {
+    if (target.engine !== "codex" && target.engine !== "pi") {
+      // DSH / Qoder / Kimi / Grok / OpenCode 等非 codex 非 pi 引擎：保持
+      // 现有「只填 id/model」行为；这些引擎的 Shared atomic 联动留待各自
+      // change 评估（DSH 已 native 接通 ButtonArea，Qoder / Kimi / Grok /
+      // OpenCode 待定）。PI 在下方分支接 atomic reasoning 联动。
       return {
         engine: target.engine,
         model: {
@@ -997,7 +1001,7 @@ function ComposerImpl({
       supportedReasoningEfforts?: ModelOption["supportedReasoningEfforts"];
       defaultReasoningEffort?: string | null;
     };
-    const catalog = (providerModelCatalogs?.codex ??
+    const catalog = (providerModelCatalogs?.[target.engine] ??
       []) as ModelReasoningLike[];
     const parentModels = models as ModelReasoningLike[];
     const matchByIdentity = (entry: ModelReasoningLike) => {
@@ -1083,7 +1087,12 @@ function ComposerImpl({
       return;
     }
     const engine = selectedSharedTarget.engine;
-    if (engine !== "codex" && engine !== "claude" && engine !== "grok") {
+    if (
+      engine !== "codex" &&
+      engine !== "claude" &&
+      engine !== "grok" &&
+      engine !== "pi"
+    ) {
       return;
     }
     const raw = selectedSharedTarget.reasoning?.effort ?? null;
