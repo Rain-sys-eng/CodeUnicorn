@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -254,6 +254,10 @@ struct PiRpcRun {
     tool_inputs_by_id: HashMap<String, Option<Value>>,
     stream_error: Option<String>,
     abort_requested: bool,
+    /// True while the main turn is synthetic：run 承接的是 pi 自唤醒 turn
+    /// （bg 任务完成通知注入等，不经过 ccgui 发送路径）。首个真实 turn
+    /// steer attach 时收养主流（见 `adopt_orphan_run`）。
+    orphan: bool,
 }
 
 impl PiRpcRun {
@@ -268,8 +272,69 @@ impl PiRpcRun {
             tool_inputs_by_id: HashMap::new(),
             stream_error: None,
             abort_requested: false,
+            orphan: false,
         }
     }
+
+    /// pi 自唤醒 turn 的承接 run：main turn id 合成、waiter 无接收方
+    /// （settle 时 send 失败静默跳过）。事件发往合成 id，被 daemon
+    /// forwarder 按 turn_id 过滤天然丢弃，不污染任何真实会话 UI。
+    fn new_orphan() -> Self {
+        static ORPHAN_SEQ: AtomicU64 = AtomicU64::new(0);
+        let seq = ORPHAN_SEQ.fetch_add(1, Ordering::SeqCst);
+        let (tx, _rx) = oneshot::channel();
+        let mut run = Self::new(
+            &format!(
+                "pi-external-{}-{seq}",
+                unix_timestamp_ms_for_process_diagnostics()
+            ),
+            tx,
+        );
+        run.orphan = true;
+        run
+    }
+}
+
+/// orphan run 被首个真实 turn 收养：改写 main turn id 并返回待回放的已
+/// 缓冲文本（无缓冲时收养但不回放）。非 orphan run 原样返回 None。
+fn adopt_orphan_run(run: &mut PiRpcRun, turn_id: &str) -> Option<String> {
+    if !run.orphan {
+        return None;
+    }
+    run.orphan = false;
+    run.main_turn_id = turn_id.to_string();
+    if run.response_text.is_empty() {
+        None
+    } else {
+        Some(run.response_text.clone())
+    }
+}
+
+/// 单 resident 的发送决策：本地有活跃 run 必 steer；本地无 run 但 pi 仍在
+/// streaming（pi 自唤醒 turn）也必须 steer——裸 prompt 会被 pi 以
+/// "already processing" 拒绝（用户可见「会话失败」）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RpcSendMode {
+    Prompt,
+    Steer,
+}
+
+fn plan_rpc_send_mode(run_active: bool, streaming: bool) -> RpcSendMode {
+    if run_active || streaming {
+        RpcSendMode::Steer
+    } else {
+        RpcSendMode::Prompt
+    }
+}
+
+/// pi 在 processing 时拒绝 prompt 的文案：
+/// "Agent is already processing. Specify streamingBehavior ('steer' or
+/// 'followUp') to queue the message."
+/// 这是唯一值得转 steer 重试的 prompt 错误（判定与到达之间的竞态，且被拒
+/// 消息在 preflight 阶段失败、未入队，重投无重复）；auth/模型等其余错误
+/// 必须原样上报，不得重试。
+fn is_rpc_busy_error(error: &str) -> bool {
+    error.contains("already processing")
 }
 
 /// RPC send outcome: `Fallback` means "use the print-json path instead".
@@ -381,8 +446,12 @@ fn settle_rpc_run(
                 None
             }
         });
-    for (index, (turn_id, waiter)) in run.waiters.into_iter().enumerate() {
-        let is_main = index == 0;
+    // 收养（orphan run 被首个真实 turn 接管）后 waiters[0] 是合成 turn，
+    // main 判定必须按 id 而非下标；非 orphan run 的 waiters[0] id 本就等于
+    // main_turn_id，等价无回归。
+    let main_turn_id = run.main_turn_id.clone();
+    for (turn_id, waiter) in run.waiters.into_iter() {
+        let is_main = turn_id == main_turn_id;
         match &failure {
             Some(error) => {
                 emit(
@@ -1032,6 +1101,13 @@ impl PiSession {
                             continue;
                         }
                         let mut guard = rpc_run.write().await;
+                        if guard.is_none() && event_type == "agent_start" {
+                            // pi 自唤醒 turn（bg 任务完成通知注入等）不经过
+                            // ccgui 发送路径：建 orphan run 承接事件流，
+                            // agent_settled 按既有逻辑结算；首个真实 turn
+                            // steer attach 时收养主流。
+                            *guard = Some(PiRpcRun::new_orphan());
+                        }
                         let Some(run) = guard.as_mut() else {
                             continue;
                         };
@@ -1152,7 +1228,9 @@ impl PiSession {
             .map_err(PiRpcSendError::Fallback)?;
         let client = resident.client.clone();
         self.settle_stale_rpc_run_if_idle(&resident).await;
-        if resident.run.read().await.is_some() {
+        // streaming 即活跃：pi 自唤醒 turn（本地无 run）同样禁止
+        // align/reconcile，否则可能 mid-turn 切会话 / set_model。
+        if resident.run.read().await.is_some() || client.is_streaming() {
             // Same-session steer. Other PI tabs have their own resident and
             // MUST stay parallel — do not reject this send as "another session".
             if let Some(desired) = resolve_model_flag(params.model.as_deref()) {
@@ -1208,20 +1286,70 @@ impl PiSession {
         }
 
         let (tx, rx) = oneshot::channel();
-        let steering = {
+        let send_mode = {
             let _op = resident.op_lock.lock().await;
-            resident.run.read().await.is_some()
+            plan_rpc_send_mode(resident.run.read().await.is_some(), client.is_streaming())
         };
-        if steering {
+        if send_mode == RpcSendMode::Steer {
             if let Err(error) = client.steer(&expanded.text, images).await {
                 return Err(PiRpcSendError::Failed(format!(
                     "pi rpc steer failed: {error}"
                 )));
             }
-            let mut guard = resident.run.write().await;
-            if let Some(run) = guard.as_mut() {
-                run.attached_turn_ids.push(turn_id.to_string());
-                run.waiters.push((turn_id.to_string(), tx));
+            self.attach_turn_to_rpc_run(&resident, turn_id, tx).await;
+        } else {
+            resident.in_flight.store(true, Ordering::SeqCst);
+            *resident.in_flight_turn.lock().await = Some(turn_id.to_string());
+            let prompt_result = client.prompt(&expanded.text, images.clone()).await;
+            resident.in_flight.store(false, Ordering::SeqCst);
+            *resident.in_flight_turn.lock().await = None;
+            let busy_steered = match prompt_result {
+                Ok(()) => false,
+                Err(error) if is_rpc_busy_error(&error) => {
+                    // 判定与到达之间的竞态：pi 已开始处理（多为 bg 任务完成
+                    // 自唤醒），prompt 在 preflight 被拒、消息未入队 → 转
+                    // steer 重投一次，随当前 turn 结算。
+                    log::warn!(
+                        "[pi/rpc] prompt rejected as busy; retrying as steer (workspace={})",
+                        self.workspace_id
+                    );
+                    if let Err(error) = client.steer(&expanded.text, images).await {
+                        return Err(PiRpcSendError::Failed(format!(
+                            "pi rpc steer failed: {error}"
+                        )));
+                    }
+                    true
+                }
+                Err(error) => {
+                    return Err(PiRpcSendError::Failed(format!(
+                        "pi rpc prompt failed: {error}"
+                    )));
+                }
+            };
+            if busy_steered {
+                self.attach_turn_to_rpc_run(&resident, turn_id, tx).await;
+            } else {
+                let mut guard = resident.run.write().await;
+                *guard = Some(PiRpcRun::new(turn_id, tx));
+                drop(guard);
+                let session_id = client
+                    .session_id()
+                    .await
+                    .unwrap_or_else(|| "pending".to_string());
+                if is_valid_pi_session_id_arg(&session_id) {
+                    self.rekey_resident(&scratch_key, &format!("session:{session_id}"))
+                        .await;
+                    self.set_session_id(Some(session_id.clone())).await;
+                }
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::SessionStarted {
+                        workspace_id: self.workspace_id.clone(),
+                        session_id,
+                        engine: EngineType::Pi,
+                        turn_id: Some(turn_id.to_string()),
+                    },
+                );
                 self.emit_turn_event(
                     turn_id,
                     EngineEvent::TurnStarted {
@@ -1229,50 +1357,7 @@ impl PiSession {
                         turn_id: turn_id.to_string(),
                     },
                 );
-            } else {
-                return Err(PiRpcSendError::Failed(
-                    "pi rpc steer lost the active run before attach".to_string(),
-                ));
             }
-        } else {
-            resident.in_flight.store(true, Ordering::SeqCst);
-            *resident.in_flight_turn.lock().await = Some(turn_id.to_string());
-            let prompt_result = client.prompt(&expanded.text, images).await;
-            resident.in_flight.store(false, Ordering::SeqCst);
-            *resident.in_flight_turn.lock().await = None;
-            if let Err(error) = prompt_result {
-                return Err(PiRpcSendError::Failed(format!(
-                    "pi rpc prompt failed: {error}"
-                )));
-            }
-            let mut guard = resident.run.write().await;
-            *guard = Some(PiRpcRun::new(turn_id, tx));
-            drop(guard);
-            let session_id = client
-                .session_id()
-                .await
-                .unwrap_or_else(|| "pending".to_string());
-            if is_valid_pi_session_id_arg(&session_id) {
-                self.rekey_resident(&scratch_key, &format!("session:{session_id}"))
-                    .await;
-                self.set_session_id(Some(session_id.clone())).await;
-            }
-            self.emit_turn_event(
-                turn_id,
-                EngineEvent::SessionStarted {
-                    workspace_id: self.workspace_id.clone(),
-                    session_id,
-                    engine: EngineType::Pi,
-                    turn_id: Some(turn_id.to_string()),
-                },
-            );
-            self.emit_turn_event(
-                turn_id,
-                EngineEvent::TurnStarted {
-                    workspace_id: self.workspace_id.clone(),
-                    turn_id: turn_id.to_string(),
-                },
-            );
         }
 
         // Turn 结算看门狗：不按墙钟杀 turn，每个 tick 与 resident 实况对账——
@@ -1416,9 +1501,54 @@ impl PiSession {
         };
         match resident {
             Some(resident) => {
-                resident.run.read().await.is_some() || resident.in_flight.load(Ordering::SeqCst)
+                resident.run.read().await.is_some()
+                    || resident.in_flight.load(Ordering::SeqCst)
+                    || resident.client.is_streaming()
             }
             None => false,
+        }
+    }
+
+    /// steer 发送后的统一 attach：run 缺失（pi 自唤醒 turn 的 agent_start
+    /// 尚未泵到）时补 orphan run；orphan run 被首个真实 turn 收养——改写
+    /// main turn id，`TurnStarted` 后回放已缓冲文本为一条 `TextDelta`，
+    /// settle 时取得完整 response_text；非 orphan run 维持既有 attached
+    /// 语义（settle 空文本，前端乐观气泡既有链路）。
+    async fn attach_turn_to_rpc_run(
+        &self,
+        resident: &PiResident,
+        turn_id: &str,
+        tx: oneshot::Sender<Result<String, String>>,
+    ) {
+        let replay = {
+            let mut guard = resident.run.write().await;
+            if guard.is_none() {
+                *guard = Some(PiRpcRun::new_orphan());
+            }
+            let run = guard.as_mut().expect("run just ensured");
+            let was_orphan = run.orphan;
+            let replay = adopt_orphan_run(run, turn_id);
+            if !was_orphan {
+                run.attached_turn_ids.push(turn_id.to_string());
+            }
+            run.waiters.push((turn_id.to_string(), tx));
+            replay
+        };
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnStarted {
+                workspace_id: self.workspace_id.clone(),
+                turn_id: turn_id.to_string(),
+            },
+        );
+        if let Some(text) = replay {
+            self.emit_turn_event(
+                turn_id,
+                EngineEvent::TextDelta {
+                    workspace_id: self.workspace_id.clone(),
+                    text,
+                },
+            );
         }
     }
 
@@ -1469,7 +1599,9 @@ impl PiSession {
         match target {
             Some(target) if current.as_deref() == Some(target) => Ok(()),
             Some(target) => {
-                if resident.run.read().await.is_some() {
+                // streaming 即活跃：pi 自唤醒 turn（本地无 run）期间同样
+                // 禁止切会话文件。
+                if resident.run.read().await.is_some() || client.is_streaming() {
                     return Err(
                         "当前 turn 仍在进行中，无法切换会话文件；请等待完成或先停止。".to_string(),
                     );
@@ -2410,6 +2542,118 @@ mod tests {
             expanded.images
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn plan_rpc_send_mode_steers_whenever_pi_is_active() {
+        assert_eq!(plan_rpc_send_mode(false, false), RpcSendMode::Prompt);
+        assert_eq!(plan_rpc_send_mode(true, false), RpcSendMode::Steer);
+        // 本地无 run 但 pi 自唤醒 turn 在跑：必须 steer，否则裸 prompt 被
+        // pi 以 "already processing" 拒绝（用户可见「会话失败」）。
+        assert_eq!(plan_rpc_send_mode(false, true), RpcSendMode::Steer);
+        assert_eq!(plan_rpc_send_mode(true, true), RpcSendMode::Steer);
+    }
+
+    #[test]
+    fn rpc_busy_error_matches_only_pi_already_processing() {
+        assert!(is_rpc_busy_error(
+            "Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message."
+        ));
+        assert!(!is_rpc_busy_error("No model selected"));
+        assert!(!is_rpc_busy_error("OAuth token expired"));
+        assert!(!is_rpc_busy_error(""));
+    }
+
+    #[test]
+    fn orphan_run_ids_are_unique_and_marked() {
+        let a = PiRpcRun::new_orphan();
+        let b = PiRpcRun::new_orphan();
+        assert!(a.orphan && b.orphan);
+        assert_ne!(a.main_turn_id, b.main_turn_id);
+        assert!(a.main_turn_id.starts_with("pi-external-"));
+    }
+
+    #[test]
+    fn adopt_orphan_run_promotes_main_and_replays_buffer() {
+        // 有缓冲：收养 + 返回待回放文本。
+        let mut run = PiRpcRun::new_orphan();
+        run.response_text.push_str("已流出一截");
+        let replay = adopt_orphan_run(&mut run, "turn-u1");
+        assert_eq!(replay.as_deref(), Some("已流出一截"));
+        assert!(!run.orphan);
+        assert_eq!(run.main_turn_id, "turn-u1");
+        // 第二个 turn attach：非 orphan，不收养不回放。
+        assert!(adopt_orphan_run(&mut run, "turn-u2").is_none());
+        assert_eq!(run.main_turn_id, "turn-u1");
+        // 无缓冲 orphan：收养但不回放。
+        let mut empty = PiRpcRun::new_orphan();
+        assert!(adopt_orphan_run(&mut empty, "turn-v1").is_none());
+        assert!(!empty.orphan);
+        assert_eq!(empty.main_turn_id, "turn-v1");
+    }
+
+    #[test]
+    fn settle_adopted_orphan_run_gives_full_text_to_adopting_turn() {
+        // orphan run 被真实 turn 收养后：settle 必须把完整 response_text 给
+        // 收养 turn（main 判定按 id 非下标）；合成 waiter 取空文本、事件发
+        // 往合成 id（daemon forwarder 按 turn_id 过滤丢弃）。
+        let mut run = PiRpcRun::new_orphan();
+        let synthetic_id = run.main_turn_id.clone();
+        run.response_text.push_str("后台任务全部完成，结果如下");
+        let _ = adopt_orphan_run(&mut run, "turn-user-1");
+        let (tx, mut rx) = oneshot::channel();
+        run.waiters.push(("turn-user-1".to_string(), tx));
+        let events = std::cell::RefCell::new(Vec::<(String, EngineEvent)>::new());
+        settle_rpc_run("ws", run, None, &|turn_id, event| {
+            events.borrow_mut().push((turn_id.to_string(), event));
+        });
+        let events = events.borrow();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            &events[0],
+            (id, EngineEvent::TurnCompleted { result, .. })
+                if id == &synthetic_id
+                && result.as_ref().and_then(|r| r.get("text")).and_then(Value::as_str) == Some("")
+        ));
+        assert!(matches!(
+            &events[1],
+            (id, EngineEvent::TurnCompleted { result, .. })
+                if id == "turn-user-1"
+                && result.as_ref().and_then(|r| r.get("text")).and_then(Value::as_str)
+                    == Some("后台任务全部完成，结果如下")
+        ));
+        let settled = rx.try_recv().expect("adopting waiter settles");
+        assert_eq!(settled.as_deref(), Ok("后台任务全部完成，结果如下"));
+    }
+
+    #[test]
+    fn settle_non_orphan_run_keeps_main_text_attached_empty() {
+        // 非 orphan same-run steer 语义不回归：main（waiters[0]）取全文，
+        // attached 取空文本。
+        let (main_tx, _main_rx) = oneshot::channel();
+        let mut run = PiRpcRun::new("turn-main", main_tx);
+        run.response_text.push_str("hello");
+        let (tx, _rx) = oneshot::channel();
+        run.attached_turn_ids.push("turn-attached".to_string());
+        run.waiters.push(("turn-attached".to_string(), tx));
+        let events = std::cell::RefCell::new(Vec::<(String, EngineEvent)>::new());
+        settle_rpc_run("ws", run, None, &|turn_id, event| {
+            events.borrow_mut().push((turn_id.to_string(), event));
+        });
+        let events = events.borrow();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            &events[0],
+            (id, EngineEvent::TurnCompleted { result, .. })
+                if id == "turn-main"
+                && result.as_ref().and_then(|r| r.get("text")).and_then(Value::as_str) == Some("hello")
+        ));
+        assert!(matches!(
+            &events[1],
+            (id, EngineEvent::TurnCompleted { result, .. })
+                if id == "turn-attached"
+                && result.as_ref().and_then(|r| r.get("text")).and_then(Value::as_str) == Some("")
+        ));
     }
 
     #[test]
