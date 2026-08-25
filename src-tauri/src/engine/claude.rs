@@ -84,8 +84,8 @@ use stream_helpers::extract_text_from_content;
 use stream_helpers::extract_tool_result_text;
 use stream_helpers::{
     can_force_kill_for_grace, extract_background_task_id, extract_claude_tool_input,
-    extract_claude_tool_name, extract_result_text, extract_string_field,
-    extract_task_started_id, extract_terminal_task_release_id, is_claude_stream_control_line,
+    extract_claude_tool_name, extract_result_text, extract_string_field, extract_task_started_id,
+    extract_terminal_task_release_id, is_claude_stream_control_line,
     looks_like_claude_runtime_error, merge_text_chunks, parse_claude_stream_json_line,
     tool_input_signature, try_register_background_task_id, try_release_background_task_id,
 };
@@ -297,6 +297,14 @@ struct PendingClaudeToolSummary {
     tool_name: String,
 }
 
+/// Mid-turn 看门狗判定结果。
+/// OpenSpec change：add-claude-mid-turn-stream-idle-watchdog。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MidTurnIdleAction {
+    Wait,
+    Kill,
+}
+
 const RETRYABLE_PROMPT_TOO_LONG_PREFIX: &str = "__claude_retryable_prompt_too_long__:";
 const AUTO_COMPACT_SIGNAL_SOURCE: &str = "auto_compact_retry";
 const CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS: u64 = 32;
@@ -307,6 +315,27 @@ const CLAUDE_CONTEXT_BOOTSTRAP_SYSTEM_PROMPT: &str =
 const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(90);
 #[cfg(test)]
 const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(10);
+// Mid-turn（首事件后、`result` 前、无后台 Agent 任务）读循环历史上无界——中转
+// 代理（如 CCSwitch）断流/半开 TCP 不产生 EOF 时 turn 永远挂起：无 TurnError、
+// 线程永远「生成中」、后续发送被堵（0.9.3 测试版用户反馈「后续轮渲染不出来」）。
+// 看门狗按 STEP 步进检查静音时长；合法静音 ceiling 为 MCP/工具 1800s+ 余量
+// （CLI 侧超时自结算），AskUserQuestion 等用户输入期间挂起硬上限。
+// OpenSpec change：add-claude-mid-turn-stream-idle-watchdog。
+#[cfg(not(test))]
+const CLAUDE_STREAM_MID_TURN_IDLE_STEP: Duration = Duration::from_secs(120);
+#[cfg(test)]
+const CLAUDE_STREAM_MID_TURN_IDLE_STEP: Duration = Duration::from_secs(1);
+/// prod 硬上限秒数（独立常量以便测试断言 prod 值不受 cfg(test) 覆盖影响）：
+/// ASK_USER_QUESTION_TIMEOUT_SECS(1800) + 300s 余量——合法静音（工具/MCP）由
+/// CLI 侧超时自结算（≤1800s+），超过即判定代理断流/CLI 卡死。
+const CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP_PROD_SECS: u64 = ASK_USER_QUESTION_TIMEOUT_SECS + 300;
+#[cfg(not(test))]
+const CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP: Duration =
+    Duration::from_secs(CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP_PROD_SECS);
+// test 值必须超过既有 fake-script fixture 的合法 mid-turn 静音（最长 sleep 7s），
+// 否则看门狗误杀「正常长 turn」测试。Kill 路径的循环级验证由纯函数单测承担。
+#[cfg(test)]
+const CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP: Duration = Duration::from_secs(30);
 const CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT: usize = 800;
 // After Claude emits its final `result` event the turn is logically done. We
 // still wait for the CLI process to exit (post-turn usage probe / Stop hooks)
@@ -573,7 +602,7 @@ impl ClaudeSession {
         let has_images = params
             .images
             .as_ref()
-            .map_or(false, |imgs| imgs.iter().any(|s| !s.trim().is_empty()));
+            .is_some_and(|imgs| imgs.iter().any(|s| !s.trim().is_empty()));
         if has_images {
             return true;
         }
@@ -613,6 +642,38 @@ impl ClaudeSession {
             return;
         }
         sample.push_str(&text[..end]);
+    }
+
+    /// Mid-turn 空闲看门狗判定（纯函数，可单测）。
+    /// pending AskUserQuestion 期间恒 Wait（用户驱动的合法静音）；
+    /// idle 未达硬上限 Wait；达到则 Kill（代理断流/CLI 卡死）。
+    /// OpenSpec change：add-claude-mid-turn-stream-idle-watchdog。
+    pub(crate) fn claude_mid_turn_idle_action(
+        idle: Duration,
+        has_pending_user_input: bool,
+        hard_cap: Duration,
+    ) -> MidTurnIdleAction {
+        if has_pending_user_input {
+            return MidTurnIdleAction::Wait;
+        }
+        if idle >= hard_cap {
+            MidTurnIdleAction::Kill
+        } else {
+            MidTurnIdleAction::Wait
+        }
+    }
+
+    fn build_stream_mid_turn_idle_timeout_error(idle: Duration, diagnostic_sample: &str) -> String {
+        let base = format!(
+            "Claude stream went silent mid-turn for {}s (hard cap {}s); likely proxy stall or hung CLI",
+            idle.as_secs(),
+            CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP.as_secs()
+        );
+        let sample = diagnostic_sample.trim();
+        if sample.is_empty() {
+            return format!("{base}. No stdout/stderr diagnostics were observed.");
+        }
+        format!("{base}. Diagnostic sample:\n{}", sample)
     }
 
     fn build_stream_no_event_timeout_error(diagnostic_sample: &str) -> String {
@@ -732,6 +793,51 @@ impl ClaudeSession {
                 workspace_id: self.workspace_id.clone(),
                 error: error_msg.clone(),
                 code: Some("claude_stream_no_event_timeout".to_string()),
+            },
+        );
+        self.clear_turn_ephemeral_state(turn_id);
+        Err(error_msg)
+    }
+
+    /// Mid-turn 断流硬上限：kill 子进程并发 TurnError。镜像 fail_stream_no_event_timeout。
+    /// OpenSpec change：add-claude-mid-turn-stream-idle-watchdog。
+    async fn fail_stream_mid_turn_idle_timeout(
+        &self,
+        turn_id: &str,
+        idle: Duration,
+        diagnostic_sample: Arc<StdMutex<String>>,
+        mut stderr_handle: tokio::task::JoinHandle<String>,
+    ) -> Result<String, String> {
+        let mut child = {
+            let mut active = self.active_processes.lock().await;
+            active.remove(turn_id)
+        };
+        if let Some(mut child_proc) = child.take() {
+            if let Err(error) = self.terminate_child_process(turn_id, &mut child_proc).await {
+                log::warn!(
+                    "[claude] failed to terminate mid-turn-idle child for turn={}: {}",
+                    turn_id,
+                    error
+                );
+            }
+        }
+        tokio::select! {
+            _ = &mut stderr_handle => {}
+            _ = tokio::time::sleep(Duration::from_secs(2)) => {
+                stderr_handle.abort();
+            }
+        }
+        let error_msg = Self::build_stream_mid_turn_idle_timeout_error(
+            idle,
+            &Self::stream_diagnostic_sample_snapshot(&diagnostic_sample),
+        );
+        self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnError {
+                workspace_id: self.workspace_id.clone(),
+                error: error_msg.clone(),
+                code: Some("claude_stream_mid_turn_idle_timeout".to_string()),
             },
         );
         self.clear_turn_ephemeral_state(turn_id);
@@ -1830,6 +1936,8 @@ impl ClaudeSession {
 
         // Process stdout events
         let mut session_id_emitted = false;
+        // Mid-turn 看门狗静音计时（收到任意一行即刷新）。
+        let mut last_stream_event_at = Instant::now();
         loop {
             if pending_text_delta.has_expired(text_delta_coalesce_window) {
                 self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
@@ -1866,7 +1974,56 @@ impl ClaudeSession {
                             }
                         }
                     } else if pending_agent_task_ids.is_empty() {
-                        lines.next_line().await
+                        // Mid-turn 看门狗：历史上此处无界，中转代理断流（无 EOF）
+                        // 会让 turn 永远挂起。按 STEP 步进检查，硬上限内仅 warn。
+                        match tokio::time::timeout(
+                            CLAUDE_STREAM_MID_TURN_IDLE_STEP,
+                            lines.next_line(),
+                        )
+                        .await
+                        {
+                            Ok(result) => result,
+                            Err(_) => {
+                                let has_pending_user_input = self
+                                    .pending_user_inputs
+                                    .lock()
+                                    .map(|map| map.contains_key(turn_id))
+                                    .unwrap_or(false);
+                                let idle = last_stream_event_at.elapsed();
+                                match Self::claude_mid_turn_idle_action(
+                                    idle,
+                                    has_pending_user_input,
+                                    CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP,
+                                ) {
+                                    MidTurnIdleAction::Wait => {
+                                        if !has_pending_user_input {
+                                            log::warn!(
+                                                "[claude] mid-turn stream idle {}s (hard cap {}s) turn={}; sample={}",
+                                                idle.as_secs(),
+                                                CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP.as_secs(),
+                                                turn_id,
+                                                Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample)
+                                            );
+                                        }
+                                        continue;
+                                    }
+                                    MidTurnIdleAction::Kill => {
+                                        self.flush_buffered_text_delta(
+                                            turn_id,
+                                            &mut pending_text_delta,
+                                        );
+                                        return self
+                                            .fail_stream_mid_turn_idle_timeout(
+                                                turn_id,
+                                                idle,
+                                                Arc::clone(&stream_diagnostic_sample),
+                                                stderr_handle,
+                                            )
+                                            .await;
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         // A pending Agent/Task subagent is outstanding pre-result.
                         // Bound the wait; see CLAUDE_BG_TASK_MAX_WAIT.
@@ -1994,6 +2151,7 @@ impl ClaudeSession {
             if line.trim().is_empty() {
                 continue;
             }
+            last_stream_event_at = Instant::now();
             let line_received_at_ms = unix_timestamp_ms();
             if stream_startup_timing.first_stdout_line_at_ms.is_none() {
                 stream_startup_timing.first_stdout_line_at_ms = Some(line_received_at_ms);
@@ -2004,7 +2162,8 @@ impl ClaudeSession {
                     // Idle-reset the pending Agent/Task max-wait: any successfully parsed
                     // stream line while a task is pending is evidence the process is alive.
                     if result_seen_at.is_none() && !pending_agent_task_ids.is_empty() {
-                        pending_agent_task_deadline = Some(Instant::now() + CLAUDE_BG_TASK_MAX_WAIT);
+                        pending_agent_task_deadline =
+                            Some(Instant::now() + CLAUDE_BG_TASK_MAX_WAIT);
                     }
                     // Structured background-task settlement blockers (issue #983).
                     if let Some(bg_id) = extract_background_task_id(&event) {
@@ -2309,11 +2468,10 @@ impl ClaudeSession {
                         Self::push_stream_diagnostic_sample(&mut sample, &line);
                         Self::push_stream_diagnostic_sample(&mut sample, "\n");
                     }
-                    if stream_runtime_error.is_none() {
-                        if looks_like_claude_runtime_error(trimmed) {
+                    if stream_runtime_error.is_none()
+                        && looks_like_claude_runtime_error(trimmed) {
                             stream_runtime_error = Some(trimmed.to_string());
                         }
-                    }
                 }
             }
         }
@@ -2399,8 +2557,7 @@ impl ClaudeSession {
                         params.access_mode.as_deref(),
                     );
 
-                    if include_hook_events
-                        && Self::is_unknown_include_hook_events_error(&error_msg)
+                    if include_hook_events && Self::is_unknown_include_hook_events_error(&error_msg)
                     {
                         self.clear_turn_ephemeral_state(turn_id);
                         return Err(error_msg);

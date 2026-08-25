@@ -106,9 +106,7 @@ fn convert_event_emits_runtime_model_sidecar_once_from_assistant_message() {
         other => panic!("expected text delta, got {:?}", other),
     }
 
-    let sidecar = receiver
-        .try_recv()
-        .expect("expected runtime model sidecar");
+    let sidecar = receiver.try_recv().expect("expected runtime model sidecar");
     match sidecar.event {
         EngineEvent::Raw { data, .. } => {
             assert_eq!(data["type"], "runtime_model");
@@ -128,7 +126,10 @@ fn convert_event_emits_runtime_model_sidecar_once_from_assistant_message() {
             }
         }),
     );
-    assert!(receiver.try_recv().is_err(), "duplicate model must not emit another sidecar");
+    assert!(
+        receiver.try_recv().is_err(),
+        "duplicate model must not emit another sidecar"
+    );
 }
 
 #[test]
@@ -2204,4 +2205,60 @@ fn convert_event_avoids_duplicate_when_assistant_blocks_repeat_whole_message() {
         Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "？"),
         other => panic!("expected punctuation-only delta, got {:?}", other),
     }
+}
+
+// OpenSpec change：add-claude-mid-turn-stream-idle-watchdog。
+#[test]
+fn mid_turn_idle_action_waits_below_hard_cap() {
+    assert_eq!(
+        ClaudeSession::claude_mid_turn_idle_action(
+            Duration::from_secs(2),
+            false,
+            Duration::from_secs(3),
+        ),
+        MidTurnIdleAction::Wait
+    );
+}
+
+#[test]
+fn mid_turn_idle_action_kills_at_hard_cap_without_pending_user_input() {
+    assert_eq!(
+        ClaudeSession::claude_mid_turn_idle_action(
+            Duration::from_secs(3),
+            false,
+            Duration::from_secs(3),
+        ),
+        MidTurnIdleAction::Kill
+    );
+    assert_eq!(
+        ClaudeSession::claude_mid_turn_idle_action(
+            Duration::from_secs(10),
+            false,
+            Duration::from_secs(3),
+        ),
+        MidTurnIdleAction::Kill
+    );
+}
+
+#[test]
+fn mid_turn_idle_action_suspends_hard_cap_while_user_input_pending() {
+    // AskUserQuestion 等用户应答是用户驱动的合法静音，硬上限必须挂起。
+    assert_eq!(
+        ClaudeSession::claude_mid_turn_idle_action(
+            Duration::from_secs(3600),
+            true,
+            Duration::from_secs(3),
+        ),
+        MidTurnIdleAction::Wait
+    );
+}
+
+#[test]
+fn mid_turn_idle_prod_hard_cap_exceeds_tool_timeout_ceiling() {
+    // 合法静音 ceiling：MCP/工具 1800s+（CLI 侧自结算）。prod 硬上限必须高于它才不误杀。
+    // 断言 prod 专用常量，不受 cfg(test) 覆盖影响。
+    assert!(
+        CLAUDE_STREAM_MID_TURN_IDLE_HARD_CAP_PROD_SECS > ASK_USER_QUESTION_TIMEOUT_SECS,
+        "prod hard cap must exceed ASK_USER_QUESTION_TIMEOUT_SECS"
+    );
 }
