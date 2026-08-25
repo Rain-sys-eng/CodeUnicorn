@@ -13,21 +13,16 @@
 - 新增 command 但遗漏 `command_registry.rs` 注册。
 - 命令参数改名后不更新 `src/services/tauri.ts`。
 - 破坏幂等性导致 retry 重放污染。
-- 对 `src-tauri` 跑全仓 `cargo fmt`，或对含 `mod foo;` 的 `lib.rs` / `mod.rs` 跑 rustfmt（稳定版会顺着 child module 重排整棵 crate；`skip_children` 仅 nightly）。
+- ~~对 `src-tauri` 跑全仓 `cargo fmt`~~（2026-08-25 起废止：提交树已 rustfmt-clean，见下「Rust Format」）。仍禁止把无关文件的 fmt 噪音混进业务提交。
 
 ## Rust Format
 
-提交树未做过全仓 rustfmt。本地稳定版 rustfmt 默认顺着 `mod` 往下走，格式化 `lib.rs` 或任意 `mod.rs` 会把无关模块一并重排进工作区。`skip_children` 是 nightly-only，不能当闸门。
+2026-08-25 起提交树已 rustfmt-clean（纯格式提交 `ddf590b70`，已入 `.git-blame-ignore-revs`）。目标转为**保持 clean**：
 
 - 配置源：`src-tauri/rustfmt.toml`（edition 2021、不重排 `mod` / import）。
-- 编辑器：`.vscode/settings.json` 关闭 Rust `formatOnSave` / `formatOnPaste`。
-- 必须格式化时只动本次改过的**叶子**文件（文件里不要有会解析到磁盘的 `mod foo;`）：
-
-```bash
-rustfmt --edition 2021 src-tauri/src/path/to/changed.rs
-```
-
-- 全仓 fmt 只能单独开纯格式 PR。
+- 改过的 `.rs` 提交前必须过 `rustfmt --edition 2021 --check <file>`；鼓励顺手 `cargo clippy --fix` 但同样只限本次改动文件。
+- 全仓 fmt / clippy sweep 仍只能单独开纯格式提交，禁止与业务混合。
+- 历史背景（为何曾经禁止全仓 fmt）：稳定版 rustfmt 默认顺着 `mod` 往下走，在树不干净时格式化 `lib.rs` / `mod.rs` 会把无关模块一并重排；`skip_children` 是 nightly-only。树 clean 后该风险转为「保持成本」，由上方 check 约束覆盖。
 
 ## 推荐验证命令
 

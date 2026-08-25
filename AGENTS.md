@@ -99,8 +99,8 @@
 
 ### Rust Format Gate
 
-- `src-tauri` 提交树不是 rustfmt-clean。禁止全仓 `cargo fmt`。禁止对含 `mod foo;` 的 `lib.rs` / `mod.rs` 跑 rustfmt（稳定版会顺着 child module 重排整棵 crate；`skip_children` 仅 nightly）。
-- 若必须格式化，只对本次改动的叶子 `.rs`：`rustfmt --edition 2021 path.rs`
+- 2026-08-25 起提交树已 rustfmt-clean（纯格式提交 `ddf590b70`，已入 `.git-blame-ignore-revs`）。目标转为**保持 clean**：改过的 `.rs` 提交前必须过 `rustfmt --edition 2021 --check <file>`。
+- 全仓 fmt / clippy sweep 只能单独开纯格式提交，禁止把无关文件的 fmt 噪音混进业务提交。
 - 细则：`dev-guidelines/backend/quality-guidelines.md`（Rust Format）。配置：`src-tauri/rustfmt.toml`、`.vscode/settings.json`。
 
 ### Shell Baseline
