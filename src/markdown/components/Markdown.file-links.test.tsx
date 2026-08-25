@@ -415,6 +415,26 @@ describe("Markdown file links", () => {
     expect(onOpenFileLink).toHaveBeenCalledWith("C:\\Users\\test\\repo\\demo.ts#L3");
   });
 
+  it("routes full markdown Windows drive destinations through the file opener", async () => {
+    const onOpenFileLink = vi.fn();
+    const path =
+      "D:/AI/Alchat/突击队/输出/S9_SE_PANEL_V101_0814_逐物料审计版.md";
+
+    render(
+      <Markdown
+        value={`结果在：[S9_SE_PANEL_V101_0814_逐物料审计版.md](${path})`}
+        onOpenFileLink={onOpenFileLink}
+      />,
+    );
+
+    const link = await screen.findByRole("link", {
+      name: "S9_SE_PANEL_V101_0814_逐物料审计版.md",
+    });
+    fireEvent.click(link);
+
+    expect(onOpenFileLink).toHaveBeenCalledWith(path);
+  });
+
   it("falls back to safe progressive reveal defaults for non-finite inputs", () => {
     vi.useFakeTimers();
     const onRenderedValueChange = vi.fn();

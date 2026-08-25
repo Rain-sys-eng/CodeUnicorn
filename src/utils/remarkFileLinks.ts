@@ -3,11 +3,10 @@ const FILE_LINK_PROTOCOL = "codex-file:";
 const SPACED_WINDOWS_FILE_PATH_PATTERN = String.raw`[A-Za-z]:[\\/](?![\\/])[^\r\n\`"'<>|]*?\.[A-Za-z0-9]{1,12}(?:#[A-Za-z0-9:_-]+)?`;
 const SPACED_POSIX_FILE_PATH_PATTERN = String.raw`\/(?:Users|Volumes|home|tmp|var|private)\/[^\r\n\`"'<>]*?\.[A-Za-z0-9]{1,12}(?:#[A-Za-z0-9:_-]+)?`;
 const WINDOWS_ABSOLUTE_PATH_PATTERN = String.raw`[A-Za-z]:[\\/](?![\\/])[^\s\`"'<>\|]+`;
-const FILE_PATH_PATTERN =
-  new RegExp(
-    String.raw`(${SPACED_WINDOWS_FILE_PATH_PATTERN}|${SPACED_POSIX_FILE_PATH_PATTERN}|${WINDOWS_ABSOLUTE_PATH_PATTERN}|\/[^\s\`"'<>]+|~\/[^\s\`"'<>]+|\.{1,2}\/[^\s\`"'<>]+|[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+)`,
-    "g",
-  );
+const FILE_PATH_PATTERN = new RegExp(
+  String.raw`(${SPACED_WINDOWS_FILE_PATH_PATTERN}|${SPACED_POSIX_FILE_PATH_PATTERN}|${WINDOWS_ABSOLUTE_PATH_PATTERN}|\/[^\s\`"'<>]+|~\/[^\s\`"'<>]+|\.{1,2}\/[^\s\`"'<>]+|[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+)`,
+  "g",
+);
 const FILE_PATH_MATCH = new RegExp(`^${FILE_PATH_PATTERN.source}$`);
 const WINDOWS_ABSOLUTE_PATH_MATCH = new RegExp(
   `^(?:${SPACED_WINDOWS_FILE_PATH_PATTERN}|${WINDOWS_ABSOLUTE_PATH_PATTERN})$`,
@@ -21,7 +20,17 @@ const BARE_WINDOWS_FILE_PATH_PATTERN = new RegExp(
   "g",
 );
 
-const TRAILING_PUNCTUATION = new Set([".", ",", ";", ":", "!", "?", ")", "]", "}"]);
+const TRAILING_PUNCTUATION = new Set([
+  ".",
+  ",",
+  ";",
+  ":",
+  "!",
+  "?",
+  ")",
+  "]",
+  "}",
+]);
 // CJK ideographs, kana, and full-width punctuation — characters that show up in
 // prose but never in real code file paths.
 const CJK_PATTERN = /[぀-ヿ㐀-䶿一-鿿＀-￯]/;
@@ -72,8 +81,16 @@ function isPathCandidate(
   if (leadingContext.endsWith("://")) {
     return false;
   }
-  if (value.startsWith("/") || value.startsWith("./") || value.startsWith("../")) {
-    if (value.startsWith("/") && previousChar && /[A-Za-z0-9.]/.test(previousChar)) {
+  if (
+    value.startsWith("/") ||
+    value.startsWith("./") ||
+    value.startsWith("../")
+  ) {
+    if (
+      value.startsWith("/") &&
+      previousChar &&
+      /[A-Za-z0-9.]/.test(previousChar)
+    ) {
       return false;
     }
     // Reject slash-commands like /aimax:plan, /commit, /help – single-segment
@@ -114,6 +131,83 @@ function escapeMarkdownLinkText(value: string) {
 
 export function toFileLink(path: string) {
   return `${FILE_LINK_PROTOCOL}${encodeURIComponent(path)}`;
+}
+
+function decodeUriComponentSafe(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function isWindowsDriveAbsolutePath(value: string) {
+  return /^[A-Za-z]:[\\/]/.test(value);
+}
+
+const WRAPPED_WINDOWS_FILE_LINK_PATTERN =
+  /^\/?\[([A-Za-z]:[\\/][^\]]+)\]\s*\(\s*codex-file:([^)]+)\)\s*$/;
+const FALSE_POSIX_WRAPPED_WINDOWS_PATH_PATTERN =
+  /^\/\[([A-Za-z]:[\\/][^\]]+)\]$/;
+const MARKDOWN_INLINE_LINK_PATTERN = /(!?)\[([^\]]*)]\(([\s\S]*?)\)/g;
+
+export function recoverLocalFileLinkPath(raw: string, depth = 0): string {
+  const trimmed = raw.trim();
+  if (!trimmed || depth > 4) {
+    return trimmed;
+  }
+  if (isWindowsDriveAbsolutePath(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith(FILE_LINK_PROTOCOL)) {
+    return recoverLocalFileLinkPath(
+      decodeUriComponentSafe(trimmed.slice(FILE_LINK_PROTOCOL.length)),
+      depth + 1,
+    );
+  }
+  const wrapped = trimmed.match(WRAPPED_WINDOWS_FILE_LINK_PATTERN);
+  if (wrapped) {
+    const decodedDest = recoverLocalFileLinkPath(
+      decodeUriComponentSafe(wrapped[2] ?? ""),
+      depth + 1,
+    );
+    if (isWindowsDriveAbsolutePath(decodedDest)) {
+      return decodedDest;
+    }
+    const bracketed = wrapped[1] ?? "";
+    if (isWindowsDriveAbsolutePath(bracketed)) {
+      return bracketed;
+    }
+  }
+  const falsePosix = trimmed.match(FALSE_POSIX_WRAPPED_WINDOWS_PATH_PATTERN);
+  if (falsePosix?.[1] && isWindowsDriveAbsolutePath(falsePosix[1])) {
+    return falsePosix[1];
+  }
+  return trimmed;
+}
+
+export function rewriteWindowsAbsoluteMarkdownLinkDestinations(value: string) {
+  MARKDOWN_INLINE_LINK_PATTERN.lastIndex = 0;
+  return value.replace(
+    MARKDOWN_INLINE_LINK_PATTERN,
+    (match, bang: string, text: string, dest: string) => {
+      if (bang === "!") {
+        return match;
+      }
+      const trimmedDest = dest.trim();
+      if (
+        !trimmedDest ||
+        /^(codex-file|file|https?|mailto):/i.test(trimmedDest)
+      ) {
+        return match;
+      }
+      const unwrapped = trimmedDest.replace(/^<(.+)>$/, "$1").trim();
+      if (!WINDOWS_ABSOLUTE_PATH_MATCH.test(unwrapped)) {
+        return match;
+      }
+      return `[${text}](${toFileLink(unwrapped)})`;
+    },
+  );
 }
 
 function linkifyText(value: string) {
@@ -157,7 +251,11 @@ function linkifyText(value: string) {
 }
 
 function isSkippableParent(parentType?: string) {
-  return parentType === "link" || parentType === "inlineCode" || parentType === "code";
+  return (
+    parentType === "link" ||
+    parentType === "inlineCode" ||
+    parentType === "code"
+  );
 }
 
 function walk(node: MarkdownNode, parentType?: string) {
@@ -259,5 +357,7 @@ export function isFileLinkUrl(url: string) {
 }
 
 export function decodeFileLink(url: string) {
-  return decodeURIComponent(url.slice(FILE_LINK_PROTOCOL.length));
+  return recoverLocalFileLinkPath(
+    decodeUriComponentSafe(url.slice(FILE_LINK_PROTOCOL.length)),
+  );
 }

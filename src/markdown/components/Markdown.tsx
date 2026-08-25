@@ -41,6 +41,7 @@ import {
   isFileLinkUrl,
   isLinkableFilePath,
   normalizeBareWindowsFilePathLinksAround,
+  rewriteWindowsAbsoluteMarkdownLinkDestinations,
   toFileLink,
 } from "../../utils/remarkFileLinks";
 import {
@@ -244,20 +245,22 @@ export const Markdown = memo(function Markdown({
     }
     const normalizeDisplayText = (text: string) =>
       normalizeImageTags(
-        normalizeBareWindowsFilePathLinksAround(
-          normalizeListIndentation(
-            normalizeInlineOrderedListBreaks(
-              normalizeGithubBlockquoteAlerts(
-                normalizeFragmentedLineBreaks(normalizeFragmentedParagraphBreaks(text)),
+        rewriteWindowsAbsoluteMarkdownLinkDestinations(
+          normalizeBareWindowsFilePathLinksAround(
+            normalizeListIndentation(
+              normalizeInlineOrderedListBreaks(
+                normalizeGithubBlockquoteAlerts(
+                  normalizeFragmentedLineBreaks(normalizeFragmentedParagraphBreaks(text)),
+                ),
               ),
             ),
+            (protectedText) =>
+              normalizeMarkdownMathForMessage(
+                normalizeFragmentedResourceReferences(
+                  protectedText,
+                ),
+              ),
           ),
-          (protectedText) =>
-            normalizeMarkdownMathForMessage(
-              normalizeFragmentedResourceReferences(
-                protectedText,
-              ),
-            ),
         ),
       );
     return normalizeOutsideMarkdownCode(renderValue, normalizeDisplayText);

@@ -11,6 +11,7 @@ import {
   isHtmlFilePath,
   openHtmlInBrowser,
 } from "../../files/utils/openHtmlInBrowser";
+import { recoverLocalFileLinkPath } from "../../../utils/remarkFileLinks";
 import {
   clampRendererContextMenuPosition,
   estimateRendererContextMenuHeight,
@@ -98,15 +99,16 @@ function normalizeLocalFilePath(path: string) {
       if (url.hostname && url.hostname !== "localhost") {
         return `\\\\${url.hostname}${decodedPath.replace(/\//g, "\\")}`;
       }
-      return decodedPath;
+      return recoverLocalFileLinkPath(decodedPath);
     } catch {
-      return trimmed;
+      return recoverLocalFileLinkPath(trimmed);
     }
   }
-  if (/^\/[A-Za-z]:[\\/]/.test(trimmed)) {
-    return trimmed.slice(1);
+  const recovered = recoverLocalFileLinkPath(trimmed);
+  if (/^\/[A-Za-z]:[\\/]/.test(recovered)) {
+    return recovered.slice(1);
   }
-  return trimmed;
+  return recovered;
 }
 
 function resolveFilePath(path: string, workspacePath?: string | null) {
@@ -139,7 +141,9 @@ function stripLineSuffix(path: string) {
 function revealLabel() {
   const platform =
     (navigator as Navigator & { userAgentData?: { platform?: string } })
-      .userAgentData?.platform ?? navigator.platform ?? "";
+      .userAgentData?.platform ??
+    navigator.platform ??
+    "";
   const normalized = platform.toLowerCase();
   if (normalized.includes("mac")) {
     return "Reveal in Finder";
@@ -202,7 +206,10 @@ export function useFileLinkOpener(
         currentOpenTargets,
         currentSelectedOpenAppId,
       );
-      const resolvedPath = resolveFilePath(stripLineSuffix(rawPath), currentWorkspacePath);
+      const resolvedPath = resolveFilePath(
+        stripLineSuffix(rawPath),
+        currentWorkspacePath,
+      );
 
       try {
         if (target.kind === "finder") {
@@ -250,7 +257,9 @@ export function useFileLinkOpener(
         workspacePath: currentWorkspacePath,
         onOpenWorkspaceFile: currentOnOpenWorkspaceFile,
       } = configRef.current;
-      const strippedPath = normalizeLocalFilePath(stripLineSuffix(rawPath).trim());
+      const strippedPath = normalizeLocalFilePath(
+        stripLineSuffix(rawPath).trim(),
+      );
       const resolvedPath = resolveFilePath(strippedPath, currentWorkspacePath);
       const workspaceRelativePath = getWorkspaceRelativePath(
         resolvedPath,
@@ -335,7 +344,10 @@ export function useFileLinkOpener(
         currentOpenTargets,
         currentSelectedOpenAppId,
       );
-      const resolvedPath = resolveFilePath(stripLineSuffix(rawPath), currentWorkspacePath);
+      const resolvedPath = resolveFilePath(
+        stripLineSuffix(rawPath),
+        currentWorkspacePath,
+      );
       const appName = (target.appName || target.label || "").trim();
       const items: RendererContextMenuItem[] = [
         {
@@ -409,24 +421,34 @@ export function useFileLinkOpener(
           id: "copy-link",
           label: "Copy Link",
           onSelect: async () => {
-            const link =
-              resolvedPath.startsWith("/") ? `file://${resolvedPath}` : resolvedPath;
+            const link = resolvedPath.startsWith("/")
+              ? `file://${resolvedPath}`
+              : resolvedPath;
             await copyTextToClipboard(link);
           },
         },
       ];
 
-      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
-        width: 260,
-        height: estimateRendererContextMenuHeight(items),
-      });
+      const position = clampRendererContextMenuPosition(
+        event.clientX,
+        event.clientY,
+        {
+          width: 260,
+          height: estimateRendererContextMenuHeight(items),
+        },
+      );
       setFileLinkMenu({
         ...position,
         label: "File link actions",
         items,
       });
     },
-    [openFileLink, openFileLinkInConfiguredTarget, openHtmlFileInBrowser, reportOpenError],
+    [
+      openFileLink,
+      openFileLinkInConfiguredTarget,
+      openHtmlFileInBrowser,
+      reportOpenError,
+    ],
   );
 
   return {
