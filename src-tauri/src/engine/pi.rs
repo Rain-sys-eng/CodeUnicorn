@@ -273,14 +273,19 @@ pub struct PiActiveProcessSnapshot {
 
 struct ActivePiChildProcess {
     child: Child,
+    /// 该 print-json 进程绑定的 PI session id（None = 新会话，spawn 出全新
+    /// session JSONL）。fallback 忙互斥按它过滤：只有同一 session 的并发
+    /// print-json 才会交叉写同一 JSONL；新会话 / 不同 session MUST 并行。
+    session_id: Option<String>,
     #[allow(dead_code)]
     started_at_ms: u64,
 }
 
 impl ActivePiChildProcess {
-    fn new(child: Child) -> Self {
+    fn new(child: Child, session_id: Option<String>) -> Self {
         Self {
             child,
+            session_id,
             started_at_ms: unix_timestamp_ms_for_process_diagnostics(),
         }
     }
@@ -308,6 +313,19 @@ fn apply_interrupt_result(
     interrupted_turns.insert(turn_id.to_string());
     active_processes.remove(turn_id);
     Ok(())
+}
+
+/// print-json fallback 的忙互斥判定：spawn-per-turn 进程只在「同一
+/// session」并发时才会交叉写同一 session JSONL。新会话（None）各自落全新
+/// JSONL，两个 None 进程互不冲突，恒放行；不同 session 写不同文件，放行。
+fn print_json_fallback_busy<'a>(
+    mut active_sessions: impl Iterator<Item = Option<&'a str>>,
+    session_id: Option<&str>,
+) -> bool {
+    let Some(session_id) = session_id else {
+        return false;
+    };
+    active_sessions.any(|active| active == Some(session_id))
 }
 
 fn unix_timestamp_ms_for_process_diagnostics() -> u64 {
@@ -832,9 +850,6 @@ impl PiSession {
         model: Option<&str>,
         scratch: &str,
     ) -> Result<PiResident, String> {
-        if self.rpc_disabled.load(Ordering::SeqCst) {
-            return Err("pi rpc disabled after previous failure".to_string());
-        }
         let key = pi_resident_map_key(session_id_hint, scratch);
         {
             let guard = self.residents.read().await;
@@ -850,6 +865,12 @@ impl PiSession {
                 return Ok(resident.clone());
             }
             guard.remove(&key);
+        }
+        // 禁用闩只拦新 spawn：已存活的 resident（并行 tab）必须继续复用。
+        // 否则一次历史会话 spawn 失败会把全 workspace 的 RPC 长驻进程全部
+        // 打成 print-json（实测表现：只剩一个 PI 能跑）。
+        if self.rpc_disabled.load(Ordering::SeqCst) {
+            return Err("pi rpc disabled after previous failure".to_string());
         }
         let bind_session_id = session_id_hint
             .map(str::trim)
@@ -1454,10 +1475,17 @@ impl PiSession {
     }
 
     pub async fn drop_resident(&self, session_id: &str) {
-        let key = format!("session:{session_id}");
+        self.drop_resident_by_key(&format!("session:{session_id}"))
+            .await;
+    }
+
+    /// 按 resident map key 释放。send fallback 路径用它覆盖 scratch 槽
+    /// （`pi_resident_map_key(None / 非法 id, turn_id)`），避免只认
+    /// `session:{id}` 导致新会话 resident 泄漏。
+    async fn drop_resident_by_key(&self, key: &str) {
         let resident = {
             let mut guard = self.residents.write().await;
-            guard.remove(&key)
+            guard.remove(key)
         };
         let Some(resident) = resident else {
             return;
@@ -1467,7 +1495,7 @@ impl PiSession {
         }
         resident.client.kill().await;
         log::info!(
-            "[pi/rpc] dropped resident session={session_id} workspace={}",
+            "[pi/rpc] dropped resident key={key} workspace={}",
             self.workspace_id
         );
     }
@@ -1629,9 +1657,12 @@ impl PiSession {
                     turn_id,
                     reason
                 );
-                if let Some(session_id) = params.session_id.as_deref() {
-                    self.drop_resident(session_id).await;
-                }
+                // 释放本次发送实际占用的 resident。key 必须与
+                // try_send_message_rpc 的 scratch_key 同源：session_id=None /
+                // 非法 id 时 resident 在 scratch:{turn_id} 槽，旧逻辑只 drop
+                // session:{id} 会让新会话 resident 泄漏。
+                let resident_key = pi_resident_map_key(params.session_id.as_deref(), turn_id);
+                self.drop_resident_by_key(&resident_key).await;
             }
             Err(PiRpcSendError::Failed(error)) => {
                 self.emit_error(turn_id, error.clone());
@@ -1645,13 +1676,24 @@ impl PiSession {
         // print-json fallback 是 spawn-per-turn：同会话并发进程会交叉写同一
         // session JSONL。融合（fusion）在矩阵升 supported 后可能打到这条
         // 路径——此时必须拒绝而不是假装 steer，让消息留在队列里。
+        // 互斥粒度是「同一 session」而不是全 workspace：不同 session / 新会话
+        // 各自写不同 JSONL，必须允许并行。
         {
-            let active = self.active_processes.lock().await;
-            if !active.is_empty()
-                || self
-                    .rpc_has_active_run_for(params.session_id.as_deref())
-                    .await
-            {
+            let print_json_busy = {
+                let active = self.active_processes.lock().await;
+                print_json_fallback_busy(
+                    active.values().map(|process| process.session_id.as_deref()),
+                    params.session_id.as_deref(),
+                )
+            };
+            // session_id=None 的新发送没有可对账的本会话 resident（scratch 槽
+            // 刚在上方释放），无需查 rpc run；scratch:commands 是树/fork 面板
+            // 共享槽，与本次发送无关。
+            let rpc_busy = match params.session_id.as_deref() {
+                Some(session_id) => self.rpc_has_active_run_for(Some(session_id)).await,
+                None => false,
+            };
+            if print_json_busy || rpc_busy {
                 let error = "PI session is busy (rpc unavailable, print-json fallback cannot steer); the message stays queued.".to_string();
                 self.emit_error(turn_id, error.clone());
                 return Err(error);
@@ -1717,7 +1759,10 @@ impl PiSession {
 
         {
             let mut active = self.active_processes.lock().await;
-            active.insert(turn_id.to_string(), ActivePiChildProcess::new(child));
+            active.insert(
+                turn_id.to_string(),
+                ActivePiChildProcess::new(child, params.session_id.clone()),
+            );
         }
 
         self.emit_turn_event(
@@ -2229,6 +2274,51 @@ mod tests {
         assert_eq!(
             pi_resident_map_key(Some("sess-a"), "turn-1"),
             pi_resident_map_key(Some("sess-a"), "turn-9")
+        );
+    }
+
+    #[test]
+    fn print_json_fallback_busy_only_blocks_same_session() {
+        // 新会话（None）从不因 print-json 占用被挡：各自 spawn 全新 JSONL。
+        assert!(!print_json_fallback_busy(
+            [None, Some("sess-a")].into_iter(),
+            None
+        ));
+        // 同 session 并发 print-json 必须互斥（交叉写同一 session JSONL）。
+        assert!(print_json_fallback_busy(
+            [Some("sess-a")].into_iter(),
+            Some("sess-a")
+        ));
+        // 不同 session 并行允许。
+        assert!(!print_json_fallback_busy(
+            [Some("sess-a")].into_iter(),
+            Some("sess-b")
+        ));
+        // 仅有新会话进程时，历史会话不被误挡。
+        assert!(!print_json_fallback_busy(
+            [None].into_iter(),
+            Some("sess-a")
+        ));
+        // 空占用一律放行。
+        assert!(!print_json_fallback_busy(
+            std::iter::empty(),
+            Some("sess-a")
+        ));
+    }
+
+    #[test]
+    fn fallback_drop_key_matches_rpc_scratch_key() {
+        // send_message fallback 释放的 key 必须与 try_send_message_rpc 的
+        // scratch_key 同源（pi_resident_map_key(session_id, turn_id)），
+        // 否则 session_id=None / 非法 id 时 resident 泄漏。
+        assert_eq!(pi_resident_map_key(None, "turn-1"), "scratch:turn-1");
+        assert_eq!(
+            pi_resident_map_key(Some("pi:x"), "turn-1"),
+            "scratch:turn-1"
+        );
+        assert_eq!(
+            pi_resident_map_key(Some("abc-123"), "turn-1"),
+            "session:abc-123"
         );
     }
 
