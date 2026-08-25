@@ -4,6 +4,7 @@ import {
   refreshPiSessionTree,
   requestPiThreadJump,
   usePiSessionTree,
+  usePiSessionTreeError,
 } from "../store/piSessionStore";
 import {
   laneChipLabel,
@@ -103,6 +104,7 @@ export function PiSessionTreePanel({
 }: PiSessionTreePanelProps) {
   const { t } = useTranslation();
   const tree = usePiSessionTree(workspaceId, threadId);
+  const treeError = usePiSessionTreeError(workspaceId, threadId);
   const [focusId, setFocusId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -384,7 +386,21 @@ export function PiSessionTreePanel({
     <div className="pi-tree-panel" role="region" aria-label={t("piSession.tree.panelAria")}>
       <div className="pi-fs-body" ref={bodyRef}>
         {tree === null ? (
-          <div className="pi-fs-empty">加载中…</div>
+          treeError !== null ? (
+            <div className="pi-fs-empty pi-fs-load-error" role="alert">
+              <p>{t("piSession.tree.loadFailed")}</p>
+              <p className="pi-fs-load-error-detail">{treeError}</p>
+              <button
+                type="button"
+                className="pi-fs-load-error-retry"
+                onClick={() => void refreshPiSessionTree(workspaceId, threadId)}
+              >
+                {t("piSession.tree.retry")}
+              </button>
+            </div>
+          ) : (
+            <div className="pi-fs-empty">加载中…</div>
+          )
         ) : visibleNodes.length === 0 ? (
           <div className="pi-fs-empty">当前过滤条件下没有节点</div>
         ) : (

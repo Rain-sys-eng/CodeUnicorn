@@ -37,6 +37,11 @@ const PI_RPC_TURN_WATCHDOG_TICK: Duration = Duration::from_secs(30);
 const PI_RPC_TURN_SILENCE_TIMEOUT: Duration = Duration::from_secs(900);
 /// After `abort`, give pi this long to settle before killing the resident.
 const PI_RPC_ABORT_SETTLE_GRACE: Duration = Duration::from_secs(2);
+/// `rpc_disabled` 闩的冷却期：置位后该窗口内拦新 spawn；窗口过后放行一次
+/// 试探 spawn（成功清闩自愈，失败重新计时）。60s 覆盖 pi 二进制升级/资源
+/// 瞬态耗尽；持续故障下每窗口最多白试一次（~2s handshake），不退化成每次
+/// 发送都白 spawn。
+const PI_RPC_DISABLED_RETRY_COOLDOWN: Duration = Duration::from_secs(60);
 
 // ponytail: pi's NDJSON stream has no terminal "result" event, so turn end is
 // detected by stdout EOF. A lingering grandchild (e.g. a bash tool daemon)
@@ -48,6 +53,15 @@ const PI_RPC_ABORT_SETTLE_GRACE: Duration = Duration::from_secs(2);
 const PI_STDOUT_EXIT_POLL: Duration = Duration::from_millis(250);
 const PI_POST_EXIT_GRACE: Duration = Duration::from_secs(5);
 const PI_STDERR_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// 禁用闩是否拦截本次新 spawn：未置位不拦；冷却期内拦；冷却过后放行一
+/// 次试探（纯函数，便于单测冷却矩阵）。
+fn rpc_disabled_blocks_spawn(disabled_since: Option<Instant>, now: Instant) -> bool {
+    match disabled_since {
+        None => false,
+        Some(since) => now.duration_since(since) < PI_RPC_DISABLED_RETRY_COOLDOWN,
+    }
+}
 
 pub fn resolve_pi_session_id_for_engine_send(
     continue_session: bool,
@@ -197,10 +211,13 @@ pub struct PiSession {
     /// Parallel native PI threads MUST NOT share a process — a single
     /// workspace-wide client serializes all tabs behind `switch_session`.
     residents: Arc<RwLock<HashMap<String, PiResident>>>,
-    /// Sticky flag: handshake proved this binary cannot speak RPC.
+    /// Sticky latch: handshake proved this binary cannot speak RPC.
     /// Per-session spawn failures do not set this; only `PiRpcClient::spawn`
-    /// handshake errors do (old pi without `--mode rpc`).
-    rpc_disabled: Arc<AtomicBool>,
+    /// handshake errors do (old pi without `--mode rpc`). 记录置位时间：闩只
+    /// 拦新 spawn（存活 resident 复用优先），冷却期过后放行一次试探
+    /// spawn，成功即清闩自愈——禁止 app 生命周期内不可逆（用户实证：一次
+    /// 切模型失败把全 workspace 的 RPC + 会话树打残到重启）。
+    rpc_disabled_since: Arc<Mutex<Option<Instant>>>,
 }
 
 /// One `pi --mode rpc` process + the run currently streaming on it.
@@ -795,7 +812,7 @@ impl PiSession {
             active_processes: Mutex::new(HashMap::new()),
             interrupted_turns: Mutex::new(HashSet::new()),
             residents: Arc::new(RwLock::new(HashMap::new())),
-            rpc_disabled: Arc::new(AtomicBool::new(false)),
+            rpc_disabled_since: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -868,9 +885,20 @@ impl PiSession {
         }
         // 禁用闩只拦新 spawn：已存活的 resident（并行 tab）必须继续复用。
         // 否则一次历史会话 spawn 失败会把全 workspace 的 RPC 长驻进程全部
-        // 打成 print-json（实测表现：只剩一个 PI 能跑）。
-        if self.rpc_disabled.load(Ordering::SeqCst) {
-            return Err("pi rpc disabled after previous failure".to_string());
+        // 打成 print-json（实测表现：只剩一个 PI 能跑）。冷却期过后放行一次
+        // 试探 spawn：成功即清闩自愈，失败重新计时——闩不可逆会让新会话 /
+        // 会话树静默残废到 app 重启（用户实证）。
+        {
+            let disabled_since = *self.rpc_disabled_since.lock().await;
+            if rpc_disabled_blocks_spawn(disabled_since, Instant::now()) {
+                return Err("pi rpc disabled after previous failure".to_string());
+            }
+            if disabled_since.is_some() {
+                log::info!(
+                    "[pi/rpc] rpc_disabled cooldown elapsed; probing spawn (workspace={})",
+                    self.workspace_id
+                );
+            }
         }
         let bind_session_id = session_id_hint
             .map(str::trim)
@@ -886,6 +914,14 @@ impl PiSession {
         .await;
         match spawn_result {
             Ok(client) => {
+                // 试探/常规 spawn 成功：清闩自愈（未置位时 take 为 None，静默
+                // 跳过，不分支）。
+                if self.rpc_disabled_since.lock().await.take().is_some() {
+                    log::info!(
+                        "[pi/rpc] spawn succeeded; rpc_disabled latch cleared (workspace={})",
+                        self.workspace_id
+                    );
+                }
                 if let Some(id) = client.session_id().await {
                     self.set_session_id(Some(id)).await;
                 }
@@ -907,7 +943,7 @@ impl PiSession {
                 Ok(resident)
             }
             Err(error) => {
-                self.rpc_disabled.store(true, Ordering::SeqCst);
+                *self.rpc_disabled_since.lock().await = Some(Instant::now());
                 Err(error)
             }
         }
@@ -2320,6 +2356,31 @@ mod tests {
             pi_resident_map_key(Some("abc-123"), "turn-1"),
             "session:abc-123"
         );
+    }
+
+    #[test]
+    fn rpc_disabled_latch_blocks_within_cooldown_and_allows_probe_after() {
+        let t0 = Instant::now();
+        // 未置位：不拦。
+        assert!(!rpc_disabled_blocks_spawn(None, t0));
+        // 冷却期内：拦（含窗口右端点前 1s）。
+        assert!(rpc_disabled_blocks_spawn(
+            Some(t0),
+            t0 + Duration::from_secs(10)
+        ));
+        assert!(rpc_disabled_blocks_spawn(
+            Some(t0),
+            t0 + PI_RPC_DISABLED_RETRY_COOLDOWN - Duration::from_secs(1)
+        ));
+        // 冷却边界及之后：放行试探。
+        assert!(!rpc_disabled_blocks_spawn(
+            Some(t0),
+            t0 + PI_RPC_DISABLED_RETRY_COOLDOWN
+        ));
+        assert!(!rpc_disabled_blocks_spawn(
+            Some(t0),
+            t0 + PI_RPC_DISABLED_RETRY_COOLDOWN * 2
+        ));
     }
 
     #[test]

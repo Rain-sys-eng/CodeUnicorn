@@ -41,6 +41,8 @@ export default {
       chipTitle:
         "会话分支（{{count}} 条 lane）· 点击查看会话树（pi RPC 无 lane 切换命令）",
       sidebarBadgeTitle: "会话树含 {{count}} 条分支 · 点击查看",
+      loadFailed: "会话树加载失败",
+      retry: "重试",
     },
   },
 };

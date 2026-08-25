@@ -23,6 +23,9 @@ function piSessionKey(workspaceId: string, threadId: string): string {
 type PiSessionFeatureState = {
   treeByKey: Record<string, PiLaneProjection>;
   loadingByKey: Record<string, boolean>;
+  /** 最近一次树加载失败的后端错误（key 同 treeByKey）。仅作面板错误态
+   * 展示；新尝试开始时清除。有 last-good 快照时错误只记录、不顶掉旧树。 */
+  errorByKey: Record<string, string>;
   /** thread key whose center-dock tree panel is open (null = closed) */
   treeOverlayKey: string | null;
   /** 树内跳转请求（store 中转：panel 无布局上下文，useLayoutNodes 消费） */
@@ -32,6 +35,7 @@ type PiSessionFeatureState = {
 let state: PiSessionFeatureState = {
   treeByKey: {},
   loadingByKey: {},
+  errorByKey: {},
   treeOverlayKey: null,
   jumpRequest: null,
 };
@@ -123,6 +127,13 @@ export async function refreshPiSessionTree(
   if (state.loadingByKey[key]) {
     return;
   }
+  // 新尝试开始即清掉上一次失败态：面板据此从「加载失败」切回「加载中」，
+  // 成功/再次失败都会重写给 key，不存在 stale 错误残留。
+  if (state.errorByKey[key]) {
+    const nextErrorByKey = { ...state.errorByKey };
+    delete nextErrorByKey[key];
+    setState({ errorByKey: nextErrorByKey });
+  }
   setState({ loadingByKey: { ...state.loadingByKey, [key]: true } });
   try {
     const tree = await piGetSessionTree({
@@ -157,6 +168,12 @@ export async function refreshPiSessionTree(
   } catch (error) {
     // RPC unavailable (print-json fallback / old pi): keep last-good snapshot.
     console.warn("[pi-session] refreshTree failed", error);
+    setState({
+      errorByKey: {
+        ...state.errorByKey,
+        [key]: error instanceof Error ? error.message : String(error),
+      },
+    });
   } finally {
     setState({ loadingByKey: { ...state.loadingByKey, [key]: false } });
   }
@@ -204,6 +221,15 @@ export function usePiSessionTree(
 ): PiLaneProjection | null {
   const key = piSessionKey(workspaceId, threadId);
   return useSyncExternalStore(subscribe, () => state.treeByKey[key] ?? null);
+}
+
+/** 树加载失败的后端错误消息（无错误 / 新尝试进行中为 null）。 */
+export function usePiSessionTreeError(
+  workspaceId: string,
+  threadId: string,
+): string | null {
+  const key = piSessionKey(workspaceId, threadId);
+  return useSyncExternalStore(subscribe, () => state.errorByKey[key] ?? null);
 }
 
 
