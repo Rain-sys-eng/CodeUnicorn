@@ -3692,6 +3692,7 @@ User Fork / Provider Continuation
 - [Agent Client Protocol](https://github.com/agentclientprotocol/agent-client-protocol)
 - [ACP v2 Prompt Lifecycle RFD](https://agentclientprotocol.com/rfds/v2/prompt)
 - [Zed External Agents](https://zed.dev/docs/ai/external-agents)
+
 - [GitHub Copilot: Changing the AI Model](https://docs.github.com/en/copilot/how-tos/use-ai-models/change-the-chat-model)
 - [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
 - [SQLite Write-Ahead Logging](https://www.sqlite.org/wal.html)
@@ -3702,3 +3703,11 @@ User Fork / Provider Continuation
 - [AutoGen: Model Context](https://microsoft.github.io/autogen/stable/reference/python/autogen_core.model_context.html)
 - [Anthropic: How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
 - [Headroom: context compression layer for AI agents](https://github.com/headroomlabs-ai/headroom)（CCR 可逆压缩、CacheAligner 前缀稳定、ContentRouter 分类型压缩的模式参考；不引入其 proxy/wrap 部署形态与 ML 压缩模型）
+
+## 最近校准
+
+### 2026-08-24：Codex provider binding 与 GUI 启动环境
+
+| Trigger | Current implementation fact | OpenSpec / code source |
+| --- | --- | --- |
+| provider binding / Codex runtime launch | GUI 启动 Codex app-server 前，根据 effective `CODEX_HOME/config.toml` 的 `model_providers.*.env_key` 解析缺失环境变量，并仅注入 child process | `src-tauri/src/codex/provider_env.rs`; `src-tauri/src/backend/app_server.rs`; `openspec/changes/fix-codex-macos-provider-env-key-resolution/` |

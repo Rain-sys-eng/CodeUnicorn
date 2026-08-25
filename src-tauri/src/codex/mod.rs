@@ -15,6 +15,7 @@ mod commit_message;
 pub(crate) mod config;
 mod doctor;
 pub(crate) mod home;
+pub(crate) mod provider_env;
 mod installer;
 pub(crate) mod launch_profile;
 mod mcp_config;
