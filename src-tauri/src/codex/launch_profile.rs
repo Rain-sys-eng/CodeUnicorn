@@ -121,14 +121,13 @@ fn resolve_workspace_arguments_source(
     if normalized_settings_value(entry.settings.codex_args.as_ref()).is_some() {
         return "workspace".to_string();
     }
-    if entry.kind.is_worktree() {
-        if parent_entry
+    if entry.kind.is_worktree()
+        && parent_entry
             .and_then(|parent| normalized_settings_value(parent.settings.codex_args.as_ref()))
             .is_some()
         {
             return "parent-workspace".to_string();
         }
-    }
     if normalized_settings_value(settings.codex_args.as_ref()).is_some() {
         "global".to_string()
     } else {

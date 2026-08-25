@@ -49,9 +49,7 @@ use crate::codex::spawn_workspace_session;
 use crate::engine::{resolve_engine_type, EngineType};
 use crate::git_utils::resolve_git_root;
 use crate::remote_backend;
-use crate::shared::settings_core::{
-    take_workspaces_recovery_notice_core, WorkspacesRecoveryNotice,
-};
+use crate::shared::settings_core::{take_workspaces_recovery_notice_core, WorkspacesRecoveryNotice};
 use crate::shared::workspaces_core;
 use crate::state::AppState;
 use crate::storage::write_workspaces_preserving_existing;

@@ -400,10 +400,7 @@ pub(crate) async fn run_qoder_doctor_for_profile_with_settings(
 ) -> Result<Value, String> {
     let distribution = qoder_distribution_from_provider_profile_id(provider_profile_id.as_deref())?;
     let mut distribution_settings = QoderDistributionSettings::from_app_settings(settings);
-    if let Some(custom_bin) = qoder_bin
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-    {
+    if let Some(custom_bin) = qoder_bin.clone().filter(|value| !value.trim().is_empty()) {
         match distribution {
             QoderDistribution::Global => distribution_settings.global_bin = Some(custom_bin),
             QoderDistribution::Cn => distribution_settings.cn_bin = Some(custom_bin),
@@ -505,8 +502,8 @@ pub(crate) async fn run_qoder_doctor_for_profile_with_settings(
                 distribution,
                 home.as_ref().and_then(|path| path.to_str()),
             )
-                .await
-                .unwrap_or_default(),
+            .await
+            .unwrap_or_default(),
         )
     } else {
         None

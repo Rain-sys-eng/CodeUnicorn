@@ -347,9 +347,9 @@ pub async fn qoder_auth_status(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "qoder_auth_status",
             serde_json::json!({ "providerProfileId": provider_profile_id }),
@@ -369,9 +369,9 @@ pub async fn qoder_auth_set_pat(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "qoder_auth_set_pat",
             serde_json::json!({ "key": key, "providerProfileId": provider_profile_id }),
@@ -390,9 +390,9 @@ pub async fn qoder_auth_delete_pat(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "qoder_auth_delete_pat",
             serde_json::json!({ "providerProfileId": provider_profile_id }),
@@ -511,7 +511,10 @@ mod tests {
     #[test]
     fn spawn_falls_back_to_inherited_env_only_when_nothing_stored() {
         // No explicit injection: the child inherits the process env var.
-        assert_eq!(select_spawn_pat(None, Some("env-pat-value".to_string())), None);
+        assert_eq!(
+            select_spawn_pat(None, Some("env-pat-value".to_string())),
+            None
+        );
         assert_eq!(select_spawn_pat(None, None), None);
     }
 

@@ -607,7 +607,6 @@ use rpc_params::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::process::Command;
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 
 use backend::app_server::{spawn_workspace_session, RuntimeShutdownSource, WorkspaceSession};
@@ -645,18 +644,15 @@ struct OpenCodeSessionEntry {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 enum GeminiRenderLane {
     Text,
     Reasoning,
     Tool,
+    #[default]
     Other,
 }
 
-impl Default for GeminiRenderLane {
-    fn default() -> Self {
-        Self::Other
-    }
-}
 
 #[derive(Default)]
 struct GeminiRenderRoutingState {

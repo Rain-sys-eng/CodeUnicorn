@@ -155,9 +155,9 @@ fn validate_models_config_text(text: &str) -> Result<Value, String> {
     let stripped = strip_jsonc_comments(text);
     let value: Value = serde_json::from_str(&stripped)
         .map_err(|error| format!("[PI_MODELS_INVALID_JSON] models.json 不是合法 JSON：{error}"))?;
-    let root = value
-        .as_object()
-        .ok_or_else(|| "[PI_MODELS_INVALID_SHAPE] models.json 根节点必须是 JSON 对象".to_string())?;
+    let root = value.as_object().ok_or_else(|| {
+        "[PI_MODELS_INVALID_SHAPE] models.json 根节点必须是 JSON 对象".to_string()
+    })?;
     if let Some(providers) = root.get("providers") {
         let providers = providers.as_object().ok_or_else(|| {
             "[PI_MODELS_INVALID_SHAPE] providers 必须是对象（providerId → 配置）".to_string()
@@ -245,9 +245,7 @@ pub async fn read_pi_models_config(
             });
         }
         Err(error) => {
-            return Err(format!(
-                "[PI_MODELS_READ] 读取 models.json 失败：{error}"
-            ));
+            return Err(format!("[PI_MODELS_READ] 读取 models.json 失败：{error}"));
         }
     };
 
@@ -271,10 +269,7 @@ pub async fn read_pi_models_config(
     }
 }
 
-pub async fn write_pi_models_config(
-    text: &str,
-    home_override: Option<&str>,
-) -> Result<(), String> {
+pub async fn write_pi_models_config(text: &str, home_override: Option<&str>) -> Result<(), String> {
     if text.trim().is_empty() {
         return Err("[PI_MODELS_EMPTY] 配置内容不能为空；如需移除自定义供应商请保存空 providers：{ \"providers\": {} }".to_string());
     }
@@ -328,15 +323,17 @@ pub async fn pi_models_config_read(
     app: AppHandle,
 ) -> Result<Value, String> {
     if remote_backend::is_remote_mode(&*state).await {
-        return remote_backend::call_remote(&*state, app, "pi_models_config_read", serde_json::json!({}))
-            .await;
-    }
-    let config = state
-        .engine_manager
-        .get_engine_config(EngineType::Pi)
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "pi_models_config_read",
+            serde_json::json!({}),
+        )
         .await;
-    let result = read_pi_models_config(config.as_ref().and_then(|item| item.home_dir.as_deref()))
-        .await?;
+    }
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
+    let result =
+        read_pi_models_config(config.as_ref().and_then(|item| item.home_dir.as_deref())).await?;
     serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
@@ -357,10 +354,7 @@ pub async fn pi_models_config_write(
         .await
         .map(|_| ());
     }
-    let config = state
-        .engine_manager
-        .get_engine_config(EngineType::Pi)
-        .await;
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
     write_pi_models_config(
         &text,
         config.as_ref().and_then(|item| item.home_dir.as_deref()),
@@ -420,13 +414,11 @@ mod tests {
         assert!(validate_models_config_text(r#"[]"#).is_err());
         assert!(validate_models_config_text(r#"{"providers": []}"#).is_err());
         assert!(validate_models_config_text(r#"{"providers": {"x": []}}"#).is_err());
-        assert!(
-            validate_models_config_text(r#"{"providers": {"x": {"models": {}}}}"#).is_err()
-        );
-        assert!(
-            validate_models_config_text(r#"{"providers": {"x": {"models": [{"name": "no-id"}]}}}"#)
-                .is_err()
-        );
+        assert!(validate_models_config_text(r#"{"providers": {"x": {"models": {}}}}"#).is_err());
+        assert!(validate_models_config_text(
+            r#"{"providers": {"x": {"models": [{"name": "no-id"}]}}}"#
+        )
+        .is_err());
     }
 
     #[tokio::test]
@@ -457,7 +449,11 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             assert_eq!(
-                std::fs::metadata(dir.join("models.json")).unwrap().permissions().mode() & 0o777,
+                std::fs::metadata(dir.join("models.json"))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
                 0o600
             );
         }
@@ -469,7 +465,10 @@ mod tests {
         assert_eq!(result.providers.len(), 1);
         let relay = &result.providers[0];
         assert_eq!(relay.id, "my-relay");
-        assert_eq!(relay.base_url.as_deref(), Some("https://relay.example.com/v1"));
+        assert_eq!(
+            relay.base_url.as_deref(),
+            Some("https://relay.example.com/v1")
+        );
         assert_eq!(relay.api.as_deref(), Some("openai-responses"));
         assert_eq!(relay.model_count, 1);
         assert!(relay.has_api_key);
@@ -482,7 +481,9 @@ mod tests {
         let file = dir.join("models.json");
         std::fs::write(&file, r#"{"providers": {"ok": {"models": [{"id": "m"}]}}}"#).unwrap();
 
-        assert!(write_pi_models_config("{ broken", Some(&agent)).await.is_err());
+        assert!(write_pi_models_config("{ broken", Some(&agent))
+            .await
+            .is_err());
         assert!(
             write_pi_models_config(r#"{"providers": {"x": {"models": [{}]}}}"#, Some(&agent))
                 .await
@@ -507,7 +508,10 @@ mod tests {
         assert!(result.file.exists);
         assert_eq!(result.text.as_deref(), Some("{ not json"));
         assert!(result.providers.is_empty());
-        assert!(result.parse_error.unwrap().contains("PI_MODELS_INVALID_JSON"));
+        assert!(result
+            .parse_error
+            .unwrap()
+            .contains("PI_MODELS_INVALID_JSON"));
 
         // User can fix in place: a valid write succeeds over the corrupted file.
         write_pi_models_config(r#"{"providers": {}}"#, Some(&agent))

@@ -166,12 +166,10 @@ fn outside_allowlist_read_synthesizes_directory_grant_approval() {
                     input.get("grantKind").and_then(|v| v.as_str()),
                     Some("directory")
                 );
-                assert!(
-                    input
-                        .get("suggestedRoot")
-                        .and_then(|v| v.as_str())
-                        .is_some_and(|root| !root.is_empty())
-                );
+                assert!(input
+                    .get("suggestedRoot")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|root| !root.is_empty()));
             }
         }
     }

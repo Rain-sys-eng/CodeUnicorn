@@ -594,7 +594,9 @@ fn budget_tool_text(text: &str) -> String {
     format!(
         "{}\n\n…[truncated {} chars for history load]",
         truncated,
-        text.chars().count().saturating_sub(GROK_TOOL_OUTPUT_CHAR_BUDGET)
+        text.chars()
+            .count()
+            .saturating_sub(GROK_TOOL_OUTPUT_CHAR_BUDGET)
     )
 }
 
@@ -893,14 +895,16 @@ fn strip_grok_image_only_fallback_text(display: &str, has_images: bool) -> Strin
     }
     // Defense: fallback was the only line of a multi-line block that is otherwise empty.
     if has_images {
-        let without_fallback = candidates.iter().fold(trimmed.to_string(), |acc, candidate| {
-            acc.lines()
-                .filter(|line| !line.trim().eq_ignore_ascii_case(candidate))
-                .collect::<Vec<_>>()
-                .join("\n")
-                .trim()
-                .to_string()
-        });
+        let without_fallback = candidates
+            .iter()
+            .fold(trimmed.to_string(), |acc, candidate| {
+                acc.lines()
+                    .filter(|line| !line.trim().eq_ignore_ascii_case(candidate))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    .trim()
+                    .to_string()
+            });
         if without_fallback.is_empty() {
             return String::new();
         }
@@ -1635,19 +1639,18 @@ async fn build_summary_from_session_dir(
     // Prefer the human's first real prompt over Grok's AI `generated_title`
     // so the sidebar shows e.g. "你好" instead of "Chinese Hello Greeting Session".
     // Stream until first user; never load the whole file.
-    let first_message = if let Some(text) = first_user_prompt_from_chat_history_path(&chat_history_path)
-        .await
-    {
-        truncate_chars(&text, 60)
-    } else if message_count == 0 {
-        // Empty draft: keep a generic title so stale-empty prune can match.
-        // Do not fall through to generated_title / session_id here.
-        "Grok Session".to_string()
-    } else {
-        title
-            .map(|text| truncate_chars(&text, 60))
-            .unwrap_or_else(|| session_id.to_string())
-    };
+    let first_message =
+        if let Some(text) = first_user_prompt_from_chat_history_path(&chat_history_path).await {
+            truncate_chars(&text, 60)
+        } else if message_count == 0 {
+            // Empty draft: keep a generic title so stale-empty prune can match.
+            // Do not fall through to generated_title / session_id here.
+            "Grok Session".to_string()
+        } else {
+            title
+                .map(|text| truncate_chars(&text, 60))
+                .unwrap_or_else(|| session_id.to_string())
+        };
 
     let file_size_bytes = std::fs::metadata(&chat_history_path)
         .or_else(|_| std::fs::metadata(&summary_path))
@@ -1662,7 +1665,7 @@ async fn build_summary_from_session_dir(
         .filter(|value| !value.is_empty())
         .map(|value| value.to_string());
 
-    let resolved_parent = parent_session_id.or_else(|| {
+    let resolved_parent = parent_session_id.or({
         // 若 summary 标明 subagent 但 map 未命中，不猜父会话
         None
     });
@@ -1833,10 +1836,10 @@ mod tests {
     use super::{
         file_mtime_millis, first_user_prompt_from_line, first_user_prompt_text,
         is_grok_runtime_context_user_text, matches_workspace_path,
-        parse_grok_user_prompt_for_display, parse_messages_from_chat_history, parse_timestamp_millis,
-        prepare_grok_history_line_for_parse, resolve_session_activity_millis,
-        strip_user_query_wrapper, url_decode_dir_name, url_encode_dir_name,
-        GROK_OMITTED_PAYLOAD_SENTINEL, GROK_TOOL_OUTPUT_CHAR_BUDGET,
+        parse_grok_user_prompt_for_display, parse_messages_from_chat_history,
+        parse_timestamp_millis, prepare_grok_history_line_for_parse,
+        resolve_session_activity_millis, strip_user_query_wrapper, url_decode_dir_name,
+        url_encode_dir_name, GROK_OMITTED_PAYLOAD_SENTINEL, GROK_TOOL_OUTPUT_CHAR_BUDGET,
     };
     use std::path::Path;
 
@@ -1966,9 +1969,7 @@ mod tests {
 
     #[test]
     fn tool_history_tail_skips_baseline_then_reads_incrementally() {
-        use super::{
-            poll_chat_history_tool_signals, GrokHistoryToolSignal, GrokToolHistoryTailState,
-        };
+        use super::{poll_chat_history_tool_signals, GrokHistoryToolSignal, GrokToolHistoryTailState};
         use std::io::Write;
 
         let dir = std::env::temp_dir().join(format!(
@@ -2607,13 +2608,10 @@ mod tests {
         assert_eq!(loaded.messages.len(), 2);
         assert_eq!(loaded.messages[0].text, "direct path");
 
-        let listed = super::list_grok_sessions(
-            &workspace,
-            None,
-            Some(grok_home.to_string_lossy().as_ref()),
-        )
-        .await
-        .expect("list");
+        let listed =
+            super::list_grok_sessions(&workspace, None, Some(grok_home.to_string_lossy().as_ref()))
+                .await
+                .expect("list");
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].first_message, "direct path");
 

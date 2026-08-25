@@ -59,9 +59,7 @@ pub(crate) async fn resolve_codex_native_history_path(
 }
 use self::provider_profile::{resolve_codex_provider_profile, CODEX_DISK_PROVIDER_PROFILE_ID};
 use self::run_metadata::{extract_json_value, sanitize_run_worktree_name};
-use self::thread_listing::{
-    build_unified_codex_thread_page, resolve_provider_scoped_fallback_model,
-};
+use self::thread_listing::{build_unified_codex_thread_page, resolve_provider_scoped_fallback_model};
 use crate::backend::app_server::{
     spawn_workspace_session_inner_with_settings, CodexAppServerLaunchOptions,
 };

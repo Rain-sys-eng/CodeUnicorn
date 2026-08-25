@@ -890,12 +890,10 @@ fn extract_session_id(event: &Value) -> Option<String> {
 }
 
 fn first_non_empty_str<'a>(candidates: &[Option<&'a str>]) -> Option<&'a str> {
-    for value in candidates {
-        if let Some(text) = value {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed);
-            }
+    for text in candidates.iter().flatten() {
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
         }
     }
     None

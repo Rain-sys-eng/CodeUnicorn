@@ -1537,7 +1537,10 @@ pub async fn get_engine_models(
             let fresh_status = super::status::detect_qoder_distribution_status(
                 launch_profile.distribution,
                 launch_profile.bin_path.as_deref(),
-                launch_profile.home_dir.as_deref().and_then(|path| path.to_str()),
+                launch_profile
+                    .home_dir
+                    .as_deref()
+                    .and_then(|path| path.to_str()),
             )
             .await;
             Ok(fresh_status.models)
@@ -4873,13 +4876,12 @@ pub async fn pi_get_session_stats(
         )
         .await;
     }
-    let session = resolve_pi_session_for_rpc_commands(
-        &state,
-        &workspace_id,
-        provider_profile_id.as_deref(),
-    )
-    .await?;
-    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+    let session =
+        resolve_pi_session_for_rpc_commands(&state, &workspace_id, provider_profile_id.as_deref())
+            .await?;
+    let client = session
+        .rpc_client_for_commands(session_id.as_deref())
+        .await?;
     client.get_session_stats().await
 }
 
@@ -4906,12 +4908,9 @@ pub async fn pi_compact(
         )
         .await;
     }
-    let session = resolve_pi_session_for_rpc_commands(
-        &state,
-        &workspace_id,
-        provider_profile_id.as_deref(),
-    )
-    .await?;
+    let session =
+        resolve_pi_session_for_rpc_commands(&state, &workspace_id, provider_profile_id.as_deref())
+            .await?;
     session
         .with_exclusive_rpc_command(session_id.as_deref(), |client| async move {
             client.compact(custom_instructions.as_deref()).await
@@ -4936,9 +4935,7 @@ pub(crate) fn resolve_pi_forked_session_id(
     let post_file = state.get("sessionFile").and_then(Value::as_str);
     if let (Some(pre), Some(post)) = (pre_session_file, post_file) {
         if pre == post {
-            log::warn!(
-                "[pi/rpc] fork returned without switching session file; treating as no-op"
-            );
+            log::warn!("[pi/rpc] fork returned without switching session file; treating as no-op");
             return None;
         }
     }
@@ -4968,12 +4965,9 @@ pub async fn pi_fork(
         )
         .await;
     }
-    let session = resolve_pi_session_for_rpc_commands(
-        &state,
-        &workspace_id,
-        provider_profile_id.as_deref(),
-    )
-    .await?;
+    let session =
+        resolve_pi_session_for_rpc_commands(&state, &workspace_id, provider_profile_id.as_deref())
+            .await?;
     let session_for_fork = session.clone();
     session
         .with_exclusive_rpc_command(session_id.as_deref(), move |client| {
@@ -5031,13 +5025,12 @@ pub async fn pi_get_session_tree(
         )
         .await;
     }
-    let session = resolve_pi_session_for_rpc_commands(
-        &state,
-        &workspace_id,
-        provider_profile_id.as_deref(),
-    )
-    .await?;
-    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+    let session =
+        resolve_pi_session_for_rpc_commands(&state, &workspace_id, provider_profile_id.as_deref())
+            .await?;
+    let client = session
+        .rpc_client_for_commands(session_id.as_deref())
+        .await?;
     // get_tree 对外统一为浅层 entries（摊平+瘦身在 pi_rpc 内完成：深会话在
     // pump 的大栈线程，浅会话在 get_tree 内），这里只需透传。
     let tree = client.get_tree().await?;
@@ -5065,11 +5058,9 @@ pub async fn pi_get_session_tree(
             let root_id = root.map(|member| member.session_id.clone());
             let root_path = root.map(|member| member.session_file.clone());
             let root_entries = match root_path.as_ref().filter(|p| **p != path) {
-                Some(root_file) => crate::engine::pi_history::parse_pi_session_entries(
-                    root_file,
-                )
-                .await
-                .unwrap_or_default(),
+                Some(root_file) => crate::engine::pi_history::parse_pi_session_entries(root_file)
+                    .await
+                    .unwrap_or_default(),
                 None => Vec::new(),
             };
             let derived = crate::engine::pi_history::list_pi_derived_lanes(path)
@@ -5108,12 +5099,11 @@ pub async fn pi_get_fork_messages(
         )
         .await;
     }
-    let session = resolve_pi_session_for_rpc_commands(
-        &state,
-        &workspace_id,
-        provider_profile_id.as_deref(),
-    )
-    .await?;
-    let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+    let session =
+        resolve_pi_session_for_rpc_commands(&state, &workspace_id, provider_profile_id.as_deref())
+            .await?;
+    let client = session
+        .rpc_client_for_commands(session_id.as_deref())
+        .await?;
     client.get_fork_messages().await
 }

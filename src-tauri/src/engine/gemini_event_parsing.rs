@@ -3,12 +3,10 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
 fn first_non_empty_str<'a>(candidates: &[Option<&'a str>]) -> Option<&'a str> {
-    for value in candidates {
-        if let Some(text) = value {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed);
-            }
+    for text in candidates.iter().flatten() {
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
         }
     }
     None
@@ -465,7 +463,7 @@ fn is_response_item_event_type(event_type: &str) -> bool {
     ) || (normalized.contains("response") && normalized.contains("item"))
 }
 
-fn extract_response_item_payload<'a>(event: &'a Value) -> Option<&'a Value> {
+fn extract_response_item_payload(event: &Value) -> Option<&Value> {
     for key in [
         "payload",
         "item",
@@ -525,7 +523,7 @@ pub(super) fn should_extract_thought_fallback(parsed_event: Option<&EngineEvent>
     !matches!(parsed_event, Some(EngineEvent::ReasoningDelta { .. }))
 }
 
-fn find_tool_calls_array<'a>(value: &'a Value, depth: usize) -> Option<&'a Vec<Value>> {
+fn find_tool_calls_array(value: &Value, depth: usize) -> Option<&Vec<Value>> {
     if depth > 6 {
         return None;
     }

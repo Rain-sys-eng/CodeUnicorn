@@ -2036,10 +2036,7 @@ fn parse_codex_session_summary_reads_payload_level_thread_source_subagent() {
         .expect("parse summary")
         .expect("summary exists");
 
-    assert_eq!(
-        summary.session_id,
-        "01a01d13-7328-7153-99f3-faf8693a30cb"
-    );
+    assert_eq!(summary.session_id, "01a01d13-7328-7153-99f3-faf8693a30cb");
     assert_eq!(
         summary.parent_session_id.as_deref(),
         Some("01a01b3c-db39-7362-9505-3e3535f4b878")

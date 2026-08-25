@@ -50,7 +50,9 @@ struct ClaudeScanIoLog {
     entries: Vec<(String, u64, u64)>,
 }
 
-static CLAUDE_SCAN_IO: Mutex<ClaudeScanIoLog> = Mutex::new(ClaudeScanIoLog { entries: Vec::new() });
+static CLAUDE_SCAN_IO: Mutex<ClaudeScanIoLog> = Mutex::new(ClaudeScanIoLog {
+    entries: Vec::new(),
+});
 
 #[allow(dead_code)]
 pub(crate) fn reset_claude_list_io_stats() {
@@ -328,7 +330,7 @@ fn candidate_workspace_paths(workspace_path: &Path) -> Vec<PathBuf> {
         candidates.push(raw);
     }
 
-    let trimmed = raw_str.trim_end_matches(|c| c == '/' || c == '\\');
+    let trimmed = raw_str.trim_end_matches(['/', '\\']);
     if trimmed != raw_str && seen.insert(trimmed.to_string()) {
         candidates.push(PathBuf::from(trimmed.to_string()));
     }
@@ -563,7 +565,8 @@ fn cap_claude_scan_paths_by_mtime(
                 .map(str::to_string)
         })
         .collect();
-    subagent_jsonl_paths.retain(|(_, parent_session_id, _)| selected_parents.contains(parent_session_id));
+    subagent_jsonl_paths
+        .retain(|(_, parent_session_id, _)| selected_parents.contains(parent_session_id));
 }
 
 fn system_time_to_epoch_millis(value: SystemTime) -> Option<i64> {
@@ -1113,9 +1116,9 @@ async fn scan_session_source_file_with_depth(
                 "complete".to_string()
             },
             updated_at: match depth {
-                ClaudeSessionScanDepth::Preview => file_mtime_ms
-                    .or(last_timestamp)
-                    .unwrap_or(now_ms),
+                ClaudeSessionScanDepth::Preview => {
+                    file_mtime_ms.or(last_timestamp).unwrap_or(now_ms)
+                }
                 ClaudeSessionScanDepth::Full => last_timestamp.unwrap_or(now_ms),
             },
             created_at: first_timestamp.or(file_mtime_ms).unwrap_or(now_ms),

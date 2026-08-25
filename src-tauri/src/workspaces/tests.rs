@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::settings::apply_workspace_settings_update;
-use super::worktree::{
-    build_clone_destination_path, sanitize_clone_dir_name, sanitize_worktree_name,
-};
+use super::worktree::{build_clone_destination_path, sanitize_clone_dir_name, sanitize_worktree_name};
 use crate::storage::{read_workspaces, write_workspaces};
 use crate::types::{WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings, WorktreeInfo};
 use uuid::Uuid;

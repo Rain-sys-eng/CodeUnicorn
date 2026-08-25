@@ -193,9 +193,9 @@ fn user_models_array(user_profile: Option<&Value>) -> Option<&Vec<Value>> {
 }
 
 fn model_index(models: &[Value], model: &str) -> Option<usize> {
-    models.iter().position(|entry| {
-        entry.get("id").and_then(Value::as_str).map(str::trim) == Some(model)
-    })
+    models
+        .iter()
+        .position(|entry| entry.get("id").and_then(Value::as_str).map(str::trim) == Some(model))
 }
 
 fn modalities_include_image(value_profile: Option<&Value>, model: &str) -> bool {
@@ -251,12 +251,7 @@ fn json_u64(value: Option<&Value>) -> Option<u64> {
 mod tests {
     use super::*;
 
-    fn describe(
-        writable: bool,
-        revision: u64,
-        value: Value,
-        user: Option<Value>,
-    ) -> Value {
+    fn describe(writable: bool, revision: u64, value: Value, user: Option<Value>) -> Value {
         let mut namespace = json!({
             "ns": PI_AI_NS,
             "value": value,
@@ -385,10 +380,7 @@ mod tests {
                 assert_eq!(expected_revision, 7);
                 assert_eq!(ops.len(), 1);
                 assert_eq!(ops[0]["op"], "set");
-                assert_eq!(
-                    ops[0]["path"],
-                    json!(["providers", "grok", "models"])
-                );
+                assert_eq!(ops[0]["path"], json!(["providers", "grok", "models"]));
                 assert_eq!(ops[0]["value"][0]["id"], "grok-4.5");
                 assert!(ops[0]["value"][0].get("input").is_none());
                 assert_eq!(ops[0]["value"][1]["name"], "Grok 4.6");
@@ -438,12 +430,7 @@ mod tests {
 
     #[test]
     fn does_not_rewrite_official_deepseek_adapter() {
-        let settings = describe(
-            true,
-            1,
-            json!({ "providers": {} }),
-            None,
-        );
+        let settings = describe(true, 1, json!({ "providers": {} }), None);
         assert_eq!(
             plan_image_admission(
                 &settings,

@@ -127,9 +127,8 @@ async fn list_claude_sessions_opens_only_limit_files_after_mtime_sort() {
     assert_eq!(sessions.len(), 3);
     let ids: Vec<String> = sessions.iter().map(|s| s.session_id.clone()).collect();
     assert!(
-        ids.iter().all(|id| {
-            id.ends_with("-5") || id.ends_with("-6") || id.ends_with("-7")
-        }),
+        ids.iter()
+            .all(|id| { id.ends_with("-5") || id.ends_with("-6") || id.ends_with("-7") }),
         "IO-before-limit must keep the newest files, got {ids:?}"
     );
     assert_eq!(
@@ -147,7 +146,8 @@ async fn list_claude_sessions_opens_only_limit_files_after_mtime_sort() {
 #[tokio::test]
 async fn list_claude_sessions_does_not_inventory_subagent_jsonl() {
     let unique = Uuid::new_v4();
-    let temp_root = std::env::temp_dir().join(format!("ccgui-claude-list-skip-subagent-{}", unique));
+    let temp_root =
+        std::env::temp_dir().join(format!("ccgui-claude-list-skip-subagent-{}", unique));
     let base_dir = temp_root.join("claude-projects");
     let workspace_path = temp_root.join("workspace");
     std::fs::create_dir_all(&workspace_path).expect("create workspace");
@@ -186,10 +186,7 @@ async fn list_claude_sessions_does_not_inventory_subagent_jsonl() {
         "sidebar list must not inventory subagent jsonl"
     );
     let (opened, _) = claude_list_io_stats_for_prefix(&temp_root);
-    assert_eq!(
-        opened, 1,
-        "must not open the 8MiB subagent transcript"
-    );
+    assert_eq!(opened, 1, "must not open the 8MiB subagent transcript");
 
     let _ = std::fs::remove_dir_all(&temp_root);
 }

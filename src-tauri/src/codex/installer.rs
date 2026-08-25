@@ -464,7 +464,7 @@ async fn check_installed_engine_binary(
     }
 }
 
-fn engine_explicit_bin<'a>(engine: CliInstallEngine, settings: &'a AppSettings) -> Option<&'a str> {
+fn engine_explicit_bin(engine: CliInstallEngine, settings: &AppSettings) -> Option<&str> {
     match engine {
         CliInstallEngine::Codex => settings.codex_bin.as_deref(),
         CliInstallEngine::Claude => settings.claude_bin.as_deref(),
@@ -987,11 +987,11 @@ fn pick_claude_version_line(output: &str) -> Option<String> {
         .rev()
         .find(|line| {
             let version_token = line
-                .trim_start_matches(|character| character == 'v' || character == 'V')
+                .trim_start_matches(['v', 'V'])
                 .split_whitespace()
                 .next()
                 .unwrap_or_default()
-                .split(|character| character == '-' || character == '+')
+                .split(['-', '+'])
                 .next()
                 .unwrap_or_default();
             let mut parts = version_token.split('.');

@@ -239,14 +239,11 @@ pub(crate) fn load_kimi_cli_credentials() -> Result<KimiCliCredentials, String> 
         .map(str::trim)
         .unwrap_or("")
         .to_string();
-    let expires_at = raw
-        .get("expires_at")
-        .and_then(|v| v.as_i64())
-        .or_else(|| {
-            raw.get("expires_at")
-                .and_then(|v| v.as_f64())
-                .map(|n| n as i64)
-        });
+    let expires_at = raw.get("expires_at").and_then(|v| v.as_i64()).or_else(|| {
+        raw.get("expires_at")
+            .and_then(|v| v.as_f64())
+            .map(|n| n as i64)
+    });
     Ok(KimiCliCredentials {
         access_token,
         refresh_token,
@@ -255,7 +252,11 @@ pub(crate) fn load_kimi_cli_credentials() -> Result<KimiCliCredentials, String> 
     })
 }
 
-pub(crate) fn kimi_cli_token_needs_refresh(creds: &KimiCliCredentials, now_secs: i64, force: bool) -> bool {
+pub(crate) fn kimi_cli_token_needs_refresh(
+    creds: &KimiCliCredentials,
+    now_secs: i64,
+    force: bool,
+) -> bool {
     if force {
         return true;
     }
@@ -301,9 +302,7 @@ pub(crate) async fn refresh_kimi_cli_access_token(
     previous: &KimiCliCredentials,
 ) -> Result<KimiCliCredentials, String> {
     if refresh_token.trim().is_empty() {
-        return Err(
-            "Kimi CLI token expired and no refresh_token; run `kimi login`".to_string(),
-        );
+        return Err("Kimi CLI token expired and no refresh_token; run `kimi login`".to_string());
     }
     let client = http_client()?;
     let url = format!("{KIMI_CODE_OAUTH_HOST}/api/oauth/token");
@@ -348,10 +347,11 @@ pub(crate) async fn refresh_kimi_cli_access_token(
         .filter(|v| !v.is_empty())
         .map(str::to_string)
         .unwrap_or_else(|| previous.refresh_token.clone());
-    let expires_in = body
-        .get("expires_in")
-        .and_then(|v| v.as_i64())
-        .or_else(|| body.get("expires_in").and_then(|v| v.as_f64()).map(|n| n as i64));
+    let expires_in = body.get("expires_in").and_then(|v| v.as_i64()).or_else(|| {
+        body.get("expires_in")
+            .and_then(|v| v.as_f64())
+            .map(|n| n as i64)
+    });
     let expires_at = expires_in.map(|secs| now_unix_secs() + secs.max(0));
     let mut raw = previous.raw.clone();
     if let Some(obj) = raw.as_object_mut() {
@@ -411,9 +411,7 @@ pub(crate) async fn query_kimi_cli_status() -> CodingPlanQuotaSnapshot {
             Err(error) => {
                 return empty_snapshot(
                     "empty_credentials",
-                    Some(format!(
-                        "Kimi CLI auth failed after refresh: {error}"
-                    )),
+                    Some(format!("Kimi CLI auth failed after refresh: {error}")),
                 );
             }
         }

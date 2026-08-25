@@ -9,9 +9,7 @@ use crate::shared_event_log::canonical::types::{
     SquadRunSettledFact, ToolResultStatus, TurnCommittedFact, TurnRequestedFact, UsageRecordedFact,
     UsageShape, UsageSource,
 };
-use crate::shared_event_log::{
-    ProjectionCheckpointRow, SharedEventWriter, StoreError, StoredEvent,
-};
+use crate::shared_event_log::{ProjectionCheckpointRow, SharedEventWriter, StoreError, StoredEvent};
 
 use super::types::{ProjectionItem, ProjectionItemKind};
 

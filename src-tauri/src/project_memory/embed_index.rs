@@ -156,9 +156,7 @@ pub(crate) async fn project_memory_embed_index_delete(
 }
 
 #[tauri::command]
-pub(crate) async fn project_memory_embed_index_clear(
-    workspace_id: String,
-) -> Result<(), String> {
+pub(crate) async fn project_memory_embed_index_clear(workspace_id: String) -> Result<(), String> {
     run_project_memory_io(move || {
         let ws_dir = match resolve_workspace_dir(&workspace_id)? {
             Some(dir) => dir,

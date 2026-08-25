@@ -563,19 +563,37 @@ pub(crate) struct SessionCatalogAttribution {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SessionCatalogIdentity {
-    Codex { session_id: String },
-    Claude { session_id: String },
-    Gemini { session_id: String },
-    Grok { session_id: String },
-    Kimi { session_id: String },
-    Pi { session_id: String },
+    Codex {
+        session_id: String,
+    },
+    Claude {
+        session_id: String,
+    },
+    Gemini {
+        session_id: String,
+    },
+    Grok {
+        session_id: String,
+    },
+    Kimi {
+        session_id: String,
+    },
+    Pi {
+        session_id: String,
+    },
     Qoder {
         session_id: String,
         provider_profile_id: Option<String>,
     },
-    OpenCode { session_id: String },
-    Dsh { session_id: String },
-    Shared { session_id: String },
+    OpenCode {
+        session_id: String,
+    },
+    Dsh {
+        session_id: String,
+    },
+    Shared {
+        session_id: String,
+    },
 }
 
 impl SessionCatalogIdentity {
@@ -638,8 +656,7 @@ pub(crate) fn parse_catalog_identity(session_id: &str) -> SessionCatalogIdentity
     }
     if let Some(raw_id) = session_id.strip_prefix("qoder:") {
         let parsed = crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
-            session_id,
-            None,
+            session_id, None,
         )
         .ok();
         return SessionCatalogIdentity::Qoder {
@@ -647,8 +664,7 @@ pub(crate) fn parse_catalog_identity(session_id: &str) -> SessionCatalogIdentity
                 .as_ref()
                 .map(|identity| identity.raw_session_id.clone())
                 .unwrap_or_else(|| raw_id.to_string()),
-            provider_profile_id: parsed
-                .map(|identity| identity.provider_profile_id.to_string()),
+            provider_profile_id: parsed.map(|identity| identity.provider_profile_id.to_string()),
         };
     }
     if let Some(raw_id) = session_id.strip_prefix("opencode:") {

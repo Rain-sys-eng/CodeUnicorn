@@ -7,9 +7,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::interval;
 
-use crate::backend::events::{
-    AppServerEvent, AppServerEventDisposition, EventSink, TerminalOutput,
-};
+use crate::backend::events::{AppServerEvent, AppServerEventDisposition, EventSink, TerminalOutput};
 use crate::engine::agent_event_bus::RunSettlementStatus;
 use crate::shared_event_log::canonical::types::OutcomeStatus;
 use crate::snapshot_throttle::global_snapshot_throttle_count;
@@ -186,7 +184,9 @@ pub(crate) struct BatchStats {
 /// batch), and crashing the whole app on a poisoned lock is strictly worse
 /// than emitting a degraded batch.
 fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl BatchedTauriEventSink {

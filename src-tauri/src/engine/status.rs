@@ -749,15 +749,14 @@ async fn detect_opencode_status_with_options(
     // OpenCode CLI in GUI-launched environments can intermittently fail `--version`
     // due to startup env quirks. Use a lightweight second probe to avoid false
     // "not installed" states in engine selector.
-    if !installed {
-        if probe_opencode_cli_help(&bin, path_env.as_ref()).await {
+    if !installed
+        && probe_opencode_cli_help(&bin, path_env.as_ref()).await {
             installed = true;
             if version.is_none() {
                 version = Some("unknown".to_string());
             }
             error = None;
         }
-    }
 
     if !installed {
         return not_installed_status(EngineType::OpenCode, error);
@@ -1266,7 +1265,7 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
                 if ch == '\u{1b}' {
                     if chars.peek() == Some(&'[') {
                         chars.next();
-                        while let Some(c) = chars.next() {
+                        for c in chars.by_ref() {
                             if c.is_ascii_alphabetic() {
                                 break;
                             }

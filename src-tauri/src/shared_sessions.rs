@@ -643,11 +643,8 @@ fn sanitize_shared_session_meta(meta: &mut SharedSessionMeta) {
         .retain(|engine, _| is_supported_shared_session_engine(*engine));
     for (engine, binding) in meta.bindings_by_engine.iter_mut() {
         binding.engine = *engine;
-        binding.native_thread_id = canonical_shared_native_thread_id(
-            *engine,
-            None,
-            &binding.native_thread_id,
-        );
+        binding.native_thread_id =
+            canonical_shared_native_thread_id(*engine, None, &binding.native_thread_id);
     } // B.2 迁移：旧 `bindings_by_engine` 归位到 default-provider 语义。
       // V0 仍是 default binding 身份字段的权威来源（回滚兼容），
       // 因此 default key 的身份字段以 engine binding 为准做覆盖式同步；
@@ -1033,11 +1030,8 @@ pub(crate) fn load_workspace_shared_ownership_seed(
         };
         seed.session_ids.push(meta.id.clone());
         for (engine, binding) in &meta.bindings_by_engine {
-            let native_id = canonical_shared_native_thread_id(
-                *engine,
-                None,
-                &binding.native_thread_id,
-            );
+            let native_id =
+                canonical_shared_native_thread_id(*engine, None, &binding.native_thread_id);
             let native_id = native_id.trim();
             if !native_id.is_empty() {
                 seed.native_ids.push(native_id.to_string());
@@ -1168,17 +1162,13 @@ pub(crate) fn list_workspace_shared_sessions(
                 canonical_shared_native_thread_id(*engine, None, &binding.native_thread_id)
             })
             .collect::<Vec<_>>();
-        native_thread_ids.extend(
-            meta.bindings_by_target
-                .values()
-                .map(|binding| {
-                    canonical_shared_native_thread_id(
-                        binding.engine,
-                        binding.provider_profile_id.as_deref(),
-                        &binding.native_thread_id,
-                    )
-                }),
-        );
+        native_thread_ids.extend(meta.bindings_by_target.values().map(|binding| {
+            canonical_shared_native_thread_id(
+                binding.engine,
+                binding.provider_profile_id.as_deref(),
+                &binding.native_thread_id,
+            )
+        }));
         if let Some(writer) = event_writer {
             native_thread_ids.extend(
                 writer
@@ -1612,11 +1602,7 @@ pub async fn update_shared_session_native_binding(
         &validate_shared_native_thread_id(&new_native_thread_id)?,
     );
     let old_native_thread_id = old_native_thread_id.map(|native_thread_id| {
-        canonical_shared_native_thread_id(
-            engine,
-            provider_profile_id.as_deref(),
-            &native_thread_id,
-        )
+        canonical_shared_native_thread_id(engine, provider_profile_id.as_deref(), &native_thread_id)
     });
     let mut meta = read_shared_session_meta(&workspace_id, &shared_session_id)?;
     if let Some(provider) = provider_profile_id.as_deref() {

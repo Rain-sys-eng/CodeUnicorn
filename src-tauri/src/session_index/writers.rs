@@ -2088,9 +2088,13 @@ mod tests {
             !engine_source_is_fresh(&connection, "grok", workspace, "fp-ok")
                 .expect("must not stay fresh")
         );
-        let listed =
-            super::super::store::list_for_workspace_path(&connection, r"C:\Users\me\proj", 10, false)
-                .expect("list");
+        let listed = super::super::store::list_for_workspace_path(
+            &connection,
+            r"C:\Users\me\proj",
+            10,
+            false,
+        )
+        .expect("list");
         assert!(
             listed.iter().any(|row| row.session_id == "grok-keep"),
             "timeout empty commit must not wipe indexed grok rows: {listed:?}"

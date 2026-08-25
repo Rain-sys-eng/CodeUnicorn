@@ -982,10 +982,11 @@ fn collect_codex_jsonl_candidates_from_root_recent_first(
         })
         .collect();
     local.sort_by(|left, right| {
-        right
-            .modified_at
-            .cmp(&left.modified_at)
-            .then_with(|| left.path.to_string_lossy().cmp(&right.path.to_string_lossy()))
+        right.modified_at.cmp(&left.modified_at).then_with(|| {
+            left.path
+                .to_string_lossy()
+                .cmp(&right.path.to_string_lossy())
+        })
     });
     for candidate in local {
         if candidates.len() >= max_candidates {
@@ -1663,7 +1664,9 @@ fn parse_codex_session_summary_with_mode(
     }))
 }
 
-pub(crate) fn infer_managed_codex_provider_profile_id_from_session_path(path: &Path) -> Option<String> {
+pub(crate) fn infer_managed_codex_provider_profile_id_from_session_path(
+    path: &Path,
+) -> Option<String> {
     for ancestor in path.ancestors() {
         let segment = ancestor.file_name().and_then(|value| value.to_str())?;
         if segment != "sessions" && segment != "archived_sessions" {
@@ -1786,7 +1789,7 @@ fn parse_changed_lines_from_git_diff_stat_output(output: &str) -> Option<i64> {
         }
     }
 
-    changed_lines_from_summary.or_else(|| {
+    changed_lines_from_summary.or({
         if saw_stat_line {
             Some(changed_lines_from_stats)
         } else {
@@ -1818,9 +1821,7 @@ fn read_number_before_keyword(line: &str, keyword: &str) -> Option<i64> {
     let keyword_index = lower.find(keyword)?;
     let prefix = &line[..keyword_index];
     prefix
-        .split(|ch: char| !ch.is_ascii_digit())
-        .filter(|segment| !segment.is_empty())
-        .last()
+        .split(|ch: char| !ch.is_ascii_digit()).rfind(|segment| !segment.is_empty())
         .and_then(|segment| segment.parse::<i64>().ok())
 }
 
@@ -1970,12 +1971,12 @@ fn codex_subagent_display_title(metadata: &CodexSubagentSessionMetadata) -> Opti
 fn portable_path_basename(path: &str) -> Option<String> {
     let trimmed = path
         .trim()
-        .trim_end_matches(|character| character == '/' || character == '\\');
+        .trim_end_matches(['/', '\\']);
     if trimmed.is_empty() {
         return None;
     }
     trimmed
-        .rsplit(|character| character == '/' || character == '\\')
+        .rsplit(['/', '\\'])
         .find_map(|segment| normalize_non_empty_string(Some(segment)))
 }
 
@@ -2384,7 +2385,7 @@ fn scan_file(
             }
 
             let timestamp_ms = read_timestamp_ms(&value);
-            if let Some(day_key) = timestamp_ms.and_then(|ms| day_key_for_timestamp_ms(ms)) {
+            if let Some(day_key) = timestamp_ms.and_then(day_key_for_timestamp_ms) {
                 if let Some(entry) = daily.get_mut(&day_key) {
                     let cached = delta.cached.min(delta.input);
                     entry.input += delta.input;
@@ -2542,7 +2543,7 @@ fn extract_cwd(value: &Value) -> Option<String> {
                 .get("session_meta")
                 .and_then(Value::as_object)
                 .or_else(|| context.get("sessionMeta").and_then(Value::as_object))
-                .or_else(|| Some(context))
+                .or(Some(context))
         })
         .or_else(|| {
             payload

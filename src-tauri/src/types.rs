@@ -18,16 +18,13 @@ pub(crate) struct SkillInvocation {
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub(crate) enum WorkspaceSessionAttributionMode {
+    #[default]
     Related,
     WorkspaceOnly,
 }
 
-impl Default for WorkspaceSessionAttributionMode {
-    fn default() -> Self {
-        Self::Related
-    }
-}
 
 impl WorkspaceSessionAttributionMode {
     pub(crate) fn as_str(self) -> &'static str {
@@ -602,16 +599,13 @@ pub(crate) struct WorkspaceInfo {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub(crate) enum WorkspaceKind {
+    #[default]
     Main,
     Worktree,
 }
 
-impl Default for WorkspaceKind {
-    fn default() -> Self {
-        WorkspaceKind::Main
-    }
-}
 
 impl WorkspaceKind {
     pub(crate) fn is_worktree(&self) -> bool {
@@ -732,34 +726,28 @@ pub(crate) struct CodexUnifiedExecExternalStatus {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub(crate) enum EmailSenderProvider {
     #[serde(rename = "126")]
     Mail126,
     #[serde(rename = "163")]
     Mail163,
     Qq,
+    #[default]
     Custom,
 }
 
-impl Default for EmailSenderProvider {
-    fn default() -> Self {
-        Self::Custom
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub(crate) enum EmailSenderSecurity {
+    #[default]
     SslTls,
     StartTls,
     None,
 }
 
-impl Default for EmailSenderSecurity {
-    fn default() -> Self {
-        Self::SslTls
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -806,17 +794,14 @@ fn default_email_sender_settings() -> EmailSenderSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub(crate) enum EmailInboundSecurity {
+    #[default]
     SslTls,
     StartTls,
     None,
 }
 
-impl Default for EmailInboundSecurity {
-    fn default() -> Self {
-        Self::SslTls
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -1433,16 +1418,13 @@ pub(crate) struct AppSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub(crate) enum BackendMode {
+    #[default]
     Local,
     Remote,
 }
 
-impl Default for BackendMode {
-    fn default() -> Self {
-        BackendMode::Local
-    }
-}
 
 fn default_access_mode() -> String {
     "full-access".to_string()
@@ -1993,7 +1975,7 @@ pub(crate) fn default_enabled_builtin_agent_ids() -> Vec<String> {
 }
 
 fn is_allowed_codex_auto_compaction_threshold_percent(value: u16) -> bool {
-    value == 92 || ((100..=200).contains(&value) && value % 10 == 0)
+    value == 92 || ((100..=200).contains(&value) && value.is_multiple_of(10))
 }
 
 impl AppSettings {

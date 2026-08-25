@@ -545,14 +545,46 @@ pub(crate) fn browser_element_selector_script(
     locale: Option<&str>,
 ) -> String {
     let labels = browser_toolbar_labels(locale);
-    let kind_heading = if labels.locale == "en" { "Heading" } else { "标题" };
-    let kind_button = if labels.locale == "en" { "Button" } else { "按钮" };
-    let kind_link = if labels.locale == "en" { "Link" } else { "链接" };
-    let kind_list = if labels.locale == "en" { "List" } else { "列表" };
-    let kind_paragraph = if labels.locale == "en" { "Paragraph" } else { "段落" };
-    let kind_image = if labels.locale == "en" { "Image" } else { "图片" };
-    let kind_code = if labels.locale == "en" { "Code" } else { "代码" };
-    let kind_excerpt = if labels.locale == "en" { "Excerpt" } else { "摘录" };
+    let kind_heading = if labels.locale == "en" {
+        "Heading"
+    } else {
+        "标题"
+    };
+    let kind_button = if labels.locale == "en" {
+        "Button"
+    } else {
+        "按钮"
+    };
+    let kind_link = if labels.locale == "en" {
+        "Link"
+    } else {
+        "链接"
+    };
+    let kind_list = if labels.locale == "en" {
+        "List"
+    } else {
+        "列表"
+    };
+    let kind_paragraph = if labels.locale == "en" {
+        "Paragraph"
+    } else {
+        "段落"
+    };
+    let kind_image = if labels.locale == "en" {
+        "Image"
+    } else {
+        "图片"
+    };
+    let kind_code = if labels.locale == "en" {
+        "Code"
+    } else {
+        "代码"
+    };
+    let kind_excerpt = if labels.locale == "en" {
+        "Excerpt"
+    } else {
+        "摘录"
+    };
     let mut script = String::from(
         r#"(function () {
   const sessionId = "#,

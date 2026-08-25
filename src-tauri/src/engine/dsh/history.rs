@@ -164,7 +164,7 @@ pub fn resolve_dsh_history_load_window(
     let raw_pages = if requested == 0 {
         1
     } else {
-        (requested as usize + page_size - 1) / page_size
+        (requested as usize).div_ceil(page_size)
     };
     let max_pages = raw_pages.clamp(1, HISTORY_MAX_PAGES);
     let before_seq = before
@@ -255,10 +255,8 @@ where
     })
 }
 
-fn emit_history_load_progress<F>(
-    on_progress: &mut Option<&mut F>,
-    progress: DshHistoryLoadProgress,
-) where
+fn emit_history_load_progress<F>(on_progress: &mut Option<&mut F>, progress: DshHistoryLoadProgress)
+where
     F: FnMut(&DshHistoryLoadProgress),
 {
     if let Some(callback) = on_progress.as_mut() {
@@ -293,7 +291,8 @@ where
         },
     );
     for page_index in 0..max_pages {
-        let page = session::history(client, session_id, Some(HISTORY_PAGE_SIZE), before_seq).await?;
+        let page =
+            session::history(client, session_id, Some(HISTORY_PAGE_SIZE), before_seq).await?;
         // Projections (usage etc.) only exist on the newest page of a tail fetch.
         if page_index == 0 {
             last_page = page.clone();
@@ -447,7 +446,12 @@ pub fn fold_history_events(entries: &[Value]) -> Vec<DshSessionMessage> {
         let data = event.get("data").cloned().unwrap_or(Value::Null);
         match event_type {
             "user/message" => {
-                flush_assistant(&mut messages, &mut assistant_buf, &mut reasoning_buf, &mut index);
+                flush_assistant(
+                    &mut messages,
+                    &mut assistant_buf,
+                    &mut reasoning_buf,
+                    &mut index,
+                );
                 let text = data
                     .get("text")
                     .and_then(Value::as_str)
@@ -455,9 +459,9 @@ pub fn fold_history_events(entries: &[Value]) -> Vec<DshSessionMessage> {
                         data.get("content")
                             .and_then(Value::as_array)
                             .and_then(|blocks| {
-                                blocks.iter().find_map(|block| {
-                                    block.get("text").and_then(Value::as_str)
-                                })
+                                blocks
+                                    .iter()
+                                    .find_map(|block| block.get("text").and_then(Value::as_str))
                             })
                     })
                     .unwrap_or("")
@@ -500,7 +504,12 @@ pub fn fold_history_events(entries: &[Value]) -> Vec<DshSessionMessage> {
                         assistant_buf.push_str(text);
                     }
                 }
-                flush_assistant(&mut messages, &mut assistant_buf, &mut reasoning_buf, &mut index);
+                flush_assistant(
+                    &mut messages,
+                    &mut assistant_buf,
+                    &mut reasoning_buf,
+                    &mut index,
+                );
             }
             "tool/call" => {
                 index += 1;
@@ -518,14 +527,8 @@ pub fn fold_history_events(entries: &[Value]) -> Vec<DshSessionMessage> {
                     text: String::new(),
                     timestamp: None,
                     kind: "tool".to_string(),
-                    tool_type: data
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .map(str::to_string),
-                    title: data
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .map(str::to_string),
+                    tool_type: data.get("name").and_then(Value::as_str).map(str::to_string),
+                    title: data.get("name").and_then(Value::as_str).map(str::to_string),
                     // DSH `arguments` is a raw JSON string; parse when possible so FE
                     // path extractors receive a normal object (and still accept strings).
                     tool_input: normalize_dsh_tool_arguments(
@@ -568,12 +571,22 @@ pub fn fold_history_events(entries: &[Value]) -> Vec<DshSessionMessage> {
                 }
             }
             "turn/end" => {
-                flush_assistant(&mut messages, &mut assistant_buf, &mut reasoning_buf, &mut index);
+                flush_assistant(
+                    &mut messages,
+                    &mut assistant_buf,
+                    &mut reasoning_buf,
+                    &mut index,
+                );
             }
             _ => {}
         }
     }
-    flush_assistant(&mut messages, &mut assistant_buf, &mut reasoning_buf, &mut index);
+    flush_assistant(
+        &mut messages,
+        &mut assistant_buf,
+        &mut reasoning_buf,
+        &mut index,
+    );
     messages
 }
 
@@ -616,14 +629,20 @@ fn is_dsh_runtime_context_text(text: &str) -> bool {
         return false;
     }
     let lower = trimmed.to_ascii_lowercase();
-    if lower.starts_with("current runtime context.") || lower.starts_with("current runtime context:")
+    if lower.starts_with("current runtime context.")
+        || lower.starts_with("current runtime context:")
     {
         return true;
     }
     let mut rest = trimmed.to_string();
     for _ in 0..12 {
         let before = rest.clone();
-        for tag in ["system-reminder", "available_skills", "agent_skills", "goal_round"] {
+        for tag in [
+            "system-reminder",
+            "available_skills",
+            "agent_skills",
+            "goal_round",
+        ] {
             rest = strip_dsh_runtime_xml_block(&rest, tag);
         }
         if rest == before {
@@ -755,11 +774,9 @@ fn current_model_from_history_events(events: &[Value]) -> Option<DshSessionCurre
         let data = event.get("data").unwrap_or(&Value::Null);
         match event_type {
             "request/context" => {
-                if let Some(next) = selection_from_provider_model(
-                    data.get("provider"),
-                    data.get("model"),
-                    None,
-                ) {
+                if let Some(next) =
+                    selection_from_provider_model(data.get("provider"), data.get("model"), None)
+                {
                     current = Some(next);
                 }
             }
@@ -815,7 +832,10 @@ fn snapshots_from_history_page(page: &Value) -> (Option<DshSessionUsage>, Option
     let Some(values) = page.pointer("/projections/values") else {
         return (None, None);
     };
-    let todos = values.get("todos").filter(|value| value.is_array()).cloned();
+    let todos = values
+        .get("todos")
+        .filter(|value| value.is_array())
+        .cloned();
     (usage_from_history_values(values), todos)
 }
 
@@ -825,7 +845,9 @@ fn usage_from_history_page(page: &Value) -> Option<DshSessionUsage> {
 
 fn usage_from_history_values(values: &Value) -> Option<DshSessionUsage> {
     let token_usage = values.get("tokenUsage").and_then(usage_from_projection);
-    let session_stats = values.get("sessionStats").and_then(session_stats_from_projection);
+    let session_stats = values
+        .get("sessionStats")
+        .and_then(session_stats_from_projection);
     let occupancy = occupancy_from_projections(values);
     match (token_usage, session_stats, occupancy) {
         (None, None, None) => None,
@@ -879,7 +901,10 @@ fn categories_from_breakdown(value: &Value) -> Option<Vec<DshContextCategoryUsag
     let rows = [
         ("system", value.get("systemTokens").and_then(Value::as_i64)),
         ("tools", value.get("toolsTokens").and_then(Value::as_i64)),
-        ("messages", value.get("messageTokens").and_then(Value::as_i64)),
+        (
+            "messages",
+            value.get("messageTokens").and_then(Value::as_i64),
+        ),
     ];
     let categories = rows
         .into_iter()
@@ -931,7 +956,10 @@ fn session_stats_from_projection(value: &Value) -> Option<DshSessionStats> {
         ttft_ms: value.get("ttftMs").and_then(Value::as_i64).unwrap_or(0),
         ttft_steps: value.get("ttftSteps").and_then(Value::as_i64).unwrap_or(0),
         decode_ms: value.get("decodeMs").and_then(Value::as_i64).unwrap_or(0),
-        decode_tokens: value.get("decodeTokens").and_then(Value::as_i64).unwrap_or(0),
+        decode_tokens: value
+            .get("decodeTokens")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
     };
     if stats.turns == 0
         && stats.steps == 0
@@ -1282,10 +1310,7 @@ mod tests {
             Some("src/main.ts")
         );
         assert_eq!(
-            messages[0]
-                .tool_output
-                .as_ref()
-                .and_then(Value::as_str),
+            messages[0].tool_output.as_ref().and_then(Value::as_str),
             Some("1\tok")
         );
     }
@@ -1355,14 +1380,15 @@ mod tests {
         assert_eq!(usage.model_context_window, Some(262000));
         assert!(usage.context_used_percent.expect("percent") > 79.0);
         assert_eq!(
-            usage
-                .context_category_usages
-                .as_ref()
-                .map(|rows| rows
-                    .iter()
-                    .map(|row| (row.name.as_str(), row.tokens))
-                    .collect::<Vec<_>>()),
-            Some(vec![("system", 1500), ("tools", 6400), ("messages", 196000)])
+            usage.context_category_usages.as_ref().map(|rows| rows
+                .iter()
+                .map(|row| (row.name.as_str(), row.tokens))
+                .collect::<Vec<_>>()),
+            Some(vec![
+                ("system", 1500),
+                ("tools", 6400),
+                ("messages", 196000)
+            ])
         );
         assert_eq!(
             todos,

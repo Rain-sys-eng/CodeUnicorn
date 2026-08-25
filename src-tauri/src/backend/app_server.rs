@@ -16,9 +16,7 @@ use tokio::process::{Child, ChildStdin};
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio::time::timeout;
 
-use crate::backend::events::{
-    AppServerEvent, AppServerEventDisposition, EventSink, TerminalOutput,
-};
+use crate::backend::events::{AppServerEvent, AppServerEventDisposition, EventSink, TerminalOutput};
 use crate::codex::collaboration_policy::strict_local_collaboration_profile_enabled;
 use crate::codex::thread_mode_state::ThreadModeState;
 use crate::runtime::{RuntimeEndedRecord, RuntimeManager};

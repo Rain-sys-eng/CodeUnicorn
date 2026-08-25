@@ -28,43 +28,151 @@ struct PiAuthProviderDef {
 }
 
 const PI_AUTH_PROVIDER_CATALOG: &[PiAuthProviderDef] = &[
-    PiAuthProviderDef { id: "anthropic", env_var: Some("ANTHROPIC_API_KEY") },
-    PiAuthProviderDef { id: "ant-ling", env_var: Some("ANT_LING_API_KEY") },
-    PiAuthProviderDef { id: "azure-openai-responses", env_var: Some("AZURE_OPENAI_API_KEY") },
-    PiAuthProviderDef { id: "openai", env_var: Some("OPENAI_API_KEY") },
-    PiAuthProviderDef { id: "deepseek", env_var: Some("DEEPSEEK_API_KEY") },
-    PiAuthProviderDef { id: "nvidia", env_var: Some("NVIDIA_API_KEY") },
-    PiAuthProviderDef { id: "google", env_var: Some("GEMINI_API_KEY") },
-    PiAuthProviderDef { id: "amazon-bedrock", env_var: Some("AWS_BEARER_TOKEN_BEDROCK") },
-    PiAuthProviderDef { id: "mistral", env_var: Some("MISTRAL_API_KEY") },
-    PiAuthProviderDef { id: "groq", env_var: Some("GROQ_API_KEY") },
-    PiAuthProviderDef { id: "cerebras", env_var: Some("CEREBRAS_API_KEY") },
-    PiAuthProviderDef { id: "cloudflare-ai-gateway", env_var: Some("CLOUDFLARE_API_KEY") },
-    PiAuthProviderDef { id: "cloudflare-workers-ai", env_var: Some("CLOUDFLARE_API_KEY") },
-    PiAuthProviderDef { id: "xai", env_var: Some("XAI_API_KEY") },
-    PiAuthProviderDef { id: "openrouter", env_var: Some("OPENROUTER_API_KEY") },
-    PiAuthProviderDef { id: "vercel-ai-gateway", env_var: Some("AI_GATEWAY_API_KEY") },
-    PiAuthProviderDef { id: "zai", env_var: Some("ZAI_API_KEY") },
-    PiAuthProviderDef { id: "zai-coding-cn", env_var: Some("ZAI_CODING_CN_API_KEY") },
-    PiAuthProviderDef { id: "opencode", env_var: Some("OPENCODE_API_KEY") },
-    PiAuthProviderDef { id: "opencode-go", env_var: Some("OPENCODE_API_KEY") },
-    PiAuthProviderDef { id: "radius", env_var: Some("RADIUS_API_KEY") },
-    PiAuthProviderDef { id: "huggingface", env_var: Some("HF_TOKEN") },
-    PiAuthProviderDef { id: "fireworks", env_var: Some("FIREWORKS_API_KEY") },
-    PiAuthProviderDef { id: "together", env_var: Some("TOGETHER_API_KEY") },
-    PiAuthProviderDef { id: "baseten", env_var: Some("BASETEN_API_KEY") },
-    PiAuthProviderDef { id: "kimi-coding", env_var: Some("KIMI_API_KEY") },
-    PiAuthProviderDef { id: "minimax", env_var: Some("MINIMAX_API_KEY") },
-    PiAuthProviderDef { id: "minimax-cn", env_var: Some("MINIMAX_CN_API_KEY") },
-    PiAuthProviderDef { id: "qwen-token-plan", env_var: Some("QWEN_TOKEN_PLAN_API_KEY") },
-    PiAuthProviderDef { id: "qwen-token-plan-individual", env_var: Some("QWEN_TOKEN_PLAN_API_KEY") },
-    PiAuthProviderDef { id: "qwen-token-plan-cn", env_var: Some("QWEN_TOKEN_PLAN_CN_API_KEY") },
-    PiAuthProviderDef { id: "xiaomi", env_var: Some("XIAOMI_API_KEY") },
-    PiAuthProviderDef { id: "xiaomi-token-plan-cn", env_var: Some("XIAOMI_TOKEN_PLAN_CN_API_KEY") },
-    PiAuthProviderDef { id: "xiaomi-token-plan-ams", env_var: Some("XIAOMI_TOKEN_PLAN_AMS_API_KEY") },
-    PiAuthProviderDef { id: "xiaomi-token-plan-sgp", env_var: Some("XIAOMI_TOKEN_PLAN_SGP_API_KEY") },
+    PiAuthProviderDef {
+        id: "anthropic",
+        env_var: Some("ANTHROPIC_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "ant-ling",
+        env_var: Some("ANT_LING_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "azure-openai-responses",
+        env_var: Some("AZURE_OPENAI_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "openai",
+        env_var: Some("OPENAI_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "deepseek",
+        env_var: Some("DEEPSEEK_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "nvidia",
+        env_var: Some("NVIDIA_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "google",
+        env_var: Some("GEMINI_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "amazon-bedrock",
+        env_var: Some("AWS_BEARER_TOKEN_BEDROCK"),
+    },
+    PiAuthProviderDef {
+        id: "mistral",
+        env_var: Some("MISTRAL_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "groq",
+        env_var: Some("GROQ_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "cerebras",
+        env_var: Some("CEREBRAS_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "cloudflare-ai-gateway",
+        env_var: Some("CLOUDFLARE_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "cloudflare-workers-ai",
+        env_var: Some("CLOUDFLARE_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "xai",
+        env_var: Some("XAI_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "openrouter",
+        env_var: Some("OPENROUTER_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "vercel-ai-gateway",
+        env_var: Some("AI_GATEWAY_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "zai",
+        env_var: Some("ZAI_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "zai-coding-cn",
+        env_var: Some("ZAI_CODING_CN_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "opencode",
+        env_var: Some("OPENCODE_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "opencode-go",
+        env_var: Some("OPENCODE_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "radius",
+        env_var: Some("RADIUS_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "huggingface",
+        env_var: Some("HF_TOKEN"),
+    },
+    PiAuthProviderDef {
+        id: "fireworks",
+        env_var: Some("FIREWORKS_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "together",
+        env_var: Some("TOGETHER_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "baseten",
+        env_var: Some("BASETEN_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "kimi-coding",
+        env_var: Some("KIMI_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "minimax",
+        env_var: Some("MINIMAX_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "minimax-cn",
+        env_var: Some("MINIMAX_CN_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "qwen-token-plan",
+        env_var: Some("QWEN_TOKEN_PLAN_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "qwen-token-plan-individual",
+        env_var: Some("QWEN_TOKEN_PLAN_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "qwen-token-plan-cn",
+        env_var: Some("QWEN_TOKEN_PLAN_CN_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "xiaomi",
+        env_var: Some("XIAOMI_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "xiaomi-token-plan-cn",
+        env_var: Some("XIAOMI_TOKEN_PLAN_CN_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "xiaomi-token-plan-ams",
+        env_var: Some("XIAOMI_TOKEN_PLAN_AMS_API_KEY"),
+    },
+    PiAuthProviderDef {
+        id: "xiaomi-token-plan-sgp",
+        env_var: Some("XIAOMI_TOKEN_PLAN_SGP_API_KEY"),
+    },
     // OAuth-only (no env var / api_key path in pi).
-    PiAuthProviderDef { id: "github-copilot", env_var: None },
+    PiAuthProviderDef {
+        id: "github-copilot",
+        env_var: None,
+    },
 ];
 
 fn catalog_entry(provider_id: &str) -> Option<&'static PiAuthProviderDef> {
@@ -169,7 +277,9 @@ async fn read_auth_map(path: &PathBuf) -> Result<Option<Map<String, Value>>, Str
             })?;
             match value {
                 Value::Object(map) => Ok(Some(map)),
-                _ => Err("[PI_AUTH_CORRUPTED] ~/.pi/agent/auth.json 根节点必须是 JSON 对象".to_string()),
+                _ => Err(
+                    "[PI_AUTH_CORRUPTED] ~/.pi/agent/auth.json 根节点必须是 JSON 对象".to_string(),
+                ),
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -278,9 +388,8 @@ pub async fn set_pi_auth_api_key(
     key: &str,
     home_override: Option<&str>,
 ) -> Result<(), String> {
-    let def = catalog_entry(provider_id).ok_or_else(|| {
-        format!("[PI_AUTH_UNKNOWN_PROVIDER] 未知 PI provider：{provider_id}")
-    })?;
+    let def = catalog_entry(provider_id)
+        .ok_or_else(|| format!("[PI_AUTH_UNKNOWN_PROVIDER] 未知 PI provider：{provider_id}"))?;
     if def.env_var.is_none() {
         return Err(format!(
             "[PI_AUTH_OAUTH_ONLY] {provider_id} 仅支持 OAuth 订阅授权，请在终端运行 pi /login"
@@ -298,10 +407,7 @@ pub async fn set_pi_auth_api_key(
     let mut map = read_auth_map(&path).await?.unwrap_or_default();
     let mut credential = Map::new();
     credential.insert("type".to_string(), Value::String("api_key".to_string()));
-    credential.insert(
-        "key".to_string(),
-        Value::String(trimmed.to_string()),
-    );
+    credential.insert("key".to_string(), Value::String(trimmed.to_string()));
     map.insert(def.id.to_string(), Value::Object(credential));
     write_auth_map(&path, &map).await
 }
@@ -310,9 +416,8 @@ pub async fn delete_pi_auth_credential(
     provider_id: &str,
     home_override: Option<&str>,
 ) -> Result<(), String> {
-    let def = catalog_entry(provider_id).ok_or_else(|| {
-        format!("[PI_AUTH_UNKNOWN_PROVIDER] 未知 PI provider：{provider_id}")
-    })?;
+    let def = catalog_entry(provider_id)
+        .ok_or_else(|| format!("[PI_AUTH_UNKNOWN_PROVIDER] 未知 PI provider：{provider_id}"))?;
     let path = resolve_pi_auth_file(home_override);
     let mut map = match read_auth_map(&path).await? {
         Some(map) => map,
@@ -338,16 +443,18 @@ pub async fn pi_auth_list_providers(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    if remote_backend::is_remote_mode(&*state).await {
-        return remote_backend::call_remote(&*state, app, "pi_auth_list_providers", serde_json::json!({}))
-            .await;
-    }
-    let config = state
-        .engine_manager
-        .get_engine_config(EngineType::Pi)
+    if remote_backend::is_remote_mode(&state).await {
+        return remote_backend::call_remote(
+            &state,
+            app,
+            "pi_auth_list_providers",
+            serde_json::json!({}),
+        )
         .await;
-    let result = list_pi_auth_providers(config.as_ref().and_then(|item| item.home_dir.as_deref()))
-        .await?;
+    }
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
+    let result =
+        list_pi_auth_providers(config.as_ref().and_then(|item| item.home_dir.as_deref())).await?;
     serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
@@ -359,9 +466,9 @@ pub async fn pi_auth_set_api_key(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "pi_auth_set_api_key",
             serde_json::json!({ "providerId": provider_id, "key": key }),
@@ -369,10 +476,7 @@ pub async fn pi_auth_set_api_key(
         .await
         .map(|_| ());
     }
-    let config = state
-        .engine_manager
-        .get_engine_config(EngineType::Pi)
-        .await;
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
     set_pi_auth_api_key(
         &provider_id,
         &key,
@@ -388,9 +492,9 @@ pub async fn pi_auth_delete_credential(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "pi_auth_delete_credential",
             serde_json::json!({ "providerId": provider_id }),
@@ -398,10 +502,7 @@ pub async fn pi_auth_delete_credential(
         .await
         .map(|_| ());
     }
-    let config = state
-        .engine_manager
-        .get_engine_config(EngineType::Pi)
-        .await;
+    let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
     delete_pi_auth_credential(
         &provider_id,
         config.as_ref().and_then(|item| item.home_dir.as_deref()),
@@ -414,11 +515,8 @@ mod tests {
     use super::*;
 
     fn temp_agent_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "mossx-pi-auth-test-{}-{}",
-            tag,
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("mossx-pi-auth-test-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -437,7 +535,10 @@ mod tests {
 
     #[test]
     fn mask_command_and_env_keys_verbatim() {
-        assert_eq!(mask_key("!op read 'op://vault/item'"), "!op read 'op://vault/item'");
+        assert_eq!(
+            mask_key("!op read 'op://vault/item'"),
+            "!op read 'op://vault/item'"
+        );
         assert_eq!(mask_key("$MY_API_KEY"), "$MY_API_KEY");
         assert_eq!(key_source("!cmd"), "command");
         assert_eq!(key_source("${A}_${B}"), "envRef");
@@ -461,7 +562,9 @@ mod tests {
         let auth = dir.join("auth.json");
         std::fs::write(&auth, "{ not json").unwrap();
         assert!(list_pi_auth_providers(Some(&agent)).await.is_err());
-        assert!(set_pi_auth_api_key("openai", "sk-x", Some(&agent)).await.is_err());
+        assert!(set_pi_auth_api_key("openai", "sk-x", Some(&agent))
+            .await
+            .is_err());
         // File untouched byte-for-byte.
         assert_eq!(std::fs::read_to_string(&auth).unwrap(), "{ not json");
     }
@@ -491,14 +594,25 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(&auth).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                std::fs::metadata(&auth).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
         }
 
         let list = list_pi_auth_providers(Some(&agent)).await.unwrap();
-        let openai = list.providers.iter().find(|item| item.id == "openai").unwrap();
+        let openai = list
+            .providers
+            .iter()
+            .find(|item| item.id == "openai")
+            .unwrap();
         assert_eq!(openai.state, "configured");
         assert_eq!(openai.masked_key.as_deref(), Some("sk-pro········abcd"));
-        let anthropic = list.providers.iter().find(|item| item.id == "anthropic").unwrap();
+        let anthropic = list
+            .providers
+            .iter()
+            .find(|item| item.id == "anthropic")
+            .unwrap();
         assert!(anthropic.oauth_subscribed);
         assert_eq!(anthropic.state, "none"); // oauth entry is not an api_key state
     }
@@ -510,14 +624,22 @@ mod tests {
         set_pi_auth_api_key("deepseek", "sk-ds-1234567890wxyz", Some(&agent))
             .await
             .unwrap();
-        delete_pi_auth_credential("deepseek", Some(&agent)).await.unwrap();
+        delete_pi_auth_credential("deepseek", Some(&agent))
+            .await
+            .unwrap();
         let list = list_pi_auth_providers(Some(&agent)).await.unwrap();
-        let ds = list.providers.iter().find(|item| item.id == "deepseek").unwrap();
+        let ds = list
+            .providers
+            .iter()
+            .find(|item| item.id == "deepseek")
+            .unwrap();
         assert_eq!(ds.state, "none");
 
         let auth = dir.join("auth.json");
         std::fs::write(&auth, r#"{"openai":{"type":"oauth","access":"tok"}}"#).unwrap();
-        let error = delete_pi_auth_credential("openai", Some(&agent)).await.unwrap_err();
+        let error = delete_pi_auth_credential("openai", Some(&agent))
+            .await
+            .unwrap_err();
         assert!(error.contains("PI_AUTH_OAUTH_MANAGED"));
         let written: Value =
             serde_json::from_str(&std::fs::read_to_string(&auth).unwrap()).unwrap();
@@ -528,10 +650,18 @@ mod tests {
     async fn rejects_unknown_provider_empty_and_multiline_key() {
         let dir = temp_agent_dir("validate");
         let agent = dir.to_string_lossy().to_string();
-        assert!(set_pi_auth_api_key("not-a-provider", "sk-x", Some(&agent)).await.is_err());
-        assert!(set_pi_auth_api_key("openai", "   ", Some(&agent)).await.is_err());
-        assert!(set_pi_auth_api_key("openai", "sk-a\nsk-b", Some(&agent)).await.is_err());
-        assert!(set_pi_auth_api_key("github-copilot", "sk-x", Some(&agent)).await.is_err());
+        assert!(set_pi_auth_api_key("not-a-provider", "sk-x", Some(&agent))
+            .await
+            .is_err());
+        assert!(set_pi_auth_api_key("openai", "   ", Some(&agent))
+            .await
+            .is_err());
+        assert!(set_pi_auth_api_key("openai", "sk-a\nsk-b", Some(&agent))
+            .await
+            .is_err());
+        assert!(set_pi_auth_api_key("github-copilot", "sk-x", Some(&agent))
+            .await
+            .is_err());
         assert!(!dir.join("auth.json").exists());
     }
 }

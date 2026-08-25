@@ -28,9 +28,7 @@ use crate::engine::grok_history::{
     candidate_encoded_cwd_names, first_user_prompt_from_line, resolve_grok_base_dir,
     session_dir_looks_valid,
 };
-use crate::engine::pi_history::{
-    locate_pi_session_file, scan_pi_jsonl_user_prompt, PiUserPromptScan,
-};
+use crate::engine::pi_history::{locate_pi_session_file, scan_pi_jsonl_user_prompt, PiUserPromptScan};
 use crate::state::AppState;
 use std::sync::Arc;
 

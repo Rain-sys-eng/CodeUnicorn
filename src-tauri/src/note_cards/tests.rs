@@ -51,17 +51,16 @@ fn reads_legacy_note_without_source() {
 
 #[test]
 fn normalizes_conversation_source_item_ids() {
-    let normalized =
-        normalize_note_source(Some(WorkspaceNoteCardSource::ConversationSelection {
-            thread_id: " thread-1 ".to_string(),
-            item_ids: vec![
-                "item-1".to_string(),
-                " item-1 ".to_string(),
-                String::new(),
-                "item-2".to_string(),
-            ],
-        }))
-        .expect("normalize source");
+    let normalized = normalize_note_source(Some(WorkspaceNoteCardSource::ConversationSelection {
+        thread_id: " thread-1 ".to_string(),
+        item_ids: vec![
+            "item-1".to_string(),
+            " item-1 ".to_string(),
+            String::new(),
+            "item-2".to_string(),
+        ],
+    }))
+    .expect("normalize source");
 
     assert_eq!(
         normalized,
@@ -108,8 +107,7 @@ fn keeps_ordinary_note_source_absent() {
 #[test]
 fn create_archive_and_restore_note_card_roundtrip() {
     let base = std::env::temp_dir().join(format!("note-card-tests-{}", uuid::Uuid::new_v4()));
-    let project_dir =
-        test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
+    let project_dir = test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
     ensure_project_dirs(&project_dir).expect("create project dirs");
 
     let created = {
@@ -120,11 +118,7 @@ fn create_archive_and_restore_note_card_roundtrip() {
             workspace_id: "workspace-1".to_string(),
             workspace_name: Some("Repo".to_string()),
             workspace_path: Some("/tmp/repo".to_string()),
-            project_name: derive_project_name(
-                Some("workspace-1"),
-                Some("Repo"),
-                Some("/tmp/repo"),
-            ),
+            project_name: derive_project_name(Some("workspace-1"), Some("Repo"), Some("/tmp/repo")),
             title: resolve_note_title(None, &body_markdown),
             body_markdown: body_markdown.clone(),
             plain_text_excerpt: build_plain_text_excerpt(&body_markdown),
@@ -164,8 +158,7 @@ fn create_archive_and_restore_note_card_roundtrip() {
     assert_eq!(archived_items.len(), 1);
     assert!(archived_items[0].archived);
 
-    let restored =
-        read_note_card(&archive_path, &project_dir, true).expect("read archived note");
+    let restored = read_note_card(&archive_path, &project_dir, true).expect("read archived note");
     assert_eq!(restored.id, created.id);
     assert_eq!(restored.source, created.source);
 
@@ -234,8 +227,7 @@ fn summarize_note_includes_preview_attachments() {
 fn delete_note_card_removes_document_and_assets() {
     let base =
         std::env::temp_dir().join(format!("note-card-delete-tests-{}", uuid::Uuid::new_v4()));
-    let project_dir =
-        test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
+    let project_dir = test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
     ensure_project_dirs(&project_dir).expect("create project dirs");
 
     let note_id = uuid::Uuid::new_v4().to_string();
@@ -283,8 +275,7 @@ fn delete_note_card_removes_document_and_assets() {
 fn sanitize_attachment_path_stays_inside_note_asset_dir() {
     let base =
         std::env::temp_dir().join(format!("note-card-hydrate-tests-{}", uuid::Uuid::new_v4()));
-    let project_dir =
-        test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
+    let project_dir = test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
     let hydrated = hydrate_attachment_path(
         &project_dir,
         "note-1",
@@ -391,8 +382,7 @@ fn materialize_attachments_skips_duplicate_existing_paths() {
         "note-card-attachment-dedupe-tests-{}",
         uuid::Uuid::new_v4()
     ));
-    let project_dir =
-        test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
+    let project_dir = test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
     ensure_project_dirs(&project_dir).expect("create project dirs");
     let note_id = "note-1";
     let asset_dir = note_asset_dir(&project_dir, note_id);
@@ -433,8 +423,7 @@ fn materialize_attachments_accepts_percent_encoded_file_uri_sources() {
         "note-card-attachment-file-uri-tests-{}",
         uuid::Uuid::new_v4()
     ));
-    let project_dir =
-        test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
+    let project_dir = test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
     ensure_project_dirs(&project_dir).expect("create project dirs");
 
     let source_path = base.join("My Image.png");
@@ -463,8 +452,7 @@ fn materialize_attachments_accepts_percent_encoded_file_uri_sources() {
 fn collect_workspace_note_summaries_matches_full_body_query() {
     let base =
         std::env::temp_dir().join(format!("note-card-search-tests-{}", uuid::Uuid::new_v4()));
-    let project_dir =
-        test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
+    let project_dir = test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
     ensure_project_dirs(&project_dir).expect("create project dirs");
 
     let long_prefix = "前缀内容".repeat(80);

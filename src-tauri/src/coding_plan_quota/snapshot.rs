@@ -172,9 +172,7 @@ pub(crate) fn relay_user_error(kind: &str) -> String {
         "not_found" | "404" => "该中转站暂不支持额度查询".to_string(),
         "auth" | "401" | "403" => "密钥无效或未授权".to_string(),
         // New API 的 /api/user/self 常要求系统访问令牌，sk 会 401
-        "auth_new_api" => {
-            "密钥无效或权限不足（New API 可能需要系统访问令牌，而非 sk）".to_string()
-        }
+        "auth_new_api" => "密钥无效或权限不足（New API 可能需要系统访问令牌，而非 sk）".to_string(),
         "rate_limited" | "429" => "请求过于频繁，请稍后重试".to_string(),
         "network" => "网络异常，请稍后重试".to_string(),
         "parse" | "empty" => "暂无可用额度数据".to_string(),
@@ -191,7 +189,10 @@ pub(crate) fn sub2api_user_error(kind: &str) -> String {
     relay_user_error(kind)
 }
 
-pub(crate) fn status_to_relay_error_kind(status: reqwest::StatusCode, for_new_api: bool) -> &'static str {
+pub(crate) fn status_to_relay_error_kind(
+    status: reqwest::StatusCode,
+    for_new_api: bool,
+) -> &'static str {
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return "rate_limited";
     }
@@ -214,4 +215,3 @@ pub(crate) fn optional_balance_string(value: Option<&Value>) -> Option<String> {
         .filter(|s| !s.is_empty())
         .map(str::to_string)
 }
-

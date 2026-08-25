@@ -267,8 +267,8 @@ impl DaemonState {
             &self.sessions,
             &self.app_settings,
             &self.storage_path,
-            |value| worktree_core::sanitize_worktree_name(value),
-            |root, name| worktree_core::unique_worktree_path_strict(root, name),
+            worktree_core::sanitize_worktree_name,
+            worktree_core::unique_worktree_path_strict,
             |root, branch_name| {
                 let root = root.clone();
                 let branch_name = branch_name.to_string();
@@ -338,7 +338,7 @@ impl DaemonState {
             |root, args| {
                 workspaces_core::run_git_command_unit(root, args, git_core::run_git_command_owned)
             },
-            |error| git_core::is_missing_worktree_error(error),
+            git_core::is_missing_worktree_error,
             |path| {
                 std::fs::remove_dir_all(path)
                     .map_err(|err| format!("Failed to remove worktree folder: {err}"))
@@ -375,7 +375,7 @@ impl DaemonState {
             |root, args| {
                 workspaces_core::run_git_command_unit(root, args, git_core::run_git_command_owned)
             },
-            |error| git_core::is_missing_worktree_error(error),
+            git_core::is_missing_worktree_error,
             |path| {
                 std::fs::remove_dir_all(path)
                     .map_err(|err| format!("Failed to remove worktree folder: {err}"))
@@ -416,7 +416,7 @@ impl DaemonState {
                         .map(|(branch_name, _was_suffixed)| branch_name)
                 }
             },
-            |value| worktree_core::sanitize_worktree_name(value),
+            worktree_core::sanitize_worktree_name,
             |root, name, current| {
                 worktree_core::unique_worktree_path_for_rename(root, name, current)
             },
@@ -690,15 +690,14 @@ impl DaemonState {
         &self,
         provider_profile_id: Option<String>,
     ) -> Result<Value, String> {
-        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
-            provider_profile_id.as_deref(),
-        )?;
+        let distribution =
+            engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+                provider_profile_id.as_deref(),
+            )?;
         let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
-        let status = engine::qoder_auth::qoder_auth_status_from_path_for_distribution(
-            path,
-            distribution,
-        )
-        .await?;
+        let status =
+            engine::qoder_auth::qoder_auth_status_from_path_for_distribution(path, distribution)
+                .await?;
         serde_json::to_value(status).map_err(|error| error.to_string())
     }
 
@@ -707,9 +706,10 @@ impl DaemonState {
         key: String,
         provider_profile_id: Option<String>,
     ) -> Result<(), String> {
-        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
-            provider_profile_id.as_deref(),
-        )?;
+        let distribution =
+            engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+                provider_profile_id.as_deref(),
+            )?;
         let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
         engine::qoder_auth::set_qoder_pat(&path, &key).await
     }
@@ -718,9 +718,10 @@ impl DaemonState {
         &self,
         provider_profile_id: Option<String>,
     ) -> Result<(), String> {
-        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
-            provider_profile_id.as_deref(),
-        )?;
+        let distribution =
+            engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+                provider_profile_id.as_deref(),
+            )?;
         let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
         engine::qoder_auth::delete_qoder_pat(&path).await
     }
@@ -1115,7 +1116,10 @@ impl DaemonState {
                 let status = engine::status::detect_qoder_distribution_status(
                     launch_profile.distribution,
                     launch_profile.bin_path.as_deref(),
-                    launch_profile.home_dir.as_deref().and_then(|path| path.to_str()),
+                    launch_profile
+                        .home_dir
+                        .as_deref()
+                        .and_then(|path| path.to_str()),
                 )
                 .await;
                 Ok(status.models)
@@ -4340,14 +4344,13 @@ impl DaemonState {
                 .map(|entry| std::path::PathBuf::from(&entry.path))
                 .ok_or_else(|| "Workspace not found".to_string())?
         };
-        let effective_provider_profile_id =
-            session_management::resolve_engine_provider_profile_id(
-                self.storage_path.as_path(),
-                workspace_id,
-                None,
-                "pi",
-                provider_profile_id,
-            )?;
+        let effective_provider_profile_id = session_management::resolve_engine_provider_profile_id(
+            self.storage_path.as_path(),
+            workspace_id,
+            None,
+            "pi",
+            provider_profile_id,
+        )?;
         let provider_launch_profile =
             engine::pi_provider_profile::resolve_pi_provider_launch_profile(
                 workspace_id,
@@ -4374,7 +4377,9 @@ impl DaemonState {
         let session = self
             .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
             .await?;
-        let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+        let client = session
+            .rpc_client_for_commands(session_id.as_deref())
+            .await?;
         client.get_session_stats().await
     }
 
@@ -4430,7 +4435,9 @@ impl DaemonState {
         let session = self
             .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
             .await?;
-        let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+        let client = session
+            .rpc_client_for_commands(session_id.as_deref())
+            .await?;
         client.get_tree().await
     }
 
@@ -4443,7 +4450,9 @@ impl DaemonState {
         let session = self
             .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
             .await?;
-        let client = session.rpc_client_for_commands(session_id.as_deref()).await?;
+        let client = session
+            .rpc_client_for_commands(session_id.as_deref())
+            .await?;
         client.get_fork_messages().await
     }
 

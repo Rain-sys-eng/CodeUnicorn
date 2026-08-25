@@ -1641,7 +1641,8 @@ fn create_browser_child_webview(
             let Some(active_session_id) = current_browser_embedded_webview_session_id() else {
                 return false;
             };
-            if handle_browser_tab_context_menu_navigation(&app_for_navigation, target_url.as_str()) {
+            if handle_browser_tab_context_menu_navigation(&app_for_navigation, target_url.as_str())
+            {
                 return false;
             }
             // 元素选择器完成时通过 bridge URL 回传选中元素证据（与浮动窗同一通道）
@@ -2134,8 +2135,7 @@ pub(crate) async fn close_browser_agent_session(
         .lock()
         .map(|binding| binding.as_deref() == Some(browser_session_id.as_str()))
         .unwrap_or(false);
-    let should_close_embedded_renderer = current_browser_embedded_webview_session_id()
-        .as_deref()
+    let should_close_embedded_renderer = current_browser_embedded_webview_session_id().as_deref()
         == Some(browser_session_id.as_str());
     clear_browser_renderer_session(browser_session_id.as_str());
     clear_browser_embedded_webview_session(browser_session_id.as_str());
@@ -2400,8 +2400,7 @@ pub(crate) async fn hide_browser_agent_webview(
     browser_session_id: String,
     app: AppHandle,
 ) -> Result<(), String> {
-    if current_browser_embedded_webview_session_id().as_deref()
-        != Some(browser_session_id.as_str())
+    if current_browser_embedded_webview_session_id().as_deref() != Some(browser_session_id.as_str())
     {
         return Ok(());
     }
@@ -2478,8 +2477,7 @@ pub(crate) async fn start_browser_agent_element_select(
             .cloned()
             .ok_or_else(|| format!("Browser session not found: {browser_session_id}"))?
     };
-    if current_browser_embedded_webview_session_id().as_deref()
-        != Some(browser_session_id.as_str())
+    if current_browser_embedded_webview_session_id().as_deref() != Some(browser_session_id.as_str())
     {
         return Err(format!(
             "Browser Agent WebView is not active for session: {browser_session_id}"
@@ -2487,9 +2485,7 @@ pub(crate) async fn start_browser_agent_element_select(
     }
     let webview = app
         .get_webview(BROWSER_RENDERER_WEBVIEW_LABEL)
-        .ok_or_else(|| {
-            format!("Browser Agent WebView is not embedded: {browser_session_id}")
-        })?;
+        .ok_or_else(|| format!("Browser Agent WebView is not embedded: {browser_session_id}"))?;
     let script = browser_element_selector_script(
         session.browser_session_id.as_str(),
         session.workspace_id.as_str(),
@@ -2504,8 +2500,7 @@ pub(crate) async fn stop_browser_agent_element_select(
     browser_session_id: String,
     app: AppHandle,
 ) -> Result<(), String> {
-    if current_browser_embedded_webview_session_id().as_deref()
-        != Some(browser_session_id.as_str())
+    if current_browser_embedded_webview_session_id().as_deref() != Some(browser_session_id.as_str())
     {
         return Err(format!(
             "Browser Agent WebView is not active for session: {browser_session_id}"
@@ -2513,9 +2508,7 @@ pub(crate) async fn stop_browser_agent_element_select(
     }
     let webview = app
         .get_webview(BROWSER_RENDERER_WEBVIEW_LABEL)
-        .ok_or_else(|| {
-            format!("Browser Agent WebView is not embedded: {browser_session_id}")
-        })?;
+        .ok_or_else(|| format!("Browser Agent WebView is not embedded: {browser_session_id}"))?;
     webview
         .eval(&browser_element_selector_stop_script())
         .map_err(|error| error.to_string())
@@ -2543,14 +2536,14 @@ pub(crate) async fn capture_browser_agent_snapshot(
         .as_deref()
         .map(|bound_session_id| bound_session_id == browser_session_id)
         .unwrap_or(false)
-        && app.get_webview_window(BROWSER_RENDERER_WINDOW_LABEL).is_some();
+        && app
+            .get_webview_window(BROWSER_RENDERER_WINDOW_LABEL)
+            .is_some();
     let embedded_renderer_matches = current_browser_embedded_webview_session_id()
         .as_deref()
         .map(|bound_session_id| bound_session_id == browser_session_id)
         .unwrap_or(false)
-        && app
-            .get_webview(BROWSER_RENDERER_WEBVIEW_LABEL)
-            .is_some();
+        && app.get_webview(BROWSER_RENDERER_WEBVIEW_LABEL).is_some();
     let renderer_matches = floating_renderer_matches || embedded_renderer_matches;
 
     let mut capture_warnings = Vec::new();
@@ -2992,10 +2985,7 @@ mod tests {
 
     #[test]
     fn embedded_renderer_uses_a_stable_singleton_label() {
-        assert_eq!(
-            BROWSER_RENDERER_WEBVIEW_LABEL,
-            "browser-agent-webview-main",
-        );
+        assert_eq!(BROWSER_RENDERER_WEBVIEW_LABEL, "browser-agent-webview-main",);
     }
 
     #[test]

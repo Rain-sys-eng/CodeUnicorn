@@ -342,10 +342,7 @@ pub(crate) fn parse_zhipu_windows(data: &Value) -> Vec<CodingPlanQuotaWindow> {
         return vec![];
     };
     for item in limits {
-        let limit_type = item
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let limit_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
         // 与 CC Switch 一致：只吃 TOKENS_LIMIT（大小写不敏感）
         if !limit_type.is_empty() && !limit_type.eq_ignore_ascii_case("TOKENS_LIMIT") {
             continue;

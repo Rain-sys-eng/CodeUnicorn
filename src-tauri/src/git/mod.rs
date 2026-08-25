@@ -2434,7 +2434,9 @@ mod tests {
 
         let repo = open_repository_at_root(&root).expect("open mixed repo");
         let mut status_options = StatusOptions::new();
-        status_options.include_untracked(true).include_ignored(false);
+        status_options
+            .include_untracked(true)
+            .include_ignored(false);
         let statuses = repo
             .statuses(Some(&mut status_options))
             .expect("collect mixed statuses");
@@ -2447,7 +2449,9 @@ mod tests {
             "staged hunks must remain after unstaged discard"
         );
         assert!(
-            !entry.status().intersects(Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_NEW),
+            !entry
+                .status()
+                .intersects(Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_NEW),
             "working tree must match the index after unstaged discard"
         );
     }

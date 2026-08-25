@@ -93,7 +93,7 @@ pub(super) fn is_claude_stream_control_line(line: &str) -> bool {
 
 pub(super) fn extract_delta_text_from_event(event: &Value) -> Option<String> {
     let part = event.get("part");
-    for value in [
+    for text in [
         event.get("delta").and_then(|value| value.as_str()),
         event.get("text").and_then(|value| value.as_str()),
         part.and_then(|value| value.get("delta"))
@@ -102,11 +102,9 @@ pub(super) fn extract_delta_text_from_event(event: &Value) -> Option<String> {
             .and_then(|value| value.as_str()),
         part.and_then(|value| value.get("content"))
             .and_then(|value| value.as_str()),
-    ] {
-        if let Some(text) = value {
-            if !text.is_empty() {
-                return Some(text.to_string());
-            }
+    ].into_iter().flatten() {
+        if !text.is_empty() {
+            return Some(text.to_string());
         }
     }
     None

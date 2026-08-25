@@ -778,7 +778,15 @@ pub(crate) fn list_for_workspace_path(
         }
     }
 
-    merge_equivalent_workspace_rows(connection, &key, limit, &mut existing, &mut rows, None, for_sidebar)?;
+    merge_equivalent_workspace_rows(
+        connection,
+        &key,
+        limit,
+        &mut existing,
+        &mut rows,
+        None,
+        for_sidebar,
+    )?;
     rows.sort_by(|left, right| {
         right
             .updated_at
@@ -839,7 +847,15 @@ pub(crate) fn list_for_workspace_path_before(
         .iter()
         .map(|row| (row.engine.clone(), row.session_id.clone()))
         .collect();
-    merge_equivalent_workspace_rows(connection, &key, limit, &mut existing, &mut rows, before, for_sidebar)?;
+    merge_equivalent_workspace_rows(
+        connection,
+        &key,
+        limit,
+        &mut existing,
+        &mut rows,
+        before,
+        for_sidebar,
+    )?;
     rows.sort_by(|left, right| {
         right
             .updated_at
@@ -1503,7 +1519,8 @@ mod tests {
             }],
         )
         .expect("upsert");
-        let rows = list_for_workspace_path(&connection, "/Users/me/proj/", 10, false).expect("list");
+        let rows =
+            list_for_workspace_path(&connection, "/Users/me/proj/", 10, false).expect("list");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].session_id, "s1");
         assert_eq!(
@@ -1993,7 +2010,8 @@ mod tests {
             ],
         )
         .expect("upsert");
-        let listed = list_for_workspace_path(&connection, r"C:\Users\me\proj", 10, false).expect("list");
+        let listed =
+            list_for_workspace_path(&connection, r"C:\Users\me\proj", 10, false).expect("list");
         let engines: Vec<_> = listed.iter().map(|row| row.engine.as_str()).collect();
         assert!(engines.contains(&"claude"), "{engines:?}");
         assert!(engines.contains(&"grok"), "{engines:?}");

@@ -11,7 +11,6 @@ use tokio::task::JoinHandle;
 use crate::engine;
 use crate::local_usage;
 use crate::remote_backend;
-use crate::shared::codex_core;
 use crate::state::AppState;
 use crate::storage::{read_json_file, with_storage_lock, write_string_atomically};
 use crate::types::{WorkspaceEntry, WorkspaceSessionAttributionMode};
@@ -68,7 +67,7 @@ async fn forward_session_management_remote<T: DeserializeOwned>(
     method: &str,
     params: serde_json::Value,
 ) -> Result<T, String> {
-    let response = remote_backend::call_remote(&*state, app, method, params).await?;
+    let response = remote_backend::call_remote(state, app, method, params).await?;
     serde_json::from_value(response).map_err(|err| err.to_string())
 }
 
@@ -246,7 +245,7 @@ pub(crate) async fn list_workspace_session_folders(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderTree, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -272,7 +271,7 @@ pub(crate) async fn create_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -300,7 +299,7 @@ pub(crate) async fn rename_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -328,7 +327,7 @@ pub(crate) async fn move_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -355,7 +354,7 @@ pub(crate) async fn delete_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote_unit(
             &state,
             app,
@@ -383,7 +382,7 @@ pub(crate) async fn assign_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionAssignmentResponse, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -412,7 +411,7 @@ pub(crate) async fn assign_workspace_session_folders(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -573,7 +572,6 @@ async fn catalog_workspace_scope(
     scoped.extend(children);
     Ok(scoped)
 }
-
 
 pub(crate) async fn delete_workspace_sessions_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -810,11 +808,12 @@ pub(crate) async fn delete_workspace_sessions_core(
                 let qoder_distribution_settings = qoder_distribution_settings.clone();
                 let raw_id = target.native_session_id.clone();
                 let handle = tokio::spawn(async move {
-                    let launch_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
-                        &workspace_id,
-                        provider_profile_id.as_deref(),
-                        &qoder_distribution_settings,
-                    )?;
+                    let launch_profile =
+                        engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                            &workspace_id,
+                            provider_profile_id.as_deref(),
+                            &qoder_distribution_settings,
+                        )?;
                     engine::qoder_history::delete_qoder_session_for_launch_profile(
                         &workspace_path,
                         &raw_id,
@@ -1432,10 +1431,7 @@ fn catalog_metadata_path(storage_path: &Path, workspace_id: &str) -> Result<Path
         .join(format!("{workspace_id}.json")))
 }
 
-fn qoder_legacy_stable_metadata_raw_id<'a>(
-    workspace_id: &str,
-    key: &'a str,
-) -> Option<&'a str> {
+fn qoder_legacy_stable_metadata_raw_id<'a>(workspace_id: &str, key: &'a str) -> Option<&'a str> {
     if qoder_profile_qualified_metadata_key_parts(key).is_some() {
         return None;
     }
@@ -1454,10 +1450,11 @@ fn qoder_legacy_metadata_profile_by_raw(
         .iter()
         .filter_map(|(key, binding)| {
             let raw_session_id = qoder_legacy_stable_metadata_raw_id(workspace_id, key)?;
-            let provider_profile_id = engine::qoder_provider_profile::qoder_canonical_provider_profile_id(
-                Some(binding.provider_profile_id.as_str()),
-            )
-            .ok();
+            let provider_profile_id =
+                engine::qoder_provider_profile::qoder_canonical_provider_profile_id(Some(
+                    binding.provider_profile_id.as_str(),
+                ))
+                .ok();
             Some((raw_session_id.to_string(), provider_profile_id))
         })
         .collect()
@@ -1485,11 +1482,14 @@ fn normalized_qoder_metadata_key(
         .ok()?;
         return Some(format!(
             "qoder:{}:{}:{}",
-            workspace_id.trim(), identity.provider_profile_id, identity.raw_session_id
+            workspace_id.trim(),
+            identity.provider_profile_id,
+            identity.raw_session_id
         ));
     }
 
-    let identity = engine::qoder_provider_profile::parse_qoder_native_session_identity(key, None).ok()?;
+    let identity =
+        engine::qoder_provider_profile::parse_qoder_native_session_identity(key, None).ok()?;
     if !identity.is_legacy {
         return Some(identity.canonical_id());
     }
@@ -1498,17 +1498,15 @@ fn normalized_qoder_metadata_key(
     if identity.raw_session_id.contains(':') {
         return None;
     }
-    let provider_profile_id = match profile_by_raw_session_id.get(identity.raw_session_id.as_str()) {
+    let provider_profile_id = match profile_by_raw_session_id.get(identity.raw_session_id.as_str())
+    {
         Some(Some(provider_profile_id)) => Some(*provider_profile_id),
         Some(None) => return None,
         None => None,
     };
-    engine::qoder_provider_profile::parse_qoder_native_session_identity(
-        key,
-        provider_profile_id,
-    )
-    .ok()
-    .map(|identity| identity.canonical_id())
+    engine::qoder_provider_profile::parse_qoder_native_session_identity(key, provider_profile_id)
+        .ok()
+        .map(|identity| identity.canonical_id())
 }
 
 fn rekey_legacy_qoder_metadata_map<T>(
@@ -1541,8 +1539,7 @@ fn normalize_legacy_qoder_catalog_metadata(
     metadata: &mut WorkspaceSessionCatalogMetadata,
     workspace_id: &str,
 ) {
-    let profile_by_raw_session_id =
-        qoder_legacy_metadata_profile_by_raw(metadata, workspace_id);
+    let profile_by_raw_session_id = qoder_legacy_metadata_profile_by_raw(metadata, workspace_id);
     rekey_legacy_qoder_metadata_map(
         &mut metadata.archived_at_by_session_id,
         workspace_id,
@@ -1575,7 +1572,8 @@ fn read_catalog_metadata(
     workspace_id: &str,
 ) -> Result<WorkspaceSessionCatalogMetadata, String> {
     let path = catalog_metadata_path(storage_path, workspace_id)?;
-    let mut metadata = read_json_file::<WorkspaceSessionCatalogMetadata>(&path)?.unwrap_or_default();
+    let mut metadata =
+        read_json_file::<WorkspaceSessionCatalogMetadata>(&path)?.unwrap_or_default();
     normalize_legacy_qoder_catalog_metadata(&mut metadata, workspace_id);
     Ok(metadata)
 }
@@ -2134,22 +2132,28 @@ fn qoder_provider_binding_for_session(
     session_id: &str,
 ) -> Option<EngineProviderBinding> {
     let identity = crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
-        session_id,
-        None,
+        session_id, None,
     )
     .ok()?;
     let stable_key = engine_provider_binding_stable_key(workspace_id, session_id, "qoder", None)?;
-    if let Some(binding) = metadata.engine_provider_binding_by_session_key.get(&stable_key) {
+    if let Some(binding) = metadata
+        .engine_provider_binding_by_session_key
+        .get(&stable_key)
+    {
         return qoder_provider_binding_matches_profile(binding, identity.provider_profile_id)
             .then(|| binding.clone());
     }
 
     let legacy_key = format!("qoder:{workspace_id}:{}", identity.raw_session_id);
-    if let Some(binding) = metadata.engine_provider_binding_by_session_key.get(&legacy_key) {
-        let binding_provider_profile_id = crate::engine::qoder_provider_profile::qoder_canonical_provider_profile_id(
-            Some(binding.provider_profile_id.as_str()),
-        )
-        .ok()?;
+    if let Some(binding) = metadata
+        .engine_provider_binding_by_session_key
+        .get(&legacy_key)
+    {
+        let binding_provider_profile_id =
+            crate::engine::qoder_provider_profile::qoder_canonical_provider_profile_id(Some(
+                binding.provider_profile_id.as_str(),
+            ))
+            .ok()?;
         return (identity.is_legacy || binding_provider_profile_id == identity.provider_profile_id)
             .then(|| binding.clone());
     }
@@ -2740,7 +2744,7 @@ pub(crate) fn record_engine_provider_binding_at_path(
         if metadata
             .engine_provider_binding_by_session_key
             .get(&stable_key)
-            == Some(&binding)
+            == Some(binding)
         {
             return Ok(false);
         }
@@ -3852,7 +3856,7 @@ fn claude_project_dir_owner_conflicts(
 
 fn normalize_owner_path_for_exact_match(path: &str) -> String {
     path.trim()
-        .trim_end_matches(|value| value == '/' || value == '\\')
+        .trim_end_matches(['/', '\\'])
         .to_string()
 }
 
@@ -3935,7 +3939,7 @@ fn infer_related_attribution_for_workspace(
                 .map(|git_root| local_usage::path_matches_workspace(cwd, Path::new(git_root)))
                 .unwrap_or(false)
         })
-        .map(|candidate| workspace_family_key(candidate))
+        .map(workspace_family_key)
         .collect::<HashSet<_>>();
     if matching_git_root_families.len() != 1
         || !matching_git_root_families.contains(&workspace_family_key(selected_workspace))

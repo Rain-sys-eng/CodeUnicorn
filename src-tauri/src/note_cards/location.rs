@@ -54,7 +54,10 @@ pub(crate) fn list_candidate_project_dirs(
     Ok(candidates)
 }
 
-pub(crate) fn workspace_id_matches(note_workspace_id: &str, expected_workspace_id: Option<&str>) -> bool {
+pub(crate) fn workspace_id_matches(
+    note_workspace_id: &str,
+    expected_workspace_id: Option<&str>,
+) -> bool {
     let expected = expected_workspace_id.map(str::trim).unwrap_or_default();
     expected.is_empty()
         || note_workspace_id.trim().is_empty()

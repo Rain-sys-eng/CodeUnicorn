@@ -469,7 +469,7 @@ pub fn find_cli_binary(name: &str, custom_bin: Option<&str>) -> Option<PathBuf> 
     let search_paths = build_search_paths(custom_bin);
 
     // Use which crate to find the binary
-    if let Some(cwd) = std::env::current_dir().ok() {
+    if let Ok(cwd) = std::env::current_dir() {
         if let Ok(found) = which::which_in(name, Some(&search_paths), &cwd) {
             #[cfg(windows)]
             {
@@ -1017,7 +1017,7 @@ pub(crate) fn extract_existing_developer_instructions(args: &[String]) -> Option
         let value_after_flag = |next: Option<&&String>| -> Option<String> {
             let v = next?.as_str();
             if v.starts_with("developer_instructions=") || v.starts_with("instructions=") {
-                Some(decode_toml_string(&v.splitn(2, '=').nth(1).unwrap_or("")))
+                Some(decode_toml_string(v.split_once('=').map(|x| x.1).unwrap_or("")))
             } else {
                 None
             }
@@ -1025,14 +1025,14 @@ pub(crate) fn extract_existing_developer_instructions(args: &[String]) -> Option
         if let Some(rest) = arg.strip_prefix("--config=") {
             let key = rest.split('=').next().unwrap_or_default().trim();
             if matches!(key, "developer_instructions" | "instructions") {
-                let v = rest.splitn(2, '=').nth(1).unwrap_or("");
+                let v = rest.split_once('=').map(|x| x.1).unwrap_or("");
                 return Some(decode_toml_string(v));
             }
         }
         // Concat forms: "-cinstructions=foo" or "--configinstructions=foo".
         if let Some(rest) = arg.strip_prefix("-c") {
             if rest.starts_with("developer_instructions=") || rest.starts_with("instructions=") {
-                let v = rest.splitn(2, '=').nth(1).unwrap_or("");
+                let v = rest.split_once('=').map(|x| x.1).unwrap_or("");
                 return Some(decode_toml_string(v));
             }
         }
@@ -1042,7 +1042,7 @@ pub(crate) fn extract_existing_developer_instructions(args: &[String]) -> Option
             } else if rest.starts_with("developer_instructions=")
                 || rest.starts_with("instructions=")
             {
-                let v = rest.splitn(2, '=').nth(1).unwrap_or("");
+                let v = rest.split_once('=').map(|x| x.1).unwrap_or("");
                 return Some(decode_toml_string(v));
             }
         }

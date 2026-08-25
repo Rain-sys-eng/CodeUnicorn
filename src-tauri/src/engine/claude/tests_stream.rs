@@ -464,9 +464,7 @@ async fn respond_to_user_input_delivers_mcp_answer_even_without_pending_entry() 
         .await
         .expect("orphan MCP waiter must accept skip");
 
-    let answer = rx
-        .await
-        .expect("orphan MCP waiter must receive skip text");
+    let answer = rx.await.expect("orphan MCP waiter must receive skip text");
     assert!(
         answer.to_ascii_lowercase().contains("skipped"),
         "skip text expected, got: {answer}"
@@ -1282,7 +1280,9 @@ async fn send_message_force_settles_pending_agent_task_that_never_notifies() {
         session.send_message(params, "turn-pending-hang"),
     )
     .await
-    .expect("send_message must force-settle at the pending-task max-wait, not hang on the 30s sleep")
+    .expect(
+        "send_message must force-settle at the pending-task max-wait, not hang on the 30s sleep",
+    )
     .expect("a force-settled pending task is a success (result was never expected to arrive)");
     let elapsed = started.elapsed();
 

@@ -161,7 +161,9 @@ pub(crate) fn qoder_canonical_provider_profile_id(
 /// Global. Only these two ids may override a legacy raw session's binding.
 pub(crate) fn has_explicit_qoder_distribution_owner(provider_profile_id: Option<&str>) -> bool {
     matches!(
-        provider_profile_id.map(str::trim).filter(|value| !value.is_empty()),
+        provider_profile_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
         Some(QODER_GLOBAL_PROVIDER_PROFILE_ID | QODER_CN_PROVIDER_PROFILE_ID)
     )
 }
@@ -431,12 +433,13 @@ mod tests {
         .expect("canonical CN identity must override the legacy local sentinel");
         assert_eq!(identity.provider_profile_id, QODER_CN_PROVIDER_PROFILE_ID);
 
-        let blank_identity = parse_qoder_native_session_identity(
-            "qoder:__qoder_cn__:same-raw-session",
-            Some(""),
-        )
-        .expect("blank owner must behave as missing legacy owner");
-        assert_eq!(blank_identity.provider_profile_id, QODER_CN_PROVIDER_PROFILE_ID);
+        let blank_identity =
+            parse_qoder_native_session_identity("qoder:__qoder_cn__:same-raw-session", Some(""))
+                .expect("blank owner must behave as missing legacy owner");
+        assert_eq!(
+            blank_identity.provider_profile_id,
+            QODER_CN_PROVIDER_PROFILE_ID
+        );
     }
 
     #[test]

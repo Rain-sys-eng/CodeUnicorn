@@ -22,7 +22,6 @@ const LOCAL_SESSION_SCAN_FALLBACK_TIMEOUT_MS: u64 = 5_000;
 const LOCAL_SESSION_SCAN_UNAVAILABLE_PARTIAL_SOURCE: &str = "local-session-scan-unavailable";
 const LIVE_THREAD_LIST_UNAVAILABLE_PARTIAL_SOURCE: &str = "live-thread-list-unavailable";
 
-
 static WORKSPACE_CODEX_SESSION_ID_CACHE: OnceLock<Mutex<HashMap<String, HashSet<String>>>> =
     OnceLock::new();
 
@@ -298,7 +297,14 @@ fn thread_entry_timestamp(entry: &Value) -> i64 {
 
 fn strip_known_engine_prefix(id: &str) -> &str {
     const PREFIXES: [&str; 8] = [
-        "codex:", "claude:", "kimi:", "grok:", "opencode:", "pi:", "gemini:", "dsh:",
+        "codex:",
+        "claude:",
+        "kimi:",
+        "grok:",
+        "opencode:",
+        "pi:",
+        "gemini:",
+        "dsh:",
     ];
     let lower = id.to_ascii_lowercase();
     for prefix in PREFIXES {
@@ -391,10 +397,11 @@ fn resolve_visible_parent_id(
         return Some(visible.clone());
     }
     let uuid = extract_codex_canonical_session_id(parent_session_id)?;
-    visible_id_by_identifier
-        .get(&uuid)
-        .cloned()
-        .or_else(|| visible_id_by_identifier.get(&format!("codex:{uuid}")).cloned())
+    visible_id_by_identifier.get(&uuid).cloned().or_else(|| {
+        visible_id_by_identifier
+            .get(&format!("codex:{uuid}"))
+            .cloned()
+    })
 }
 
 fn thread_entry_parent_session_id(entry: &Value) -> Option<String> {

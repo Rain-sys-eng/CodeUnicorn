@@ -160,9 +160,7 @@ fn collab_stage_portable_text(payload: &Value) -> Option<String> {
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
         })?;
-    Some(format!(
-        "[协作环节 {node_id} · {status}]\n{body}"
-    ))
+    Some(format!("[协作环节 {node_id} · {status}]\n{body}"))
 }
 
 fn transform_event(
@@ -181,8 +179,9 @@ fn transform_event(
                     omissions.push(ProjectionOmission {
                         entry_id: entry_id.clone(),
                         category: "collab-control-prompt".to_string(),
-                        reason: "collab scheduler briefing/summary is not portable ordinary context"
-                            .to_string(),
+                        reason:
+                            "collab scheduler briefing/summary is not portable ordinary context"
+                                .to_string(),
                         disposition: OmissionDisposition::NotRetrievable,
                         retrievable_ref: None,
                     });
@@ -1237,9 +1236,7 @@ mod tests {
 
     #[test]
     fn oversized_single_turn_preserves_non_empty_spine_for_prompt_and_import() {
-        use crate::native_history::{
-            ContextSourceEntry, NativeHistoryEngine, NativeHistoryFidelity,
-        };
+        use crate::native_history::{ContextSourceEntry, NativeHistoryEngine, NativeHistoryFidelity};
 
         let mut source_entries = vec![ContextSourceEntry {
             source_entry_id: "user-intent".to_string(),
@@ -1595,9 +1592,7 @@ mod tests {
 
     #[test]
     fn native_source_identity_changes_package_checksum() {
-        use crate::native_history::{
-            ContextSourceEntry, NativeHistoryEngine, NativeHistoryFidelity,
-        };
+        use crate::native_history::{ContextSourceEntry, NativeHistoryEngine, NativeHistoryFidelity};
         let compile = |fingerprint: &str| {
             compile_native_context(&CompileNativeContextRequest {
                 session_id: "continuation-a".to_string(),
@@ -1650,9 +1645,7 @@ mod tests {
 
     #[test]
     fn native_compilation_decisions_change_package_identity() {
-        use crate::native_history::{
-            ContextSourceEntry, NativeHistoryEngine, NativeHistoryFidelity,
-        };
+        use crate::native_history::{ContextSourceEntry, NativeHistoryEngine, NativeHistoryFidelity};
         let compile = |destination: Value,
                        capabilities: RuntimeContextCapabilities,
                        budget_estimated_tokens: Option<u64>| {

@@ -178,12 +178,13 @@ pub async fn set_permission_preset(
     let preset = permission_preset_for_access_mode(access_mode);
     let line = permission_command_line(preset);
     let value = client
-        .call("commands/execute", execute_command_payload(session_id, &line))
+        .call(
+            "commands/execute",
+            execute_command_payload(session_id, &line),
+        )
         .await?;
     if let Some(error) = command_execution_error(&value) {
-        return Err(format!(
-            "dsh permission preset `{preset}` failed: {error}"
-        ));
+        return Err(format!("dsh permission preset `{preset}` failed: {error}"));
     }
     Ok(value)
 }
@@ -606,10 +607,7 @@ mod tests {
 
     #[test]
     fn execute_command_payload_uses_typert_args_envelope() {
-        let payload = execute_command_payload(
-            "session-1",
-            "/permission danger-full-access",
-        );
+        let payload = execute_command_payload("session-1", "/permission danger-full-access");
         let args = payload.get("args").expect("typert args envelope");
         assert_eq!(args["agentId"], "session-1");
         assert_eq!(args["line"], "/permission danger-full-access");

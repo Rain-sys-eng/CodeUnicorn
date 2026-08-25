@@ -1154,16 +1154,16 @@ impl ClaudeSession {
             }
             if self.pending_approval_request_count_for_turn(&turn_id) == 0 {
                 let approval_entries = self.take_synthetic_approval_entries(&turn_id);
-                let aggregated_summary =
-                    format_synthetic_approval_completion_text(&approval_entries).unwrap_or_else(
-                        || {
-                            if decision == "accept" {
-                                "Directory grant resolved.".to_string()
-                            } else {
-                                "Directory grant declined.".to_string()
-                            }
-                        },
-                    );
+                let aggregated_summary = format_synthetic_approval_completion_text(
+                    &approval_entries,
+                )
+                .unwrap_or_else(|| {
+                    if decision == "accept" {
+                        "Directory grant resolved.".to_string()
+                    } else {
+                        "Directory grant declined.".to_string()
+                    }
+                });
                 if self.has_approval_resume_waiter_for_turn(&turn_id) {
                     let resume_message =
                         format_synthetic_approval_resume_message(&approval_entries);

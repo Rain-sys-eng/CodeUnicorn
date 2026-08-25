@@ -698,17 +698,14 @@ where
                         .await;
                     if let Some(runtime_manager) = runtime_manager {
                         if automatic_recovery {
-                            if let Err(quarantine_error) = runtime_manager
+                            runtime_manager
                                 .record_recovery_failure_with_backoff(
                                     "codex",
                                     &workspace_id,
                                     recovery_source,
                                     "stale existing session failed health probe during connect",
                                 )
-                                .await
-                            {
-                                return Err(quarantine_error);
-                            }
+                                .await?
                         }
                         continue;
                     }
@@ -764,17 +761,14 @@ where
                         )
                         .await;
                     if automatic_recovery {
-                        if let Err(quarantine_error) = runtime_manager
+                        runtime_manager
                             .record_recovery_failure_with_backoff(
                                 "codex",
                                 &workspace_id,
                                 recovery_source,
                                 error.as_str(),
                             )
-                            .await
-                        {
-                            return Err(quarantine_error);
-                        }
+                            .await?;
                         continue;
                     }
                     return Err(error);
@@ -809,17 +803,14 @@ where
             }
             if let Err(error) = &replace_result {
                 if automatic_recovery {
-                    if let Err(quarantine_error) = runtime_manager
+                    runtime_manager
                         .record_recovery_failure_with_backoff(
                             "codex",
                             &workspace_id,
                             recovery_source,
                             error.as_str(),
                         )
-                        .await
-                    {
-                        return Err(quarantine_error);
-                    }
+                        .await?;
                     continue;
                 }
                 return replace_result;
