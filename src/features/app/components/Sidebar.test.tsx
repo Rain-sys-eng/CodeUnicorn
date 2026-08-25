@@ -1,5 +1,13 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { afterEach } from "vitest";
 import { baseProps, resetSidebarTestMocks } from "./Sidebar.test-utils";
@@ -33,7 +41,9 @@ beforeEach(() => {
 
 function openWorkspaceActionsMenu(workspaceCard: HTMLElement) {
   act(() => {
-    fireEvent.click(within(workspaceCard).getByRole("button", { name: "New Session" }));
+    fireEvent.click(
+      within(workspaceCard).getByRole("button", { name: "New Session" }),
+    );
   });
   const menu = screen.getByRole("menu", { name: "Workspace actions" });
   act(() => {
@@ -147,7 +157,9 @@ describe("Sidebar", () => {
     expect(container.querySelector(".sidebar-quick-icon-strip")).toBeNull();
     expect(container.querySelector(".sidebar-content-column")).toBeTruthy();
     expect(container.querySelector(".workspace-list")).toBeTruthy();
-    expect(container.querySelector(".sidebar-section-title-icon-image")).toBeNull();
+    expect(
+      container.querySelector(".sidebar-section-title-icon-image"),
+    ).toBeNull();
   });
 
   it("routes root session folder drafts through the controlled owner", async () => {
@@ -168,13 +180,17 @@ describe("Sidebar", () => {
       <Sidebar
         {...baseProps}
         workspaces={[workspace]}
-        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        groupedWorkspaces={[
+          { id: null, name: "Ungrouped", workspaces: [workspace] },
+        ]}
         onRequestRootSessionFolderDraft={onRequestRootSessionFolderDraft}
       />,
     );
 
     await waitFor(() => expect(screen.getByText("codemoss")).toBeTruthy());
-    const workspaceCard = screen.getByText("codemoss").closest(".workspace-card");
+    const workspaceCard = screen
+      .getByText("codemoss")
+      .closest(".workspace-card");
     expect(workspaceCard).toBeTruthy();
     if (!workspaceCard) {
       throw new Error("Missing workspace card");
@@ -182,7 +198,9 @@ describe("Sidebar", () => {
 
     const menu = openWorkspaceActionsMenu(workspaceCard as HTMLElement);
     act(() => {
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "New folder" }));
+      fireEvent.click(
+        within(menu).getByRole("menuitem", { name: "New folder" }),
+      );
     });
 
     expect(onRequestRootSessionFolderDraft).toHaveBeenCalledWith("ws-1");
@@ -203,8 +221,12 @@ describe("Sidebar", () => {
 
     const bottomNav = container.querySelector(".sidebar-bottom-nav");
     expect(bottomNav).toBeTruthy();
-    const settingsButton = bottomNav?.querySelector(".sidebar-primary-nav-item-bottom");
-    const runtimeNoticeBubble = bottomNav?.querySelector(".global-runtime-notice-dock-bubble");
+    const settingsButton = bottomNav?.querySelector(
+      ".sidebar-primary-nav-item-bottom",
+    );
+    const runtimeNoticeBubble = bottomNav?.querySelector(
+      ".global-runtime-notice-dock-bubble",
+    );
     const runtimeNoticeAnchor = bottomNav?.querySelector(
       ".global-runtime-notice-dock-shell.is-menu-anchored",
     );
@@ -223,7 +245,9 @@ describe("Sidebar", () => {
       />,
     );
 
-    const settingsToggle = container.querySelector(".sidebar-primary-nav-item-bottom");
+    const settingsToggle = container.querySelector(
+      ".sidebar-primary-nav-item-bottom",
+    );
     expect(settingsToggle).toBeTruthy();
     await act(async () => {
       fireEvent.click(settingsToggle as Element);
@@ -231,9 +255,12 @@ describe("Sidebar", () => {
 
     const dropdown = container.querySelector(".sidebar-settings-dropdown");
     expect(dropdown).toBeTruthy();
-    const runtimeNoticeItem = within(dropdown as HTMLElement).getByRole("menuitem", {
-      name: "Runtime Notice",
-    });
+    const runtimeNoticeItem = within(dropdown as HTMLElement).getByRole(
+      "menuitem",
+      {
+        name: "Runtime Notice",
+      },
+    );
     fireEvent.click(runtimeNoticeItem);
     expect(onOpenRuntimeNotice).toHaveBeenCalledTimes(1);
     expect(container.querySelector(".sidebar-settings-dropdown")).toBeNull();
@@ -249,7 +276,9 @@ describe("Sidebar", () => {
       />,
     );
 
-    const settingsToggle = container.querySelector(".sidebar-primary-nav-item-bottom");
+    const settingsToggle = container.querySelector(
+      ".sidebar-primary-nav-item-bottom",
+    );
     expect(settingsToggle).toBeTruthy();
     await act(async () => {
       fireEvent.click(settingsToggle as Element);
@@ -259,7 +288,9 @@ describe("Sidebar", () => {
       container.querySelector(".sidebar-settings-runtime-notice-icon.is-idle"),
     ).toBeTruthy();
     expect(
-      container.querySelector(".sidebar-settings-runtime-notice-icon.is-has-error"),
+      container.querySelector(
+        ".sidebar-settings-runtime-notice-icon.is-has-error",
+      ),
     ).toBeNull();
 
     await act(async () => {
@@ -274,7 +305,9 @@ describe("Sidebar", () => {
     });
 
     expect(
-      container.querySelector(".sidebar-settings-runtime-notice-icon.is-has-error"),
+      container.querySelector(
+        ".sidebar-settings-runtime-notice-icon.is-has-error",
+      ),
     ).toBeTruthy();
     expect(
       container.querySelector(".sidebar-settings-runtime-notice-icon.is-idle"),
@@ -282,7 +315,9 @@ describe("Sidebar", () => {
   });
 
   it("mirrors runtime notice error state on the pinned settings entry", async () => {
-    writeClientStoreValue("app", SIDEBAR_SETTINGS_PINNED_ACTIONS_KEY, ["runtime-notice"]);
+    writeClientStoreValue("app", SIDEBAR_SETTINGS_PINNED_ACTIONS_KEY, [
+      "runtime-notice",
+    ]);
 
     const { container, rerender } = render(
       <Sidebar
@@ -297,9 +332,13 @@ describe("Sidebar", () => {
       '.sidebar-settings-pinned-item[data-runtime-notice-status="idle"]',
     );
     expect(pinnedIdle).toBeTruthy();
-    expect(pinnedIdle?.classList.contains("is-runtime-notice-error")).toBe(false);
+    expect(pinnedIdle?.classList.contains("is-runtime-notice-error")).toBe(
+      false,
+    );
     expect(
-      pinnedIdle?.querySelector(".sidebar-settings-runtime-notice-icon.is-idle"),
+      pinnedIdle?.querySelector(
+        ".sidebar-settings-runtime-notice-icon.is-idle",
+      ),
     ).toBeTruthy();
 
     await act(async () => {
@@ -317,9 +356,13 @@ describe("Sidebar", () => {
       '.sidebar-settings-pinned-item[data-runtime-notice-status="has-error"]',
     );
     expect(pinnedError).toBeTruthy();
-    expect(pinnedError?.classList.contains("is-runtime-notice-error")).toBe(true);
+    expect(pinnedError?.classList.contains("is-runtime-notice-error")).toBe(
+      true,
+    );
     expect(
-      pinnedError?.querySelector(".sidebar-settings-runtime-notice-icon.is-has-error"),
+      pinnedError?.querySelector(
+        ".sidebar-settings-runtime-notice-icon.is-has-error",
+      ),
     ).toBeTruthy();
   });
 
@@ -334,7 +377,9 @@ describe("Sidebar", () => {
       />,
     );
 
-    const settingsToggle = container.querySelector(".sidebar-primary-nav-item-bottom");
+    const settingsToggle = container.querySelector(
+      ".sidebar-primary-nav-item-bottom",
+    );
     expect(settingsToggle).toBeTruthy();
     await act(async () => {
       fireEvent.click(settingsToggle as Element);
@@ -353,12 +398,17 @@ describe("Sidebar", () => {
       fireEvent.click(pinBoxes[2]); // Project Memory
     });
 
-    expect(container.querySelectorAll(".sidebar-settings-pinned-item")).toHaveLength(2);
+    expect(
+      container.querySelectorAll(".sidebar-settings-pinned-item"),
+    ).toHaveLength(2);
 
     // 第三个未勾选的框应被禁用，并由 wrapper 提供 tip 文案
-    const disabledPins = within(dropdown as HTMLElement).getAllByRole("checkbox", {
-      name: "You can pin up to 2 items. Uncheck one first.",
-    });
+    const disabledPins = within(dropdown as HTMLElement).getAllByRole(
+      "checkbox",
+      {
+        name: "You can pin up to 2 items. Uncheck one first.",
+      },
+    );
     expect(disabledPins.length).toBeGreaterThanOrEqual(1);
     expect((disabledPins[0] as HTMLInputElement).disabled).toBe(true);
     expect(
@@ -376,7 +426,9 @@ describe("Sidebar", () => {
     const settingsItem = within(dropdown as HTMLElement).getByRole("menuitem", {
       name: "Settings",
     });
-    expect(settingsItem.closest(".sidebar-settings-dropdown-option")).toBeNull();
+    expect(
+      settingsItem.closest(".sidebar-settings-dropdown-option"),
+    ).toBeNull();
 
     // 点击外显图标触发对应动作
     const pinnedSpecHub = within(
@@ -398,7 +450,10 @@ describe("Sidebar", () => {
       <Sidebar
         {...baseProps}
         topbarNode={
-          <div data-testid="sidebar-topbar-interactive" data-tauri-drag-region="false">
+          <div
+            data-testid="sidebar-topbar-interactive"
+            data-tauri-drag-region="false"
+          >
             toggle
           </div>
         }
@@ -410,18 +465,15 @@ describe("Sidebar", () => {
     expect(placeholder?.hasAttribute("data-tauri-drag-region")).toBe(true);
     expect(content?.hasAttribute("data-tauri-drag-region")).toBe(true);
     expect(
-      screen.getByTestId("sidebar-topbar-interactive").getAttribute("data-tauri-drag-region"),
+      screen
+        .getByTestId("sidebar-topbar-interactive")
+        .getAttribute("data-tauri-drag-region"),
     ).toBe("false");
   });
 
   it("shows search entry and triggers callback", () => {
     const onOpenGlobalSearch = vi.fn();
-    render(
-      <Sidebar
-        {...baseProps}
-        onOpenGlobalSearch={onOpenGlobalSearch}
-      />,
-    );
+    render(<Sidebar {...baseProps} onOpenGlobalSearch={onOpenGlobalSearch} />);
 
     const searchButton = screen.getByRole("button", { name: "Search" });
     fireEvent.click(searchButton);
@@ -456,11 +508,17 @@ describe("Sidebar", () => {
           ".sidebar-primary-nav .sidebar-primary-nav-shortcut",
         ),
       ).toHaveLength(2);
-      expect(screen.getByRole("button", { name: "Home" }).getAttribute("title")).toContain("Ctrl+J");
-      expect(screen.queryByRole("button", { name: "Automation" })).toBeNull();
-      expect(screen.getByRole("button", { name: "Search" }).getAttribute("title")).toContain("Ctrl+O");
       expect(
-        screen.getByRole("button", { name: "Quick Switcher" }).getAttribute("title"),
+        screen.getByRole("button", { name: "Home" }).getAttribute("title"),
+      ).toContain("Ctrl+J");
+      expect(screen.queryByRole("button", { name: "Automation" })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Search" }).getAttribute("title"),
+      ).toContain("Ctrl+O");
+      expect(
+        screen
+          .getByRole("button", { name: "Quick Switcher" })
+          .getAttribute("title"),
       ).toContain("Ctrl+E");
       fireEvent.click(screen.getByRole("button", { name: "Quick Switcher" }));
       expect(onOpenQuickSwitcher).toHaveBeenCalledTimes(1);
@@ -478,7 +536,9 @@ describe("Sidebar", () => {
       <Sidebar {...baseProps} onCollapseSidebar={onCollapseSidebar} />,
     );
 
-    const settingsToggle = container.querySelector(".sidebar-primary-nav-item-bottom");
+    const settingsToggle = container.querySelector(
+      ".sidebar-primary-nav-item-bottom",
+    );
     expect(settingsToggle).toBeTruthy();
     await act(async () => {
       fireEvent.click(settingsToggle as Element);
@@ -502,8 +562,12 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Home" }).getAttribute("title")).toContain("Not set");
-    expect(screen.getByRole("button", { name: "Search" }).getAttribute("title")).toContain("Not set");
+    expect(
+      screen.getByRole("button", { name: "Home" }).getAttribute("title"),
+    ).toContain("Not set");
+    expect(
+      screen.getByRole("button", { name: "Search" }).getAttribute("title"),
+    ).toContain("Not set");
   });
 
   it("hides removed and primary navigation entries in settings dropdown", async () => {
@@ -519,7 +583,9 @@ describe("Sidebar", () => {
       />,
     );
 
-    const settingsToggle = container.querySelector(".sidebar-primary-nav-item-bottom");
+    const settingsToggle = container.querySelector(
+      ".sidebar-primary-nav-item-bottom",
+    );
     expect(settingsToggle).toBeTruthy();
     await act(async () => {
       fireEvent.click(settingsToggle as Element);
@@ -536,13 +602,17 @@ describe("Sidebar", () => {
       menu.queryByRole("menuitem", { name: "Hide conversation sidebar" }),
     ).toBeNull();
     expect(menu.getByRole("menuitem", { name: "Lock" })).toBeTruthy();
-    expect(menu.queryByRole("menuitem", { name: "Long-term Memory" })).toBeNull();
+    expect(
+      menu.queryByRole("menuitem", { name: "Long-term Memory" }),
+    ).toBeNull();
     expect(menu.getByRole("menuitem", { name: "Spec Hub" })).toBeTruthy();
     expect(menu.getByRole("menuitem", { name: "Project Memory" })).toBeTruthy();
     expect(menu.queryByRole("menuitem", { name: "Release Notes" })).toBeNull();
     expect(menu.queryByRole("menuitem", { name: "Terminal" })).toBeNull();
     const gitGraphItem = menu.getByRole("menuitem", { name: "Git Graph" });
-    expect(gitGraphItem.querySelector(".lucide-git-commit-horizontal")).toBeTruthy();
+    expect(
+      gitGraphItem.querySelector(".lucide-git-commit-horizontal"),
+    ).toBeTruthy();
     expect(menu.queryByRole("menuitem", { name: "Open home" })).toBeNull();
 
     fireEvent.click(gitGraphItem);
@@ -555,7 +625,8 @@ describe("Sidebar", () => {
     render(<Sidebar {...baseProps} onAppModeChange={onAppModeChange} />);
 
     expect(
-      (screen.getByRole("button", { name: "Market" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "Market" }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Extensions" }));
@@ -660,11 +731,15 @@ describe("Sidebar", () => {
 
     const pinnedSection = container.querySelector(".sidebar-pinned-section");
     expect(pinnedSection).toBeTruthy();
-    expect(within(pinnedSection as HTMLElement).getByText("项目分析")).toBeTruthy();
+    expect(
+      within(pinnedSection as HTMLElement).getByText("项目分析"),
+    ).toBeTruthy();
 
     const workspaceList = container.querySelector(".workspace-list");
     expect(workspaceList).toBeTruthy();
-    expect(within(workspaceList as HTMLElement).getByText("给我生成一张图")).toBeTruthy();
+    expect(
+      within(workspaceList as HTMLElement).getByText("给我生成一张图"),
+    ).toBeTruthy();
     expect(screen.queryByText("Agent 20")).toBeNull();
     expect(screen.queryByText("Codex Session")).toBeNull();
     expect(screen.queryByText("Pinned Provider")).toBeNull();
@@ -717,7 +792,9 @@ describe("Sidebar", () => {
     };
     let isPinned = false;
     const getPinTimestamp = (workspaceId: string, threadId: string) =>
-      workspaceId === "ws-1" && threadId === "thread-1" && isPinned ? 111 : null;
+      workspaceId === "ws-1" && threadId === "thread-1" && isPinned
+        ? 111
+        : null;
     const isThreadPinned = (workspaceId: string, threadId: string) =>
       workspaceId === "ws-1" && threadId === "thread-1" && isPinned;
 
@@ -811,15 +888,25 @@ describe("Sidebar", () => {
         ]}
         threadsByWorkspace={{ "ws-worktree": [runningThread] }}
         threadStatusById={{
-          "thread-running": { isProcessing: true, hasUnread: false, isReviewing: false },
+          "thread-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
         }}
       />,
     );
 
     const rootWorkspaceCard = container.querySelector(".workspace-card");
-    const projectCollapseToggle = rootWorkspaceCard?.querySelector(".workspace-collapse-toggle");
-    expect(projectCollapseToggle?.classList.contains("workspace-folder-btn")).toBe(true);
-    expect(projectCollapseToggle?.classList.contains("is-session-running")).toBe(true);
+    const projectCollapseToggle = rootWorkspaceCard?.querySelector(
+      ".workspace-collapse-toggle",
+    );
+    expect(
+      projectCollapseToggle?.classList.contains("workspace-folder-btn"),
+    ).toBe(true);
+    expect(
+      projectCollapseToggle?.classList.contains("is-session-running"),
+    ).toBe(true);
     const worktreeIcon = container.querySelector(".worktree-node-icon");
     expect(worktreeIcon?.classList.contains("is-session-running")).toBe(true);
   });
@@ -871,16 +958,36 @@ describe("Sidebar", () => {
           ],
         }}
         threadStatusById={{
-          "alpha-running": { isProcessing: true, hasUnread: false, isReviewing: false },
-          "alpha-exited": { isProcessing: false, hasUnread: false, isReviewing: false },
-          "beta-running": { isProcessing: true, hasUnread: false, isReviewing: false },
-          "beta-exited": { isProcessing: false, hasUnread: false, isReviewing: false },
+          "alpha-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "alpha-exited": {
+            isProcessing: false,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "beta-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "beta-exited": {
+            isProcessing: false,
+            hasUnread: false,
+            isReviewing: false,
+          },
         }}
       />,
     );
 
-    const alphaCard = screen.getByText("alpha").closest(".workspace-card") as HTMLElement | null;
-    const betaCard = screen.getByText("beta").closest(".workspace-card") as HTMLElement | null;
+    const alphaCard = screen
+      .getByText("alpha")
+      .closest(".workspace-card") as HTMLElement | null;
+    const betaCard = screen
+      .getByText("beta")
+      .closest(".workspace-card") as HTMLElement | null;
     expect(alphaCard).toBeTruthy();
     expect(betaCard).toBeTruthy();
     if (!alphaCard || !betaCard) {
@@ -889,7 +996,9 @@ describe("Sidebar", () => {
 
     const menu = openWorkspaceActionsMenu(alphaCard);
     await act(async () => {
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "Hide exited sessions" }));
+      fireEvent.click(
+        within(menu).getByRole("menuitem", { name: "Hide exited sessions" }),
+      );
       await Promise.resolve();
     });
 
@@ -935,21 +1044,33 @@ describe("Sidebar", () => {
           ],
         }}
         threadStatusById={{
-          "alpha-running": { isProcessing: true, hasUnread: false, isReviewing: false },
-          "alpha-exited": { isProcessing: false, hasUnread: false, isReviewing: false },
+          "alpha-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "alpha-exited": {
+            isProcessing: false,
+            hasUnread: false,
+            isReviewing: false,
+          },
         }}
         hydratedThreadListWorkspaceIds={new Set(["ws-alpha"])}
       />,
     );
 
-    const alphaCard = screen.getByText("alpha").closest(".workspace-card") as HTMLElement | null;
+    const alphaCard = screen
+      .getByText("alpha")
+      .closest(".workspace-card") as HTMLElement | null;
     expect(alphaCard).toBeTruthy();
     if (!alphaCard) {
       throw new Error("Missing workspace card");
     }
 
     const menu = openWorkspaceActionsMenu(alphaCard);
-    const toggle = within(menu).getByRole("menuitem", { name: "Hide exited sessions" });
+    const toggle = within(menu).getByRole("menuitem", {
+      name: "Hide exited sessions",
+    });
     await act(async () => {
       fireEvent.keyDown(toggle, { key: "Enter" });
       fireEvent.click(toggle);
@@ -1011,15 +1132,33 @@ describe("Sidebar", () => {
           ],
         }}
         threadStatusById={{
-          "root-running": { isProcessing: true, hasUnread: false, isReviewing: false },
-          "root-exited": { isProcessing: false, hasUnread: false, isReviewing: false },
-          "worktree-running": { isProcessing: true, hasUnread: false, isReviewing: false },
-          "worktree-exited": { isProcessing: false, hasUnread: false, isReviewing: false },
+          "root-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "root-exited": {
+            isProcessing: false,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "worktree-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "worktree-exited": {
+            isProcessing: false,
+            hasUnread: false,
+            isReviewing: false,
+          },
         }}
       />,
     );
 
-    const worktreeCard = screen.getByText("feature-hidden").closest(".worktree-card") as HTMLElement | null;
+    const worktreeCard = screen
+      .getByText("feature-hidden")
+      .closest(".worktree-card") as HTMLElement | null;
     expect(worktreeCard).toBeTruthy();
     if (!worktreeCard) {
       throw new Error("Missing worktree card");
@@ -1027,7 +1166,9 @@ describe("Sidebar", () => {
 
     await act(async () => {
       fireEvent.click(
-        within(worktreeCard).getByRole("button", { name: "Hide exited sessions" }),
+        within(worktreeCard).getByRole("button", {
+          name: "Hide exited sessions",
+        }),
       );
     });
 
@@ -1076,27 +1217,45 @@ describe("Sidebar", () => {
           },
         ]}
         threadsByWorkspace={{
-          "ws-root": [{ id: "root-running", name: "Root running", updatedAt: 2 }],
+          "ws-root": [
+            { id: "root-running", name: "Root running", updatedAt: 2 },
+          ],
           "ws-worktree": [
             { id: "worktree-running", name: "Worktree running", updatedAt: 2 },
             { id: "worktree-exited", name: "Worktree exited", updatedAt: 1 },
           ],
         }}
         threadStatusById={{
-          "root-running": { isProcessing: true, hasUnread: false, isReviewing: false },
-          "worktree-running": { isProcessing: true, hasUnread: false, isReviewing: false },
-          "worktree-exited": { isProcessing: false, hasUnread: false, isReviewing: false },
+          "root-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "worktree-running": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+          },
+          "worktree-exited": {
+            isProcessing: false,
+            hasUnread: false,
+            isReviewing: false,
+          },
         }}
       />,
     );
 
-    const worktreeCard = screen.getByText("feature-hidden").closest(".worktree-card") as HTMLElement | null;
+    const worktreeCard = screen
+      .getByText("feature-hidden")
+      .closest(".worktree-card") as HTMLElement | null;
     expect(worktreeCard).toBeTruthy();
     if (!worktreeCard) {
       throw new Error("Missing worktree card");
     }
 
-    const toggle = within(worktreeCard).getByRole("button", { name: "Hide exited sessions" });
+    const toggle = within(worktreeCard).getByRole("button", {
+      name: "Hide exited sessions",
+    });
     await act(async () => {
       fireEvent.keyDown(toggle, { key: "Spacebar" });
       fireEvent.click(toggle);
@@ -1477,14 +1636,20 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Refresh incomplete thread list" })).toBeNull();
-    const workspaceCard = screen.getByText("codemoss").closest(".workspace-card");
+    expect(
+      screen.queryByRole("button", { name: "Refresh incomplete thread list" }),
+    ).toBeNull();
+    const workspaceCard = screen
+      .getByText("codemoss")
+      .closest(".workspace-card");
     expect(workspaceCard).toBeTruthy();
     if (!workspaceCard) {
       throw new Error("Missing workspace card");
     }
     const menu = openWorkspaceActionsMenu(workspaceCard as HTMLElement);
-    expect(within(menu).getByRole("menuitem", { name: "threads.reloadThreads" })).toBeTruthy();
+    expect(
+      within(menu).getByRole("menuitem", { name: "threads.reloadThreads" }),
+    ).toBeTruthy();
   });
 
   it("keeps worktree incomplete refresh on the worktree row only", () => {
@@ -1539,9 +1704,9 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: "Refresh incomplete thread list" })).toHaveLength(
-      1,
-    );
+    expect(
+      screen.getAllByRole("button", { name: "Refresh incomplete thread list" }),
+    ).toHaveLength(1);
   });
 
   it("refreshes the degraded workspace from the workspace actions reload item", async () => {
@@ -1583,14 +1748,18 @@ describe("Sidebar", () => {
       />,
     );
 
-    const workspaceCard = screen.getByText("codemoss").closest(".workspace-card");
+    const workspaceCard = screen
+      .getByText("codemoss")
+      .closest(".workspace-card");
     expect(workspaceCard).toBeTruthy();
     if (!workspaceCard) {
       throw new Error("Missing workspace card");
     }
     const menu = openWorkspaceActionsMenu(workspaceCard as HTMLElement);
     await act(async () => {
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "threads.reloadThreads" }));
+      fireEvent.click(
+        within(menu).getByRole("menuitem", { name: "threads.reloadThreads" }),
+      );
       await Promise.resolve();
     });
     expect(onQuickReloadWorkspaceThreads).toHaveBeenCalledWith("ws-root");
@@ -1634,7 +1803,9 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(container.querySelector(".sidebar-refresh-icon.is-spinning")).toBeNull();
+    expect(
+      container.querySelector(".sidebar-refresh-icon.is-spinning"),
+    ).toBeNull();
   });
 
   it("hides the degraded refresh action when no quick reload handler is available", () => {
@@ -1675,14 +1846,20 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Refresh incomplete thread list" })).toBeNull();
-    const workspaceCard = screen.getByText("codemoss").closest(".workspace-card");
+    expect(
+      screen.queryByRole("button", { name: "Refresh incomplete thread list" }),
+    ).toBeNull();
+    const workspaceCard = screen
+      .getByText("codemoss")
+      .closest(".workspace-card");
     expect(workspaceCard).toBeTruthy();
     if (!workspaceCard) {
       throw new Error("Missing workspace card");
     }
     const menu = openWorkspaceActionsMenu(workspaceCard as HTMLElement);
-    expect(within(menu).getByRole("menuitem", { name: "threads.reloadThreads" })).toBeTruthy();
+    expect(
+      within(menu).getByRole("menuitem", { name: "threads.reloadThreads" }),
+    ).toBeTruthy();
   });
 
   it("toggles group collapse on whole header row click", async () => {
@@ -1712,7 +1889,9 @@ describe("Sidebar", () => {
       />,
     );
 
-    const groupHeader = container.querySelector(".workspace-group-header") as HTMLElement | null;
+    const groupHeader = container.querySelector(
+      ".workspace-group-header",
+    ) as HTMLElement | null;
     expect(groupHeader).toBeTruthy();
     if (!groupHeader) {
       throw new Error("Expected workspace group header");
@@ -1988,14 +2167,18 @@ describe("Sidebar", () => {
       />,
     );
 
-    const workspaceCard = screen.getByText("codemoss").closest(".workspace-card");
+    const workspaceCard = screen
+      .getByText("codemoss")
+      .closest(".workspace-card");
     expect(workspaceCard).toBeTruthy();
     if (!workspaceCard) {
       throw new Error("Missing workspace card");
     }
     const menu = openWorkspaceActionsMenu(workspaceCard as HTMLElement);
     await act(async () => {
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "Open in main panel" }));
+      fireEvent.click(
+        within(menu).getByRole("menuitem", { name: "Open in main panel" }),
+      );
       await Promise.resolve();
     });
 
@@ -2033,19 +2216,29 @@ describe("Sidebar", () => {
       );
 
       await act(async () => {
-        fireEvent.mouseEnter(screen.getByRole("button", { name: "Add workspace" }));
+        fireEvent.mouseEnter(
+          screen.getByRole("button", { name: "Add workspace" }),
+        );
         await vi.advanceTimersByTimeAsync(250);
       });
       let tooltips = screen.getAllByRole("tooltip");
-      expect(tooltips[tooltips.length - 1]?.textContent).toContain("Add workspace");
+      expect(tooltips[tooltips.length - 1]?.textContent).toContain(
+        "Add workspace",
+      );
 
       await act(async () => {
-        fireEvent.mouseLeave(screen.getByRole("button", { name: "Add workspace" }));
-        fireEvent.mouseEnter(screen.getByRole("button", { name: "New Session" }));
+        fireEvent.mouseLeave(
+          screen.getByRole("button", { name: "Add workspace" }),
+        );
+        fireEvent.mouseEnter(
+          screen.getByRole("button", { name: "New Session" }),
+        );
         await vi.advanceTimersByTimeAsync(250);
       });
       tooltips = screen.getAllByRole("tooltip");
-      expect(tooltips[tooltips.length - 1]?.textContent).toContain("New Session");
+      expect(tooltips[tooltips.length - 1]?.textContent).toContain(
+        "New Session",
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -2098,7 +2291,12 @@ describe("Sidebar", () => {
         ]}
         threadsByWorkspace={{
           "ws-1": [
-            { id: "root-session", name: "Root session", updatedAt: 3, folderId: null },
+            {
+              id: "root-session",
+              name: "Root session",
+              updatedAt: 3,
+              folderId: null,
+            },
             {
               id: "claude:folder-session",
               name: "Folder session",
@@ -2114,13 +2312,17 @@ describe("Sidebar", () => {
 
     expect(await screen.findByText("Planning")).toBeTruthy();
     expect(screen.getByText("Claude fixes")).toBeTruthy();
-    const workspaceCard = screen.getByText("codemoss").closest(".workspace-card");
+    const workspaceCard = screen
+      .getByText("codemoss")
+      .closest(".workspace-card");
     expect(workspaceCard).toBeTruthy();
     if (!workspaceCard) {
       throw new Error("Missing workspace card");
     }
     const menu = openWorkspaceActionsMenu(workspaceCard as HTMLElement);
-    expect(within(menu).getByRole("menuitem", { name: "New folder" })).toBeTruthy();
+    expect(
+      within(menu).getByRole("menuitem", { name: "New folder" }),
+    ).toBeTruthy();
     expect(screen.getByText("Root session")).toBeTruthy();
     expect(screen.getByText("Folder session")).toBeTruthy();
     expect(document.querySelectorAll(".thread-row")).toHaveLength(2);
@@ -2229,11 +2431,36 @@ describe("Sidebar", () => {
         threadsByWorkspace={{
           "ws-1": [
             { id: "root-session", name: "Root session", updatedAt: 7 },
-            { id: "folder-session-1", name: "Folder session 1", updatedAt: 6, folderId: "folder-target" },
-            { id: "folder-session-2", name: "Folder session 2", updatedAt: 5, folderId: "folder-target" },
-            { id: "folder-session-3", name: "Folder session 3", updatedAt: 4, folderId: "folder-target" },
-            { id: "folder-session-4", name: "Folder session 4", updatedAt: 3, folderId: "folder-target" },
-            { id: "folder-session-5", name: "Folder session 5", updatedAt: 2, folderId: "folder-target" },
+            {
+              id: "folder-session-1",
+              name: "Folder session 1",
+              updatedAt: 6,
+              folderId: "folder-target",
+            },
+            {
+              id: "folder-session-2",
+              name: "Folder session 2",
+              updatedAt: 5,
+              folderId: "folder-target",
+            },
+            {
+              id: "folder-session-3",
+              name: "Folder session 3",
+              updatedAt: 4,
+              folderId: "folder-target",
+            },
+            {
+              id: "folder-session-4",
+              name: "Folder session 4",
+              updatedAt: 3,
+              folderId: "folder-target",
+            },
+            {
+              id: "folder-session-5",
+              name: "Folder session 5",
+              updatedAt: 2,
+              folderId: "folder-target",
+            },
           ],
         }}
         hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
@@ -2248,8 +2475,12 @@ describe("Sidebar", () => {
     if (!planningRow) {
       throw new Error("Missing Planning folder row");
     }
-    fireEvent.click(within(planningRow).getByRole("button", { name: "Folder actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "New folder in project" }));
+    fireEvent.click(
+      within(planningRow).getByRole("button", { name: "Folder actions" }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "New folder in project" }),
+    );
     fireEvent.change(screen.getByLabelText("Folder name"), {
       target: { value: " Follow ups " },
     });
@@ -2262,7 +2493,9 @@ describe("Sidebar", () => {
     );
     expect(await screen.findByText("Follow ups")).toBeTruthy();
 
-    fireEvent.click(within(planningRow).getByRole("button", { name: "Folder actions" }));
+    fireEvent.click(
+      within(planningRow).getByRole("button", { name: "Folder actions" }),
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename folder" }));
     const renameInput = screen.getByDisplayValue("Planning");
     fireEvent.change(renameInput, { target: { value: " Roadmap " } });
@@ -2360,7 +2593,11 @@ describe("Sidebar", () => {
       within(folderRow).getByRole("button", { name: "New session in project" }),
     );
     expect(screen.getByRole("menuitem", { name: "Claude Code" })).toBeTruthy();
-    expect(screen.queryByRole("menuitem", { name: /Claude Code.*CLI not installed/ })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", {
+        name: /Claude Code.*CLI not installed/,
+      }),
+    ).toBeNull();
     const codexItem = screen.getByRole("menuitem", { name: /Codex/ });
     fireEvent.mouseEnter(codexItem);
     await act(async () => {
@@ -2668,7 +2905,9 @@ describe("Sidebar", () => {
       ],
     });
     vi.mocked(assignWorkspaceSessionFolder)
-      .mockRejectedValueOnce(new Error("session does not belong to target workspace"))
+      .mockRejectedValueOnce(
+        new Error("session does not belong to target workspace"),
+      )
       .mockResolvedValueOnce({
         sessionId: "claude:real-session",
         folderId: "folder-parent",
@@ -2933,7 +3172,9 @@ describe("Sidebar", () => {
       if (!planningGroup) {
         throw new Error("Missing Planning folder group");
       }
-      expect(within(planningGroup).getByText("Real Claude session")).toBeTruthy();
+      expect(
+        within(planningGroup).getByText("Real Claude session"),
+      ).toBeTruthy();
     });
   });
 
@@ -3145,7 +3386,9 @@ describe("Sidebar", () => {
       within(folderRow).getByRole("button", { name: "New session in project" }),
     );
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: "sidebar.newSharedSession" }));
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "sidebar.newSharedSession" }),
+      );
     });
     await act(async () => {
       fireEvent.click(
@@ -3198,11 +3441,15 @@ describe("Sidebar", () => {
     );
 
     expect(container.querySelector(".workspace-sortable-list")).not.toBeNull();
-    expect(container.querySelectorAll(".workspace-drag-handle")).toHaveLength(0);
-    expect(container.querySelectorAll(".workspace-card.is-reorderable")).toHaveLength(2);
-    expect(container.querySelectorAll(".workspace-collapse-toggle.is-reorder-entry")).toHaveLength(
-      2,
+    expect(container.querySelectorAll(".workspace-drag-handle")).toHaveLength(
+      0,
     );
+    expect(
+      container.querySelectorAll(".workspace-card.is-reorderable"),
+    ).toHaveLength(2);
+    expect(
+      container.querySelectorAll(".workspace-collapse-toggle.is-reorder-entry"),
+    ).toHaveLength(2);
   });
 
   it("disables long-press reorder when callback is missing or the group has one project", () => {
@@ -3234,7 +3481,9 @@ describe("Sidebar", () => {
       />,
     );
     expect(
-      withoutCallback.container.querySelectorAll(".workspace-card.is-reorderable"),
+      withoutCallback.container.querySelectorAll(
+        ".workspace-card.is-reorderable",
+      ),
     ).toHaveLength(0);
     withoutCallback.unmount();
 
@@ -3242,11 +3491,14 @@ describe("Sidebar", () => {
       <Sidebar
         {...baseProps}
         workspaces={[alone]}
-        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [alone] }]}
+        groupedWorkspaces={[
+          { id: null, name: "Ungrouped", workspaces: [alone] },
+        ]}
         onReorderWorkspaces={vi.fn()}
       />,
     );
-    expect(single.container.querySelectorAll(".workspace-card.is-reorderable")).toHaveLength(0);
+    expect(
+      single.container.querySelectorAll(".workspace-card.is-reorderable"),
+    ).toHaveLength(0);
   });
-
 });

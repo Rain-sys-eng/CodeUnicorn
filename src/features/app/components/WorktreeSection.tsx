@@ -10,7 +10,10 @@ import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 
-const EMPTY_MOVE_FOLDER_TARGETS_BY_WORKSPACE_ID: Record<string, ThreadMoveFolderTarget[]> = {};
+const EMPTY_MOVE_FOLDER_TARGETS_BY_WORKSPACE_ID: Record<
+  string,
+  ThreadMoveFolderTarget[]
+> = {};
 
 type ThreadStatusMap = Record<
   string,
@@ -70,7 +73,10 @@ type WorktreeSectionProps = {
   ) => void;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
-  onShowWorktreeSessionMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
+  onShowWorktreeSessionMenu: (
+    event: MouseEvent,
+    workspace: WorkspaceInfo,
+  ) => void;
   onQuickReloadWorkspaceThreads?: (workspaceId: string) => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -157,14 +163,20 @@ export function WorktreeSection({
   const hasDegradedThreadList = (threads: ThreadSummary[]) =>
     threads.some((thread) => {
       const partialSource =
-        typeof thread.partialSource === "string" ? thread.partialSource.trim() : "";
+        typeof thread.partialSource === "string"
+          ? thread.partialSource.trim()
+          : "";
       return thread.isDegraded || partialSource.length > 0;
     });
 
   const threadRowsByWorktreeId = useMemo(() => {
     const rowsByWorktreeId = new Map<
       string,
-      { unpinnedRows: ThreadRowsResult["unpinnedRows"]; workspacePinnedRows: ThreadRowsResult["workspacePinnedRows"]; totalRoots: number }
+      {
+        unpinnedRows: ThreadRowsResult["unpinnedRows"];
+        workspacePinnedRows: ThreadRowsResult["workspacePinnedRows"];
+        totalRoots: number;
+      }
     >();
     if (isSectionCollapsed || worktrees.length === 0) {
       return rowsByWorktreeId;
@@ -230,7 +242,9 @@ export function WorktreeSection({
           }
         }}
         aria-expanded={!isSectionCollapsed}
-        aria-label={isSectionCollapsed ? "Expand worktrees" : "Collapse worktrees"}
+        aria-label={
+          isSectionCollapsed ? "Expand worktrees" : "Collapse worktrees"
+        }
       >
         <Layers className="worktree-header-icon" aria-hidden />
         <span className="worktree-header-text">worktrees</span>
@@ -241,7 +255,9 @@ export function WorktreeSection({
           ›
         </span>
       </button>
-      <div className={`worktree-list ${isSectionCollapsed ? "collapsed" : "expanded"}`}>
+      <div
+        className={`worktree-list ${isSectionCollapsed ? "collapsed" : "expanded"}`}
+      >
         {!isSectionCollapsed &&
           worktrees.map((worktree) => {
             const worktreeThreads = threadsByWorkspace[worktree.id] ?? [];
@@ -253,7 +269,8 @@ export function WorktreeSection({
               (worktreeThreads.length > 0 || Boolean(worktreeNextCursor));
             const isWorktreePaging =
               threadListPagingByWorkspace[worktree.id] ?? false;
-            const isThreadListRefreshing = threadListLoadingByWorkspace[worktree.id] ?? false;
+            const isThreadListRefreshing =
+              threadListLoadingByWorkspace[worktree.id] ?? false;
             const worktreePage = Math.max(
               1,
               threadListPageByWorkspace[worktree.id] ?? 1,
@@ -261,15 +278,16 @@ export function WorktreeSection({
             const isWorktreeExpanded = worktreePage > 1;
             const hasPrimaryActiveThread =
               worktree.id === activeWorkspaceId && Boolean(activeThreadId);
-            const hasRunningSession = worktreeThreads.some(
-              (thread) => Boolean(threadStatusById[thread.id]?.isProcessing),
+            const hasRunningSession = worktreeThreads.some((thread) =>
+              Boolean(threadStatusById[thread.id]?.isProcessing),
             );
             const isThreadListDegraded = hasDegradedThreadList(worktreeThreads);
             const threadRows = threadRowsByWorktreeId.get(worktree.id);
             const worktreeThreadRows = threadRows?.unpinnedRows ?? [];
             const worktreeWorkspacePinnedRows =
               threadRows?.workspacePinnedRows ?? [];
-            const moveFolderTargets = moveFolderTargetsByWorkspaceId[worktree.id];
+            const moveFolderTargets =
+              moveFolderTargetsByWorkspaceId[worktree.id];
             const totalWorktreeRoots = threadRows?.totalRoots ?? 0;
             const visibleThreadRootCount = resolveVisibleThreadRootLimit(
               worktree.settings.visibleThreadRootCount,
@@ -298,11 +316,13 @@ export function WorktreeSection({
                 hasPrimaryActiveThread={hasPrimaryActiveThread}
                 hasRunningSession={hasRunningSession}
                 showExitedSessionsToggle={
-                  exitedSessionVisibility.hasExitedSessions
-                  || exitedSessionVisibility.hiddenExitedCount > 0
+                  exitedSessionVisibility.hasExitedSessions ||
+                  exitedSessionVisibility.hiddenExitedCount > 0
                 }
                 hideExitedSessions={hideExitedSessions}
-                hiddenExitedSessionsCount={exitedSessionVisibility.hiddenExitedCount}
+                hiddenExitedSessionsCount={
+                  exitedSessionVisibility.hiddenExitedCount
+                }
                 threadCount={totalWorktreeRoots}
                 hasThreadCursor={Boolean(worktreeNextCursor)}
                 isDeleting={deletingWorktreeIds.has(worktree.id)}

@@ -97,15 +97,12 @@ type ListThreadsForWorkspace = (
     /** When true mid-flight, list apply must no-op (workspace cancelled/switched). */
     isStale?: () => boolean;
   },
-) => Promise<
-  | void
-  | {
-      applied?: boolean;
-      stale?: boolean;
-      visibleCount?: number;
-      authoritativeEmpty?: boolean;
-    }
->;
+) => Promise<void | {
+  applied?: boolean;
+  stale?: boolean;
+  visibleCount?: number;
+  authoritativeEmpty?: boolean;
+}>;
 
 type UseWorkspaceThreadListHydrationOptions = {
   activeWorkspaceId: string | null;
@@ -141,7 +138,8 @@ type ThreadHydrationKind = "full-catalog" | "session-radar" | "first-paint";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const IS_VITEST =
-  typeof import.meta !== "undefined" && (import.meta as any).env?.MODE === "test";
+  typeof import.meta !== "undefined" &&
+  (import.meta as any).env?.MODE === "test";
 
 /**
  * Cold-start / first bind / Cmd+R: do not start first-paint until the user has
@@ -172,9 +170,13 @@ export const WORKSPACE_SWITCH_INPUT_QUIET_MS = IS_VITEST ? 0 : 300;
  * not exhaustive full-catalog. Force refresh still uses full-catalog.
  * @internal exported for tests
  */
-export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MIN_DELAY_MS = IS_VITEST ? 0 : 800;
+export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MIN_DELAY_MS = IS_VITEST
+  ? 0
+  : 800;
 export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_QUIET_MS = IS_VITEST ? 0 : 600;
-export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_WAIT_MS = IS_VITEST ? 0 : 8_000;
+export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_WAIT_MS = IS_VITEST
+  ? 0
+  : 8_000;
 
 /**
  * Pointer soft-cancel keeps clicks ahead of the post-first-paint Index
@@ -363,9 +365,9 @@ export function useWorkspaceThreadListHydration({
     | null
   >(null);
   /** Quiet idle Index soft re-sync after active first-paint (or force-enter re-arm). */
-  const pendingPostFirstPaintIndexSoftResyncCleanupRef = useRef<(() => void) | null>(
-    null,
-  );
+  const pendingPostFirstPaintIndexSoftResyncCleanupRef = useRef<
+    (() => void) | null
+  >(null);
   const postFirstPaintIndexSoftResyncTargetIdRef = useRef<string | null>(null);
   /** Workspaces that already had a post-first-paint Index soft re-sync scheduled. */
   const postFirstPaintIndexSoftResyncArmedIdsRef = useRef(new Set<string>());
@@ -374,7 +376,9 @@ export function useWorkspaceThreadListHydration({
    * listThreadsForWorkspace call (off-orchestrator), so pointer soft-cancel
    * uses the generation guard below instead of cancelWorkspaceTasks.
    */
-  const postFirstPaintIndexSoftResyncInFlightIdRef = useRef<string | null>(null);
+  const postFirstPaintIndexSoftResyncInFlightIdRef = useRef<string | null>(
+    null,
+  );
   /** Bumped by pointer soft-cancel so the orphan's late setThreads no-op via isStale. */
   const postFirstPaintIndexSoftResyncGenerationRef = useRef(0);
   /** Consecutive input-driven deferrals of the post-first-paint Index soft re-sync. */
@@ -501,7 +505,9 @@ export function useWorkspaceThreadListHydration({
           ) {
             postFirstPaintIndexSoftResyncInFlightIdRef.current = null;
           }
-          if (postFirstPaintIndexSoftResyncGenerationRef.current === generation) {
+          if (
+            postFirstPaintIndexSoftResyncGenerationRef.current === generation
+          ) {
             // Settled without a soft-cancel: the deferral cycle is over.
             postFirstPaintIndexSoftResyncDeferCountRef.current = 0;
             postFirstPaintIndexSoftResyncFirstDeferAtRef.current = 0;
@@ -645,7 +651,8 @@ export function useWorkspaceThreadListHydration({
       const deferCeilingHit =
         postFirstPaintIndexSoftResyncDeferCountRef.current >=
           POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFERS ||
-        now - firstDeferAt >= POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFER_WINDOW_MS;
+        now - firstDeferAt >=
+          POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFER_WINDOW_MS;
       if (deferCeilingHit) {
         // Defer ceiling: run now even though the user is still clicking — the
         // sidebar must converge. Reset so the next cycle may defer again.
@@ -891,11 +898,11 @@ export function useWorkspaceThreadListHydration({
         ? "full-catalog"
         : options?.mergeExistingThreads
           ? "first-paint"
-        : options?.startupHydrationMode === "first-paint"
-          ? "first-paint"
-        : options?.startupHydrationMode === "full-catalog"
-          ? "full-catalog"
-        : "first-paint";
+          : options?.startupHydrationMode === "first-paint"
+            ? "first-paint"
+            : options?.startupHydrationMode === "full-catalog"
+              ? "full-catalog"
+              : "first-paint";
       // Cold-start: only active workspace may hydrate until gate-ready.
       // User force refresh may target any workspace after gate; during cold-start
       // force still restricted to active to avoid dual-scan storms.
@@ -933,14 +940,13 @@ export function useWorkspaceThreadListHydration({
       ) {
         return false;
       }
-      const hasHydratedThreadList =
-        options?.mergeExistingThreads
+      const hasHydratedThreadList = options?.mergeExistingThreads
+        ? false
+        : options?.startupHydrationMode === "first-paint"
           ? false
-          : options?.startupHydrationMode === "first-paint"
-            ? false
-            : kind === "first-paint"
-              ? uiHydrated
-              : fullyHydrated;
+          : kind === "first-paint"
+            ? uiHydrated
+            : fullyHydrated;
       const isHydratingThreadList =
         hydratingThreadListWorkspaceIdsRef.current.has(workspaceId);
       if (
@@ -970,7 +976,9 @@ export function useWorkspaceThreadListHydration({
             ? "first-paint"
             : "full-catalog",
         mergeExistingThreads: options?.mergeExistingThreads,
-        includeOpenCodeSessions: options?.mergeExistingThreads ? false : undefined,
+        includeOpenCodeSessions: options?.mergeExistingThreads
+          ? false
+          : undefined,
       });
       return true;
     },
@@ -1065,7 +1073,9 @@ export function useWorkspaceThreadListHydration({
       ) {
         cancelPendingPostFirstPaintIndexSoftResync();
       }
-      if (autoHydratedActiveWorkspaceIdRef.current === previousActiveWorkspaceId) {
+      if (
+        autoHydratedActiveWorkspaceIdRef.current === previousActiveWorkspaceId
+      ) {
         autoHydratedActiveWorkspaceIdRef.current = null;
       }
     }

@@ -63,9 +63,7 @@ describe("WorktreeSection", () => {
     expect(
       screen.queryByRole("button", { name: "Search older..." }),
     ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Load older..." }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Load older..." })).toBeNull();
   });
 
   it("shows neither an empty session message nor a loading skeleton for empty worktrees", () => {
@@ -111,7 +109,9 @@ describe("WorktreeSection", () => {
 
     // 「暂无会话」占位已下线：空 worktree 不再渲染任何占位文案。
     expect(
-      screen.queryByText(/No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i),
+      screen.queryByText(
+        /No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i,
+      ),
     ).toBeNull();
     expect(screen.queryByLabelText("Loading agents")).toBeNull();
   });
@@ -158,7 +158,9 @@ describe("WorktreeSection", () => {
     );
 
     expect(
-      screen.queryByText(/No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i),
+      screen.queryByText(
+        /No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i,
+      ),
     ).toBeNull();
   });
 
@@ -205,7 +207,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    const header = container.querySelector(".worktree-header") as HTMLButtonElement | null;
+    const header = container.querySelector(
+      ".worktree-header",
+    ) as HTMLButtonElement | null;
     expect(header).toBeTruthy();
     if (!header) {
       throw new Error("Expected worktree header");
@@ -260,7 +264,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    const worktreeRow = container.querySelector(".worktree-row") as HTMLElement | null;
+    const worktreeRow = container.querySelector(
+      ".worktree-row",
+    ) as HTMLElement | null;
     expect(worktreeRow).toBeTruthy();
     if (!worktreeRow) {
       throw new Error("Expected worktree row");
@@ -326,8 +332,12 @@ describe("WorktreeSection", () => {
 
   it("passes worktree-scoped folder move targets to thread menus", () => {
     const onShowThreadMenu = vi.fn();
-    const parentMoveTargets = [{ folderId: "parent-folder", label: "Parent Folder" }];
-    const worktreeMoveTargets = [{ folderId: "worktree-folder", label: "Worktree Folder" }];
+    const parentMoveTargets = [
+      { folderId: "parent-folder", label: "Parent Folder" },
+    ];
+    const worktreeMoveTargets = [
+      { folderId: "worktree-folder", label: "Worktree Folder" },
+    ];
     const thread = {
       id: "claude:thread-1",
       name: "Worktree Session",
@@ -379,7 +389,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    const threadRow = screen.getByText("Worktree Session").closest(".thread-row");
+    const threadRow = screen
+      .getByText("Worktree Session")
+      .closest(".thread-row");
     expect(threadRow).toBeTruthy();
     if (!threadRow) {
       throw new Error("Expected worktree thread row");
@@ -462,7 +474,12 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{
           [degradedWorktree.id]: [
-            { id: "thread-1", name: "Alpha", updatedAt: 1000, isDegraded: true },
+            {
+              id: "thread-1",
+              name: "Alpha",
+              updatedAt: 1000,
+              isDegraded: true,
+            },
           ],
         }}
         threadStatusById={{}}
@@ -497,7 +514,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: /Refresh incomplete thread list/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Refresh incomplete thread list/i }),
+    ).toBeNull();
 
     rerender(
       <WorktreeSection
@@ -508,7 +527,12 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{
           [degradedWorktree.id]: [
-            { id: "thread-1", name: "Alpha", updatedAt: 1000, isDegraded: true },
+            {
+              id: "thread-1",
+              name: "Alpha",
+              updatedAt: 1000,
+              isDegraded: true,
+            },
           ],
         }}
         threadStatusById={{}}
@@ -597,7 +621,11 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    expect(container.querySelector(".worktree-label-prefix")?.textContent).toBe("feature");
-    expect(container.querySelector(".worktree-label")?.textContent).toBe("windows");
+    expect(container.querySelector(".worktree-label-prefix")?.textContent).toBe(
+      "feature",
+    );
+    expect(container.querySelector(".worktree-label")?.textContent).toBe(
+      "windows",
+    );
   });
 });
