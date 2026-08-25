@@ -26,6 +26,7 @@ export const mockTranslate = (key: string, params?: Record<string, unknown>) => 
         "common.later": "Later",
         "common.dismiss": "Dismiss",
         "common.retry": "Retry",
+        "common.loadFailed": "Load failed",
         "common.deleting": "Deleting…",
         "approval.inputRequested": "Input requested",
         "approval.submitted": "Submitted",

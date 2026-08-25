@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { KeyedLoadState } from "../../../components/common/KeyedLoadState";
 import {
   refreshPiSessionTree,
   requestPiThreadJump,
@@ -387,17 +388,14 @@ export function PiSessionTreePanel({
       <div className="pi-fs-body" ref={bodyRef}>
         {tree === null ? (
           treeError !== null ? (
-            <div className="pi-fs-empty pi-fs-load-error" role="alert">
-              <p>{t("piSession.tree.loadFailed")}</p>
-              <p className="pi-fs-load-error-detail">{treeError}</p>
-              <button
-                type="button"
-                className="pi-fs-load-error-retry"
-                onClick={() => void refreshPiSessionTree(workspaceId, threadId)}
-              >
-                {t("piSession.tree.retry")}
-              </button>
-            </div>
+            <KeyedLoadState
+              error={treeError}
+              onRetry={() => void refreshPiSessionTree(workspaceId, threadId)}
+              title={t("piSession.tree.loadFailed")}
+              className="pi-fs-empty pi-fs-load-error"
+              detailClassName="pi-fs-load-error-detail"
+              retryClassName="pi-fs-load-error-retry"
+            />
           ) : (
             <div className="pi-fs-empty">加载中…</div>
           )
