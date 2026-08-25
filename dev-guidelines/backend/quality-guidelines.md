@@ -17,11 +17,13 @@
 
 ## Rust Format
 
+> 上位铁律见 `AGENTS.md` → Format Discipline Gate：格式化只允许作用于本次改动的文件、且只允许局部格式化；本小节是 Rust 专项细则。
+
 2026-08-25 起提交树已 rustfmt-clean（纯格式提交 `ddf590b70`，已入 `.git-blame-ignore-revs`）。目标转为**保持 clean**：
 
 - 配置源：`src-tauri/rustfmt.toml`（edition 2021、不重排 `mod` / import）。
 - 改过的 `.rs` 提交前必须过 `rustfmt --edition 2021 --check <file>`；鼓励顺手 `cargo clippy --fix` 但同样只限本次改动文件。
-- 全仓 fmt / clippy sweep 仍只能单独开纯格式提交，禁止与业务混合。
+- 全仓 fmt / clippy sweep 按 Format Discipline Gate 视为禁止（除非用户显式拍板，且只能单独开纯格式提交）；禁止把无关区域的 fmt 噪音混进业务提交。
 - 历史背景（为何曾经禁止全仓 fmt）：稳定版 rustfmt 默认顺着 `mod` 往下走，在树不干净时格式化 `lib.rs` / `mod.rs` 会把无关模块一并重排；`skip_children` 是 nightly-only。树 clean 后该风险转为「保持成本」，由上方 check 约束覆盖。
 
 ## 推荐验证命令

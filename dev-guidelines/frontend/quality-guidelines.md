@@ -32,6 +32,8 @@
 
 ## Frontend Format（Prettier）
 
+> 上位铁律见 `AGENTS.md` → Format Discipline Gate：格式化只允许作用于本次改动的文件、且只允许局部格式化；本小节是 Prettier 专项细则。
+
 仓库未接入 Prettier：无 `.prettierrc*` 配置、`package.json` 无 format 脚本（2026-08-25 核实）。因此 `npx prettier --write` 会按**默认配置**重排整个文件，与既有风格不一致：
 
 - 禁止对未确认 prettier-clean 的 ts / tsx / css 文件直接 `npx prettier --write <file>`。实例：2026-08-25 对 `Sidebar.tsx` 跑一次 write 产生 1437 行无关重排 diff，差点混入业务提交，已 `git checkout` 回滚后用脚本外科式重放目标改动。

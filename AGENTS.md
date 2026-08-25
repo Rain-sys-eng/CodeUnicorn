@@ -97,10 +97,18 @@
 - 高风险文件冲突时，禁止整文件 `--ours` / `--theirs` 覆盖。
 - 必须先列 capability matrix，再做 semantic merge，并验证关键 symbol / tests / contract command。
 
+### Format Discipline Gate（格式化铁律）
+
+- **禁止无脑格式化**：任何格式化工具（prettier / rustfmt / cargo fmt / eslint --fix / biome / 任何 linter 的全文件或全仓模式）只允许作用于**你本次改动的文件**，且只允许**局部格式化**（你本次编辑触及的 hunk 区域）。
+- 禁止对未改动文件做「顺手 fmt」；禁止以「让整个文件过 check」为由重排全文件——check 暴露的**非本次改动区域**存量违规，只能单独开纯格式提交修复，禁止混入业务提交。
+- 多 AI 并行是本仓库常态：你的全文件重排会把别人的在途 hunk 裹进巨型 diff，制造冲突、误提交与 review 噪音（2026-08-25 实证两次：ModelSelect.tsx 被 prettier 全量重排 2680 行裹住在途改动；src-tauri 全仓 clippy+fmt sweep 100 文件）。
+- 提交前自查 `git diff --stat`：改动行数远超你的实际编辑 = 混入格式化噪音，必须拆开（拆法：拆 hunk `git apply --cached`，或 `git show HEAD:file` + 脚本重放 + `git update-index --cacheinfo`）。
+- 各语言细则：frontend `dev-guidelines/frontend/quality-guidelines.md`（Prettier 红线）、backend Rust Format Gate（见下）。
+
 ### Rust Format Gate
 
 - 2026-08-25 起提交树已 rustfmt-clean（纯格式提交 `ddf590b70`，已入 `.git-blame-ignore-revs`）。目标转为**保持 clean**：改过的 `.rs` 提交前必须过 `rustfmt --edition 2021 --check <file>`。
-- 全仓 fmt / clippy sweep 只能单独开纯格式提交，禁止把无关文件的 fmt 噪音混进业务提交。
+- 全仓 fmt / clippy sweep 按 Format Discipline Gate 视为禁止（除非用户显式拍板，且只能单独开纯格式提交）；禁止把无关区域的 fmt 噪音混进业务提交。
 - 细则：`dev-guidelines/backend/quality-guidelines.md`（Rust Format）。配置：`src-tauri/rustfmt.toml`、`.vscode/settings.json`。
 
 ### Shell Baseline
