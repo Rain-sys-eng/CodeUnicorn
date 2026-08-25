@@ -11,4 +11,5 @@ mod empty_prune;
 pub(crate) mod importer;
 pub(crate) mod shared_visibility;
 pub(crate) mod store;
+pub(crate) mod tombstone_filter;
 mod writers;

@@ -58,7 +58,7 @@ pub(crate) async fn list_project_related_sessions_core(
         normalized_query.scan_quality(),
     )
     .await?;
-    let related_entries = global_entries
+    let mut related_entries = global_entries
         .into_iter()
         .filter_map(|entry| {
             if strict_scope_ids.contains(&entry.workspace_id) {
@@ -75,6 +75,8 @@ pub(crate) async fn list_project_related_sessions_core(
             Some(apply_attribution_to_entry(entry, attribution))
         })
         .collect::<Vec<_>>();
+    // 出口过滤：已删除（tombstone）会话不得经 related 扫描复活
+    crate::session_management::reject_tombstoned_catalog_entries(&mut related_entries);
 
     Ok(build_catalog_page(
         related_entries,

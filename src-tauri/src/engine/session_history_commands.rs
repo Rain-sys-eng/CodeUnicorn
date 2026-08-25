@@ -96,9 +96,14 @@ pub async fn list_claude_sessions(
         .engine_manager
         .get_engine_config(EngineType::Claude)
         .await;
-    let sessions =
+    let mut sessions =
         super::claude_history::list_claude_sessions_with_config(&path, limit, config.as_ref())
             .await?;
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "claude",
+        &mut sessions,
+        |session| &session.session_id,
+    );
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 
@@ -256,12 +261,17 @@ pub async fn list_gemini_sessions(
         .engine_manager
         .get_engine_config(EngineType::Gemini)
         .await;
-    let sessions = super::gemini_history::list_gemini_sessions(
+    let mut sessions = super::gemini_history::list_gemini_sessions(
         &path,
         limit,
         config.as_ref().and_then(|item| item.home_dir.as_deref()),
     )
     .await?;
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "gemini",
+        &mut sessions,
+        |session| &session.session_id,
+    );
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 
@@ -346,12 +356,17 @@ pub async fn list_kimi_sessions(
         .engine_manager
         .get_engine_config(EngineType::Kimi)
         .await;
-    let sessions = super::kimi_history::list_kimi_sessions(
+    let mut sessions = super::kimi_history::list_kimi_sessions(
         &path,
         limit,
         config.as_ref().and_then(|item| item.home_dir.as_deref()),
     )
     .await?;
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "kimi",
+        &mut sessions,
+        |session| &session.session_id,
+    );
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 
@@ -432,12 +447,17 @@ pub async fn list_pi_sessions(
     }
     let path = std::path::PathBuf::from(&workspace_path);
     let config = state.engine_manager.get_engine_config(EngineType::Pi).await;
-    let sessions = super::pi_history::list_pi_sessions(
+    let mut sessions = super::pi_history::list_pi_sessions(
         &path,
         limit,
         config.as_ref().and_then(|item| item.home_dir.as_deref()),
     )
     .await?;
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "pi",
+        &mut sessions,
+        |session| &session.session_id,
+    );
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 
@@ -522,9 +542,14 @@ pub async fn list_qoder_sessions(
         provider_profile_id.as_deref(),
         &super::qoder_provider_profile::QoderDistributionSettings::from_app_settings(&settings),
     )?;
-    let sessions =
+    let mut sessions =
         super::qoder_history::list_qoder_sessions_for_launch_profile(&path, limit, &launch_profile)
             .await?;
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "qoder",
+        &mut sessions,
+        |session| &session.session_id,
+    );
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 
@@ -615,12 +640,17 @@ pub async fn list_grok_sessions(
         .engine_manager
         .get_engine_config(EngineType::Grok)
         .await;
-    let sessions = super::grok_history::list_grok_sessions(
+    let mut sessions = super::grok_history::list_grok_sessions(
         &path,
         limit,
         config.as_ref().and_then(|item| item.home_dir.as_deref()),
     )
     .await?;
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "grok",
+        &mut sessions,
+        |session| &session.session_id,
+    );
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 
@@ -704,7 +734,13 @@ pub async fn list_dsh_sessions(
     let runtime = crate::engine::dsh::runtime_settings_from_app(&settings);
     let (_snapshot, client) = crate::engine::dsh::connect_existing(&runtime).await?;
     let path = std::path::PathBuf::from(&workspace_path);
-    let sessions = crate::engine::dsh::history::list_dsh_sessions(&client, &path, limit).await?;
+    let mut sessions =
+        crate::engine::dsh::history::list_dsh_sessions(&client, &path, limit).await?;
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "dsh",
+        &mut sessions,
+        |session| &session.session_id,
+    );
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 

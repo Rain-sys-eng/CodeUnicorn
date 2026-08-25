@@ -432,6 +432,24 @@ pub(crate) async fn assign_workspace_session_folders(
     .await
 }
 
+/// 出口过滤：catalog / projection / global 列表不得返回已 tombstone（用户
+/// 已删除）的会话——物理残留文件 MUST NOT 经磁盘扫描源复活进侧栏。
+/// 放在 core 出口而非 `build_workspace_scope_catalog_data` 内部：v1 删除的
+/// owner 解析复用同一构建路径，tombstoned 行必须保持可解析以供重试。
+pub(crate) fn reject_tombstoned_catalog_entries(entries: &mut Vec<WorkspaceSessionCatalogEntry>) {
+    let filter = crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open();
+    if filter.is_empty() {
+        return;
+    }
+    entries.retain(|entry| {
+        !filter.is_tombstoned(&entry.engine, &entry.session_id)
+            && entry
+                .canonical_session_id
+                .as_deref()
+                .is_none_or(|canonical| !filter.is_tombstoned(&entry.engine, canonical))
+    });
+}
+
 pub(crate) async fn list_workspace_sessions_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     _sessions: &Mutex<HashMap<String, std::sync::Arc<crate::codex::WorkspaceSession>>>,
@@ -446,7 +464,7 @@ pub(crate) async fn list_workspace_sessions_core(
     let normalized_query = query.unwrap_or_default();
     let attribution_mode = WorkspaceSessionAttributionMode::from_query(&normalized_query);
     let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
-    let scope_catalog = build_workspace_scope_catalog_data(
+    let mut scope_catalog = build_workspace_scope_catalog_data(
         workspaces,
         engine_manager,
         storage_path,
@@ -456,6 +474,7 @@ pub(crate) async fn list_workspace_sessions_core(
         normalized_query.scan_quality(),
     )
     .await?;
+    reject_tombstoned_catalog_entries(&mut scope_catalog.entries);
     Ok(build_catalog_page(
         scope_catalog.entries,
         normalized_query,
@@ -482,7 +501,7 @@ pub(crate) async fn get_workspace_session_projection_summary_core(
         None,
         Some(SESSION_CATALOG_MAX_LIMIT as u32),
     );
-    let scope_catalog = build_workspace_scope_catalog_data(
+    let mut scope_catalog = build_workspace_scope_catalog_data(
         workspaces,
         engine_manager,
         storage_path,
@@ -492,6 +511,7 @@ pub(crate) async fn get_workspace_session_projection_summary_core(
         normalized_query.scan_quality(),
     )
     .await?;
+    reject_tombstoned_catalog_entries(&mut scope_catalog.entries);
     let counts = build_catalog_count_summary(&scope_catalog.entries, &normalized_query);
     let filtered_entries = scope_catalog
         .entries
@@ -523,7 +543,7 @@ pub(crate) async fn list_global_codex_sessions_core(
 ) -> Result<WorkspaceSessionCatalogPage, String> {
     let normalized_query = query.unwrap_or_default();
     let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
-    let (entries, partial_sources) = build_global_engine_catalog_entries(
+    let (mut entries, partial_sources) = build_global_engine_catalog_entries(
         engine_manager,
         workspaces,
         storage_path,
@@ -532,6 +552,7 @@ pub(crate) async fn list_global_codex_sessions_core(
         normalized_query.scan_quality(),
     )
     .await?;
+    reject_tombstoned_catalog_entries(&mut entries);
 
     Ok(build_catalog_page(
         entries,
@@ -3855,9 +3876,7 @@ fn claude_project_dir_owner_conflicts(
 }
 
 fn normalize_owner_path_for_exact_match(path: &str) -> String {
-    path.trim()
-        .trim_end_matches(['/', '\\'])
-        .to_string()
+    path.trim().trim_end_matches(['/', '\\']).to_string()
 }
 
 fn paths_are_equivalent_for_owner(left: &str, right: &str) -> bool {

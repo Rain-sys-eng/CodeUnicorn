@@ -1083,6 +1083,13 @@ pub(crate) async fn run_session_delete_v2(
                     SessionDeleteV2Result::success(&target.thread_id, codes::ALREADY_MISSING)
                 } else {
                     // 标记已落：物理删除失败不影响侧栏隐藏（marker-first）
+                    // 诊断日志：幽灵会话残留根因（文件锁 / 多 root 副本）取证
+                    log::warn!(
+                        "[session_delete_v2] MARKED_DELETED engine={} session={} error={}",
+                        target.engine,
+                        target.native_session_id,
+                        error
+                    );
                     if let Some(retry) = build_retry_for_plan(&plan, &configs) {
                         schedule_residual_retry(
                             format!("{}:{}", target.engine, target.native_session_id),

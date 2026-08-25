@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -1167,6 +1168,28 @@ pub(crate) fn lookup_rows_for_delete(
     Ok(rows)
 }
 
+/// All tombstoned `(engine, session_id)` pairs. Disk-scan list exports use
+/// this to keep user-deleted-but-physically-surviving sessions hidden
+/// (marker-first deletion: tombstone is the durable fact, physical delete is
+/// best-effort).
+pub(crate) fn list_tombstoned_session_keys(
+    connection: &Connection,
+) -> Result<HashSet<(String, String)>, String> {
+    let mut statement = connection
+        .prepare("SELECT engine, session_id FROM session_index WHERE tombstoned_at IS NOT NULL")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|error| error.to_string())?;
+    let mut keys = HashSet::new();
+    for row in rows {
+        keys.insert(row.map_err(|error| error.to_string())?);
+    }
+    Ok(keys)
+}
+
 /// Hard-delete Index rows that should never have been imported (empty /
 /// control-plane Claude jsonl). Unlike tombstone, this does not block a later
 /// upsert when the same session grows a real user prompt.
@@ -1203,7 +1226,7 @@ pub(crate) fn delete_engine_session_rows(
     Ok(deleted)
 }
 
-fn strip_known_engine_prefix(id: &str) -> &str {
+pub(crate) fn strip_known_engine_prefix(id: &str) -> &str {
     const PREFIXES: [&str; 8] = [
         "codex:",
         "claude:",
