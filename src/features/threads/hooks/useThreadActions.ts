@@ -438,6 +438,14 @@ export function useThreadActions({
       const preserveState = options?.preserveState ?? false;
       const isFirstPaintHydration =
         options?.startupHydrationMode === "first-paint";
+      // focus-refresh merge 不 fan-out 重探测(codex 在线分页 / claude 磁盘
+      // list / 活动 catalog):Session Index(自带指纹门控 sync)+ titles +
+      // shared 已足够刷新列表,新会话由 index 指纹 sync / importer 捕获。
+      // 显式 reload 与 Session Management 仍走全量。显隐逻辑不变:hideSet、
+      // 占位草稿过滤、tombstone、last-good floor 全部照旧。
+      const isFocusRefreshMerge =
+        options?.recoverySource === "focus-refresh" &&
+        options?.mergeExistingThreads === true;
       // First-paint never fans out OpenCode/native multi-engine lists.
       const includeOpenCodeSessions =
         !isFirstPaintHydration && (options?.includeOpenCodeSessions ?? true);
@@ -620,12 +628,21 @@ export function useThreadActions({
           indexVisibility,
           earlyPaintHideSet,
         );
+        // merge(focus-refresh/restore) 路径在「本地还没有任何行」时同样
+        // 提前画 index 行:否则冷 workspace 要等整条 merge 管线(引擎探测 +
+        // orchestrator 串行)跑完才结束 loading。显隐逻辑与 first-paint 完全
+        // 一致(同一 hideSet + hideReady defer + 同一投影函数),只是时机提前;
+        // 已有行的 merge 不提前画,避免热路径双重 dispatch churn。
+        const mergeColdEarlyPaint =
+          !isFirstPaintHydration &&
+          options?.mergeExistingThreads === true &&
+          (threadsByWorkspace[workspace.id] ?? []).length === 0;
         if (
-          isFirstPaintHydration &&
-          !options?.mergeExistingThreads &&
           sessionIndexPage &&
           Array.isArray(sessionIndexPage.data) &&
-          sessionIndexPage.data.length > 0
+          sessionIndexPage.data.length > 0 &&
+          ((isFirstPaintHydration && !options?.mergeExistingThreads) ||
+            mergeColdEarlyPaint)
         ) {
           if (shouldRememberHideUnreadiness(canProjectIndexNatives)) {
             rememberPartialSource("shared-visibility-unavailable");
@@ -868,6 +885,12 @@ export function useThreadActions({
         const fetchStartedAt = Date.now();
         let cursor: string | null = null;
         do {
+          // focus-refresh merge:跳过 codex 在线分页(运行时连接 + 逐页 IPC
+          // 是 merge 管线主成本),matchingThreads 留空,列表成员由 Session
+          // Index + 现有行兜底;cursor 为 null 时「更多」回落 index keyset。
+          if (isFocusRefreshMerge) {
+            break;
+          }
           {
             const abandoned = abandonIfStale();
             if (abandoned) {
@@ -1290,13 +1313,16 @@ export function useThreadActions({
         // disk seed. Session Index already seeded Claude/Codex/Kimi above.
         // Full catalog remains for Session Management / explicit force refresh.
         const projectCatalogSessionsPromise =
-          !isFirstPaintHydration && canListWorkspaceSessions
+          !isFirstPaintHydration &&
+          !isFocusRefreshMerge &&
+          canListWorkspaceSessions
             ? loadActiveProjectCatalogSessions(
                 workspace.id,
                 sessionAttributionMode,
               )
             : Promise.resolve(null);
-        const claudeSessionsPromise = isFirstPaintHydration
+        const claudeSessionsPromise =
+          isFirstPaintHydration || isFocusRefreshMerge
           ? Promise.resolve(
               null as Awaited<
                 ReturnType<typeof listClaudeSessionsForFallbackSeedService>

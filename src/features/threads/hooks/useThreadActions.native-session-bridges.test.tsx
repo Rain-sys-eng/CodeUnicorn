@@ -861,4 +861,80 @@ describe("useThreadActions native session bridges", () => {
       }),
     );
   });
+
+  it("early-paints Index rows on focus-refresh merge for a cold workspace and skips engine probes", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    } as never);
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(listSessionIndexForWorkspace).mockResolvedValue({
+      data: [
+        {
+          engine: "claude",
+          sessionId: "session-real-1",
+          title: "帮我看一下这段代码",
+          updatedAt: 1_730_000_000_000,
+        },
+      ],
+      source: "session-index",
+      synced: true,
+      engines: ["claude"],
+      visibility: {
+        available: true,
+        freshness: "verified",
+        hiddenNativeIds: [],
+      },
+    });
+    const onDebug = vi.fn();
+    const { dispatch, result } = renderActions({ onDebug });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+        mergeExistingThreads: true,
+        recoverySource: "focus-refresh",
+        includeOpenCodeSessions: false,
+      });
+    });
+
+    // A:冷 workspace(本地无行)的 merge 路径也提前画 index 行
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "thread/list session-index early-paint",
+      }),
+    );
+    expectSetThreadsDispatched(dispatch, workspace.id, [
+      { id: "claude:session-real-1" },
+    ]);
+    // B:focus-refresh merge 不 fan-out 重探测(codex 在线分页 / claude 磁盘
+    // list / 活动 catalog)
+    expect(listThreads).not.toHaveBeenCalled();
+    expect(listClaudeSessions).not.toHaveBeenCalled();
+    expect(listWorkspaceSessions).not.toHaveBeenCalled();
+  });
+
+  it("keeps engine probes on non-focus-refresh merge (explicit reload semantics)", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    } as never);
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    const onDebug = vi.fn();
+    const { result } = renderActions({ onDebug });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+        mergeExistingThreads: true,
+      });
+    });
+
+    // 非 focus-refresh 的 merge(如显式 reload)仍走全量探测
+    expect(listThreads).toHaveBeenCalled();
+  });
 });
