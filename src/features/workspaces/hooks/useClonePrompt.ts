@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { WorkspaceInfo } from "../../../types";
 import { pickWorkspacePath } from "../../../services/tauri";
+import { normalizePathSeparators } from "../../../utils/path";
 
 type ClonePromptState = {
   workspace: WorkspaceInfo;
@@ -39,10 +40,6 @@ type UseClonePromptResult = {
   useSuggestedCopiesFolder: () => void;
   clearCopiesFolder: () => void;
 };
-
-function normalizePathSeparators(path: string) {
-  return path.replace(/\\/g, "/");
-}
 
 function dirname(path: string) {
   const normalized = normalizePathSeparators(path).replace(/\/+$/, "");

@@ -88,14 +88,13 @@ fn detect_claude_synthetic_approval_kind(
             return Some(ClaudeSyntheticApprovalKind::FileChange);
         }
         // Command blocked for allowlist write, but absolute path outside → grant first.
-        if looks_like_outside_allowlist_denial(message) {
-            if extract_absolute_path_from_tool_input(tool_input)
+        if looks_like_outside_allowlist_denial(message)
+            && extract_absolute_path_from_tool_input(tool_input)
                 .or_else(|| extract_absolute_path_from_text(message))
                 .is_some()
             {
                 return Some(ClaudeSyntheticApprovalKind::DirectoryGrant);
             }
-        }
         return Some(ClaudeSyntheticApprovalKind::CommandExecution);
     }
 
@@ -166,18 +165,17 @@ impl ClaudeSession {
 
         match kind {
             ClaudeSyntheticApprovalKind::DirectoryGrant => {
-                let absolute_path: String = match extract_absolute_path_from_tool_input(
-                    tool_input.as_ref(),
-                )
-                .or_else(|| extract_absolute_path_from_text(output))
-                {
-                    Some(path) => path,
-                    None => {
-                        return Some(self.build_command_mode_blocked_signal(
-                            turn_id, tool_id, &tool_name, output,
-                        ));
-                    }
-                };
+                let absolute_path: String =
+                    match extract_absolute_path_from_tool_input(tool_input.as_ref())
+                        .or_else(|| extract_absolute_path_from_text(output))
+                    {
+                        Some(path) => path,
+                        None => {
+                            return Some(self.build_command_mode_blocked_signal(
+                                turn_id, tool_id, &tool_name, output,
+                            ));
+                        }
+                    };
 
                 // Already inside L1 → do not re-prompt grant.
                 if self.is_path_in_session_allowlist(&absolute_path) {
@@ -208,10 +206,7 @@ impl ClaudeSession {
                 if let Some(Value::Object(existing)) = tool_input.clone() {
                     input_map = existing;
                 }
-                input_map.insert(
-                    "path".to_string(),
-                    Value::String(absolute_path.clone()),
-                );
+                input_map.insert("path".to_string(), Value::String(absolute_path.clone()));
                 input_map.insert(
                     "canonicalPath".to_string(),
                     Value::String(absolute_path.clone()),
@@ -234,10 +229,7 @@ impl ClaudeSession {
                     "originalToolName".to_string(),
                     Value::String(tool_name.clone()),
                 );
-                input_map.insert(
-                    "engine".to_string(),
-                    Value::String("claude".to_string()),
-                );
+                input_map.insert("engine".to_string(), Value::String("claude".to_string()));
                 input_map.insert(
                     "retryContext".to_string(),
                     serde_json::json!({
@@ -323,15 +315,16 @@ impl ClaudeSession {
                     || event.get("mcpServers").is_some();
 
                 if has_init_payload {
-                    let init_model = event
-                        .get("model")
-                        .and_then(|value| value.as_str())
-                        .or_else(|| {
-                            event
-                                .get("message")
-                                .and_then(|message| message.get("model"))
-                                .and_then(|value| value.as_str())
-                        });
+                    let init_model =
+                        event
+                            .get("model")
+                            .and_then(|value| value.as_str())
+                            .or_else(|| {
+                                event
+                                    .get("message")
+                                    .and_then(|message| message.get("model"))
+                                    .and_then(|value| value.as_str())
+                            });
                     self.maybe_emit_runtime_model(turn_id, init_model, "system.init.model");
                     return Some(EngineEvent::Raw {
                         workspace_id: self.workspace_id.clone(),
@@ -789,9 +782,7 @@ impl ClaudeSession {
                             self.cache_tool_block_index(turn_id, index, &tool_id);
                         }
                         let content = block.get("content").or_else(|| block.get("tool_output"));
-                        if content.is_none() {
-                            return None;
-                        }
+                        content?;
                         let is_error = block
                             .get("is_error")
                             .or_else(|| block.get("isError"))

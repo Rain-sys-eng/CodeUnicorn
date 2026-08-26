@@ -106,9 +106,8 @@ pub(crate) fn import_workspace_wallpaper_from_path(
     if !source.is_file() {
         return Err("Wallpaper source is not a file.".to_string());
     }
-    let extension = file_extension(&source).ok_or_else(|| {
-        "Wallpaper file type is not supported.".to_string()
-    })?;
+    let extension = file_extension(&source)
+        .ok_or_else(|| "Wallpaper file type is not supported.".to_string())?;
     let kind = wallpaper_kind_from_extension(&extension)
         .ok_or_else(|| "Wallpaper file type is not supported.".to_string())?;
     fs::create_dir_all(wallpaper_dir).map_err(|err| err.to_string())?;
@@ -157,11 +156,9 @@ pub(crate) async fn import_workspace_wallpaper(
 #[tauri::command]
 pub(crate) async fn remove_workspace_wallpaper(path: String) -> Result<(), String> {
     let wallpaper_dir = ensure_wallpaper_dir()?;
-    tokio::task::spawn_blocking(move || {
-        remove_workspace_wallpaper_file(&path, &wallpaper_dir)
-    })
-    .await
-    .map_err(|err| err.to_string())?
+    tokio::task::spawn_blocking(move || remove_workspace_wallpaper_file(&path, &wallpaper_dir))
+        .await
+        .map_err(|err| err.to_string())?
 }
 
 fn wallpaper_preview_mime(extension: &str) -> Option<&'static str> {
@@ -203,9 +200,8 @@ pub(crate) fn read_workspace_wallpaper_preview_from_path(
     wallpaper_dir: &Path,
 ) -> Result<String, String> {
     let canonical_target = resolve_managed_wallpaper_file(path, wallpaper_dir)?;
-    let extension = file_extension(&canonical_target).ok_or_else(|| {
-        "Wallpaper file type is not supported.".to_string()
-    })?;
+    let extension = file_extension(&canonical_target)
+        .ok_or_else(|| "Wallpaper file type is not supported.".to_string())?;
     let mime = wallpaper_preview_mime(&extension)
         .ok_or_else(|| "Wallpaper file type is not supported.".to_string())?;
     let metadata = fs::metadata(&canonical_target).map_err(|err| err.to_string())?;
@@ -221,9 +217,8 @@ pub(crate) fn read_workspace_wallpaper_bytes_from_path(
     wallpaper_dir: &Path,
 ) -> Result<Vec<u8>, String> {
     let canonical_target = resolve_managed_wallpaper_file(path, wallpaper_dir)?;
-    let extension = file_extension(&canonical_target).ok_or_else(|| {
-        "Wallpaper file type is not supported.".to_string()
-    })?;
+    let extension = file_extension(&canonical_target)
+        .ok_or_else(|| "Wallpaper file type is not supported.".to_string())?;
     wallpaper_media_mime(&extension)
         .ok_or_else(|| "Wallpaper file type is not supported.".to_string())?;
     let metadata = fs::metadata(&canonical_target).map_err(|err| err.to_string())?;
@@ -234,9 +229,7 @@ pub(crate) fn read_workspace_wallpaper_bytes_from_path(
 }
 
 #[tauri::command]
-pub(crate) async fn read_workspace_wallpaper_preview(
-    path: String,
-) -> Result<String, String> {
+pub(crate) async fn read_workspace_wallpaper_preview(path: String) -> Result<String, String> {
     let wallpaper_dir = ensure_wallpaper_dir()?;
     tokio::task::spawn_blocking(move || {
         read_workspace_wallpaper_preview_from_path(&path, &wallpaper_dir)
@@ -282,15 +275,14 @@ pub(crate) fn is_allowed_wallhaven_host(host: &str) -> bool {
 }
 
 pub(crate) fn parse_wallhaven_https_url(raw: &str) -> Result<reqwest::Url, String> {
-    let url = reqwest::Url::parse(raw.trim()).map_err(|_| {
-        "Wallpaper URL is not valid.".to_string()
-    })?;
+    let url =
+        reqwest::Url::parse(raw.trim()).map_err(|_| "Wallpaper URL is not valid.".to_string())?;
     if url.scheme() != "https" {
         return Err("Wallpaper URL must be HTTPS.".to_string());
     }
-    let host = url.host_str().ok_or_else(|| {
-        "Wallpaper URL is missing a host.".to_string()
-    })?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| "Wallpaper URL is missing a host.".to_string())?;
     if !is_allowed_wallhaven_host(host) {
         return Err("Wallpaper URL is not a Wallhaven address.".to_string());
     }
@@ -301,7 +293,10 @@ pub(crate) fn wallhaven_source_url(id: &str) -> String {
     format!("https://wallhaven.cc/w/{}", id.trim())
 }
 
-fn wallhaven_image_extension(url: &reqwest::Url, content_type: Option<&str>) -> Option<&'static str> {
+fn wallhaven_image_extension(
+    url: &reqwest::Url,
+    content_type: Option<&str>,
+) -> Option<&'static str> {
     let from_path = url
         .path()
         .rsplit('.')
@@ -313,7 +308,13 @@ fn wallhaven_image_extension(url: &reqwest::Url, content_type: Option<&str>) -> 
         Some("jpg" | "jpeg") => return Some("jpg"),
         _ => {}
     }
-    match content_type.unwrap_or("").split(';').next().unwrap_or("").trim() {
+    match content_type
+        .unwrap_or("")
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+    {
         "image/png" => Some("png"),
         "image/webp" => Some("webp"),
         "image/jpeg" => Some("jpg"),
@@ -418,14 +419,12 @@ pub(crate) async fn search_workspace_wallpaper_market(
         .unwrap_or("")
         .to_string();
     let client = wallhaven_http_client()?;
-    let mut request = client
-        .get(WALLHAVEN_SEARCH_URL)
-        .query(&[
-            ("purity", "100"),
-            ("categories", categories),
-            ("page", &page.to_string()),
-            ("atleast", "1920x1080"),
-        ]);
+    let mut request = client.get(WALLHAVEN_SEARCH_URL).query(&[
+        ("purity", "100"),
+        ("categories", categories),
+        ("page", &page.to_string()),
+        ("atleast", "1920x1080"),
+    ]);
     if q.is_empty() {
         request = request.query(&[("sorting", "toplist"), ("topRange", "1M")]);
     } else {
@@ -437,7 +436,10 @@ pub(crate) async fn search_workspace_wallpaper_market(
         return Err("Wallpaper market is rate-limited. Try again in a moment.".to_string());
     }
     if !status.is_success() {
-        return Err(format!("Wallpaper market request failed (HTTP {}).", status.as_u16()));
+        return Err(format!(
+            "Wallpaper market request failed (HTTP {}).",
+            status.as_u16()
+        ));
     }
     let payload = response
         .json::<serde_json::Value>()
@@ -464,7 +466,10 @@ pub(crate) async fn download_workspace_wallpaper(
         .map_err(|err| err.to_string())?;
     let status = response.status();
     if !status.is_success() {
-        return Err(format!("Wallpaper download failed (HTTP {}).", status.as_u16()));
+        return Err(format!(
+            "Wallpaper download failed (HTTP {}).",
+            status.as_u16()
+        ));
     }
     let content_type = response
         .headers()
@@ -512,10 +517,7 @@ mod tests {
         assert_eq!(imported.kind, "image");
         assert_eq!(imported.source_path, source.to_string_lossy());
         assert!(PathBuf::from(&imported.path).starts_with(&wallpaper_dir));
-        assert_eq!(
-            fs::read(&imported.path).expect("read copy"),
-            b"png-bytes"
-        );
+        assert_eq!(fs::read(&imported.path).expect("read copy"), b"png-bytes");
 
         fs::remove_dir_all(&root).ok();
     }
@@ -569,9 +571,8 @@ mod tests {
             .expect("remove managed");
         assert!(!managed.exists());
 
-        let error =
-            remove_workspace_wallpaper_file(outside.to_str().unwrap(), &wallpaper_dir)
-                .expect_err("reject outside");
+        let error = remove_workspace_wallpaper_file(outside.to_str().unwrap(), &wallpaper_dir)
+            .expect_err("reject outside");
         assert!(error.contains("outside"));
         assert!(outside.exists());
 
@@ -584,7 +585,10 @@ mod tests {
         assert_eq!(wallhaven_categories(Some("anime")), "010");
         assert_eq!(wallhaven_categories(Some("people")), "001");
         assert!(is_allowed_wallhaven_host("th.wallhaven.cc"));
-        assert!(parse_wallhaven_https_url("https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg").is_ok());
+        assert!(
+            parse_wallhaven_https_url("https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg")
+                .is_ok()
+        );
         assert!(parse_wallhaven_https_url("http://wallhaven.cc/w/abc123").is_err());
         assert!(parse_wallhaven_https_url("https://example.com/a.jpg").is_err());
     }

@@ -1,5 +1,14 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef } from "react";
-import { workspaceScopedHas, type WorkspaceScopedMap } from "./workspaceScopedMap";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
+import {
+  workspaceScopedHas,
+  type WorkspaceScopedMap,
+} from "./workspaceScopedMap";
 import type { Dispatch, MutableRefObject } from "react";
 import { buildConversationItem } from "../../../utils/threadItems";
 import { isCodexSubagentActivityItem } from "../utils/codexSubagentIdentity";
@@ -9,10 +18,14 @@ import {
   type RealtimeBatcherFlush,
   type RealtimeBatcherFlushReason,
 } from "../contracts/realtimeEventBatcher";
+import { isSalvageableTerminalAssistantComplete } from "../contracts/realtimeEventContract";
 import { asString } from "../utils/threadNormalize";
 import type { ConversationItem, DebugEntry } from "../../../types";
 import type { ThreadAction } from "./useThreadsReducer";
-import { isRealtimeBatchingEnabled, readStreamingScheduleTier } from "../utils/realtimePerfFlags";
+import {
+  isRealtimeBatchingEnabled,
+  readStreamingScheduleTier,
+} from "../utils/realtimePerfFlags";
 import {
   resolveDispatchSubmitMode,
   type DispatchSubmitMode,
@@ -55,6 +68,11 @@ import {
   noteThreadReducerWorkMeasured,
 } from "../utils/streamLatencyDiagnostics";
 import { recordHotspotSample } from "../../../services/perfBaseline/hotspotTracker";
+import {
+  applyBackgroundTaskUpdate,
+  noteBackgroundTaskStarted,
+  setBackgroundTaskUpdateSink,
+} from "../../messages/utils/backgroundTaskStore";
 import { inferEngineFromLegacyThreadId } from "../contracts/engineRuntimeIdentity";
 
 const CLAUDE_STREAM_DEBUG_FLAG_KEY = "ccgui.debug.claude.stream";
@@ -72,17 +90,30 @@ const LIVE_DELTA_EXTERNALIZATION_ENABLED = isLiveDeltaExternalizationEnabled();
 const inferEngineFromThreadId = inferEngineFromLegacyThreadId;
 
 export function canProgressEventStartProcessing(
-  engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
+  engine:
+    | "claude"
+    | "codex"
+    | "gemini"
+    | "grok"
+    | "kimi"
+    | "opencode"
+    | "pi"
+    | "dsh"
+    | "qoder",
 ) {
   return engine !== "codex";
 }
 
 function isClaudeThread(threadId: string) {
-  return threadId.startsWith("claude:") || threadId.startsWith("claude-pending-");
+  return (
+    threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")
+  );
 }
 
 function isGeminiThread(threadId: string) {
-  return threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-");
+  return (
+    threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")
+  );
 }
 
 function isGrokThread(threadId: string) {
@@ -109,7 +140,14 @@ function readHighResolutionNowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-type ReasoningEngineHint = "gemini" | "grok" | "kimi" | "pi" | "dsh" | "qoder" | null;
+type ReasoningEngineHint =
+  | "gemini"
+  | "grok"
+  | "kimi"
+  | "pi"
+  | "dsh"
+  | "qoder"
+  | null;
 
 function isGeminiEventThread(
   threadId: string,
@@ -118,31 +156,19 @@ function isGeminiEventThread(
   return engineHint === "gemini" || isGeminiThread(threadId);
 }
 
-function isGrokEventThread(
-  threadId: string,
-  engineHint?: ReasoningEngineHint,
-) {
+function isGrokEventThread(threadId: string, engineHint?: ReasoningEngineHint) {
   return engineHint === "grok" || isGrokThread(threadId);
 }
 
-function isKimiEventThread(
-  threadId: string,
-  engineHint?: ReasoningEngineHint,
-) {
+function isKimiEventThread(threadId: string, engineHint?: ReasoningEngineHint) {
   return engineHint === "kimi" || isKimiThread(threadId);
 }
 
-function isDshEventThread(
-  threadId: string,
-  engineHint?: ReasoningEngineHint,
-) {
+function isDshEventThread(threadId: string, engineHint?: ReasoningEngineHint) {
   return engineHint === "dsh" || isDshThread(threadId);
 }
 
-function isPiEventThread(
-  threadId: string,
-  engineHint?: ReasoningEngineHint,
-) {
+function isPiEventThread(threadId: string, engineHint?: ReasoningEngineHint) {
   return engineHint === "pi" || isPiThread(threadId);
 }
 
@@ -156,8 +182,19 @@ function isQoderEventThread(
 function inferItemEngineSource(
   item: Record<string, unknown>,
   threadId: string,
-): "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder" {
-  const rawEngineSource = asString(item.engineSource ?? item.engine_source ?? "")
+):
+  | "claude"
+  | "codex"
+  | "gemini"
+  | "grok"
+  | "kimi"
+  | "opencode"
+  | "pi"
+  | "dsh"
+  | "qoder" {
+  const rawEngineSource = asString(
+    item.engineSource ?? item.engine_source ?? "",
+  )
     .trim()
     .toLowerCase();
   if (
@@ -181,7 +218,11 @@ function isInterruptedThread(
   workspaceId: string | null,
   threadId: string,
 ) {
-  return workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId);
+  return workspaceScopedHas(
+    interruptedThreadsRef.current,
+    workspaceId,
+    threadId,
+  );
 }
 
 function isClaudeStreamDebugEnabled() {
@@ -215,9 +256,7 @@ type UseThreadItemEventsOptions = {
   dispatch: Dispatch<ThreadAction>;
   resolveCanonicalThreadId?: (threadId: string) => string;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
-  resolveCollaborationUiMode?: (
-    threadId: string,
-  ) => "plan" | "code" | null;
+  resolveCollaborationUiMode?: (threadId: string) => "plan" | "code" | null;
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   safeMessageActivity: () => void;
@@ -290,6 +329,7 @@ type RealtimeDeltaOperation =
       itemId: string;
       delta: string;
       turnId?: string | null;
+      toolType?: "commandExecution" | "fileChange";
     };
 
 // 32ms (~30 flush/s)：12ms 时顶层 thread reducer 每秒最高 dispatch ~83 次，
@@ -314,7 +354,8 @@ function isCodexAssistantMessageItem(
 function shouldBatchNormalizedRealtimeEvent(event: NormalizedThreadEvent) {
   return (
     (isCodexAssistantMessageItem(event.item) &&
-      (event.operation === "itemStarted" || event.operation === "itemUpdated")) ||
+      (event.operation === "itemStarted" ||
+        event.operation === "itemUpdated")) ||
     event.operation === "appendReasoningContentDelta" ||
     event.operation === "appendReasoningSummaryDelta" ||
     event.operation === "appendToolOutputDelta"
@@ -345,7 +386,9 @@ function shouldDispatchNormalizedRealtimeEventUrgently(
   );
 }
 
-function buildPendingNormalizedRealtimeOperationKey(event: NormalizedThreadEvent) {
+function buildPendingNormalizedRealtimeOperationKey(
+  event: NormalizedThreadEvent,
+) {
   return `${event.threadId}\u0000${event.item.kind}\u0000${event.item.id}`;
 }
 
@@ -358,9 +401,10 @@ function normalizeTurnId(value: unknown) {
 }
 
 function extractTurnIdFromRawItem(item: Record<string, unknown>) {
-  const turn = item.turn && typeof item.turn === "object"
-    ? (item.turn as Record<string, unknown>)
-    : null;
+  const turn =
+    item.turn && typeof item.turn === "object"
+      ? (item.turn as Record<string, unknown>)
+      : null;
   return normalizeTurnId(
     item.turnId ??
       item.turn_id ??
@@ -371,7 +415,9 @@ function extractTurnIdFromRawItem(item: Record<string, unknown>) {
   );
 }
 
-function extractTurnIdFromNormalizedRealtimeEvent(event: NormalizedThreadEvent) {
+function extractTurnIdFromNormalizedRealtimeEvent(
+  event: NormalizedThreadEvent,
+) {
   const eventTurnId = normalizeTurnId(event.turnId);
   if (eventTurnId) {
     return eventTurnId;
@@ -403,13 +449,15 @@ export function useThreadItemEvents({
   const pendingRealtimeDeltaOpsRef = useRef<RealtimeDeltaOperation[]>([]);
   const realtimeFlushTimerRef = useRef<number | null>(null);
   const isFlushingRealtimeDeltaOpsRef = useRef(false);
-  const pendingNormalizedRealtimeOpsRef = useRef<Map<string, PendingNormalizedRealtimeOperation>>(
-    new Map(),
-  );
+  const pendingNormalizedRealtimeOpsRef = useRef<
+    Map<string, PendingNormalizedRealtimeOperation>
+  >(new Map());
   const normalizedRealtimeBatcherRef = useRef(createRealtimeEventBatcher());
   const normalizedRealtimeFlushTimerRef = useRef<number | null>(null);
   const isFlushingNormalizedRealtimeOpsRef = useRef(false);
-  const activeRealtimeTurnIdByThreadRef = useRef<Map<string, string>>(new Map());
+  const activeRealtimeTurnIdByThreadRef = useRef<Map<string, string>>(
+    new Map(),
+  );
   // 全局已终态 turnId 集合。按 turnId（回合的全局唯一身份）判定终态，
   // 使迟到事件无论落在主线程还是别名线程都能被识别为已结束，避免复燃。
   const terminalRealtimeTurnIdsRef = useRef<Set<string>>(new Set());
@@ -420,7 +468,10 @@ export function useThreadItemEvents({
   const droppedLateRealtimeEventCountRef = useRef(0);
 
   const normalizeToolIdentifier = useCallback((value: string) => {
-    return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
   }, []);
 
   const isClaudeExitPlanModeTool = useCallback(
@@ -476,7 +527,11 @@ export function useThreadItemEvents({
         reason?: string;
       },
     ) => {
-      if (!onDebug || !isClaudeThread(payload.threadId) || !isClaudeStreamDebugEnabled()) {
+      if (
+        !onDebug ||
+        !isClaudeThread(payload.threadId) ||
+        !isClaudeStreamDebugEnabled()
+      ) {
         return;
       }
       onDebug({
@@ -511,7 +566,8 @@ export function useThreadItemEvents({
       if (options.allowActiveTurnFallback === false) {
         return false;
       }
-      const activeTurnId = activeRealtimeTurnIdByThreadRef.current.get(threadId);
+      const activeTurnId =
+        activeRealtimeTurnIdByThreadRef.current.get(threadId);
       if (activeTurnId) {
         return terminalRealtimeTurnIdsRef.current.has(activeTurnId);
       }
@@ -522,64 +578,70 @@ export function useThreadItemEvents({
     [],
   );
 
-  const noteRealtimeTurnStarted = useCallback((threadId: string, turnId: string) => {
-    const normalizedTurnId = normalizeTurnId(turnId);
-    if (!threadId || !normalizedTurnId) {
-      return;
-    }
-    activeRealtimeTurnIdByThreadRef.current.set(threadId, normalizedTurnId);
-    // 新回合开始：解除该线程的「已结算」态，避免上一回合的结算态
-    // 误杀本回合的无 turnId 事件。
-    settledRealtimeThreadsRef.current.delete(threadId);
-  }, []);
+  const noteRealtimeTurnStarted = useCallback(
+    (threadId: string, turnId: string) => {
+      const normalizedTurnId = normalizeTurnId(turnId);
+      if (!threadId || !normalizedTurnId) {
+        return;
+      }
+      activeRealtimeTurnIdByThreadRef.current.set(threadId, normalizedTurnId);
+      // 新回合开始：解除该线程的「已结算」态，避免上一回合的结算态
+      // 误杀本回合的无 turnId 事件。
+      settledRealtimeThreadsRef.current.delete(threadId);
+    },
+    [],
+  );
 
-  const markRealtimeTurnTerminal = useCallback((threadId: string, turnId: string) => {
-    const normalizedTurnId = normalizeTurnId(turnId);
-    if (!threadId || !normalizedTurnId) {
-      return;
-    }
-    const terminalTurnIds = terminalRealtimeTurnIdsRef.current;
-    terminalTurnIds.delete(normalizedTurnId);
-    terminalTurnIds.add(normalizedTurnId);
-    while (terminalTurnIds.size > MAX_TERMINAL_TURN_IDS) {
-      const oldestTurnId = terminalTurnIds.values().next().value;
-      if (!oldestTurnId) {
-        break;
+  const markRealtimeTurnTerminal = useCallback(
+    (threadId: string, turnId: string) => {
+      const normalizedTurnId = normalizeTurnId(turnId);
+      if (!threadId || !normalizedTurnId) {
+        return;
       }
-      terminalTurnIds.delete(oldestTurnId);
-    }
-    // 该线程回合已结算：登记结算态并清掉活跃记录，使后续「无 turnId」
-    // 的迟到事件不再复燃它（配合 isRealtimeTurnTerminal 的无 id 分支）。
-    const settledThreads = settledRealtimeThreadsRef.current;
-    settledThreads.delete(threadId);
-    settledThreads.add(threadId);
-    while (settledThreads.size > MAX_TERMINAL_TURN_IDS) {
-      const oldestThreadId = settledThreads.values().next().value;
-      if (!oldestThreadId) {
-        break;
+      const terminalTurnIds = terminalRealtimeTurnIdsRef.current;
+      terminalTurnIds.delete(normalizedTurnId);
+      terminalTurnIds.add(normalizedTurnId);
+      while (terminalTurnIds.size > MAX_TERMINAL_TURN_IDS) {
+        const oldestTurnId = terminalTurnIds.values().next().value;
+        if (!oldestTurnId) {
+          break;
+        }
+        terminalTurnIds.delete(oldestTurnId);
       }
-      settledThreads.delete(oldestThreadId);
-    }
-    activeRealtimeTurnIdByThreadRef.current.delete(threadId);
-    // 诊断汇总：本回合期间被终态守卫拦下的迟到事件数（>0 表示确有
-    // 迟到事件试图复燃线程，这正是「结束后仍显示生成中」的根因）。
-    const droppedLateEvents = droppedLateRealtimeEventCountRef.current;
-    if (droppedLateEvents > 0) {
-      droppedLateRealtimeEventCountRef.current = 0;
-      onDebug?.({
-        id: `${Date.now()}-realtime-late-event-drop`,
-        timestamp: Date.now(),
-        source: "event",
-        label: "thread/session:realtime-late-event-drop",
-        payload: {
-          threadId,
-          turnId: normalizedTurnId,
-          droppedLateEvents,
-          activeThreadId,
-        },
-      });
-    }
-  }, [activeThreadId, onDebug]);
+      // 该线程回合已结算：登记结算态并清掉活跃记录，使后续「无 turnId」
+      // 的迟到事件不再复燃它（配合 isRealtimeTurnTerminal 的无 id 分支）。
+      const settledThreads = settledRealtimeThreadsRef.current;
+      settledThreads.delete(threadId);
+      settledThreads.add(threadId);
+      while (settledThreads.size > MAX_TERMINAL_TURN_IDS) {
+        const oldestThreadId = settledThreads.values().next().value;
+        if (!oldestThreadId) {
+          break;
+        }
+        settledThreads.delete(oldestThreadId);
+      }
+      activeRealtimeTurnIdByThreadRef.current.delete(threadId);
+      // 诊断汇总：本回合期间被终态守卫拦下的迟到事件数（>0 表示确有
+      // 迟到事件试图复燃线程，这正是「结束后仍显示生成中」的根因）。
+      const droppedLateEvents = droppedLateRealtimeEventCountRef.current;
+      if (droppedLateEvents > 0) {
+        droppedLateRealtimeEventCountRef.current = 0;
+        onDebug?.({
+          id: `${Date.now()}-realtime-late-event-drop`,
+          timestamp: Date.now(),
+          source: "event",
+          label: "thread/session:realtime-late-event-drop",
+          payload: {
+            threadId,
+            turnId: normalizedTurnId,
+            droppedLateEvents,
+            activeThreadId,
+          },
+        });
+      }
+    },
+    [activeThreadId, onDebug],
+  );
 
   const isRealtimeTurnTerminalExact = useCallback(
     (threadId: string, turnId?: string | null) =>
@@ -597,8 +659,15 @@ export function useThreadItemEvents({
         markedProcessingThreads?: Set<string>;
       },
     ) => {
-      const threadId = resolveCanonicalThreadId?.(operation.threadId) ?? operation.threadId;
-      if (isInterruptedThread(interruptedThreadsRef, operation.workspaceId, threadId)) {
+      const threadId =
+        resolveCanonicalThreadId?.(operation.threadId) ?? operation.threadId;
+      if (
+        isInterruptedThread(
+          interruptedThreadsRef,
+          operation.workspaceId,
+          threadId,
+        )
+      ) {
         return;
       }
       if (isRealtimeTurnTerminal(threadId, operation.turnId)) {
@@ -627,6 +696,7 @@ export function useThreadItemEvents({
           operation.itemId,
           lane,
           operation.delta,
+          operation.kind === "toolOutputDelta" ? operation.toolType : undefined,
         );
         if (!isFirst) {
           return;
@@ -672,7 +742,9 @@ export function useThreadItemEvents({
           threadId,
           itemId: operation.itemId,
           delta: operation.delta,
-          hasCustomName: Boolean(getCustomName(operation.workspaceId, threadId)),
+          hasCustomName: Boolean(
+            getCustomName(operation.workspaceId, threadId),
+          ),
         });
         const dispatchCostMs = readHighResolutionNowMs() - dispatchStartedAt;
         noteThreadReducerWorkMeasured(threadId, {
@@ -806,10 +878,7 @@ export function useThreadItemEvents({
   );
 
   const enqueueRealtimeDeltaOperation = useCallback(
-    (
-      operation: RealtimeDeltaOperation,
-      options: { urgent?: boolean } = {},
-    ) => {
+    (operation: RealtimeDeltaOperation, options: { urgent?: boolean } = {}) => {
       if (options.urgent) {
         // 首个 assistant shell 是结构性 lifecycle 事件。先提交已排队的前一段
         // tail，再同步建壳；其它 thread 的队列保持原 cadence。
@@ -867,11 +936,21 @@ export function useThreadItemEvents({
         return;
       }
       if (lane === "reasoningContent") {
-        dispatch({ type: "appendReasoningContent", threadId, itemId, delta: tail });
+        dispatch({
+          type: "appendReasoningContent",
+          threadId,
+          itemId,
+          delta: tail,
+        });
         return;
       }
       if (lane === "reasoningSummary") {
-        dispatch({ type: "appendReasoningSummary", threadId, itemId, delta: tail });
+        dispatch({
+          type: "appendReasoningSummary",
+          threadId,
+          itemId,
+          delta: tail,
+        });
         return;
       }
       dispatch({ type: "appendToolOutput", threadId, itemId, delta: tail });
@@ -918,7 +997,12 @@ export function useThreadItemEvents({
       }
       const drained = drainLiveItemDeltaTail(threadId);
       for (const entry of drained) {
-        dispatchLiveItemDeltaTail(threadId, entry.itemId, entry.lane, entry.text);
+        dispatchLiveItemDeltaTail(
+          threadId,
+          entry.itemId,
+          entry.lane,
+          entry.text,
+        );
       }
     },
     [dispatchLiveItemDeltaTail],
@@ -932,16 +1016,16 @@ export function useThreadItemEvents({
         ensuredThreads?: Set<string>;
         markedProcessingThreads?: Set<string>;
         useTransitionForDispatch?: boolean;
+        allowTerminalCompleteSalvage?: boolean;
       } = {},
     ) => {
-      const {
-        ensuredThreads,
-        markedProcessingThreads,
-      } = options;
-      const eventTurnId = extractTurnIdFromNormalizedRealtimeEvent(normalizedEvent);
+      const { ensuredThreads, markedProcessingThreads } = options;
+      const eventTurnId =
+        extractTurnIdFromNormalizedRealtimeEvent(normalizedEvent);
       const isEventTurnTerminal = () =>
         isRealtimeTurnTerminal(normalizedEvent.threadId, eventTurnId);
-      const shouldMarkProcessing = normalizedEvent.operation !== "itemCompleted";
+      const shouldMarkProcessing =
+        normalizedEvent.operation !== "itemCompleted";
       const markProcessingIfNeeded = () => {
         if (!shouldMarkProcessing) {
           return;
@@ -959,7 +1043,17 @@ export function useThreadItemEvents({
         markedProcessingThreads?.add(normalizedEvent.threadId);
       };
       const run = (runOptions: { skipProcessingMark?: boolean } = {}) => {
-        if (isEventTurnTerminal()) {
+        // fix-turn-terminal-live-text-commit-loss：terminal barrier 之后到达的
+        // 非空 assistant 终稿改为 salvage 落盘（reducer merge 取更长者），不再
+        // 静默丢全文。processing 复燃由 markProcessingIfNeeded 内部的
+        // isEventTurnTerminal 早退天然防住。
+        if (
+          isEventTurnTerminal() &&
+          !(
+            options.allowTerminalCompleteSalvage === true &&
+            isSalvageableTerminalAssistantComplete(normalizedEvent)
+          )
+        ) {
           droppedLateRealtimeEventCountRef.current += 1;
           return;
         }
@@ -1046,7 +1140,10 @@ export function useThreadItemEvents({
             normalizedEvent.workspaceId,
           );
         } else {
-          applyCollabThreadLinks(normalizedEvent.threadId, normalizedEvent.rawItem);
+          applyCollabThreadLinks(
+            normalizedEvent.threadId,
+            normalizedEvent.rawItem,
+          );
         }
       }
       if (
@@ -1083,19 +1180,30 @@ export function useThreadItemEvents({
         skipMessageActivity?: boolean;
       } = {},
     ) => {
+      // fix-turn-terminal-live-text-commit-loss：非空 assistant 终稿即使在
+      // terminal barrier 之后到达也要放行，由 dispatch 层按 salvage 同步合入，
+      // 避免 normalized 路由（codex/shared/agent-canvas）终稿被静默丢弃。
+      const allowTerminalCompleteSalvage =
+        isSalvageableTerminalAssistantComplete(operation.event);
       if (
         isRealtimeTurnTerminal(
           operation.event.threadId,
           extractTurnIdFromNormalizedRealtimeEvent(operation.event),
-        )
+        ) &&
+        !allowTerminalCompleteSalvage
       ) {
         return;
       }
-      dispatchNormalizedRealtimeEvent(operation.event, operation.hasCustomName, {
-        ensuredThreads: options.ensuredThreads,
-        markedProcessingThreads: options.markedProcessingThreads,
-        useTransitionForDispatch: options.useTransitionForDispatch,
-      });
+      dispatchNormalizedRealtimeEvent(
+        operation.event,
+        operation.hasCustomName,
+        {
+          ensuredThreads: options.ensuredThreads,
+          markedProcessingThreads: options.markedProcessingThreads,
+          useTransitionForDispatch: options.useTransitionForDispatch,
+          allowTerminalCompleteSalvage,
+        },
+      );
       runNormalizedRealtimeEventSideEffects(operation.event, {
         skipMessageActivity: options.skipMessageActivity,
       });
@@ -1122,7 +1230,9 @@ export function useThreadItemEvents({
     const flushStartedAt = readHighResolutionNowMs();
     let flushedOpCount = 0;
     try {
-      const bufferedOps = Array.from(pendingNormalizedRealtimeOpsRef.current.values());
+      const bufferedOps = Array.from(
+        pendingNormalizedRealtimeOpsRef.current.values(),
+      );
       pendingNormalizedRealtimeOpsRef.current.clear();
       flushedOpCount = bufferedOps.length;
       const ensuredThreads = new Set<string>();
@@ -1164,7 +1274,10 @@ export function useThreadItemEvents({
         // as one giant route operation.
         let batchStart = flushEndedAt;
         for (const event of flush.events) {
-          if (typeof event.timestampMs === "number" && event.timestampMs < batchStart) {
+          if (
+            typeof event.timestampMs === "number" &&
+            event.timestampMs < batchStart
+          ) {
             batchStart = event.timestampMs;
           }
         }
@@ -1221,7 +1334,8 @@ export function useThreadItemEvents({
       }
       if (
         isCodexAssistantMessageItem(operation.event.item) &&
-        (operation.event.operation === "itemStarted" || operation.event.operation === "itemUpdated")
+        (operation.event.operation === "itemStarted" ||
+          operation.event.operation === "itemUpdated")
       ) {
         pendingNormalizedRealtimeOpsRef.current.set(
           buildPendingNormalizedRealtimeOperationKey(operation.event),
@@ -1235,7 +1349,9 @@ export function useThreadItemEvents({
         }, NORMALIZED_REALTIME_BATCH_FLUSH_MS);
         return;
       }
-      const flushes = normalizedRealtimeBatcherRef.current.push(operation.event);
+      const flushes = normalizedRealtimeBatcherRef.current.push(
+        operation.event,
+      );
       if (flushes.some((flush) => flush.reason === "first-token")) {
         for (const flush of flushes) {
           for (const event of flush.events) {
@@ -1245,10 +1361,11 @@ export function useThreadItemEvents({
                 hasCustomName: operation.hasCustomName,
               },
               {
-                useTransitionForDispatch: !shouldDispatchNormalizedRealtimeEventUrgently(
-                  event,
-                  flush.reason,
-                ),
+                useTransitionForDispatch:
+                  !shouldDispatchNormalizedRealtimeEventUrgently(
+                    event,
+                    flush.reason,
+                  ),
               },
             );
           }
@@ -1276,7 +1393,10 @@ export function useThreadItemEvents({
   const flushNormalizedRealtimeOpsForThread = useCallback(
     (threadId: string) => {
       const matchingOperations: PendingNormalizedRealtimeOperation[] = [];
-      for (const [operationKey, operation] of pendingNormalizedRealtimeOpsRef.current) {
+      for (const [
+        operationKey,
+        operation,
+      ] of pendingNormalizedRealtimeOpsRef.current) {
         if (operation.event.threadId !== threadId) {
           continue;
         }
@@ -1348,8 +1468,40 @@ export function useThreadItemEvents({
   const flushPendingRealtimeEvents = useCallback(() => {
     flushRealtimeDeltaOps();
     flushNormalizedRealtimeOps();
-  }, [flushNormalizedRealtimeOps, flushRealtimeDeltaOps]);
-
+    // fix-turn-terminal-live-text-commit-loss：contract batcher 的积压 delta
+    // 也必须在 terminal barrier 建立前同步落 durable。此前只有 legacy 两条
+    // 队列被 flush，batcher 的 cadence flush（startTransition）在 barrier 之后
+    // 会被 isRealtimeTurnTerminal 静默丢弃，导致末段正文冻结在 first-token 壳。
+    const batcherFlush = normalizedRealtimeBatcherRef.current.flush("terminal");
+    if (batcherFlush && batcherFlush.events.length > 0) {
+      const ensuredThreads = new Set<string>();
+      const markedProcessingThreads = new Set<string>();
+      for (const event of batcherFlush.events) {
+        applyNormalizedRealtimeEventNow(
+          {
+            event,
+            // drain 时现算 custom-name（比 push 时闭包捕获更新鲜），
+            // 避免把错误线程的命名状态带进 auto-rename。
+            hasCustomName: Boolean(
+              getCustomName(event.workspaceId, event.threadId),
+            ),
+          },
+          {
+            ensuredThreads,
+            markedProcessingThreads,
+            useTransitionForDispatch: false,
+          },
+        );
+      }
+      safeMessageActivity();
+    }
+  }, [
+    applyNormalizedRealtimeEventNow,
+    flushNormalizedRealtimeOps,
+    flushRealtimeDeltaOps,
+    getCustomName,
+    safeMessageActivity,
+  ]);
 
   // \u00a76.3 / \u00a76.4: dispatch \u8c03\u5ea6\u4e0e\u4eea\u8868\u62ee\u53d6
   const submitScheduleInstrumentationRef = useRef({
@@ -1378,7 +1530,8 @@ export function useThreadItemEvents({
         isCritical,
       });
       const startedAt =
-        typeof performance !== "undefined" && typeof performance.now === "function"
+        typeof performance !== "undefined" &&
+        typeof performance.now === "function"
           ? performance.now()
           : Date.now();
       // §6.4: instrumentation \u5728 submit-mode \u9009\u5b9a\u540e\u7acb\u5373\u8bb0\u5f55,
@@ -1390,7 +1543,8 @@ export function useThreadItemEvents({
       else inst0.idleDispatchCount += 1;
       const finalize = () => {
         const endedAt =
-          typeof performance !== "undefined" && typeof performance.now === "function"
+          typeof performance !== "undefined" &&
+          typeof performance.now === "function"
             ? performance.now()
             : Date.now();
         inst0.totalDispatchCostMs += Math.max(0, endedAt - startedAt);
@@ -1409,12 +1563,14 @@ export function useThreadItemEvents({
       }
       // mode === "idle"
       if (
-        typeof (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback ===
-        "function"
+        typeof (globalThis as { requestIdleCallback?: unknown })
+          .requestIdleCallback === "function"
       ) {
-        (globalThis as unknown as {
-          requestIdleCallback: (cb: () => void) => void;
-        }).requestIdleCallback(() => {
+        (
+          globalThis as unknown as {
+            requestIdleCallback: (cb: () => void) => void;
+          }
+        ).requestIdleCallback(() => {
           finalize();
         });
         return;
@@ -1431,7 +1587,6 @@ export function useThreadItemEvents({
     () => submitScheduleInstrumentationRef.current,
     [],
   );
-
 
   const handleItemUpdate = useCallback(
     (
@@ -1454,12 +1609,22 @@ export function useThreadItemEvents({
       // \u4f4e\u4f18\u5148\u7ea7\u4f1a\u8bdd\uff08threadId !== activeThreadId\uff09+ guarded / aggressive \u8d70 transition / idle \u3002
       const isLiveRow = threadId === activeThreadId;
       dispatchWithSchedule(
-        { type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) },
+        {
+          type: "ensureThread",
+          workspaceId,
+          threadId,
+          engine: inferEngineFromThreadId(threadId),
+        },
         { isLiveRow, isCritical: false },
       );
       const itemType = asString(item?.type ?? "");
       const itemId = asString(item?.id ?? "");
       const itemEngineSource = inferItemEngineSource(item, threadId);
+      // PI 后台任务卡：登记 toolId→taskId 身份（幂等 merge），
+      // receipt / notification 更新按 taskId 关联到同一张卡。
+      if (itemType === "backgroundTask") {
+        noteBackgroundTaskStarted(workspaceId, threadId, item);
+      }
       const shouldSuppressGeminiReasoningProcessing =
         itemType === "reasoning" &&
         (itemEngineSource === "gemini" || itemEngineSource === "kimi");
@@ -1476,12 +1641,13 @@ export function useThreadItemEvents({
         applyCollabThreadLinks(threadId, item);
       }
       const agentMessageSnapshotText = asString(
-        item?.text ?? item?.content ?? item?.output_text ?? item?.outputText ?? "",
+        item?.text ??
+          item?.content ??
+          item?.output_text ??
+          item?.outputText ??
+          "",
       );
-      if (
-        itemType === "agentMessage" ||
-        itemType === "reasoning"
-      ) {
+      if (itemType === "agentMessage" || itemType === "reasoning") {
         logClaudeStream("item-snapshot", {
           workspaceId,
           threadId,
@@ -1512,6 +1678,7 @@ export function useThreadItemEvents({
         "generated_image",
         "image_generation_call",
         "image_generation_end",
+        "backgroundTask",
       ].includes(itemType);
       if (shouldMarkProcessing && shouldIncrementAgentSegment && isToolItem) {
         // A4 live-text 外部化：本段正文只有建壳首段落进了 reducer，其余都停在通道里。
@@ -1642,14 +1809,26 @@ export function useThreadItemEvents({
           itemEngineSource === "codex"
             ? {
                 ...converted,
-                engineSource: itemEngineSource as "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder",
+                engineSource: itemEngineSource as
+                  | "claude"
+                  | "codex"
+                  | "gemini"
+                  | "grok"
+                  | "kimi"
+                  | "opencode"
+                  | "pi"
+                  | "dsh"
+                  | "qoder",
               }
             : converted;
         const threadEngine = inferEngineFromThreadId(threadId);
         // Claude reasoning should converge to the persisted history shape.
         // Accept snapshot items so final/live state can be enriched by the
         // server snapshot instead of staying delta-only.
-        if (threadEngine === "claude" && normalizedConverted.kind === "reasoning") {
+        if (
+          threadEngine === "claude" &&
+          normalizedConverted.kind === "reasoning"
+        ) {
           logReasoningRoute("reasoning-snapshot-accepted", {
             workspaceId,
             threadId,
@@ -1662,7 +1841,9 @@ export function useThreadItemEvents({
             threadId,
             itemId: normalizedConverted.id,
             itemType,
-            deltaLength: `${normalizedConverted.summary}${normalizedConverted.content}`.length,
+            deltaLength:
+              `${normalizedConverted.summary}${normalizedConverted.content}`
+                .length,
             textPreview: createDebugPreview(
               normalizedConverted.content || normalizedConverted.summary || "",
             ),
@@ -1674,7 +1855,8 @@ export function useThreadItemEvents({
           !normalizedConverted.collaborationMode
             ? {
                 ...normalizedConverted,
-                collaborationMode: resolveCollaborationUiMode?.(threadId) ?? null,
+                collaborationMode:
+                  resolveCollaborationUiMode?.(threadId) ?? null,
               }
             : normalizedConverted;
         dispatch({
@@ -1749,11 +1931,7 @@ export function useThreadItemEvents({
           // Re-decompose the key into the original tuple. The gate is
           // append-only, so we forward the merged text as a single delta.
           // The reducer is idempotent for repeated text appends.
-          const [workspaceId, itemId] = key.split("\0") as [
-            string,
-            string,
-            string,
-          ];
+          const [workspaceId, itemId, kindToken] = key.split("\0");
           const metadata = toolOutputMetadataRef.current.get(key);
           const threadId = metadata?.threadId ?? "";
           if (!workspaceId || !threadId || !itemId) return;
@@ -1764,6 +1942,8 @@ export function useThreadItemEvents({
             itemId,
             delta: fullText,
             turnId: metadata?.turnId ?? null,
+            toolType:
+              kindToken === "fileChange" ? "fileChange" : "commandExecution",
           });
         },
       }),
@@ -1930,11 +2110,7 @@ export function useThreadItemEvents({
         textPreview: createDebugPreview(resolvedDelta),
       });
     },
-    [
-      enqueueRealtimeDeltaOperation,
-      interruptedThreadsRef,
-      logClaudeStream,
-    ],
+    [enqueueRealtimeDeltaOperation, interruptedThreadsRef, logClaudeStream],
   );
 
   const onAgentMessageCompleted = useCallback(
@@ -2020,7 +2196,12 @@ export function useThreadItemEvents({
       }
       const timestamp = Date.now();
       // \u00a76.2: \u4fdd\u8bc1\u4e0a\u4e0b\u6587\u5148 ensureThread (\u539f\u987a\u5e8f)
-      dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
+      dispatch({
+        type: "ensureThread",
+        workspaceId,
+        threadId,
+        engine: inferEngineFromThreadId(threadId),
+      });
       const hasCustomName = Boolean(getCustomName(workspaceId, threadId));
       // \u00a76.2: \u4e00\u6b21\u6027\u5408\u5e76 completeAgentMessage + setThreadTimestamp +
       // setLastAgentMessage + (\u6761\u4ef6) markUnread\uff0c\u51cf\u5c11 reducer \u8c03\u5ea6\u6b21\u6570\u3002
@@ -2095,6 +2276,37 @@ export function useThreadItemEvents({
     [flushToolOutputForItem, handleItemUpdate],
   );
 
+  // 1.4 PI 后台任务状态更新（receipt 快照 / 终态通知）：会话级状态表合并后，
+  // 合成 backgroundTask item 走与 item/updated 相同的 upsert 路径（含 reducer
+  // mergeToolItemPreservingSnapshot 语义：title/detail 缺省时保留建卡值）。
+  const onBackgroundTaskUpdated = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      payload: {
+        toolId: string | null;
+        task: Record<string, unknown>;
+        source: string;
+      },
+    ) => {
+      const result = applyBackgroundTaskUpdate(workspaceId, threadId, payload);
+      if (!result) {
+        return;
+      }
+      handleItemUpdate(workspaceId, threadId, result.item, true, false);
+    },
+    [handleItemUpdate],
+  );
+
+  // P2 registry watcher sink：与 onBackgroundTaskUpdated 同构（store 合并 +
+  // reducer upsert），保证 registry 兜底路径下 timeline 卡片与 pill 同步翻终态。
+  useEffect(() => {
+    setBackgroundTaskUpdateSink(onBackgroundTaskUpdated);
+    return () => {
+      setBackgroundTaskUpdateSink(null);
+    };
+  }, [onBackgroundTaskUpdated]);
+
   const onReasoningSummaryDelta = useCallback(
     (
       workspaceId: string,
@@ -2110,7 +2322,9 @@ export function useThreadItemEvents({
         itemId,
         deltaLength: delta.length,
       });
-      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
+      if (
+        workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)
+      ) {
         logClaudeStream("reasoning-summary-delta-skipped", {
           workspaceId,
           threadId,
@@ -2139,7 +2353,12 @@ export function useThreadItemEvents({
         textPreview: createDebugPreview(delta),
       });
     },
-    [enqueueRealtimeDeltaOperation, interruptedThreadsRef, logClaudeStream, logReasoningRoute],
+    [
+      enqueueRealtimeDeltaOperation,
+      interruptedThreadsRef,
+      logClaudeStream,
+      logReasoningRoute,
+    ],
   );
 
   const onReasoningSummaryBoundary = useCallback(
@@ -2155,7 +2374,9 @@ export function useThreadItemEvents({
         threadId,
         itemId,
       });
-      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
+      if (
+        workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)
+      ) {
         logClaudeStream("reasoning-summary-boundary-skipped", {
           workspaceId,
           threadId,
@@ -2179,7 +2400,12 @@ export function useThreadItemEvents({
         itemId,
       });
     },
-    [enqueueRealtimeDeltaOperation, interruptedThreadsRef, logClaudeStream, logReasoningRoute],
+    [
+      enqueueRealtimeDeltaOperation,
+      interruptedThreadsRef,
+      logClaudeStream,
+      logReasoningRoute,
+    ],
   );
 
   const onReasoningTextDelta = useCallback(
@@ -2197,7 +2423,9 @@ export function useThreadItemEvents({
         itemId,
         deltaLength: delta.length,
       });
-      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
+      if (
+        workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)
+      ) {
         logClaudeStream("reasoning-text-delta-skipped", {
           workspaceId,
           threadId,
@@ -2226,7 +2454,12 @@ export function useThreadItemEvents({
         textPreview: createDebugPreview(delta),
       });
     },
-    [enqueueRealtimeDeltaOperation, interruptedThreadsRef, logClaudeStream, logReasoningRoute],
+    [
+      enqueueRealtimeDeltaOperation,
+      interruptedThreadsRef,
+      logClaudeStream,
+      logReasoningRoute,
+    ],
   );
 
   const onCommandOutputDelta = useCallback(
@@ -2311,14 +2544,16 @@ export function useThreadItemEvents({
       } satisfies PendingNormalizedRealtimeOperation;
       if (
         shouldBatchNormalizedRealtimeEvent(normalizedEvent) ||
-        (enableRealtimeBatchingRef.current && shouldUseContractRealtimeBatcher(normalizedEvent))
+        (enableRealtimeBatchingRef.current &&
+          shouldUseContractRealtimeBatcher(normalizedEvent))
       ) {
         enqueueNormalizedRealtimeEvent(operation);
         return;
       }
       flushNormalizedRealtimeOps();
       applyNormalizedRealtimeEventNow(operation, {
-        useTransitionForDispatch: normalizedEvent.operation !== "completeAgentMessage",
+        useTransitionForDispatch:
+          normalizedEvent.operation !== "completeAgentMessage",
       });
     },
     [
@@ -2337,6 +2572,7 @@ export function useThreadItemEvents({
     onItemStarted,
     onItemUpdated,
     onItemCompleted,
+    onBackgroundTaskUpdated,
     onNormalizedRealtimeEvent,
     onReasoningSummaryDelta,
     onReasoningSummaryBoundary,

@@ -111,8 +111,7 @@ pub fn path_is_within_root(candidate: &Path, root: &Path) -> bool {
         let root_s = root.to_string_lossy().to_ascii_lowercase();
         let candidate_n = candidate_s.replace('/', "\\");
         let root_n = root_s.replace('/', "\\");
-        candidate_n == root_n
-            || candidate_n.starts_with(&format!("{root_n}\\"))
+        candidate_n == root_n || candidate_n.starts_with(&format!("{root_n}\\"))
     }
     #[cfg(all(not(target_os = "macos"), not(windows)))]
     {
@@ -122,7 +121,9 @@ pub fn path_is_within_root(candidate: &Path, root: &Path) -> bool {
 
 /// True when candidate is inside any of the allowlist roots.
 pub fn path_is_within_any_root(candidate: &Path, roots: &[PathBuf]) -> bool {
-    roots.iter().any(|root| path_is_within_root(candidate, root))
+    roots
+        .iter()
+        .any(|root| path_is_within_root(candidate, root))
 }
 
 /// Sensitive roots that must not be granted whole without narrowing.
@@ -185,11 +186,16 @@ pub fn extract_absolute_path_from_text(text: &str) -> Option<String> {
     // Windows: C:\... or C:/...
     for token in text.split_whitespace() {
         let cleaned = token.trim_matches(|c: char| {
-            matches!(c, '"' | '\'' | '`' | ',' | ';' | ')' | '(' | '[' | ']' | '{' | '}')
+            matches!(
+                c,
+                '"' | '\'' | '`' | ',' | ';' | ')' | '(' | '[' | ']' | '{' | '}'
+            )
         });
         if cleaned.len() >= 3 {
             let bytes = cleaned.as_bytes();
-            if bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/')
+            if bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && (bytes[2] == b'\\' || bytes[2] == b'/')
             {
                 return Some(cleaned.to_string());
             }
@@ -227,20 +233,13 @@ mod tests {
     #[test]
     fn extract_unix_path_from_text() {
         let found = extract_absolute_path_from_text("read /Users/me/.claude/CLAUDE.md please");
-        assert_eq!(
-            found.as_deref(),
-            Some("/Users/me/.claude/CLAUDE.md")
-        );
+        assert_eq!(found.as_deref(), Some("/Users/me/.claude/CLAUDE.md"));
     }
 
     #[test]
     fn extract_windows_path_from_text() {
-        let found =
-            extract_absolute_path_from_text(r"read C:\Users\me\.claude\CLAUDE.md please");
-        assert_eq!(
-            found.as_deref(),
-            Some(r"C:\Users\me\.claude\CLAUDE.md")
-        );
+        let found = extract_absolute_path_from_text(r"read C:\Users\me\.claude\CLAUDE.md please");
+        assert_eq!(found.as_deref(), Some(r"C:\Users\me\.claude\CLAUDE.md"));
     }
 
     #[test]

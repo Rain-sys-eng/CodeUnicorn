@@ -288,8 +288,7 @@ impl WorkspaceSession {
                     exit_code,
                     exit_signal.as_deref(),
                     self.shutdown_source()
-                        .map(RuntimeShutdownSource::as_str)
-                        .as_deref(),
+                        .map(RuntimeShutdownSource::as_str),
                     Some(self.runtime_generation().as_str()),
                     self.process_id,
                     Some(self.started_at_ms),

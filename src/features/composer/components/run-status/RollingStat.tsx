@@ -1,14 +1,17 @@
 /**
- * pill 上的 +N / -N 数字滚动：基于 @number-flow/react 的 odometer 位滚动。
+ * pill 上的 +N / -N 数字滚动：自实现 odometer（逐位 0-9 滚动条 + translateY）。
+ *
+ * 历史：此前基于 @number-flow/react，其 shadow DOM 依赖 CSS mask /
+ * mix-blend-mode: plus-lighter / will-change / mod() 等重型特性，在
+ * Windows WebView2 上符号与首位数字长期重叠错位（Mac 正常，本地不可复现），
+ * 故替换为纯 CSS transition 实现——无 mask、无 blend-mode、无 will-change。
  *
  * 注意：
- * - NumberFlow 仅在 **已挂载后 value 变化** 时动画；首次挂载直接显示终值不会滚。
- * - 因此 mount / 目标变化时：先落到上一次可见值（首挂为 0），再在 layout 后切到目标。
- * - respectMotionPreference：系统「减少动态效果」时 NumberFlow 内部会跳过动画。
- * - 需要浏览器支持 CSS mod() / linear() / @property（现代 Chromium / WKWebView 一般可用）。
+ * - 每位数字列挂载或 digit 变化时，经一帧 RAF 切到目标位，由 CSS transition 完成滚动。
+ * - 首挂 displayValue 为 0，经双 RAF 切到目标 value，形成「从 0 起滚」。
+ * - prefers-reduced-motion 时 transition 关闭，直接跳变（CSS 侧处理）。
  */
 import { memo, useEffect, useRef, useState } from "react";
-import NumberFlow, { continuous } from "@number-flow/react";
 
 /** 略放慢，方便肉眼观察位滚动 */
 const DEFAULT_DURATION_MS = 900;
@@ -18,11 +21,47 @@ export type RollingStatProps = {
   /** 前缀，如 "+" / "-" */
   prefix?: string;
   className?: string;
-  /** 滚动时长（ms），映射到 NumberFlow spin/transform timing */
+  /** 滚动时长（ms），映射到 strip 的 transition-duration */
   durationMs?: number;
   /** 测试与 a11y：固定最终语义值 */
   "data-testid"?: string;
 };
+
+/** 单个数字位：0-9 纵向滚动条，translateY(-N em) 选中当前位 */
+function DigitColumn({
+  digit,
+  durationMs,
+}: {
+  digit: number;
+  durationMs: number;
+}) {
+  // 首挂从 0 起滚；digit 变化时从当前位滚到目标位
+  const [shown, setShown] = useState(0);
+
+  useEffect(() => {
+    if (shown === digit) return;
+    const id = window.requestAnimationFrame(() => setShown(digit));
+    return () => window.cancelAnimationFrame(id);
+  }, [digit, shown]);
+
+  return (
+    <span className="crs-rolling-digit" aria-hidden>
+      <span
+        className="crs-rolling-strip"
+        style={{
+          transform: `translateY(-${shown}em)`,
+          transitionDuration: `${Math.max(0, durationMs)}ms`,
+        }}
+      >
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+          <span key={d} className="crs-rolling-strip-cell">
+            {d}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
 
 export const RollingStat = memo(function RollingStat({
   value,
@@ -31,6 +70,7 @@ export const RollingStat = memo(function RollingStat({
   durationMs = DEFAULT_DURATION_MS,
   "data-testid": testId,
 }: RollingStatProps) {
+  const target = Math.max(0, Math.round(value));
   // 首挂非 0 时从 0 起滚；后续更新从当前 display 滚到新 value
   const [displayValue, setDisplayValue] = useState(0);
   const mountedRef = useRef(false);
@@ -40,16 +80,16 @@ export const RollingStat = memo(function RollingStat({
     let outer = 0;
     let inner = 0;
 
-    // 首挂：先确保 0 已 paint，再设目标（触发 NumberFlow 更新动画）
+    // 首挂：先确保 0 已 paint，再设目标（触发滚动动画）
     // 后续：直接在下一帧设目标（display 已是旧值）
     const apply = () => {
       if (!cancelled) {
-        setDisplayValue(value);
+        setDisplayValue(target);
         mountedRef.current = true;
       }
     };
 
-    if (!mountedRef.current && value === 0) {
+    if (!mountedRef.current && target === 0) {
       apply();
       return;
     }
@@ -62,44 +102,34 @@ export const RollingStat = memo(function RollingStat({
       window.cancelAnimationFrame(outer);
       window.cancelAnimationFrame(inner);
     };
-  }, [value]);
+  }, [target]);
 
-  const timing = {
-    duration: Math.max(0, durationMs),
-    easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-  } as const;
+  const digits = String(displayValue).split("").map(Number);
 
   return (
     <span
       className={className}
       data-testid={testId}
-      data-value={value}
+      data-value={target}
       data-display-value={displayValue}
-      aria-label={`${prefix}${value}`}
+      role="img"
+      aria-label={`${prefix}${target}`}
     >
-      <NumberFlow
-        value={displayValue}
-        prefix={prefix}
-        plugins={[continuous]}
-        format={{ useGrouping: false, maximumFractionDigits: 0 }}
-        transformTiming={timing}
-        spinTiming={timing}
-        opacityTiming={{
-          duration: Math.min(400, durationMs),
-          easing: "ease-out",
-        }}
-        respectMotionPreference
-        isolate
-        willChange
-        className="composer-run-status-rolling-stat"
-        style={{
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 0.85,
-          // 默认量级；过小会把位滚动裁成「瞬间跳变」
-          ["--number-flow-mask-height" as string]: "0.25em",
-          ["--number-flow-mask-width" as string]: "0.35em",
-        }}
-      />
+      <span className="crs-rolling">
+        {prefix ? (
+          <span className="crs-rolling-prefix" aria-hidden>
+            {prefix}
+          </span>
+        ) : null}
+        {digits.map((d, i) => (
+          // key 用「从右往左的位序」，位数增长时新列挂左侧、已有列保持滚动状态
+          <DigitColumn
+            key={digits.length - 1 - i}
+            digit={d}
+            durationMs={durationMs}
+          />
+        ))}
+      </span>
     </span>
   );
 });

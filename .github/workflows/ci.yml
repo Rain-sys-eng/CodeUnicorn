@@ -124,6 +124,10 @@ jobs:
         run: npm run check:realtime-event-batching
       - name: Bundle chunking
         run: npm run check:bundle-chunking
+      - name: Large-file growth gate
+        # 止血 gate：baseline 内文件增长超 growthAllowanceLines(50) 即红。
+        # 此前 gate 只挂每周 cron（large-file-governance.yml），主链无拦截。
+        run: npm run check:large-files:gate
       - name: Typecheck
         run: npm run typecheck
   test-js:

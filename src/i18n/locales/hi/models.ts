@@ -21,6 +21,8 @@ const models = {
     "emptyChannelModelsHint": "नीचे «मॉडल जोड़ें» पर क्लिक करके कस्टम मॉडल जोड़ें",
     "emptyDshHostHint": "DeepSeek Harness में मॉडल कॉन्फ़िगर करें। सेटिंग्स खोलने के लिए यहाँ क्लिक करें।",
     "refreshConfigFailed": "रीफ़्रेश विफल: {{message}}",
+    "searchModelsPlaceholder": "मॉडल खोजें…",
+    "noMatchingModels": "कोई मेल खाता मॉडल नहीं",
         "claude": {
       "fable5": {
         "label": "Fable 5",

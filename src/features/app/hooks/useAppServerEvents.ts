@@ -226,6 +226,20 @@ export type AppServerEventHandlers = {
     threadId: string,
     item: Record<string, unknown>,
   ) => void;
+  /**
+   * PI 后台任务状态更新（pi-background-tasks 扩展）：receipt 快照（启动）与
+   * `<background-task-notification>` 终态唤醒。task 为 canonical 快照；
+   * notification 路径 toolId 为 null，按 task.id 关联。
+   */
+  onBackgroundTaskUpdated?: (
+    workspaceId: string,
+    threadId: string,
+    payload: {
+      toolId: string | null;
+      task: Record<string, unknown>;
+      source: string;
+    },
+  ) => void;
   onReasoningSummaryDelta?: (
     workspaceId: string,
     threadId: string,
@@ -800,7 +814,18 @@ function resolveLegacyModelContextWindow(
   if (parsed !== null && parsed > 0) {
     return parsed;
   }
-  return isClaudeThreadId(threadId) ? null : 200000;
+  // Claude/Codex（含 codex-pending）不伪造 200K 默认窗口：三方 provider 的真实
+  // 窗口未知（128K~1M 都有可能），伪造值只会产生误导百分比；window 未上报时
+  // 透传 null，context 指示器按「未上报」降级
+  // （fix-codex-third-party-provider-model-catalog）。其他引擎维持原行为。
+  if (
+    isClaudeThreadId(threadId) ||
+    threadId.startsWith("codex:") ||
+    threadId.startsWith("codex-pending-")
+  ) {
+    return null;
+  }
+  return 200000;
 }
 
 function isGeminiThreadId(threadId: string): boolean {
@@ -3352,6 +3377,27 @@ export function dispatchAppServerEvent(
         );
       }
       handlers.onItemUpdated?.(workspace_id, threadId, contextualItem);
+    }
+    return;
+  }
+
+  if (method === "item/backgroundTask/updated") {
+    const params = message.params as Record<string, unknown>;
+    const rawItemThreadId = extractThreadIdFromParams(params);
+    const itemBridge = rawItemThreadId
+      ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
+      : null;
+    const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
+    const task =
+      params.task && typeof params.task === "object"
+        ? (params.task as Record<string, unknown>)
+        : null;
+    if (threadId && task) {
+      handlers.onBackgroundTaskUpdated?.(workspace_id, threadId, {
+        toolId: typeof params.toolId === "string" ? params.toolId : null,
+        task,
+        source: asString(params.source ?? ""),
+      });
     }
     return;
   }

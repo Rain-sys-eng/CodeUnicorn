@@ -44,7 +44,7 @@
 ### 4. Validation & Error Matrix
 
 | 场景 | 必须行为 | 禁止行为 |
-|---|---|---|
+| --- | --- | --- |
 | 新建会话无 `providerProfileId` | 创建 disk profile thread 并记录 disk binding | 猜测最近使用的 managed provider |
 | 新建 managed provider 会话 | materialize provider home，启动 provider-scoped runtime，记录 managed binding | 写入全局 `~/.codex` 或复用 disk runtime |
 | provider 缺失/删除后继续发送 | 返回 provider not found / unavailable 类错误 | 静默按 `__disk__` 发送 |
@@ -159,7 +159,7 @@ if is_thread_not_found_error_message(&error) {
 ### 4. Validation & Error Matrix
 
 | State / path | Required behavior | Forbidden behavior |
-|---|---|---|
+| --- | --- | --- |
 | two enabled | 列出两个 ids 与两个 `<skill>` bodies | 丢失其中一个 body |
 | one disabled, one enabled | snapshot 只列仍启用 id；声明未列出的旧 bundled skill inactive | 继续携带 disabled body |
 | all disabled | `Enabled: none.`；无 `<skill>` body | 返回 `None` / 省略整个 curated state |
@@ -218,7 +218,7 @@ Some(format!(
 `staleRecoveryClassification` 是 UI/runtime recovery 的诊断 payload，不是 backend 私有 error type。字段进入 debug event、runtime notice 或用户恢复卡前必须保持稳定语义。
 
 | Field | Accepted values | Trigger / Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `reasonCode` | `malformed-thread-id` | 当前 thread id 无法作为 provider thread/session id 使用，例如 review/command 路径传入非法 id；只允许 disposable first-turn draft 走 fresh continuation。 |
 | `reasonCode` | `missing-thread-binding` | frontend/local state 有当前用户意图，但没有可验证 provider binding 或 backend/session catalog 找不到对应 binding；可先尝试 verified rebind，first-turn empty draft 可 fresh continuation。 |
 | `reasonCode` | `stale-thread-binding` | thread/session id 曾经有效，但 provider runtime 返回 `thread not found` / `session not found`；durable conversation 必须先 rebind/fork，不能 silent replacement。 |
@@ -234,7 +234,7 @@ Existing runtime reconnect diagnostics may still use legacy values such as `brok
 ### 3. Recovery Failure Playbook
 
 | Failure class | Required evidence | Preferred action | Hard stop |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Disposable first-turn draft missing | accepted-turn fact is `empty-draft`, no durable items, local optimistic user intent exists | `fresh-continuation` before fork fallback | Do not show a manual stale-thread card for an empty draft if fresh continuation succeeds. |
 | Same-id rebind after missing thread | refresh/rebind returns the same `threadId` that just failed | Treat as unverified; continue to `fresh-continuation` or explicit failure | Do not retry the same missing id and call it recovered. |
 | Durable stale conversation | accepted turn exists, assistant output exists, persisted session/history exists, or durable activity is unknown | `rebind-and-retry`; if impossible, `fork-and-retry` or visible recovery card | Do not silently create a fresh thread that hides prior durable history. |
@@ -273,7 +273,7 @@ type ProviderRecoveryAttemptDeps = {
 Provider-specific substitutions:
 
 | Provider | Classifier source | Fresh start API | Fork API | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `GEMINI` | Gemini CLI session missing / session JSON not found / process restart evidence | `startThreadForMessageSend(workspace, "gemini")` or provider-specific session starter | `forkGeminiSession` equivalent only after history anchor exists | Do not infer measured recovery unless Gemini source artifact proves session id replacement. |
 | `CLAUDE` | Claude Code JSONL missing / `claude-pending-*` draft missing / history loader cannot hydrate id | `startThreadForMessageSend(workspace, "claude")` or Claude session starter | `forkClaudeSessionFromMessage` when message anchor exists | Respect `CLAUDE_HOME` / configured Claude home from `claude-context-usage-contract.md`; do not mix histories across homes. |
 
@@ -287,7 +287,7 @@ Template constraints:
 ### 5. Validation & Error Matrix
 
 | Scenario | Required behavior | Forbidden behavior |
-|---|---|---|
+| --- | --- | --- |
 | malformed first-turn draft id | classify `malformed-thread-id`, then fresh continuation if optimistic intent exists | fork or retry the malformed id |
 | missing binding for empty draft | classify `missing-thread-binding`, create fresh thread once, move optimistic intent, retry | create multiple fresh threads for one send attempt |
 | durable stale thread | classify `stale-thread-binding`, attempt rebind/fork or show visible recovery | silent fresh replacement |
@@ -300,3 +300,11 @@ Template constraints:
 - Classifier tests for `staleRecoveryClassification`: `malformed-thread-id`, `missing-thread-binding`, `stale-thread-binding`, and unrelated errors.
 - Provider template implementations MUST add provider-focused tests before enabling runtime behavior.
 - Contract validation after behavior changes: `npm run check:runtime-contracts`, focused Vitest hook tests, and relevant OpenSpec strict validate.
+
+### GUI-launched provider environment resolution
+
+- Before spawning the Codex app-server, the macOS desktop path MUST inspect the effective `CODEX_HOME/config.toml` and collect only valid `model_providers.*.env_key` names.
+- Existing non-empty process environment values MUST win. Missing values MUST be resolved in a single allowlisted login/interactive shell invocation bounded by one timeout (no per-key spawns); shell command text MUST be fixed and variable names MUST be passed as positional arguments.
+- The shell allowlist accepts any absolute `zsh`/`bash` path (basename decides); unsupported shells fail soft, and the resolver is a Windows no-op by design.
+- Framed stdout parsing MUST tolerate shell startup noise and MUST scope frame markers per key so prefix-colliding names stay unambiguous. Resolved secrets MUST be injected into the Codex child process only; they MUST NOT be written to config, logged, or returned to the renderer.
+- A missing config, invalid TOML, unsupported shell, timeout, or empty value MUST fail soft and preserve the normal launch path.

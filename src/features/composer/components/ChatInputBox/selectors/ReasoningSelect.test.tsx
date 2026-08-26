@@ -73,6 +73,40 @@ describe('ReasoningSelect', () => {
     expect(screen.queryByText('Max')).toBeNull();
   });
 
+  it('does not leak PI minimal into menus that omit options', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(
+      <ReasoningSelect
+        value="low"
+        onChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Low' }));
+    expect(document.body.querySelector('[data-reasoning-id="minimal"]')).toBeNull();
+    expect(document.body.querySelector('[data-reasoning-id="low"]')).toBeTruthy();
+    expect(document.body.querySelector('[data-reasoning-id="high"]')).toBeTruthy();
+  });
+
+  it('renders and selects the PI minimal effort', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onChange = vi.fn();
+    render(
+      <ReasoningSelect
+        value="low"
+        onChange={onChange}
+        options={['off', 'minimal', 'low', 'medium', 'high']}
+        showDefaultOption
+        defaultLabel="Default"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Low' }));
+    await user.click(await screen.findByText('Minimal'));
+
+    expect(onChange).toHaveBeenCalledWith('minimal');
+  });
+
   it('renders and selects the DSH off effort', async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();

@@ -1,7 +1,9 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::time::timeout;
 
 use super::store::{
@@ -24,9 +26,7 @@ use crate::engine::gemini_history::list_gemini_sessions;
 use crate::engine::grok_history::list_grok_sessions;
 use crate::engine::opencode_session_list_core;
 use crate::engine::pi_history::list_pi_sessions;
-use crate::engine::qoder_history::{
-    list_qoder_sessions_for_launch_profile, QoderSessionSummary,
-};
+use crate::engine::qoder_history::{list_qoder_sessions_for_launch_profile, QoderSessionSummary};
 use crate::engine::qoder_provider_profile::{
     resolve_qoder_provider_launch_profile, QoderDistributionSettings, QoderProviderLaunchProfile,
     QODER_CN_PROVIDER_PROFILE_ID, QODER_GLOBAL_PROVIDER_PROFILE_ID,
@@ -34,7 +34,7 @@ use crate::engine::qoder_provider_profile::{
 use crate::local_usage::resolve_sessions_roots;
 use crate::state::AppState;
 
-const DEFAULT_SIDEBAR_INDEX_LIMIT: usize = 12;
+const DEFAULT_SIDEBAR_INDEX_LIMIT: usize = 5;
 const ASYNC_ENGINE_LIST_TIMEOUT: Duration = Duration::from_secs(3);
 const OPENCODE_INDEX_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -81,16 +81,18 @@ async fn list_qoder_index_sessions(
             Ok(Ok(mut distribution_sessions)) => sessions.append(&mut distribution_sessions),
             Ok(Err(error)) => {
                 let message = error.to_ascii_lowercase();
-                failure = Some(if message.contains("not found")
-                    || message.contains("not installed")
-                    || message.contains("no such file")
-                    || message.contains("timed out")
-                    || message.contains("timeout")
-                {
-                    "qoder-unavailable".to_string()
-                } else {
-                    format!("qoder-sync-error:{}", truncate_error(&error))
-                });
+                failure = Some(
+                    if message.contains("not found")
+                        || message.contains("not installed")
+                        || message.contains("no such file")
+                        || message.contains("timed out")
+                        || message.contains("timeout")
+                    {
+                        "qoder-unavailable".to_string()
+                    } else {
+                        format!("qoder-sync-error:{}", truncate_error(&error))
+                    },
+                );
             }
             Err(_) => failure = Some("qoder-sync-timeout".to_string()),
         }
@@ -483,8 +485,12 @@ async fn sync_qoder_engine(
         let settings = state.engine_manager.qoder_distribution_settings().await;
         match resolve_qoder_index_profiles(&workspace_path, &settings) {
             Ok(profiles) => {
-                let (sessions, partial) = list_qoder_index_sessions(&workspace_path, limit, profiles).await;
-                (rows_from_qoder_summaries(&workspace_path, &sessions), partial)
+                let (sessions, partial) =
+                    list_qoder_index_sessions(&workspace_path, limit, profiles).await;
+                (
+                    rows_from_qoder_summaries(&workspace_path, &sessions),
+                    partial,
+                )
             }
             Err(error) => (
                 Vec::new(),
@@ -579,6 +585,20 @@ async fn sync_opencode_engine(
         }
         Err(_) => (Vec::new(), Some("opencode-sync-timeout".into())),
     };
+
+    // 引擎隔离边界：CLI 失败（timeout / unavailable / error）时不 commit，
+    // 让 opencode 源保持上次状态，不 invalidate 自己——否则 workspace 级
+    // workspace_index_sources_invalidated 会命中失效源，每次 list 都连坐
+    // 触发全引擎磁盘扫描。仅 CLI 正常返回（含确认无 session 的空结果）时
+    // commit，把「权威空」落成 fresh，之后 skip 不再反复探测。
+    if partial.is_some() {
+        return WriterResult {
+            upserted: 0,
+            engines: vec!["opencode".into()],
+            partial_source: partial,
+            skipped_fresh: false,
+        };
+    }
 
     tokio::task::spawn_blocking(move || {
         let connection = open_connection()?;
@@ -881,18 +901,16 @@ pub(crate) async fn backfill_session_index_core(
                         return Ok(Vec::new());
                     };
                     let (global_result, cn_result) = tokio::join!(
-                        list_qoder_sessions_for_launch_profile(
-                            &path,
-                            Some(limit),
-                            &global_profile,
-                        ),
+                        list_qoder_sessions_for_launch_profile(&path, Some(limit), &global_profile,),
                         list_qoder_sessions_for_launch_profile(&path, Some(limit), &cn_profile),
                     );
                     let mut sessions = Vec::new();
                     let mut errors = Vec::new();
                     for result in [global_result, cn_result] {
                         match result {
-                            Ok(mut distribution_sessions) => sessions.append(&mut distribution_sessions),
+                            Ok(mut distribution_sessions) => {
+                                sessions.append(&mut distribution_sessions)
+                            }
                             Err(error) => errors.push(error),
                         }
                     }
@@ -974,9 +992,55 @@ pub async fn upsert_session_index_rows(rows: Vec<SessionIndexRow>) -> Result<u32
     Ok(changed as u32)
 }
 
+/// 失效源的后台异步重扫:同一 workspace 同时在飞最多一次;完成后 upsert
+/// 有变化则 emit session-index-imported(与 importer 同事件),前端重拉
+/// 拿到新行。guard 用进程级 OnceLock,泄漏面仅为 sync panic 时该
+/// workspace 永久不再调度——sync_session_index_core 内部按引擎隔离
+/// panic,风险可接受。
+fn schedule_background_index_sync(app: &AppHandle, workspace_id: &str, limit: usize) {
+    static INFLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let inflight = INFLIGHT.get_or_init(|| Mutex::new(HashSet::new()));
+    {
+        let mut guard = match inflight.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if !guard.insert(workspace_id.to_string()) {
+            return;
+        }
+    }
+    let app = app.clone();
+    let workspace_id = workspace_id.to_string();
+    tauri::async_runtime::spawn(async move {
+        let result = {
+            let state = app.state::<AppState>();
+            sync_session_index_core(&state, &workspace_id, limit, false).await
+        };
+        if let Ok(report) = &result {
+            if report.upserted > 0 {
+                let _ = app.emit(
+                    super::importer::SESSION_INDEX_IMPORTED_EVENT,
+                    super::importer::SessionIndexImportedPayload {
+                        workspace_ids: vec![workspace_id.clone()],
+                        upserted: report.upserted as u32,
+                    },
+                );
+            }
+        }
+        if let Some(set) = INFLIGHT.get() {
+            let mut guard = match set.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            guard.remove(&workspace_id);
+        }
+    });
+}
+
 /// List sidebar sessions from SQLite. Optionally sync first when stale/empty.
 #[tauri::command]
 pub async fn list_session_index_for_workspace(
+    app: AppHandle,
     workspace_id: String,
     limit: Option<u32>,
     sync_if_needed: Option<bool>,
@@ -1008,23 +1072,38 @@ pub async fn list_session_index_for_workspace(
 
     if sync_if_needed || force_sync {
         let path_for_check = path_str.clone();
-        let index_empty = force_sync
-            || tokio::task::spawn_blocking(move || {
+        // rows_empty:workspace 在 index 里一行都没有(首次落行)。
+        // sources_invalidated:send/create 显式标 stale(last_sync_ms = 0)。
+        let (rows_empty, sources_invalidated) = if force_sync {
+            (false, false)
+        } else {
+            tokio::task::spawn_blocking(move || {
                 let connection = open_connection()?;
-                let existing = list_for_workspace_path(&connection, &path_for_check, 1)?;
+                let existing = list_for_workspace_path(&connection, &path_for_check, 1, false)?;
                 if existing.is_empty() {
-                    return Ok(true);
+                    return Ok::<(bool, bool), String>((true, false));
                 }
-                workspace_index_sources_invalidated(&connection, &path_for_check)
+                let invalidated =
+                    workspace_index_sources_invalidated(&connection, &path_for_check)?;
+                Ok((false, invalidated))
             })
             .await
-            .map_err(|error| error.to_string())??;
-        if force_sync || index_empty {
+            .map_err(|error| error.to_string())??
+        };
+        if force_sync || rows_empty {
+            // 显式 force(手动 reload / settle)/ 首次落行:阻塞 sync,契约不变。
             let report = sync_session_index_core(&state, &workspace_id, limit, force_sync).await?;
-            synced = !report.skipped_fresh || index_empty;
+            synced = !report.skipped_fresh || force_sync || rows_empty;
             sync_ms = Some(report.duration_ms);
             partial_source = report.partial_source;
             engines = report.engines;
+        } else if sources_invalidated {
+            // 新鲜度失效但已有行:立即返回当前 SQLite 行,后台异步重扫,完成
+            // 后 emit session-index-imported 由前端重拉。新会话在发送时已由
+            // 前端 upsert 直接落 index,重扫只是补元数据——不该把 5~10s 全
+            // 引擎磁盘扫描挡在列表返回前(2026-08-26 实证 syncMs 5272~10427
+            // 阻塞 early paint)。
+            schedule_background_index_sync(&app, &workspace_id, limit);
         }
     }
 
@@ -1043,6 +1122,7 @@ pub async fn list_session_index_for_workspace(
                     &path_for_list,
                     limit.saturating_add(1),
                     Some((before_updated_at, before_session_id)),
+                    true,
                 )?;
                 let more = rows.len() > limit;
                 if more {
@@ -1051,8 +1131,10 @@ pub async fn list_session_index_for_workspace(
                 Ok::<(Vec<SessionIndexRow>, bool), String>((rows, more))
             }
             None => {
-                let rows = list_for_workspace_path(&connection, &path_for_list, limit)?;
-                let total = count_for_workspace_path(&connection, &path_for_list)?;
+                // 侧栏分页路径：排除 pi fork 派生行（渲染层本就隐藏，
+                // 不能让它占分页槽位把 main 挤出可见窗口）。
+                let rows = list_for_workspace_path(&connection, &path_for_list, limit, true)?;
+                let total = count_for_workspace_path(&connection, &path_for_list, true)?;
                 let more = total > rows.len() as i64;
                 Ok((rows, more))
             }

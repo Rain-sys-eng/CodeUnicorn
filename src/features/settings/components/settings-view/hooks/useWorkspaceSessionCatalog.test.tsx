@@ -2,7 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   listGlobalCodexSessions,
   listProjectRelatedSessions,
   listWorkspaceSessions,
@@ -12,16 +12,32 @@ import {
   buildWorkspaceSessionSelectionKey,
   useWorkspaceSessionCatalog,
   type WorkspaceSessionCatalogFilters,
+  type WorkspaceSessionCatalogMutationResponse,
 } from "./useWorkspaceSessionCatalog";
 
 vi.mock("../../../../../services/tauri", () => ({
   listGlobalCodexSessions: vi.fn(),
   listProjectRelatedSessions: vi.fn(),
   listWorkspaceSessions: vi.fn(),
-  archiveWorkspaceSessions: vi.fn(),
-  unarchiveWorkspaceSessions: vi.fn(),
+  archiveWorkspaceSessionsV2: vi.fn(),
+  unarchiveWorkspaceSessionsV2: vi.fn(),
   deleteWorkspaceSessions: vi.fn(),
 }));
+
+vi.mock("../../../../threads/utils/sessionDeleteV2", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../../threads/utils/sessionDeleteV2")>();
+  return {
+    ...actual,
+    isSessionDeleteV2Enabled: vi.fn(() => false),
+    requestSessionDelete: vi.fn(),
+  };
+});
+
+import {
+  isSessionDeleteV2Enabled,
+  requestSessionDelete,
+} from "../../../../threads/utils/sessionDeleteV2";
 
 const DEFAULT_FILTERS: WorkspaceSessionCatalogFilters = {
   keyword: "",
@@ -400,7 +416,7 @@ describe("useWorkspaceSessionCatalog", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(archiveWorkspaceSessions)
+    vi.mocked(archiveWorkspaceSessionsV2)
       .mockResolvedValueOnce({
         results: [{ sessionId: "codex:main", ok: true, archivedAt: 100 }],
       })
@@ -425,11 +441,11 @@ describe("useWorkspaceSessionCatalog", () => {
       response = await result.current.mutate("archive", result.current.entries);
     });
 
-    expect(archiveWorkspaceSessions).toHaveBeenNthCalledWith(1, "ws-main", [
-      "codex:main",
+    expect(archiveWorkspaceSessionsV2).toHaveBeenNthCalledWith(1, "ws-main", [
+      { threadId: "codex:main", engine: "codex" },
     ]);
-    expect(archiveWorkspaceSessions).toHaveBeenNthCalledWith(2, "ws-worktree", [
-      "codex:worktree",
+    expect(archiveWorkspaceSessionsV2).toHaveBeenNthCalledWith(2, "ws-worktree", [
+      { threadId: "codex:worktree", engine: "codex" },
     ]);
     expect(response?.results).toEqual([
       {
@@ -469,7 +485,7 @@ describe("useWorkspaceSessionCatalog", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(archiveWorkspaceSessions).mockResolvedValueOnce({
+    vi.mocked(archiveWorkspaceSessionsV2).mockResolvedValueOnce({
       results: [
         {
           sessionId: "claude:child-session",
@@ -498,8 +514,8 @@ describe("useWorkspaceSessionCatalog", () => {
       response = await result.current.mutate("archive", result.current.entries);
     });
 
-    expect(archiveWorkspaceSessions).toHaveBeenCalledWith("child-ws", [
-      "claude:child-session",
+    expect(archiveWorkspaceSessionsV2).toHaveBeenCalledWith("child-ws", [
+      { threadId: "claude:child-session", engine: "claude" },
     ]);
     expect(response?.results[0]).toMatchObject({
       selectionKey: "child-ws::claude:child-ws:child-session",
@@ -533,7 +549,7 @@ describe("useWorkspaceSessionCatalog", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(archiveWorkspaceSessions)
+    vi.mocked(archiveWorkspaceSessionsV2)
       .mockResolvedValueOnce({
         results: [{ sessionId: "codex:main", ok: true, archivedAt: 100 }],
       })
@@ -665,7 +681,7 @@ describe("useWorkspaceSessionCatalog", () => {
         code: "OWNER_WORKSPACE_UNRESOLVED",
       },
     ]);
-    expect(archiveWorkspaceSessions).not.toHaveBeenCalled();
+    expect(archiveWorkspaceSessionsV2).not.toHaveBeenCalled();
   });
 
   it("loads inferred related codex sessions for project mode", async () => {
@@ -762,5 +778,109 @@ describe("useWorkspaceSessionCatalog", () => {
     await waitFor(() => {
       expect(result.current.entries[0]?.engine).toBe("claude");
     });
+  });
+});
+
+describe("useWorkspaceSessionCatalog (delete v2)", () => {
+  it("delete 走 v2 通道：批量一次调用并映射 SessionDeleteCode", async () => {
+    vi.mocked(isSessionDeleteV2Enabled).mockReturnValue(true);
+    vi.mocked(listWorkspaceSessions).mockResolvedValueOnce({
+      data: [
+        {
+          sessionId: "claude:s-1",
+          workspaceId: "ws-1",
+          engine: "claude",
+          title: "A",
+          updatedAt: 2,
+          threadKind: "native",
+        },
+        {
+          sessionId: "session-b",
+          workspaceId: "ws-1",
+          engine: "codex",
+          title: "B",
+          updatedAt: 1,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(requestSessionDelete).mockResolvedValue([
+      { sessionId: "claude:s-1", ok: true, code: "OK" },
+      { sessionId: "session-b", ok: true, code: "MARKED_DELETED" },
+    ]);
+
+    const { result } = renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: DEFAULT_FILTERS,
+      }),
+    );
+    await waitFor(() => expect(result.current.entries).toHaveLength(2));
+
+    let response: WorkspaceSessionCatalogMutationResponse | undefined;
+    await act(async () => {
+      response = await result.current.mutate("delete", result.current.entries);
+    });
+
+    // 批量恒为一次调用
+    expect(vi.mocked(requestSessionDelete)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(requestSessionDelete)).toHaveBeenCalledWith("ws-1", [
+      "claude:s-1",
+      "session-b",
+    ]);
+    expect(response?.results).toHaveLength(2);
+    expect(response?.results.every((item) => item.ok)).toBe(true);
+    // MARKED_DELETED 映射：幂等成功、磁盘未删（后台重试）、元数据已清
+    const marked = response?.results.find((item) => item.sessionId === "session-b");
+    expect(marked?.code).toBe("MARKED_DELETED");
+    expect(marked?.deletedFromDisk).toBe(false);
+    expect(marked?.metadataCleaned).toBe(true);
+    // 成功项从列表移除
+    expect(result.current.entries).toHaveLength(0);
+  });
+
+  it("delete v2 失败项如实上报错误码", async () => {
+    vi.mocked(isSessionDeleteV2Enabled).mockReturnValue(true);
+    vi.mocked(listWorkspaceSessions).mockResolvedValueOnce({
+      data: [
+        {
+          sessionId: "dsh:s-9",
+          workspaceId: "ws-1",
+          engine: "dsh",
+          title: "DSH",
+          updatedAt: 1,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(requestSessionDelete).mockResolvedValue([
+      { sessionId: "dsh:s-9", ok: false, code: "ENGINE_BUSY", error: "dsh daemon connect timeout" },
+    ]);
+
+    const { result } = renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: DEFAULT_FILTERS,
+      }),
+    );
+    await waitFor(() => expect(result.current.entries).toHaveLength(1));
+
+    let response: WorkspaceSessionCatalogMutationResponse | undefined;
+    await act(async () => {
+      response = await result.current.mutate("delete", result.current.entries);
+    });
+
+    const item = response?.results[0];
+    expect(item?.ok).toBe(false);
+    expect(item?.code).toBe("ENGINE_BUSY");
+    expect(item?.error).toBe("dsh daemon connect timeout");
+    // 失败项保留在列表中
+    expect(result.current.entries).toHaveLength(1);
   });
 });

@@ -17,6 +17,12 @@ import {
   useSubagentInspectorSelection,
 } from "../../subagent-ui";
 import { MultiAgentConversationHost } from "../../multi-agent";
+import { PiConversationTreeSplit } from "../../pi-session/components/PiConversationTreeSplit";
+import { usePiTreeOverlayKey } from "../../pi-session/store/piSessionStore";
+import {
+  shallowEqual,
+  useActiveCanvasSelector,
+} from "../hooks/activeCanvasStore";
 import { useAgentInspectorSelection } from "../../multi-agent/store/inspectorStore";
 
 const NOTE_CARDS_SPLIT_RATIO_KEY = "noteCardsSplitRatio";
@@ -174,12 +180,26 @@ export function DesktopLayout({
   // 对话内 Inspector 打开时，composer 必须进左列，形成「左上下 | 右」。
   const subagentInspectorOpen = Boolean(useSubagentInspectorSelection());
   const agentInspectorOpen = Boolean(useAgentInspectorSelection());
+  // pi 会话树 dock 打开时同理（pi 独立状态，与 subAgent inspector 分域）。
+  const piTreeOverlayKey = usePiTreeOverlayKey();
+  const piCanvasScope = useActiveCanvasSelector(
+    (state) => ({ threadId: state.threadId, workspaceId: state.workspaceId }),
+    shallowEqual,
+  );
+  // 判定与 PiConversationTreeSplit 一致：workspace + pi（族内跳转后 activeThread
+  // 变了但面板仍在，composer 必须保持左列布局，不能掉回底部）。
+  const piTreeRequestWorkspace = piTreeOverlayKey?.split(":")[0] ?? null;
+  const piTreeOpen =
+    Boolean(piCanvasScope.threadId?.startsWith("pi:")) &&
+    piTreeRequestWorkspace !== null &&
+    piTreeRequestWorkspace === piCanvasScope.workspaceId;
   const shouldPlaceComposerInChatColumn =
     isEditorSplitChatVisible ||
     isBrowserDockSplitVisible ||
     isNoteCardsSplitMode ||
     subagentInspectorOpen ||
-    agentInspectorOpen;
+    agentInspectorOpen ||
+    (piTreeOpen && centerMode === "chat");
   const hasBottomPanel = Boolean(planPanelNode);
   const shouldShowComposerBelowContent =
     centerMode !== "projectMap" &&
@@ -762,14 +782,16 @@ export function DesktopLayout({
                     }
                     ref={chatLayerRef}
                   >
-                    <MultiAgentConversationHost
-                      messagesNode={messagesNode}
-                      composerNode={
-                        shouldPlaceComposerInChatColumn ? composerNode : null
-                      }
-                      workspaceId={activeWorkspaceId}
-                      workspacePath={activeWorkspacePath}
-                    />
+                    <PiConversationTreeSplit>
+                      <MultiAgentConversationHost
+                        messagesNode={messagesNode}
+                        composerNode={
+                          shouldPlaceComposerInChatColumn ? composerNode : null
+                        }
+                        workspaceId={activeWorkspaceId}
+                        workspacePath={activeWorkspacePath}
+                      />
+                    </PiConversationTreeSplit>
                   </div>
                   {isBrowserDockSplitVisible ? (
                     <div

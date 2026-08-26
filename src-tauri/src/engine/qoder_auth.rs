@@ -40,6 +40,10 @@ pub struct QoderAuthStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub masked_key: Option<String>,
     pub env_var: &'static str,
+    /// Whether the mossx process environment also defines this distribution's
+    /// PAT variable. Stored PAT wins on spawn; this only surfaces the
+    /// coexistence so the UI can explain which credential is effective.
+    pub env_present: bool,
 }
 
 fn mask_key(key: &str) -> String {
@@ -232,15 +236,24 @@ pub(crate) fn qoder_has_pat_credential() -> bool {
     qoder_has_pat_credential_for_distribution(QoderDistribution::Global)
 }
 
-/// PAT that should be injected into the selected distribution CLI. Skip when
-/// the selected process env already has the variable so the child inherits it.
+/// PAT that should be injected into the selected distribution CLI. A stored
+/// mossx PAT always wins over an inherited process env var (an explicit
+/// `cmd.env` set overrides inheritance); only when nothing is stored do we
+/// return `None` and let the child inherit the process environment.
 pub(crate) fn resolve_qoder_pat_for_spawn_for_distribution(
     distribution: QoderDistribution,
 ) -> Option<String> {
-    if qoder_process_env_has_pat_for_distribution(distribution) {
-        return None;
-    }
-    stored_qoder_pat_for_distribution_sync(distribution)
+    select_spawn_pat(
+        stored_qoder_pat_for_distribution_sync(distribution),
+        process_env_pat_for_distribution(distribution),
+    )
+}
+
+/// Spawn credential precedence: stored PAT beats the process environment.
+/// `_process_env` only documents the losing side; when no PAT is stored we
+/// return `None` so the child inherits the process env var unchanged.
+fn select_spawn_pat(stored: Option<String>, _process_env: Option<String>) -> Option<String> {
+    stored
 }
 
 /// Legacy callers are Qoder Global.
@@ -289,6 +302,7 @@ pub async fn qoder_auth_status_from_path_for_distribution(
         state,
         masked_key,
         env_var: pat_env_var(distribution),
+        env_present: env_active,
     })
 }
 
@@ -333,9 +347,9 @@ pub async fn qoder_auth_status(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "qoder_auth_status",
             serde_json::json!({ "providerProfileId": provider_profile_id }),
@@ -355,9 +369,9 @@ pub async fn qoder_auth_set_pat(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "qoder_auth_set_pat",
             serde_json::json!({ "key": key, "providerProfileId": provider_profile_id }),
@@ -376,9 +390,9 @@ pub async fn qoder_auth_delete_pat(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return remote_backend::call_remote(
-            &*state,
+            &state,
             app,
             "qoder_auth_delete_pat",
             serde_json::json!({ "providerProfileId": provider_profile_id }),
@@ -481,6 +495,39 @@ mod tests {
         delete_qoder_pat(&cn_path).await.unwrap();
         assert!(global_path.exists());
         assert!(!cn_path.exists());
+    }
+
+    #[test]
+    fn stored_pat_wins_over_process_env_for_spawn() {
+        assert_eq!(
+            select_spawn_pat(
+                Some("stored-pat-value".to_string()),
+                Some("env-pat-value".to_string())
+            ),
+            Some("stored-pat-value".to_string())
+        );
+    }
+
+    #[test]
+    fn spawn_falls_back_to_inherited_env_only_when_nothing_stored() {
+        // No explicit injection: the child inherits the process env var.
+        assert_eq!(
+            select_spawn_pat(None, Some("env-pat-value".to_string())),
+            None
+        );
+        assert_eq!(select_spawn_pat(None, None), None);
+    }
+
+    #[tokio::test]
+    async fn status_reports_env_presence_alongside_stored_pat() {
+        let path = temp_auth_file("env-present");
+        set_qoder_pat(&path, "qoder_pat_abcdef1234567890xyz")
+            .await
+            .unwrap();
+        let status = qoder_auth_status_from_path(path).await.unwrap();
+        assert_eq!(status.state, "configured");
+        // env_present must mirror the real process env, regardless of stored.
+        assert_eq!(status.env_present, process_env_pat().is_some());
     }
 
     #[test]

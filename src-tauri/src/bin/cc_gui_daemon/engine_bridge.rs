@@ -58,6 +58,8 @@ pub(crate) mod opencode_provider_profile;
 pub mod pi;
 #[path = "../../engine/pi_auth.rs"]
 pub mod pi_auth;
+#[path = "../../engine/pi_rpc.rs"]
+pub mod pi_rpc;
 #[path = "../../engine/pi_history.rs"]
 pub mod pi_history;
 #[path = "../../engine/pi_provider_profile.rs"]
@@ -519,7 +521,9 @@ pub mod commands {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum EngineType {
+    #[default]
     Claude,
     Codex,
     Gemini,
@@ -531,11 +535,6 @@ pub enum EngineType {
     Qoder,
 }
 
-impl Default for EngineType {
-    fn default() -> Self {
-        EngineType::Claude
-    }
-}
 
 impl EngineType {
     pub fn display_name(&self) -> &'static str {
@@ -848,7 +847,7 @@ impl EngineFeatures {
 
     pub fn pi() -> Self {
         Self {
-            reasoning_effort: false,
+            reasoning_effort: true,
             collaboration_mode: false,
             image_input: true,
             session_resume: true,
@@ -910,6 +909,7 @@ pub(crate) fn disabled_engine_status(engine_type: EngineType) -> EngineStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct SendMessageParams {
     pub text: String,
     pub model: Option<String>,
@@ -926,25 +926,6 @@ pub struct SendMessageParams {
     pub custom_spec_root: Option<String>,
 }
 
-impl Default for SendMessageParams {
-    fn default() -> Self {
-        Self {
-            text: String::new(),
-            model: None,
-            effort: None,
-            disable_thinking: false,
-            access_mode: None,
-            images: None,
-            continue_session: false,
-            session_id: None,
-            fork_session_id: None,
-            agent: None,
-            variant: None,
-            collaboration_mode: None,
-            custom_spec_root: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

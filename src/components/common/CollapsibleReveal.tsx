@@ -203,5 +203,3 @@ export function CollapsibleReveal({
     </div>
   );
 }
-
-export default CollapsibleReveal;

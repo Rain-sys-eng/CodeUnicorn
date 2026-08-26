@@ -247,6 +247,14 @@ export function QoderAuthSection({
             ：{loadError}
           </div>
         ) : null}
+        {state === "configured" && snapshot?.envPresent ? (
+          <div className="pi-auth-row pi-auth-row-message">
+            {t("settings.vendor.qoderAuth.envIgnoredStoredWins", {
+              envVar,
+              defaultValue: `进程环境变量中同时存在 ${envVar}，已被忽略；以保存的 PAT 为准。`,
+            })}
+          </div>
+        ) : null}
         <div className={`pi-auth-provider${editing ? " pi-auth-row-expanded" : ""}`}>
           <div className={`pi-auth-row${editing ? " pi-auth-row-expanded" : ""}`}>
             <span className="pi-auth-brand-icon">
@@ -391,7 +399,7 @@ export function QoderAuthSection({
             {t("settings.vendor.qoderAuth.resolutionOrder", {
               authFile: authFileName,
               cliName,
-              defaultValue: `解析顺序：进程环境变量 → ${authFileName} → ${cliName} login`,
+              defaultValue: `解析顺序：${authFileName} → 进程环境变量 → ${cliName} login`,
             })}
           </span>
         </div>

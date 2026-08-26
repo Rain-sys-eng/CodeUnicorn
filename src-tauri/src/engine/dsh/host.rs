@@ -150,8 +150,8 @@ impl DshHostClient {
         if !status.is_success() {
             return Err(format!("dsh respond HTTP {status}: {text}"));
         }
-        let receipt: Value = serde_json::from_str(&text)
-            .map_err(|error| format!("dsh respond json: {error}"))?;
+        let receipt: Value =
+            serde_json::from_str(&text).map_err(|error| format!("dsh respond json: {error}"))?;
         interpret_respond_receipt(&receipt)?;
         Ok(receipt)
     }
@@ -186,9 +186,13 @@ impl DshHostClient {
     }
 }
 
-pub fn parse_server_response(text: &str, expected_rpc_id: &str, method: &str) -> Result<Value, String> {
-    let envelope: ServerResponseEnvelope = serde_json::from_str(text)
-        .map_err(|error| format!("dsh {method} envelope: {error}"))?;
+pub fn parse_server_response(
+    text: &str,
+    expected_rpc_id: &str,
+    method: &str,
+) -> Result<Value, String> {
+    let envelope: ServerResponseEnvelope =
+        serde_json::from_str(text).map_err(|error| format!("dsh {method} envelope: {error}"))?;
     if envelope.kind != "server-response" {
         return Err(format!(
             "dsh {method}: expected server-response, got {}",
@@ -205,8 +209,8 @@ pub fn parse_server_response(text: &str, expected_rpc_id: &str, method: &str) ->
     let Some(result) = envelope.result else {
         return Err(format!("dsh {method}: missing result"));
     };
-    let parsed: RpcOk = serde_json::from_value(result)
-        .map_err(|error| format!("dsh {method} result: {error}"))?;
+    let parsed: RpcOk =
+        serde_json::from_value(result).map_err(|error| format!("dsh {method} result: {error}"))?;
     if parsed.ok {
         return Ok(parsed.value);
     }
@@ -267,14 +271,8 @@ mod tests {
     fn explains_model_does_not_support_images_as_resolved_declaration() {
         let body = r#"{"type":"server-response","rpcId":"rpc-1","result":{"ok":false,"error":{"code":"attachment-error","message":"Model \"grok-4.5\" does not support image input.","details":{"reason":"MODEL_DOES_NOT_SUPPORT_IMAGES"}}}}"#;
         let err = parse_server_response(body, "rpc-1", "session.prompt").unwrap_err();
-        assert!(
-            err.contains("attachment-error"),
-            "unexpected error: {err}"
-        );
-        assert!(
-            err.contains("grok-4.5"),
-            "unexpected error: {err}"
-        );
+        assert!(err.contains("attachment-error"), "unexpected error: {err}");
+        assert!(err.contains("grok-4.5"), "unexpected error: {err}");
         assert!(
             err.contains("declare image input"),
             "unexpected error: {err}"

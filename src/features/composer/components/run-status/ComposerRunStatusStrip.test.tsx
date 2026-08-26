@@ -2,8 +2,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ComposerRunStatusStrip } from "./ComposerRunStatusStrip";
+import {
+  applyBackgroundTaskUpdate,
+  resetBackgroundTaskStoreForTests,
+} from "../../../messages/utils/backgroundTaskStore";
 
 describe("ComposerRunStatusStrip styles", () => {
   it("loads deferred todo/plan list styles from the strip host", () => {
@@ -67,6 +71,107 @@ describe("ComposerRunStatusStrip styles", () => {
     expect(css).toMatch(
       /\.crs-subagent-row\.is-completed \.crs-subagent-status[\s\S]*--status-success/,
     );
+  });
+});
+
+describe("ComposerRunStatusStrip background task pill", () => {
+  beforeEach(() => {
+    resetBackgroundTaskStoreForTests();
+  });
+
+  it("renders the pill from the store even without other run-status activity", () => {
+    applyBackgroundTaskUpdate("ws-1", "pi:s1", {
+      toolId: "tool-1",
+      task: { id: "t-1", name: "spike", status: "running" },
+      source: "receipt",
+    });
+
+    const { container } = render(
+      <ComposerRunStatusStrip
+        todos={[]}
+        subagents={[]}
+        plan={null}
+        isPlanMode={false}
+        isProcessing={false}
+        mergePlanIntoTodos={false}
+        sessionFileChanges={null}
+        backgroundTasksScope={{ workspaceId: "ws-1", threadId: "pi:s1" }}
+      />,
+    );
+    const strip = container.querySelector('[data-testid="composer-run-status"]');
+    expect(strip).not.toBeNull();
+    const pill = container.querySelector(
+      '[data-section="backgroundTask"]',
+    ) as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill?.classList.contains("is-running")).toBe(true);
+    expect(pill?.textContent).toContain("1/1");
+  });
+
+  it("expands the task panel on pill click with running rows and terminal rows", () => {
+    applyBackgroundTaskUpdate("ws-1", "pi:s1", {
+      toolId: "tool-1",
+      task: { id: "t-1", name: "spike", status: "running", startTime: 1 },
+      source: "receipt",
+    });
+    applyBackgroundTaskUpdate("ws-1", "pi:s1", {
+      toolId: null,
+      task: { id: "t-2", name: "build", status: "completed", exitCode: 0 },
+      source: "notification",
+    });
+
+    const { container } = render(
+      <ComposerRunStatusStrip
+        todos={[]}
+        subagents={[]}
+        plan={null}
+        isPlanMode={false}
+        isProcessing={false}
+        mergePlanIntoTodos={false}
+        sessionFileChanges={null}
+        backgroundTasksScope={{ workspaceId: "ws-1", threadId: "pi:s1" }}
+      />,
+    );
+
+    fireEvent.click(
+      container.querySelector('[data-section="backgroundTask"]') as HTMLElement,
+    );
+
+    const runningList = screen.getByTestId("composer-run-status-bg-list-running");
+    expect(
+      runningList.querySelectorAll('[data-testid="composer-run-status-bg-row"]'),
+    ).toHaveLength(1);
+    expect(runningList.textContent).toContain("spike");
+    const doneList = screen.getByTestId("composer-run-status-bg-list-done");
+    expect(
+      doneList.querySelectorAll('[data-testid="composer-run-status-bg-row"]'),
+    ).toHaveLength(1);
+    expect(doneList.textContent).toContain("build");
+    expect(doneList.textContent).toContain("exit 0");
+  });
+
+  it("hides the pill for threads without tasks (无任务不占位)", () => {
+    applyBackgroundTaskUpdate("ws-1", "pi:s1", {
+      toolId: "tool-1",
+      task: { id: "t-1", status: "running" },
+      source: "receipt",
+    });
+
+    const { container } = render(
+      <ComposerRunStatusStrip
+        todos={[]}
+        subagents={[]}
+        plan={null}
+        isPlanMode={false}
+        isProcessing={false}
+        mergePlanIntoTodos={false}
+        sessionFileChanges={null}
+        backgroundTasksScope={{ workspaceId: "ws-1", threadId: "pi:other" }}
+      />,
+    );
+    expect(
+      container.querySelector('[data-testid="composer-run-status"]'),
+    ).toBeNull();
   });
 });
 

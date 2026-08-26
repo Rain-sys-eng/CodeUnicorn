@@ -67,4 +67,17 @@ describe("chat input responsiveness guard", () => {
     expect(source).toContain("\"threadStatusById\"");
     expect(source).toContain("export const Composer = memo(ComposerGate, areComposerPropsEqual)");
   });
+
+  it("keeps ChatInputBoxAdapter onSelectEffort on stable useCallback identities", () => {
+    const source = readSource("src/features/composer/components/Composer.tsx");
+    expect(extractUseCallbackBlock(source, "handleSharedEffortChange")).toBeTruthy();
+    expect(extractUseCallbackBlock(source, "handleCreationEffortChange")).toBeTruthy();
+
+    const onSelectEffortIndex = source.indexOf("onSelectEffort={");
+    expect(onSelectEffortIndex).toBeGreaterThan(-1);
+    const jsxSlice = source.slice(onSelectEffortIndex, onSelectEffortIndex + 800);
+    expect(jsxSlice).toContain("handleSharedEffortChange");
+    expect(jsxSlice).toContain("handleCreationEffortChange");
+    expect(jsxSlice).not.toContain("(effort) =>");
+  });
 });

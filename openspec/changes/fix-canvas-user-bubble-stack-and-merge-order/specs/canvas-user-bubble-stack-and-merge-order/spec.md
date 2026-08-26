@@ -53,6 +53,15 @@ The system MUST NOT reorder the list by `timestamp`.
 - **THEN** unmatched-X MUST be inserted between `matched-1` and `matched-2`
 - **AND** MUST NOT be pushed after the local-only tail
 
+#### Scenario: captioned image optimistic MUST NOT land after the assistant
+
+- **WHEN** local items contain a current-turn optimistic user with images plus caption, followed by a live assistant with a different id
+- **AND** incoming history hydrates that same turn as a real user whose text is empty or whose image URL differs, plus the persisted assistant
+- **THEN** the merged timeline MUST keep a single user bubble above the assistant
+- **AND** MUST NOT append the optimistic user after the assistant
+- **AND** if the hydrated user text is empty, the visible caption MUST be taken from the optimistic payload
+- **AND** a later typed optimistic question MUST NOT collapse onto a previous image-only real user
+
 #### Scenario: leftover with no matched neighbor may append
 
 - **WHEN** leftover incoming items have no already-emitted incoming predecessor or successor

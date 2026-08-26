@@ -17,8 +17,10 @@ import {
   mergeGeminiSessionSummaries,
   mergeGrokSessionSummaries,
   mergeKimiSessionSummaries,
+  mergePiSessionSummaries,
   mergeQoderSessionSummaries,
   normalizeGeminiSessionSummaries,
+  normalizePiSessionSummaries,
   normalizeQoderSessionSummaries,
   mergeDshSessionSummaries,
   mergeThreadSummaryPreservingStableIdentity,
@@ -1847,5 +1849,84 @@ describe("thread-list ingest hide prefilter", () => {
     expect(threadIdInHiddenSharedBindingSet("sess-gemini", hidden)).toBe(
       false,
     );
+  });
+});
+
+describe("pi session summaries", () => {
+  it("normalizePiSessionSummaries keeps parentSessionId (camelCase + snake_case)", () => {
+    const sessions = normalizePiSessionSummaries([
+      {
+        sessionId: "root-1",
+        firstMessage: "1+1",
+        updatedAt: 100,
+      },
+      {
+        sessionId: "fork-1",
+        firstMessage: "1+1",
+        updatedAt: 200,
+        parentSessionId: "root-1",
+      },
+      {
+        session_id: "fork-2",
+        first_message: "1+1",
+        updated_at: 300,
+        parent_session_id: "root-1",
+      },
+    ]);
+    expect(sessions).toHaveLength(3);
+    expect(sessions[0].parentSessionId).toBeUndefined();
+    expect(sessions[1].parentSessionId).toBe("root-1");
+    expect(sessions[2].parentSessionId).toBe("root-1");
+  });
+
+  it("mergePiSessionSummaries maps parentSessionId to pi: parentThreadId (侧栏派生隐藏依赖)", () => {
+    const merged = mergePiSessionSummaries(
+      [],
+      [
+        {
+          sessionId: "root-1",
+          firstMessage: "1+1",
+          updatedAt: 100,
+        },
+        {
+          sessionId: "fork-1",
+          firstMessage: "1+1",
+          updatedAt: 200,
+          parentSessionId: "root-1",
+        },
+      ],
+      "ws-1",
+      {},
+      () => undefined,
+    );
+    const byId = new Map(merged.map((row) => [row.id, row]));
+    expect(byId.get("pi:root-1")?.parentThreadId).toBeFalsy();
+    expect(byId.get("pi:fork-1")?.parentThreadId).toBe("pi:root-1");
+  });
+
+  it("mergePiSessionSummaries backfills parent onto a live thread that leaked without one", () => {
+    const merged = mergePiSessionSummaries(
+      [
+        {
+          id: "pi:fork-1",
+          name: "1+1",
+          updatedAt: 500,
+          engineSource: "pi",
+        },
+      ],
+      [
+        {
+          sessionId: "fork-1",
+          firstMessage: "1+1",
+          updatedAt: 200,
+          parentSessionId: "root-1",
+        },
+      ],
+      "ws-1",
+      {},
+      () => undefined,
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].parentThreadId).toBe("pi:root-1");
   });
 });

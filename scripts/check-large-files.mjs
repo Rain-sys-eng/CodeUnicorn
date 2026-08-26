@@ -269,6 +269,7 @@ function validatePolicyConfig(policyConfig, policyFile) {
       throw new Error(`Invalid newFileFailThreshold in large-file policy config: ${policyFile}`);
     }
   }
+  validateGrowthAllowance(policyConfig.growthAllowanceLines, `${policyFile}.growthAllowanceLines`);
 
   for (const [index, policy] of policyConfig.policies.entries()) {
     validatePolicy(policy, `${policyFile}.policies[${index}]`, { requireMatch: true });
@@ -298,9 +299,20 @@ function validatePolicy(policy, label, { requireMatch }) {
   if (warnThreshold > failThreshold) {
     throw new Error(`Invalid threshold order in large-file policy: ${label}`);
   }
+  validateGrowthAllowance(policy.growthAllowanceLines, `${label}.growthAllowanceLines`);
 
   if (requireMatch) {
     validatePolicyMatch(policy.match, label);
+  }
+}
+
+function validateGrowthAllowance(value, label) {
+  if (value == null) {
+    return;
+  }
+  const allowance = Number(value);
+  if (!Number.isFinite(allowance) || allowance < 0) {
+    throw new Error(`Invalid growthAllowanceLines in large-file policy: ${label}`);
   }
 }
 
@@ -391,20 +403,28 @@ function buildBaselineMap(baseline) {
   return baselineMap;
 }
 
-export function determineHardDebtStatus(lineCount, baselineEntry, hasBaseline) {
+export function determineHardDebtStatus(lineCount, baselineEntry, hasBaseline, growthAllowanceLines = 0) {
   if (!hasBaseline) {
     return "captured";
   }
   if (!baselineEntry) {
     return "new";
   }
-  if (lineCount > baselineEntry.lines) {
+  if (lineCount > baselineEntry.lines + growthAllowanceLines) {
     return "regressed";
+  }
+  if (lineCount > baselineEntry.lines) {
+    return "within-allowance";
   }
   if (lineCount === baselineEntry.lines) {
     return "retained";
   }
   return "reduced";
+}
+
+export function resolveGrowthAllowance(policy, policyConfig) {
+  const raw = policy?.growthAllowanceLines ?? policyConfig?.growthAllowanceLines;
+  return raw == null ? 0 : Number(raw);
 }
 
 function resolveNewFileFailThreshold(policyConfig) {
@@ -434,6 +454,7 @@ function classifyLegacyFile(relativePath, extension, lineCount, threshold) {
     status: "oversized",
     baselineLines: null,
     delta: null,
+    growthAllowanceLines: null,
   };
 }
 
@@ -457,6 +478,7 @@ function classifyPolicyFile(
     throw new Error(`Invalid thresholds in policy ${policy.id}`);
   }
 
+  const growthAllowanceLines = resolveGrowthAllowance(policy, policyConfig);
   const newFileFailThreshold = resolveNewFileFailThreshold(policyConfig);
   if (scope === "new-file") {
     if (newFileFailThreshold == null) {
@@ -467,7 +489,7 @@ function classifyPolicyFile(
     }
 
     const baselineEntry = newFileBaselineMap?.get(relativePath) ?? null;
-    const status = determineHardDebtStatus(lineCount, baselineEntry, newFileBaselineMap != null);
+    const status = determineHardDebtStatus(lineCount, baselineEntry, newFileBaselineMap != null, growthAllowanceLines);
     const baselineLines = baselineEntry?.lines ?? null;
     const delta = baselineLines == null ? null : lineCount - baselineLines;
 
@@ -483,6 +505,7 @@ function classifyPolicyFile(
       status,
       baselineLines,
       delta,
+      growthAllowanceLines,
       thresholdSource: "new-file-ratchet",
     };
   }
@@ -493,28 +516,38 @@ function classifyPolicyFile(
 
   const baselineEntry = baselineMap?.get(relativePath) ?? null;
   const isPolicyHardDebt = lineCount > failThreshold;
-  const isNewFileRatchetDebt =
+  const isRatchetScoped =
     scope === "fail" &&
     newFileBaselineMap != null &&
     newFileFailThreshold != null &&
-    lineCount > newFileFailThreshold &&
-    !newFileBaselineMap.has(relativePath);
+    lineCount > newFileFailThreshold;
+  const ratchetBaselineEntry = isRatchetScoped ? newFileBaselineMap.get(relativePath) ?? null : null;
+  const isNewFileRatchetDebt = isRatchetScoped && ratchetBaselineEntry == null;
+  const isNewFileRatchetRegression =
+    !isPolicyHardDebt &&
+    ratchetBaselineEntry != null &&
+    lineCount > ratchetBaselineEntry.lines + growthAllowanceLines;
 
-  if (scope === "fail" && !isPolicyHardDebt && !isNewFileRatchetDebt) {
+  if (scope === "fail" && !isPolicyHardDebt && !isNewFileRatchetDebt && !isNewFileRatchetRegression) {
     return null;
   }
 
-  const isHardDebt = isPolicyHardDebt || isNewFileRatchetDebt;
+  const isHardDebt = isPolicyHardDebt || isNewFileRatchetDebt || isNewFileRatchetRegression;
   const status = isPolicyHardDebt
-    ? determineHardDebtStatus(lineCount, baselineEntry, baselineMap != null)
+    ? determineHardDebtStatus(lineCount, baselineEntry, baselineMap != null, growthAllowanceLines)
     : isNewFileRatchetDebt
       ? "new"
+      : isNewFileRatchetRegression
+        ? "regressed"
     : "watch";
-  const baselineLines = isPolicyHardDebt ? baselineEntry?.lines ?? null : null;
+  const baselineLines = isPolicyHardDebt
+    ? baselineEntry?.lines ?? null
+    : isNewFileRatchetRegression
+      ? ratchetBaselineEntry.lines
+      : null;
   const delta = baselineLines == null ? null : lineCount - baselineLines;
-  const effectiveFailThreshold = isNewFileRatchetDebt && !isPolicyHardDebt
-    ? newFileFailThreshold
-    : failThreshold;
+  const usesRatchetThreshold = !isPolicyHardDebt && (isNewFileRatchetDebt || isNewFileRatchetRegression);
+  const effectiveFailThreshold = usesRatchetThreshold ? newFileFailThreshold : failThreshold;
 
   return {
     path: relativePath,
@@ -528,7 +561,8 @@ function classifyPolicyFile(
     status,
     baselineLines,
     delta,
-    thresholdSource: isNewFileRatchetDebt && !isPolicyHardDebt ? "new-file-ratchet" : "policy",
+    growthAllowanceLines,
+    thresholdSource: usesRatchetThreshold ? "new-file-ratchet" : "policy",
   };
 }
 
@@ -616,6 +650,9 @@ function formatConsoleMessage(item) {
   if (item.baselineLines != null) {
     parts.push(`baseline=${item.baselineLines}`);
     parts.push(`delta=${formatDelta(item.delta)}`);
+    if (item.growthAllowanceLines != null) {
+      parts.push(`allowance=${item.growthAllowanceLines}`);
+    }
   }
 
   return `${parts.join(", ")})`;

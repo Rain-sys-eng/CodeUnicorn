@@ -5,7 +5,7 @@ TBD - created by archiving change add-shared-context-compiler. Update Purpose af
 ## Requirements
 ### Requirement: Compiler MUST Select Projection Mode By Capability
 
-The compiler MUST select the first applicable mode in this order: `native-delta`, `native-history-import`, `native-history-clone`, `portable-transcript`, `checkpoint`. Selection MUST use runtime capabilities and destination identity rather than engine-name branches.
+The compiler MUST select the first applicable mode in this order: `native-delta`, `native-history-import`, `native-history-clone`, `portable-transcript`, `checkpoint`. Selection MUST use runtime capabilities and destination identity rather than engine-name branches. A Shared Codex target MUST NOT declare structured history import solely because its app-server exposes `thread/inject_items`.
 
 #### Scenario: existing binding uses native delta
 
@@ -18,6 +18,12 @@ The compiler MUST select the first applicable mode in this order: `native-delta`
 - **WHEN** native delta is inapplicable and runtime capability reports structured history import
 - **THEN** the compiler MUST select `native-history-import`
 - **AND** it MUST NOT choose transcript merely because of engine type
+
+#### Scenario: Codex Shared delivery avoids partial Responses item chains
+
+- **WHEN** a Shared Codex target crosses into a Binding without native delta
+- **THEN** the compiler MUST select `portable-transcript` or bounded `checkpoint`
+- **AND** it MUST omit tool call/result exchanges as an atomic pair
 
 #### Scenario: unsupported capability degrades explicitly
 
@@ -62,3 +68,32 @@ The compiler MUST apply deterministic category-specific folding for tool output,
 - **WHEN** identical repeated log input is compiled multiple times
 - **THEN** the folded output and omission record MUST be byte-identical
 - **AND** error/warning plus bounded head/tail evidence MUST be retained
+
+### Requirement: destination-owned omission REQUIRES resumable destination native identity
+
+The compiler MUST omit entries as `destination-owned` only when a destination native session identity is supplied for the compile **and** that identity is being treated as resumable for ownership dedupe. When the caller withholds destination native identity for rematerialization, the compiler MUST include portable history that would otherwise be destination-owned.
+
+#### Scenario: rematerialize compile includes previously owned history
+
+- **WHEN** compile is invoked with `destination_native_session_id = null` for rematerialization
+- **AND** historical attempts were previously associated with the same binding key
+- **THEN** those entries MUST NOT be dropped solely as `destination-owned`
+- **AND** the resulting package MUST be allowed to carry transferable prompt-prefix or delta content
+
+#### Scenario: resumable destination still dedupes owned attempts
+
+- **WHEN** compile is invoked with a destination native session identity for a resumable binding
+- **AND** an entry's attempt is owned by that binding
+- **THEN** the entry MAY be omitted as `destination-owned`
+- **AND** the omission MUST remain auditable in the ProjectionManifest
+
+### Requirement: Compiler helpers MUST support needs-history detection
+
+The system MUST be able to determine whether a session range contains portable history that would produce a non-empty transfer payload when compiled from the beginning without destination-owned omission. This determination drives empty-handoff guards.
+
+#### Scenario: needs-history true when original user task exists
+
+- **WHEN** Canonical events include a prior user task body in the session
+- **AND** a full rematerialize compile would include that body in prompt-prefix or delta
+- **THEN** needs-history MUST be true for empty-handoff evaluation on later continue turns
+

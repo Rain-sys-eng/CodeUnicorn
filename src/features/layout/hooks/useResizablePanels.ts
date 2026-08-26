@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
+import { clamp } from "@/utils/math";
 
 const MIN_SIDEBAR_WIDTH = 210;
 const MAX_SIDEBAR_WIDTH = 360;
@@ -34,10 +35,6 @@ function stopResizeEventPropagation(event: ReactMouseEvent) {
   if (typeof event.stopPropagation === "function") {
     event.stopPropagation();
   }
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
 }
 
 function getRightPanelMaxWidth() {

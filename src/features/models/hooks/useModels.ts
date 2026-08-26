@@ -19,6 +19,7 @@ import {
   CUSTOM_MODEL_DEFAULT_REASONING_EFFORT,
   CUSTOM_MODEL_SUPPORTED_REASONING_OPTIONS,
 } from "../customModelReasoning";
+import { buildSelectionApplyEpochKey } from "./modelSelectionApplyCircuit";
 
 type UseModelsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -535,11 +536,6 @@ export function useModels({
     return next;
   }, [rawModels, modelMappingVersion]);
 
-  const modelsFingerprint = useMemo(
-    () => modelOptionsFingerprint(models),
-    [models],
-  );
-
   // 原子幂等写入：语义相等保持同一 state 引用
   const commitSelection = useCallback(
     (nextModelId: string | null, nextEffort: string | null) => {
@@ -588,9 +584,13 @@ export function useModels({
         return;
       }
 
-      const epochKey = `${modelsFingerprint}\0${snapshot.preferredModelId ?? ""}\0${
-        snapshot.preferredEffort ?? ""
-      }\0${snapshot.preferredSelectionReady ? "1" : "0"}`;
+      const epochKey = buildSelectionApplyEpochKey({
+        preferredModelId: snapshot.preferredModelId,
+        preferredEffort: snapshot.preferredEffort,
+        preferredSelectionReady: snapshot.preferredSelectionReady,
+        nextModelId,
+        nextEffort,
+      });
       if (selectionApplyEpochRef.current !== epochKey) {
         selectionApplyEpochRef.current = epochKey;
         selectionApplyCountRef.current = 0;
@@ -636,7 +636,7 @@ export function useModels({
       };
       commitSelection(nextModelId, nextEffort);
     },
-    [commitSelection, modelsFingerprint],
+    [commitSelection],
   );
 
   // Listen for localStorage changes (cross-tab sync + custom events)
@@ -958,6 +958,10 @@ export function useModels({
             workspaceId: requestedWorkspaceId,
             error: staleCatalog.error,
             entryCount: staleCatalog.entries.length,
+            reasonCode:
+              staleCatalog.entries.length > 0
+                ? "using-stale-cache"
+                : "empty-cache",
           },
         });
       }

@@ -25,6 +25,7 @@ import type {
 import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
 import type { SharedSessionSupportedEngine } from "../../shared-session/utils/sharedSessionEngines";
 import type { HistoryLoadingProgress } from "../../threads/utils/historyLoadingProgress";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 import type { OpenAppMenuExtraAction } from "../../app/components/OpenAppMenu";
 import type {
   AccessMode,
@@ -166,6 +167,8 @@ export type LayoutNodesFlatOptions = {
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
   showSidebarProviderLabels: boolean;
+  defaultVisibleThreadRootCount: number;
+  onChangeDefaultVisibleThreadRootCount: (count: number) => void | Promise<unknown>;
   onRefreshAccountRateLimits?: () => Promise<void> | void;
   showMessageAnchors: boolean;
   accountInfo: AccountSnapshot | null;
@@ -214,6 +217,7 @@ export type LayoutNodesFlatOptions = {
     mode: Extract<AccessMode, "default" | "full-access">,
   ) => Promise<void> | void;
   onOpenSettings: () => void;
+  onOpenSessionManagement?: () => void;
   onOpenShortcutsSettings?: () => void;
   onOpenExperimentalSettings: () => void;
   onOpenSkillsSettings?: () => void;
@@ -249,6 +253,7 @@ export type LayoutNodesFlatOptions = {
   onAddCloneAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onClearActiveThread: (workspaceId: string) => void;
   onProviderContinuationTargetReady?: (input: {
     workspaceId: string;
     threadId: string;
@@ -272,11 +277,23 @@ export type LayoutNodesFlatOptions = {
   onRenameCancel?: () => void;
   onRenameConfirm?: () => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
-  pinThread: (workspaceId: string, threadId: string) => boolean;
+  pinThread: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   unpinThread: (workspaceId: string, threadId: string) => void;
-  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadPinned: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => boolean;
   isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
-  getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  getPinTimestamp: (
+    workspaceId: string,
+    threadId: string,
+    scope?: ThreadPinScope,
+  ) => number | null;
   pinnedThreadsVersion: number;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onAutoNameThread: (workspaceId: string, threadId: string) => void;
@@ -808,6 +825,8 @@ export type RuntimeLayoutNodesOptions = Pick<
   | "activeRateLimits"
   | "usageShowRemaining"
   | "showSidebarProviderLabels"
+  | "defaultVisibleThreadRootCount"
+  | "onChangeDefaultVisibleThreadRootCount"
   | "onRefreshAccountRateLimits"
   | "showMessageAnchors"
   | "accountInfo"
@@ -835,6 +854,7 @@ export type RuntimeLayoutNodesOptions = Pick<
 export type ChromeLayoutNodesOptions = Pick<
   LayoutNodesFlatOptions,
   | "onOpenSettings"
+  | "onOpenSessionManagement"
   | "onOpenShortcutsSettings"
   | "onOpenAgentSettings"
   | "onOpenPromptSettings"
@@ -858,6 +878,7 @@ export type ChromeLayoutNodesOptions = Pick<
   | "onAddCloneAgent"
   | "onToggleWorkspaceCollapse"
   | "onSelectThread"
+  | "onClearActiveThread"
   | "onProviderContinuationTargetReady"
   | "onSelectHomeWorkspace"
   | "onDeleteThread"

@@ -16,9 +16,7 @@ use tokio::process::{Child, ChildStdin};
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio::time::timeout;
 
-use crate::backend::events::{
-    AppServerEvent, AppServerEventDisposition, EventSink, TerminalOutput,
-};
+use crate::backend::events::{AppServerEvent, AppServerEventDisposition, EventSink, TerminalOutput};
 use crate::codex::collaboration_policy::strict_local_collaboration_profile_enabled;
 use crate::codex::thread_mode_state::ThreadModeState;
 use crate::runtime::{RuntimeEndedRecord, RuntimeManager};
@@ -1286,6 +1284,11 @@ async fn spawn_workspace_session_once<E: EventSink>(
     if let Some(codex_home) = codex_home {
         command.env("CODEX_HOME", codex_home);
     }
+    crate::codex::provider_env::apply_codex_provider_env(
+        &mut command,
+        effective_codex_home.as_deref(),
+    )
+    .await;
     if launch_options.launch_mode == CodexAppServerLaunchMode::SessionHooksDisabled {
         command.env("CODEX_NON_INTERACTIVE", "1");
     }

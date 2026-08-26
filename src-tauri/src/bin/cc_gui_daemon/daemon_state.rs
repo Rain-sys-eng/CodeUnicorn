@@ -267,8 +267,8 @@ impl DaemonState {
             &self.sessions,
             &self.app_settings,
             &self.storage_path,
-            |value| worktree_core::sanitize_worktree_name(value),
-            |root, name| worktree_core::unique_worktree_path_strict(root, name),
+            worktree_core::sanitize_worktree_name,
+            worktree_core::unique_worktree_path_strict,
             |root, branch_name| {
                 let root = root.clone();
                 let branch_name = branch_name.to_string();
@@ -338,7 +338,7 @@ impl DaemonState {
             |root, args| {
                 workspaces_core::run_git_command_unit(root, args, git_core::run_git_command_owned)
             },
-            |error| git_core::is_missing_worktree_error(error),
+            git_core::is_missing_worktree_error,
             |path| {
                 std::fs::remove_dir_all(path)
                     .map_err(|err| format!("Failed to remove worktree folder: {err}"))
@@ -375,7 +375,7 @@ impl DaemonState {
             |root, args| {
                 workspaces_core::run_git_command_unit(root, args, git_core::run_git_command_owned)
             },
-            |error| git_core::is_missing_worktree_error(error),
+            git_core::is_missing_worktree_error,
             |path| {
                 std::fs::remove_dir_all(path)
                     .map_err(|err| format!("Failed to remove worktree folder: {err}"))
@@ -416,7 +416,7 @@ impl DaemonState {
                         .map(|(branch_name, _was_suffixed)| branch_name)
                 }
             },
-            |value| worktree_core::sanitize_worktree_name(value),
+            worktree_core::sanitize_worktree_name,
             |root, name, current| {
                 worktree_core::unique_worktree_path_for_rename(root, name, current)
             },
@@ -690,15 +690,14 @@ impl DaemonState {
         &self,
         provider_profile_id: Option<String>,
     ) -> Result<Value, String> {
-        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
-            provider_profile_id.as_deref(),
-        )?;
+        let distribution =
+            engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+                provider_profile_id.as_deref(),
+            )?;
         let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
-        let status = engine::qoder_auth::qoder_auth_status_from_path_for_distribution(
-            path,
-            distribution,
-        )
-        .await?;
+        let status =
+            engine::qoder_auth::qoder_auth_status_from_path_for_distribution(path, distribution)
+                .await?;
         serde_json::to_value(status).map_err(|error| error.to_string())
     }
 
@@ -707,9 +706,10 @@ impl DaemonState {
         key: String,
         provider_profile_id: Option<String>,
     ) -> Result<(), String> {
-        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
-            provider_profile_id.as_deref(),
-        )?;
+        let distribution =
+            engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+                provider_profile_id.as_deref(),
+            )?;
         let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
         engine::qoder_auth::set_qoder_pat(&path, &key).await
     }
@@ -718,9 +718,10 @@ impl DaemonState {
         &self,
         provider_profile_id: Option<String>,
     ) -> Result<(), String> {
-        let distribution = engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
-            provider_profile_id.as_deref(),
-        )?;
+        let distribution =
+            engine::qoder_provider_profile::qoder_distribution_from_provider_profile_id(
+                provider_profile_id.as_deref(),
+            )?;
         let path = engine::qoder_auth::resolve_qoder_auth_file_for_distribution(distribution)?;
         engine::qoder_auth::delete_qoder_pat(&path).await
     }
@@ -1115,7 +1116,10 @@ impl DaemonState {
                 let status = engine::status::detect_qoder_distribution_status(
                     launch_profile.distribution,
                     launch_profile.bin_path.as_deref(),
-                    launch_profile.home_dir.as_deref().and_then(|path| path.to_str()),
+                    launch_profile
+                        .home_dir
+                        .as_deref()
+                        .and_then(|path| path.to_str()),
                 )
                 .await;
                 Ok(status.models)
@@ -4328,6 +4332,130 @@ impl DaemonState {
         .await
     }
 
+    async fn resolve_pi_session_for_rpc(
+        &self,
+        workspace_id: &str,
+        provider_profile_id: Option<&str>,
+    ) -> Result<std::sync::Arc<engine::pi::PiSession>, String> {
+        let workspace_path = {
+            let workspaces = self.workspaces.lock().await;
+            workspaces
+                .get(workspace_id)
+                .map(|entry| std::path::PathBuf::from(&entry.path))
+                .ok_or_else(|| "Workspace not found".to_string())?
+        };
+        let effective_provider_profile_id = session_management::resolve_engine_provider_profile_id(
+            self.storage_path.as_path(),
+            workspace_id,
+            None,
+            "pi",
+            provider_profile_id,
+        )?;
+        let provider_launch_profile =
+            engine::pi_provider_profile::resolve_pi_provider_launch_profile(
+                workspace_id,
+                effective_provider_profile_id.as_deref(),
+                None,
+            )?;
+        Ok(self
+            .engine_manager
+            .get_or_create_pi_session_for_runtime(
+                workspace_id,
+                &workspace_path,
+                &provider_launch_profile.runtime_key,
+                provider_launch_profile.home_dir.as_deref(),
+            )
+            .await)
+    }
+
+    pub(super) async fn pi_get_session_stats(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        let client = session
+            .rpc_client_for_commands(session_id.as_deref())
+            .await?;
+        client.get_session_stats().await
+    }
+
+    pub(super) async fn pi_compact(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        custom_instructions: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        session
+            .with_exclusive_rpc_command(session_id.as_deref(), |client| async move {
+                client.compact(custom_instructions.as_deref()).await
+            })
+            .await
+    }
+
+    pub(super) async fn pi_fork(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        entry_id: String,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        session
+            .with_exclusive_rpc_command(session_id.as_deref(), |client| async move {
+                let pre_state = client.get_state().await?;
+                let pre_file = pre_state
+                    .get("sessionFile")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let data = client.fork(&entry_id).await?;
+                if let Some(path) = pre_file {
+                    client.switch_session(&path).await?;
+                }
+                Ok(data)
+            })
+            .await
+    }
+
+    pub(super) async fn pi_get_session_tree(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        let client = session
+            .rpc_client_for_commands(session_id.as_deref())
+            .await?;
+        client.get_tree().await
+    }
+
+    pub(super) async fn pi_get_fork_messages(
+        &self,
+        workspace_id: String,
+        session_id: Option<String>,
+        provider_profile_id: Option<String>,
+    ) -> Result<Value, String> {
+        let session = self
+            .resolve_pi_session_for_rpc(&workspace_id, provider_profile_id.as_deref())
+            .await?;
+        let client = session
+            .rpc_client_for_commands(session_id.as_deref())
+            .await?;
+        client.get_fork_messages().await
+    }
+
     pub(super) async fn list_qoder_sessions(
         &self,
         workspace_path: String,
@@ -4407,14 +4535,6 @@ impl DaemonState {
     ) -> Result<Value, String> {
         codex_core::list_mcp_server_status_core(&self.sessions, workspace_id, None, cursor, limit)
             .await
-    }
-
-    pub(super) async fn archive_thread(
-        &self,
-        workspace_id: String,
-        thread_id: String,
-    ) -> Result<Value, String> {
-        codex_core::archive_thread_core(&self.sessions, workspace_id, None, thread_id).await
     }
 
     pub(super) async fn delete_codex_session(
@@ -4895,37 +5015,6 @@ impl DaemonState {
             self.storage_path.as_path(),
             workspace_id,
             query,
-        )
-        .await
-    }
-
-    pub(super) async fn archive_workspace_sessions(
-        &self,
-        workspace_id: String,
-        session_ids: Vec<String>,
-    ) -> Result<session_management::WorkspaceSessionBatchMutationResponse, String> {
-        session_management::archive_workspace_sessions_core(
-            &self.workspaces,
-            &self.sessions,
-            &self.engine_manager,
-            self.storage_path.as_path(),
-            workspace_id,
-            session_ids,
-        )
-        .await
-    }
-
-    pub(super) async fn unarchive_workspace_sessions(
-        &self,
-        workspace_id: String,
-        session_ids: Vec<String>,
-    ) -> Result<session_management::WorkspaceSessionBatchMutationResponse, String> {
-        session_management::unarchive_workspace_sessions_core(
-            &self.workspaces,
-            &self.engine_manager,
-            self.storage_path.as_path(),
-            workspace_id,
-            session_ids,
         )
         .await
     }

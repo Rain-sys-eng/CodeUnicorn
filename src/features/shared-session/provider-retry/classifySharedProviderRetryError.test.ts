@@ -67,6 +67,65 @@ describe("classifySharedProviderRetryError", () => {
         message: '{"code":"502"}',
       }),
     ).toMatchObject({ disposition: "retryable", kind: "server" });
+    // Cloudflare 524（Proxy Read Timeout）显式白名单：
+    // 完整 JSON body 命中 timeout 分支；裸 code/status 由 524 规则兜底。
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          'API Error: 524 {"type":"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-524/","title":"Error 524: A timeout occurred","status":524,"detail":"The upstream server did not respond within the 120-second Proxy Read Timeout.","instance":"0000000000000000"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "timeout", reason: "超时" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":524}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "server" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"status":524}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "server" });
+    // 扩展状态码白名单：relay/网关可愈的 4xx 与纯 JSON body 的 5xx。
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":402}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool", reason: "号池" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":404,"message":"no available channel"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool", reason: "号池" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "API Error: 408 Request Timeout",
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "timeout", reason: "超时" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":409}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "soft-cancel", reason: "暂时中断" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "425 Too Early",
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "soft-cancel" });
+    expect(
+      classifySharedProviderRetryError({
+        message: 'API Error: 400 {"error":{"message":"bad request"}}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "soft-cancel" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":503}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "server" });
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"status":500}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "server" });
     expect(
       classifySharedProviderRetryError({
         message:
@@ -96,6 +155,25 @@ describe("classifySharedProviderRetryError", () => {
         message: "failed to read /tmp/job-503.log",
       }),
     ).toMatchObject({ disposition: "ignore", kind: "unknown" });
+  });
+
+  it("treats payload-size status codes as permanent overflow", () => {
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":413}',
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "overflow", reason: "上下文过长" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "API Error: 431 Request Header Fields Too Large",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "overflow" });
+    // 402 带余额关键词仍由 quota permanent 优先拦截，不进 pool 空转。
+    expect(
+      classifySharedProviderRetryError({
+        message: '{"code":402,"message":"insufficient balance"}',
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota", reason: "配额不足" });
   });
 
   it("retries a bare Turn cancelled only when the user did not stop", () => {
@@ -143,6 +221,43 @@ describe("classifySharedProviderRetryError", () => {
         sendState: "recovery-required",
       }),
     ).toMatchObject({ disposition: "ignore", kind: "recovery" });
+  });
+
+  it("classifies quota-insufficiency as permanent before pool rules", () => {
+    // yuzu 实例：预扣费 403 必须判 permanent，不能进 pool retryable 空转烧余额
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          "Failed to authenticate. API Error: 403 预扣费额度失败, 用户剩余额度: ＄0.378004, 需要预扣费额度: ＄0.800000 (request id: abc)",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota", reason: "配额不足" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "API Error: 403 insufficient balance for this request",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "user quota exceeded, please top up",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "余额不足，请充值后重试",
+      }),
+    ).toMatchObject({ disposition: "permanent", kind: "quota" });
+    // 反例：无配额关键词的 401 / bare 403 仍走 pool retryable
+    expect(
+      classifySharedProviderRetryError({
+        message:
+          '会话失败：unexpected status 401 Unauthorized: {"code":"INVALID_API_KEY","message":"Invalid API key"}',
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool" });
+    expect(
+      classifySharedProviderRetryError({
+        message: "Failed to authenticate. API Error: 403",
+      }),
+    ).toMatchObject({ disposition: "retryable", kind: "pool" });
   });
 
   it("fails closed on unrecognized errors", () => {

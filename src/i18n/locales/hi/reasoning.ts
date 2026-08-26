@@ -13,6 +13,10 @@ const reasoning = {
       "label": "बंद (Off)",
       "description": "सोच अक्षम"
     },
+    "minimal": {
+      "label": "न्यूनतम (Minimal)",
+      "description": "सबसे हल्की सोच"
+    },
     "low": {
       "label": "कम",
       "description": "बुनियादी तर्क के साथ त्वरित प्रतिक्रियाएँ"

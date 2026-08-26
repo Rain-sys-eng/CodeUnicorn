@@ -1775,7 +1775,9 @@ async fn list_claude_sessions_peeks_head_and_caps_by_mtime() {
     let older_mtime = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(100);
     let newer_mtime = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(200);
     let older_file = std::fs::File::open(&older_path).expect("open older");
-    older_file.set_modified(older_mtime).expect("set older mtime");
+    older_file
+        .set_modified(older_mtime)
+        .expect("set older mtime");
     let newest_file = std::fs::File::open(&newest_path).expect("open newest");
     newest_file
         .set_modified(newer_mtime)

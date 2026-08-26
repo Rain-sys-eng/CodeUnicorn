@@ -37,6 +37,10 @@ export type SharedProviderRetrySeries = {
   lastAttemptId: string | null;
   originUserMessageId: string | null;
   startedAtMs: number;
+  /** identical-failure 熔断签名（kind + normalized message 前缀）。 */
+  failureSignature: string | null;
+  /** 连续相同 signature 的失败次数。 */
+  sameSignatureCount: number;
 };
 
 type ThreadRetryState = {

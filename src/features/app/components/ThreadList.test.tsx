@@ -1438,6 +1438,56 @@ describe("ThreadList", () => {
     ).toBeNull();
     expect(screen.getByText("续接")).toBeTruthy();
   });
+
+  it("opens the pin scope menu at the exact click coordinates for unpinned rows", () => {
+    const onShowPinScopeMenu = vi.fn();
+    const onToggleThreadPin = vi.fn();
+    const { container } = render(
+      <ThreadList
+        {...baseProps}
+        onToggleThreadPin={onToggleThreadPin}
+        onShowPinScopeMenu={onShowPinScopeMenu}
+      />,
+    );
+
+    const pinToggle = container.querySelector(".thread-pin-toggle");
+    if (!pinToggle) {
+      throw new Error("Missing pin toggle");
+    }
+    fireEvent.click(pinToggle, { clientX: 321, clientY: 654 });
+
+    expect(onShowPinScopeMenu).toHaveBeenCalledTimes(1);
+    const [event, workspaceId, threadId] = onShowPinScopeMenu.mock.calls[0];
+    expect(event.clientX).toBe(321);
+    expect(event.clientY).toBe(654);
+    expect(workspaceId).toBe("ws-1");
+    expect(threadId).toBe("thread-1");
+    // 未置顶点击不得直接改变置顶状态
+    expect(onToggleThreadPin).not.toHaveBeenCalled();
+    expect(baseProps.onSelectThread).not.toHaveBeenCalled();
+  });
+
+  it("unpins directly when a pinned row pin toggle is clicked", () => {
+    const onShowPinScopeMenu = vi.fn();
+    const onToggleThreadPin = vi.fn();
+    const { container } = render(
+      <ThreadList
+        {...baseProps}
+        isThreadPinned={() => true}
+        onToggleThreadPin={onToggleThreadPin}
+        onShowPinScopeMenu={onShowPinScopeMenu}
+      />,
+    );
+
+    const pinToggle = container.querySelector(".thread-pin-toggle");
+    if (!pinToggle) {
+      throw new Error("Missing pin toggle");
+    }
+    fireEvent.click(pinToggle, { clientX: 100, clientY: 200 });
+
+    expect(onToggleThreadPin).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(onShowPinScopeMenu).not.toHaveBeenCalled();
+  });
 });
 
 it("marks the list as virtualized when 200 threads are present", () => {

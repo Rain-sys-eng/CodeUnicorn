@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import FileIcon from "../../../components/FileIcon";
+import { FileIcon } from "../../../components/FileIcon";
 import { UnsavedChangesDialog } from "../../../components/ui/UnsavedChangesDialog";
 import { getGitFileFullDiff } from "../../../services/tauri";
 import { computeDiffFromUnifiedPatch } from "../../../utils/diff";

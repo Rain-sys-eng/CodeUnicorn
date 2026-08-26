@@ -14,6 +14,7 @@ import {
   getEffectiveSelectedModelId,
   getNextEngineSelectedModelId,
   getReasoningOptionsForModel,
+  resolveLedgerAwareEngineModels,
   upsertEngineSelectedModelId,
 } from "./modelSelection";
 import { resolveClaudeManagedRuntimeModel } from "../../features/models/claudeManagedRuntimeModel";
@@ -63,7 +64,24 @@ export function useAppShellComposerModelSection({
   } | null>(null);
   const [engineSelectedModelIdByType, setEngineSelectedModelIdByType] =
     useState<Record<string, string | null>>({});
-  const activeEngineSelectedModelId = engineSelectedModelIdByType[activeEngine] ?? null;
+  const activeEngineSelectedModelId =
+    engineSelectedModelIdByType[activeEngine] ?? null;
+  // catalog 降级（探测失败只剩 source=fallback 的合成兜底，即 PI 的 auto）时，
+  // 把会话账本的 modelId 合成临时选项，避免切历史会话被静默修成兜底默认。
+  // 引擎圈定收敛在 resolveLedgerAwareEngineModels（仅 PI；其他引擎原样返回）。
+  const ledgerAwareEngineModels = useMemo<ModelOption[]>(() => {
+    return resolveLedgerAwareEngineModels({
+      activeEngine,
+      hasActiveThread: activeThreadId !== null,
+      engineModelsAsOptions,
+      threadLedgerModelId: selectedComposerSelection?.modelId ?? null,
+    });
+  }, [
+    activeEngine,
+    activeThreadId,
+    engineModelsAsOptions,
+    selectedComposerSelection,
+  ]);
   const effectiveModels = useMemo<ModelOption[]>(() => {
     if (
       activeEngine === "codex" &&
@@ -72,13 +90,14 @@ export function useAppShellComposerModelSection({
     ) {
       return enrichScopedCodexReasoningMetadata(engineModelsAsOptions, models);
     }
-    return getEffectiveModels(activeEngine, models, engineModelsAsOptions);
+    return getEffectiveModels(activeEngine, models, ledgerAwareEngineModels);
   }, [
     activeEngine,
     activeProviderProfileId,
     activeThreadId,
     models,
     engineModelsAsOptions,
+    ledgerAwareEngineModels,
   ]);
   const providerModelCatalogs = useMemo(
     () => ({
@@ -127,7 +146,7 @@ export function useAppShellComposerModelSection({
         activeEngine === "qoder" ||
         activeThreadEngine === "qoder",
       codexModels: effectiveModels,
-      engineModelsAsOptions,
+      engineModelsAsOptions: ledgerAwareEngineModels,
       engineSelectedModelIdByType,
     });
   }, [
@@ -135,6 +154,7 @@ export function useAppShellComposerModelSection({
     activeProviderProfileId,
     effectiveModels,
     engineModelsAsOptions,
+    ledgerAwareEngineModels,
     engineSelectedModelIdByType,
     hasActiveComposerThread,
     selectedComposerSelection,
@@ -142,7 +162,10 @@ export function useAppShellComposerModelSection({
     activeThreadEngine,
   ]);
   const effectiveSelectedModel = useMemo(() => {
-    return effectiveModels.find((model) => model.id === effectiveSelectedModelId) ?? null;
+    return (
+      effectiveModels.find((model) => model.id === effectiveSelectedModelId) ??
+      null
+    );
   }, [effectiveModels, effectiveSelectedModelId]);
   const persistedGlobalComposerModelId = useMemo(() => {
     return getEffectiveSelectedModelId({
@@ -157,7 +180,9 @@ export function useAppShellComposerModelSection({
   }, [models, selectedModelId]);
   const persistedGlobalComposerModel = useMemo(() => {
     return (
-      models.find((model: any) => model.id === persistedGlobalComposerModelId) ?? null
+      models.find(
+        (model: any) => model.id === persistedGlobalComposerModelId,
+      ) ?? null
     );
   }, [models, persistedGlobalComposerModelId]);
   const persistedGlobalComposerReasoningOptions = useMemo(() => {
@@ -179,7 +204,10 @@ export function useAppShellComposerModelSection({
     return getEffectiveReasoningOptions(activeEngine, modelReasoningOptions);
   }, [activeEngine, modelReasoningOptions]);
   const effectiveReasoningSupported = useMemo(() => {
-    return getEffectiveReasoningSupported(activeEngine, modelReasoningOptions.length > 0);
+    return getEffectiveReasoningSupported(
+      activeEngine,
+      modelReasoningOptions.length > 0,
+    );
   }, [activeEngine, modelReasoningOptions.length]);
   const effectiveSelectedEffort = useMemo(() => {
     return getEffectiveSelectedEffort({
@@ -219,7 +247,7 @@ export function useAppShellComposerModelSection({
   ]);
   const resolvedModel =
     activeEngine === "claude"
-      ? claudeRuntimeResolution?.runtime ?? null
+      ? (claudeRuntimeResolution?.runtime ?? null)
       : (effectiveSelectedModel?.model ?? effectiveSelectedModelId ?? null);
   const resolvedModelSource = effectiveSelectedModel?.source ?? "unknown";
   // Codex: custom/catalog models may carry providerProfileId for first-send binding.
@@ -228,9 +256,11 @@ export function useAppShellComposerModelSection({
   // inference from custom-model ownership metadata (custom-model-provider-binding).
   const resolvedProviderProfileId =
     activeEngine === "codex"
-      ? (effectiveSelectedModel?.providerProfileId?.trim() || null)
+      ? effectiveSelectedModel?.providerProfileId?.trim() || null
       : null;
-  const resolvedEffort = effectiveReasoningSupported ? effectiveSelectedEffort : null;
+  const resolvedEffort = effectiveReasoningSupported
+    ? effectiveSelectedEffort
+    : null;
   const handleSelectModel = useCallback(
     (id: string | null) => {
       if (id === null) {
@@ -305,11 +335,14 @@ export function useAppShellComposerModelSection({
         nextSelectedModel = {
           id: freeformId,
           model: keepOnDsh
-            ? (findDshCatalogModel(dshCatalogModels, freeformId)?.model?.trim() ||
+            ? findDshCatalogModel(
+                dshCatalogModels,
+                freeformId,
+              )?.model?.trim() ||
               resolveDshNativeRuntimeModel({
                 catalogEntryId: freeformId,
               }) ||
-              freeformId)
+              freeformId
             : freeformId,
           displayName: freeformId,
           description: "",
@@ -325,28 +358,27 @@ export function useAppShellComposerModelSection({
       // belongs to another engine, keep the DSH ledger / send resolver.
       const skipDshThreadLedger =
         threadEngine === "dsh" && targetEngine !== "dsh";
-      const nextSelectedEffort =
-        getEffectiveSelectedEffort({
-          activeEngine: targetEngine,
-          hasActiveThread: isCrossEngineSelection
-            ? false
-            : hasActiveComposerThread,
-          selectedEffort: effectiveSelectedEffort,
-          activeThreadSelection:
-            !isCrossEngineSelection &&
-            (hasActiveComposerThread ||
-              activeEngine === "claude" ||
-              activeEngine === "grok")
-              ? {
-                  modelId: nextSelectedModel.id,
-                  effort: effectiveSelectedEffort,
-                }
-              : null,
-          reasoningOptions: getEffectiveReasoningOptions(
-            targetEngine,
-            getReasoningOptionsForModel(nextSelectedModel),
-          ),
-        });
+      const nextSelectedEffort = getEffectiveSelectedEffort({
+        activeEngine: targetEngine,
+        hasActiveThread: isCrossEngineSelection
+          ? false
+          : hasActiveComposerThread,
+        selectedEffort: effectiveSelectedEffort,
+        activeThreadSelection:
+          !isCrossEngineSelection &&
+          (hasActiveComposerThread ||
+            activeEngine === "claude" ||
+            activeEngine === "grok")
+            ? {
+                modelId: nextSelectedModel.id,
+                effort: effectiveSelectedEffort,
+              }
+            : null,
+        reasoningOptions: getEffectiveReasoningOptions(
+          targetEngine,
+          getReasoningOptionsForModel(nextSelectedModel),
+        ),
+      });
       if (import.meta.env.DEV) {
         console.info("[model/select]", {
           activeEngine: targetEngine,
@@ -370,7 +402,9 @@ export function useAppShellComposerModelSection({
         // Explicit effort changes go through handleSelectComposerEffort.
         persistComposerEnginePref?.(targetEngine, {
           modelId: nextSelectedModel.id,
-          ...(nextSelectedEffort !== null ? { effort: nextSelectedEffort } : {}),
+          ...(nextSelectedEffort !== null
+            ? { effort: nextSelectedEffort }
+            : {}),
         });
       }
       // Stay-on-thread: a foreign catalog pick on a DSH thread must not
@@ -395,7 +429,7 @@ export function useAppShellComposerModelSection({
         source: nextSelectedModel.source ?? "unknown",
         providerProfileId:
           targetEngine === "codex"
-            ? (nextSelectedModel.providerProfileId?.trim() || null)
+            ? nextSelectedModel.providerProfileId?.trim() || null
             : (previousResolver?.providerProfileId ?? null),
         effort: nextSelectedEffort,
         collaborationMode: previousResolver?.collaborationMode ?? null,
@@ -510,7 +544,11 @@ export function useAppShellComposerModelSection({
     if (!needsModelRepair && !needsEffortRepair) {
       return;
     }
-    persistComposerSelectionForThread(activeWorkspaceId, activeThreadId, nextSelection);
+    persistComposerSelectionForThread(
+      activeWorkspaceId,
+      activeThreadId,
+      nextSelection,
+    );
   }, [
     activeEngine,
     activeThreadId,

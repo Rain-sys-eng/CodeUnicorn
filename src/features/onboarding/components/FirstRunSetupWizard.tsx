@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CliInstallEngine, EngineStatus } from "../../../types";
 import appLogo from "../../../assets/icon.png";
+import { useKnownOpenAppIcons } from "../../app/hooks/useKnownOpenAppIcons";
 import { getKnownOpenAppIcon, GENERIC_APP_ICON } from "../../app/utils/openAppIcons";
 import {
   FIRST_RUN_ENGINE_META,
@@ -58,6 +59,9 @@ export function FirstRunSetupWizard({
   onEnterApp,
 }: FirstRunSetupWizardProps) {
   const { t } = useTranslation();
+  // Built-in open-app PNGs load lazily; this re-renders once they are cached
+  // so the IDE choice card swaps from the generic glyph to the real logo.
+  useKnownOpenAppIcons();
   const currentIndex = stepIndex(step);
   const canGoBack = currentIndex > 0;
   const hasReadyCli =

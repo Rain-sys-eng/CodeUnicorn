@@ -211,7 +211,10 @@ fn validate_squad_plan_value(
         .map(str::trim)
         .unwrap_or("");
     if summary.is_empty() {
-        return Err(FactValidationError::new(ctx, "plan.summary must be non-empty"));
+        return Err(FactValidationError::new(
+            ctx,
+            "plan.summary must be non-empty",
+        ));
     }
     let has_markdown = plan
         .get("markdown")
@@ -686,7 +689,8 @@ fn validate_timestamp(value: i64, name: &str, ctx: &str) -> Result<(), FactValid
 mod tests {
     use super::super::types::{
         CanonicalBlock, CanonicalProviderProfileSource, CanonicalUserInput, Outcome, OutcomeStatus,
-        ProviderPrivateRef, TurnExecutionSnapshot, TurnRequestedFact, UsageRecordedFact, UsageShape,
+        ProviderPrivateRef, TurnExecutionSnapshot, TurnRequestedFact, UsageRecordedFact,
+        UsageShape,
     };
     use super::*;
 

@@ -840,9 +840,7 @@ mod tests {
         sanitize_app_settings, sanitize_renderer_diagnostic_entry, sanitize_runtime_pool_row,
         summarize_store_value, write_json_atomically, MAX_DIAGNOSTIC_ARRAY_ITEMS,
     };
-    use crate::runtime::{
-        RuntimePoolRow, RuntimeProcessDiagnostics, RuntimeStartupState, RuntimeState,
-    };
+    use crate::runtime::{RuntimePoolRow, RuntimeProcessDiagnostics, RuntimeStartupState, RuntimeState};
     use crate::types::AppSettings;
     use serde_json::json;
     use std::fs;

@@ -19,8 +19,8 @@ pub(crate) use location::{
 pub(crate) use markdown::{build_plain_text_excerpt, resolve_note_title, summarize_note};
 #[cfg(test)]
 pub(crate) use storage::{
-    derive_project_name, ensure_project_dirs, note_asset_dir, note_file_path, normalize_note_source,
-    now_ms, project_dir_path, read_note_card, write_note_card,
+    derive_project_name, ensure_project_dirs, note_asset_dir, note_file_path,
+    normalize_note_source, now_ms, project_dir_path, read_note_card, write_note_card,
 };
 #[cfg(test)]
 pub(crate) use types::{NoteCardAttachment, WorkspaceNoteCard, WorkspaceNoteCardSource};

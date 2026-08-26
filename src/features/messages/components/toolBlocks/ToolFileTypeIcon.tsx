@@ -43,5 +43,3 @@ export const ToolFileTypeIcon = memo(function ToolFileTypeIcon({
     />
   );
 });
-
-export default ToolFileTypeIcon;

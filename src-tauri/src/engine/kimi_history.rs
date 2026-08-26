@@ -430,8 +430,7 @@ fn budget_tool_input_value(value: Option<Value>) -> Option<Value> {
 }
 
 fn first_prompt_preview_from_wire_line(line: &str) -> Option<String> {
-    if !(line.contains("\"type\":\"turn.prompt\"") || line.contains("\"type\": \"turn.prompt\""))
-    {
+    if !(line.contains("\"type\":\"turn.prompt\"") || line.contains("\"type\": \"turn.prompt\"")) {
         return None;
     }
     let prepared = prepare_kimi_wire_line_for_parse(line);
@@ -824,7 +823,13 @@ fn parse_messages_from_wire(raw: &str) -> KimiSessionLoadResult {
     let mut saw_usage = false;
     let mut counter = 0usize;
     for line in raw.lines() {
-        append_messages_from_wire_line(line, &mut messages, &mut usage, &mut saw_usage, &mut counter);
+        append_messages_from_wire_line(
+            line,
+            &mut messages,
+            &mut usage,
+            &mut saw_usage,
+            &mut counter,
+        );
     }
     KimiSessionLoadResult {
         messages,
@@ -832,9 +837,7 @@ fn parse_messages_from_wire(raw: &str) -> KimiSessionLoadResult {
     }
 }
 
-fn parse_messages_from_wire_reader<R: BufRead>(
-    reader: R,
-) -> Result<KimiSessionLoadResult, String> {
+fn parse_messages_from_wire_reader<R: BufRead>(reader: R) -> Result<KimiSessionLoadResult, String> {
     let mut messages: Vec<KimiSessionMessage> = Vec::new();
     let mut usage = KimiSessionUsage::default();
     let mut saw_usage = false;

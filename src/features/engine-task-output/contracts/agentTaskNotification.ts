@@ -1,3 +1,7 @@
+export type AgentTaskNotificationTag =
+  | "task-notification"
+  | "background-task-notification";
+
 export type AgentTaskNotification = {
   taskId: string | null;
   toolUseId: string | null;
@@ -5,13 +9,23 @@ export type AgentTaskNotification = {
   status: string | null;
   summary: string | null;
   resultText: string;
+  /** 外层标签形态：Claude `<task-notification>` vs pi `<background-task-notification>`。 */
+  tag?: AgentTaskNotificationTag;
+  /** pi 通知的 `<task-name>`（Claude 通知无此字段）。 */
+  taskName?: string | null;
+  /** pi 通知的 `<exit-code>`（Claude 通知无此字段）。 */
+  exitCode?: string | null;
 };
 
-const TASK_NOTIFICATION_OPEN_TAG = /<\s*task-notification\s*>/i;
-const TASK_NOTIFICATION_CLOSE_TAG = /<\s*\/\s*task-notification\s*>/i;
+// 长标签在前：`background-task-notification` 包含 `task-notification` 子串，
+// 交替顺序保证不错配；闭合 `\s*>` 边界延续 0.3.12 硬化口径（不允许属性）。
+const TASK_NOTIFICATION_OPEN_TAG =
+  /<\s*(background-task-notification|task-notification)\s*>/i;
+const TASK_NOTIFICATION_CLOSE_TAG =
+  /<\s*\/\s*(?:background-task-notification|task-notification)\s*>/i;
 const RESULT_OPEN_TAG_REGEX = /<\s*result\s*>/i;
 const RESULT_CLOSE_SUFFIX_REGEX =
-  /\s*<\s*\/\s*result\s*>\s*(?:<\s*\/\s*task-notification\s*>\s*)?$/i;
+  /\s*<\s*\/\s*result\s*>\s*(?:<\s*\/\s*(?:background-task-notification|task-notification)\s*>\s*)?$/i;
 const BACKGROUND_COMMAND_TITLE_REGEX =
   /Background\s+command\s+["“]([^"”]+)["”]/i;
 const BACKGROUND_COMMAND_TITLE_ZH_REGEX =
@@ -133,6 +147,8 @@ function extractEnvelopeHeader(block: string) {
     outputFile: extractTagValue(block, "output-file"),
     status: extractTagValue(block, "status"),
     summary: extractTagValue(block, "summary"),
+    taskName: extractTagValue(block, "task-name"),
+    exitCode: extractTagValue(block, "exit-code"),
   };
 }
 
@@ -166,6 +182,7 @@ export function parseAgentTaskNotification(
   if (taskNotificationMatch.index !== 0) {
     return null;
   }
+  const tag = (taskNotificationMatch[1] ?? "task-notification").toLowerCase() as AgentTaskNotificationTag;
   const normalizedText = trimmedText.slice(taskNotificationMatch.index);
   const resultOpenMatch = RESULT_OPEN_TAG_REGEX.exec(normalizedText);
   if (resultOpenMatch && typeof resultOpenMatch.index === "number") {
@@ -176,6 +193,7 @@ export function parseAgentTaskNotification(
     const header = extractEnvelopeHeader(headerBlock);
     return {
       ...header,
+      tag,
       resultText,
     };
   }
@@ -189,8 +207,16 @@ export function parseAgentTaskNotification(
   }
   return {
     ...header,
+    tag,
     resultText: "",
   };
+}
+
+/** pi 扩展的 `<background-task-notification>` 终态唤醒（与 Claude `<task-notification>` 区分）。 */
+export function isPiBackgroundTaskNotification(
+  notification: AgentTaskNotification | null | undefined,
+): boolean {
+  return notification?.tag === "background-task-notification";
 }
 
 /** CLI 注入的 task-notification（后台 wakeup / SubAgent 退役）不是真实用户提问。 */

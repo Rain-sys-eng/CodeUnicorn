@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "Очистить",
     "modelMappingNote": "Изменения отразятся в выпадающем списке выбора модели.",
     "notificationSounds": "Звуки уведомлений",
+    "minimalTranscript": "Минимальный режим",
+    "minimalTranscriptDesc": "Если включено, завершённые ответы показывают только финальный ответ; рассуждения, вызовы инструментов и промежуточные заметки сворачиваются в одну раскрываемую сводку.",
+    "minimalTranscriptNormal": "Обычный",
+    "minimalTranscriptMinimal": "Минимальный",
+    "topSessionTabsHide": "Скрыть верхние вкладки",
+    "topSessionTabsShow": "Показать верхние вкладки",
     "systemNotification": "Системные уведомления",
     "systemNotificationDesc": "Отправлять системные уведомления при завершении сессий.",
     "testSound": "Проверить",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Высокая уверенность",
     "sessionManagementAttributionConfidenceMedium": "Средняя уверенность",
     "sessionManagementThreadVisibilityLabel": "Число сессий на боковой панели по умолчанию",
-    "sessionManagementThreadVisibilityHint": "Управляет тем, сколько корневых сессий эта рабочая область показывает по умолчанию, пока боковая панель свёрнута. По умолчанию {{defaultCount}}, поддерживаемый диапазон {{min}}-{{max}}; действующее значение {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Переопределяет, сколько корневых сессий этот проект показывает в свёрнутой боковой панели. Без переопределения используется настройка рабочей области (сейчас {{defaultCount}}). Диапазон {{min}}-{{max}}; действующее значение {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Число сессий на боковой панели по умолчанию обновлено до {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Сохранение...",
     "sessionManagementLoadMore": "Загрузить ещё",
@@ -1399,6 +1405,7 @@ const settings = {
         "notConfigured": "Не настроено",
         "envActive": "Переменная окружения активна",
         "envActiveHint": "Окружение процесса действует при запуске {{cliName}} из mossx. Задайте PAT, чтобы переопределить его.",
+        "envIgnoredStoredWins": "В окружении процесса также задан {{envVar}}; он игнорируется, действует сохранённый PAT.",
         "setKey": "Задать ключ",
         "overrideSet": "Переопределить",
         "edit": "Изменить",
@@ -1412,7 +1419,7 @@ const settings = {
         "toggleKeyVisibility": "Показать / скрыть",
         "saveHint": "Записывает {{authFile}} (0600) и подставляет при запуске {{cliName}}",
         "loadFailed": "Не удалось прочитать состояние аутентификации",
-        "resolutionOrder": "Порядок разрешения: env процесса → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "Порядок разрешения: {{authFile}} → env процесса → {{cliName}} login"
       }
     },
     "cliValidationTitle": "Проверка CLI",

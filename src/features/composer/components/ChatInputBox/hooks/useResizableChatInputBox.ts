@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentPropsWithoutRef, CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import { clamp } from '@/utils/math';
 
 type ResizeDirection = 'n';
 
@@ -30,10 +31,6 @@ const COLLAPSE_OVERSHOOT_PX = 36;
 const EXPAND_DRAG_THRESHOLD_PX = 18;
 const COLLAPSE_EXPAND_HOLD_MS = 400;
 const EXPAND_RESIZE_HOLD_MS = 1000;
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
-}
 
 function getBounds(): Bounds {
   const viewportH = typeof window !== 'undefined' ? window.innerHeight : VIEWPORT_HEIGHT_FALLBACK_PX;

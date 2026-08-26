@@ -147,6 +147,10 @@ function OrchCard({
       return;
     }
     const tick = () => {
+      // 后台窗口看不到卡死提示，跳过采样；阈值 90s，10s 粒度足够及时。
+      if (document.visibilityState === "hidden") {
+        return;
+      }
       const live = getAgentLivePhase(workspaceId, threadId);
       const anchor =
         live?.updatedAt && live.phase === runningStage.id
@@ -156,7 +160,7 @@ function OrchCard({
       setHangHint(age >= STAGE_HANG_HINT_MS);
     };
     tick();
-    const id = window.setInterval(tick, 5_000);
+    const id = window.setInterval(tick, 10_000);
     return () => window.clearInterval(id);
   }, [
     terminal,

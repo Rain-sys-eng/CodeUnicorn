@@ -23,6 +23,8 @@ pub(crate) mod claude_history_large_payload;
 mod claude_history_large_payload_tests;
 #[cfg(test)]
 mod claude_history_list_budget_tests;
+#[cfg(test)]
+mod claude_history_window_fidelity_tests;
 pub(crate) mod claude_history_subagents;
 pub(crate) mod claude_message_content;
 pub(crate) mod cli_image_input;
@@ -48,6 +50,8 @@ pub(crate) mod opencode_native_artifact;
 pub(crate) mod opencode_provider_profile;
 pub mod pi;
 pub mod pi_auth;
+pub mod pi_models_config;
+pub mod pi_rpc;
 pub(crate) mod pi_history;
 pub(crate) mod pi_provider_profile;
 pub mod qoder;
@@ -65,6 +69,7 @@ pub mod task_output;
 pub use commands::*;
 pub use manager::EngineManager;
 pub use pi_auth::{pi_auth_delete_credential, pi_auth_list_providers, pi_auth_set_api_key};
+pub use pi_models_config::{pi_models_config_read, pi_models_config_write};
 pub use qoder_auth::{qoder_auth_delete_pat, qoder_auth_set_pat, qoder_auth_status};
 pub use rewind_commands::*;
 pub use session_history_commands::*;

@@ -20,7 +20,7 @@ use super::files::{
     list_workspace_directory_children_inner_with_refresh, list_workspace_files_inner_with_refresh,
     paste_external_workspace_items_inner, paste_workspace_item_inner,
     read_external_absolute_file_inner, read_external_spec_file_inner, read_workspace_file_inner,
-    read_workspace_file_preview_inner, rename_workspace_item_inner,
+    read_workspace_file_preview_inner, read_workspace_file_tail_inner, rename_workspace_item_inner,
     resolve_external_absolute_preview_handle_inner, resolve_external_spec_preview_handle_inner,
     resolve_workspace_preview_handle_inner, search_workspace_text_inner,
     trash_workspace_item_inner, write_external_absolute_file_inner, write_external_spec_file_inner,
@@ -49,9 +49,7 @@ use crate::codex::spawn_workspace_session;
 use crate::engine::{resolve_engine_type, EngineType};
 use crate::git_utils::resolve_git_root;
 use crate::remote_backend;
-use crate::shared::settings_core::{
-    take_workspaces_recovery_notice_core, WorkspacesRecoveryNotice,
-};
+use crate::shared::settings_core::{take_workspaces_recovery_notice_core, WorkspacesRecoveryNotice};
 use crate::shared::workspaces_core;
 use crate::state::AppState;
 use crate::storage::write_workspaces_preserving_existing;
@@ -3235,6 +3233,54 @@ pub(crate) async fn probe_open_app_presets() -> Result<Vec<OpenAppPresetProbe>, 
     tokio::task::spawn_blocking(probe_open_app_presets_sync)
         .await
         .map_err(|err| err.to_string())
+}
+
+/// 2.3 PI 后台任务输出日志按需 tail：读 workspace 文件末尾 ≤8 KiB
+/// （byte budget 对齐 tool-output 口径），首字节不整读。
+#[tauri::command]
+pub(crate) async fn read_workspace_file_tail(
+    workspace_id: String,
+    path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<WorkspaceFileResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "read_workspace_file_tail",
+            json!({ "workspaceId": workspace_id, "path": path }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+    workspaces_core::read_workspace_file_core(
+        &state.workspaces,
+        &workspace_id,
+        &path,
+        |root, rel_path| read_workspace_file_tail_inner(root, rel_path, 8 * 1024),
+    )
+    .await
+}
+
+/// 2.2 断链判定：PI 后台任务 registry 进程存活探测（`libc::kill(pid, 0)`，
+/// 无信号副作用）。pid <= 0 或已被回收返回 false。
+#[tauri::command]
+pub(crate) fn process_is_alive(pid: i32) -> bool {
+    if pid <= 0 {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        // kill(pid, 0) 仅探测可发送信号；ESRCH=进程不存在，EPERM/0=存在。
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+    #[cfg(windows)]
+    {
+        // Windows 没有 POSIX kill(pid, 0) 等价探测面，按"已断链"返回 false
+        // 由上层 watchdog / reconnect 兜底，宁误报回收不误报存活。
+        false
+    }
 }
 
 #[cfg(test)]

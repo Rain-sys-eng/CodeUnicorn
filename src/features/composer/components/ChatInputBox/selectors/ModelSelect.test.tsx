@@ -555,6 +555,81 @@ describe("ModelSelect", () => {
     expect(onAddModel).toHaveBeenCalledTimes(1);
   });
 
+  it("filters submenu models by search query", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onChange = vi.fn();
+
+    render(
+      <ModelSelect
+        value="claude-opus-4-8"
+        currentProvider="claude"
+        triggerVariant="readiness"
+        onChange={onChange}
+        models={[
+          { id: "claude-opus-4-8", label: "Opus 4.8" },
+          { id: "claude-sonnet-5", label: "Sonnet 5" },
+        ]}
+        modelGroups={[
+          {
+            providerId: "claude",
+            providerLabel: "Claude Code",
+            enabled: true,
+            models: [
+              { id: "claude-opus-4-8", label: "Opus 4.8" },
+              { id: "claude-sonnet-5", label: "Sonnet 5" },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "chat.currentModel:Opus 4.8" }));
+    await user.hover(await screen.findByRole("menuitem", { name: /Claude Code/ }));
+
+    const searchInput = await screen.findByPlaceholderText(
+      "models.searchModelsPlaceholder",
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: /Opus 4.8/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Sonnet 5/ })).toBeTruthy();
+
+    // 点击搜索框区域不得关闭菜单 / 子菜单（真实 pointer 事件在 jsdom 零布局下
+    // 会误关子菜单，这里用 fireEvent 模拟按下 + 点击验证选择器保持打开）。
+    fireEvent.pointerDown(searchInput);
+    fireEvent.mouseDown(searchInput);
+    fireEvent.click(searchInput);
+    expect(screen.getByRole("menuitem", { name: /Claude Code/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Opus 4.8/ })).toBeTruthy();
+
+    // jsdom 无布局，Radix 子菜单 grace-area 计算会把真实 pointer 移入输入框
+    // 误判为离开而关闭子菜单（真实浏览器无此问题），这里用 fireEvent 模拟输入。
+    fireEvent.change(searchInput, { target: { value: "sonnet" } });
+
+    expect(screen.queryByRole("menuitem", { name: /Opus 4.8/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /Sonnet 5/ })).toBeTruthy();
+
+    // Escape：有 query 时先清空并留在菜单，不关闭选择器。
+    fireEvent.keyDown(searchInput, { key: "Escape" });
+    expect((searchInput as HTMLInputElement).value).toBe("");
+    expect(
+      await screen.findByRole("menuitem", { name: /Opus 4.8/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Sonnet 5/ })).toBeTruthy();
+
+    fireEvent.change(searchInput, { target: { value: "zzz-no-match" } });
+
+    expect(screen.queryByRole("menuitem", { name: /Opus 4.8/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Sonnet 5/ })).toBeNull();
+    expect(screen.getByText("models.noMatchingModels")).toBeTruthy();
+
+    // 只有选中具体模型才关闭选择器。
+    fireEvent.change(searchInput, { target: { value: "sonnet" } });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Sonnet 5/ }));
+    expect(onChange).toHaveBeenCalledWith("claude-sonnet-5");
+    expect(screen.queryByRole("menuitem", { name: /Sonnet 5/ })).toBeNull();
+  });
+
   it("shows add model in every provider submenu, not only the current engine", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onAddModel = vi.fn();
@@ -2127,6 +2202,148 @@ describe("buildProviderExecutionTarget", () => {
       }),
     ).toBe(false);
   });
+
+  // ===== PI engine（expand-shared-atomic-reasoning-linkage-to-pi） =====
+
+  it("seeds PI model default effort when switching from Codex", () => {
+    // Cross-engine: Codex high MUST NOT inherit; PI model default is "low".
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "codex",
+          providerProfileId: null,
+          modelCatalogEntryId: "gpt-5.6-sol",
+          model: "gpt-5.6-sol",
+          reasoning: { effort: "high" },
+        },
+        "pi",
+        "__disk__",
+        "claude-sonnet-4.5",
+        "Local disk",
+        "disk",
+        true,
+        "claude-sonnet-4.5",
+        null,
+        {
+          supportedReasoningEfforts: [
+            { reasoningEffort: "off" },
+            { reasoningEffort: "low" },
+            { reasoningEffort: "medium" },
+            { reasoningEffort: "high" },
+          ],
+          defaultReasoningEffort: "low",
+        },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "claude-sonnet-4.5",
+        model: "claude-sonnet-4.5",
+        reasoning: { effort: "low" },
+      }),
+    );
+  });
+
+  it("keeps same-profile PI effort when next model still supports it", () => {
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "pi",
+          providerProfileId: "__disk__",
+          modelCatalogEntryId: "claude-sonnet-4.5",
+          model: "claude-sonnet-4.5",
+          reasoning: { effort: "high" },
+        },
+        "pi",
+        "__disk__",
+        "claude-opus-4.6",
+        "Local disk",
+        "disk",
+        true,
+        "claude-opus-4.6",
+        null,
+        {
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low" },
+            { reasoningEffort: "medium" },
+            { reasoningEffort: "high" },
+          ],
+          defaultReasoningEffort: "low",
+        },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "claude-opus-4.6",
+        reasoning: { effort: "high" },
+      }),
+    );
+  });
+
+  it("drops PI effort when next PI model does not support it", () => {
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "pi",
+          providerProfileId: null,
+          modelCatalogEntryId: "claude-sonnet-4.5",
+          model: "claude-sonnet-4.5",
+          reasoning: { effort: "xhigh" },
+        },
+        "pi",
+        "__disk__",
+        "thinking-holes-model",
+        "Local disk",
+        "disk",
+        true,
+        "thinking-holes-model",
+        null,
+        {
+          supportedReasoningEfforts: [
+            { reasoningEffort: "high" },
+            { reasoningEffort: "max" },
+          ],
+          defaultReasoningEffort: "high",
+        },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "thinking-holes-model",
+        reasoning: { effort: "high" },
+      }),
+    );
+  });
+
+  it("PI unknown model without metadata yields null effort", () => {
+    // Capability-neutral：runtime-only 模型不发明档位
+    expect(
+      buildProviderExecutionTarget(
+        {
+          engine: "codex",
+          providerProfileId: null,
+          modelCatalogEntryId: "gpt-5.6-sol",
+          model: "gpt-5.6-sol",
+          reasoning: { effort: "high" },
+        },
+        "pi",
+        "__disk__",
+        "runtime-only-pi",
+        "Local disk",
+        "disk",
+        true,
+        "runtime-only-pi",
+        null,
+        null,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        engine: "pi",
+        modelCatalogEntryId: "runtime-only-pi",
+        reasoning: null,
+      }),
+    );
+  });
 });
 
 describe("resolveClaudeCatalogModelLabel", () => {
@@ -2992,6 +3209,78 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
     });
   });
 
+  it("disambiguates PI custom-provider rows that share the same last segment", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const piGroup: ProviderTargetGroup = {
+      providerId: "pi",
+      providerLabel: "PI CLI",
+      enabled: true,
+      profiles: [
+        {
+          id: "__local_pi__",
+          label: "本地配置",
+          source: "disk",
+          loading: false,
+          error: null,
+          models: [
+            {
+              id: "cpa/cline/deepseek-v4-flash-0731",
+              label: "cline/deepseek-v4-flash-0731",
+              provider: "cpa",
+              description: "ctx 200K · thinking",
+            },
+            {
+              id: "cpa/fb2api/deepseek-v4-flash-0731",
+              label: "fb2api/deepseek-v4-flash-0731",
+              provider: "cpa",
+              description: "ctx 200K · thinking",
+            },
+            {
+              id: "cpa/deepseek-v4-pro-0813",
+              label: "deepseek-v4-pro-0813",
+              provider: "cpa",
+              description: "ctx 200K · thinking",
+            },
+          ],
+        },
+      ],
+    };
+    const groups: ProviderTargetGroup[] = [...buildAtomicGroups(), piGroup];
+
+    render(
+      <ModelSelect
+        value="claude-opus-4-8"
+        currentProvider="claude"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        onExecutionTargetChange={vi.fn()}
+        executionTarget={atomicExecutionTarget}
+        targetGroups={groups}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:Opus 4.8" }),
+    );
+    await screen.findByRole("menuitem", { name: /PI CLI/ });
+    openPickerSubmenu(/PI CLI/);
+
+    const clineRow = document.querySelector(
+      '[data-model-id="cpa/cline/deepseek-v4-flash-0731"]',
+    );
+    const fb2apiRow = document.querySelector(
+      '[data-model-id="cpa/fb2api/deepseek-v4-flash-0731"]',
+    );
+    const proRow = document.querySelector(
+      '[data-model-id="cpa/deepseek-v4-pro-0813"]',
+    );
+    expect(clineRow?.textContent).toContain("cline/deepseek-v4-flash-0731");
+    expect(fb2apiRow?.textContent).toContain("fb2api/deepseek-v4-flash-0731");
+    // 无冲突的行保持 last-segment 简洁展示
+    expect(proRow?.textContent).toContain("deepseek-v4-pro-0813");
+    expect(proRow?.textContent).not.toContain("cpa/deepseek-v4-pro-0813");
+  });
+
   it("keeps the PI closed trigger prefixed so it cannot collide with DSH last-segment names", async () => {
     const piTarget: ExecutionTarget = {
       engine: "pi",
@@ -3118,5 +3407,107 @@ describe("ModelSelect empty channel models and custom reasoning defaults", () =>
       document.querySelector('[data-model-id="kimi-coding/k3-256k"]') as Element,
     );
     expect(onProviderModelChange).toHaveBeenCalledWith("pi", "kimi-coding/k3-256k");
+  });
+});
+
+describe("fallback-only legacy catalog auto recovery", () => {
+  const piFallbackGroup = {
+    providerId: "pi" as const,
+    providerLabel: "PI CLI",
+    enabled: true,
+    models: [
+      {
+        id: "auto",
+        label: "auto",
+        description: "Use PI CLI default model",
+        source: "fallback",
+      },
+    ],
+  };
+
+  it("auto-triggers one refresh when the opened group is fallback-only", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onRefreshConfig = vi.fn();
+
+    render(
+      <ModelSelect
+        value="auto"
+        currentProvider="pi"
+        providerLabel="PI CLI"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        models={piFallbackGroup.models}
+        modelGroups={[piFallbackGroup]}
+        onRefreshConfig={onRefreshConfig}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:auto" }),
+    );
+    await screen.findByRole("menu");
+
+    expect(onRefreshConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not auto-refresh when the group already has live models", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onRefreshConfig = vi.fn();
+    const liveModels = [
+      {
+        id: "ark/deepseek-v4-flash",
+        label: "deepseek-v4-flash",
+        source: "detected",
+        provider: "ark",
+      },
+    ];
+
+    render(
+      <ModelSelect
+        value="ark/deepseek-v4-flash"
+        currentProvider="pi"
+        providerLabel="PI CLI"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        models={liveModels}
+        modelGroups={[{ ...piFallbackGroup, models: liveModels }]}
+        onRefreshConfig={onRefreshConfig}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "chat.currentModel:ark / deepseek-v4-flash",
+      }),
+    );
+    await screen.findByRole("menu");
+
+    expect(onRefreshConfig).not.toHaveBeenCalled();
+  });
+
+  it("does not double-fire while a refresh is already in flight", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onRefreshConfig = vi.fn();
+
+    render(
+      <ModelSelect
+        value="auto"
+        currentProvider="pi"
+        providerLabel="PI CLI"
+        triggerVariant="readiness"
+        onChange={vi.fn()}
+        models={piFallbackGroup.models}
+        modelGroups={[piFallbackGroup]}
+        onRefreshConfig={onRefreshConfig}
+        isRefreshingConfig
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:auto" }),
+    );
+    await screen.findByRole("menu");
+
+    expect(onRefreshConfig).not.toHaveBeenCalled();
   });
 });

@@ -359,12 +359,10 @@ fn resolve_project_root(
 }
 
 fn first_non_empty_text<'a>(candidates: &[Option<&'a str>]) -> Option<&'a str> {
-    for candidate in candidates {
-        if let Some(text) = candidate {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed);
-            }
+    for text in candidates.iter().flatten() {
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
         }
     }
     None
@@ -1303,7 +1301,8 @@ async fn peek_gemini_list_summary(path: &Path) -> Option<GeminiSessionSummary> {
     let mut buf = vec![0u8; GEMINI_LIST_PEEK_BYTES];
     let n = file.read(&mut buf).await.ok()?;
     let head = String::from_utf8_lossy(&buf[..n]);
-    let session_id = peek_gemini_session_id_from_head(&head).or_else(|| session_id_from_gemini_path(path))?;
+    let session_id =
+        peek_gemini_session_id_from_head(&head).or_else(|| session_id_from_gemini_path(path))?;
     let mtime = file_mtime_millis(path);
     let created_at = extract_json_quoted_string_for_key(&head, "startTime")
         .or_else(|| extract_json_quoted_string_for_key(&head, "start_time"))
@@ -1317,7 +1316,8 @@ async fn peek_gemini_list_summary(path: &Path) -> Option<GeminiSessionSummary> {
         .and_then(parse_timestamp_millis)
         .or(mtime)
         .unwrap_or(created_at);
-    let first_message = peek_first_user_preview_from_head(&head).unwrap_or_else(|| session_id.clone());
+    let first_message =
+        peek_first_user_preview_from_head(&head).unwrap_or_else(|| session_id.clone());
     Some(GeminiSessionSummary {
         canonical_session_id: Some(session_id.clone()),
         session_id,
@@ -1338,7 +1338,10 @@ fn budget_gemini_string(value: &str) -> String {
     if value.contains("data:image") || value.contains("base64") {
         return GEMINI_OMITTED_PAYLOAD_SENTINEL.to_string();
     }
-    let truncated: String = value.chars().take(GEMINI_STRING_FIELD_BYTE_BUDGET).collect();
+    let truncated: String = value
+        .chars()
+        .take(GEMINI_STRING_FIELD_BYTE_BUDGET)
+        .collect();
     format!(
         "{}…[truncated {} chars]",
         truncated,

@@ -94,5 +94,3 @@ export const EditToolBlock = memo(function EditToolBlock({
     />
   );
 });
-
-export default EditToolBlock;

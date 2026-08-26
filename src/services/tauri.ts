@@ -165,7 +165,7 @@ export type {
 export {
   assignWorkspaceSessionFolders,
   assignWorkspaceSessionFolder,
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   createWorkspaceSessionFolder,
   createNativeProviderContinuation,
   prepareNativeProviderContinuation,
@@ -182,8 +182,9 @@ export {
   moveWorkspaceSessionFolder,
   recordAutoSessionMetadata,
   renameWorkspaceSessionFolder,
-  unarchiveWorkspaceSessions,
+  unarchiveWorkspaceSessionsV2,
 } from "./tauri/sessionManagement";
+export type { SessionArchiveV2Target } from "./tauri/sessionManagement";
 export type {
   SessionIndexEngine,
   SessionIndexListPage,
@@ -640,7 +641,6 @@ export {
   rememberApprovalRule,
 } from "./tauri/permission";
 export {
-  archiveThread,
   deleteClaudeSession,
   deleteCodexSession,
   deleteCodexSessions,

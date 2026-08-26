@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
+import { loadWorkspaceAliasModalStyles } from "../../../styles/featureStyleLoaders";
+import { useFeatureStylesReady } from "../../../styles/useFeatureStylesReady";
 
 type WorkspaceAliasPromptProps = {
   workspaceName: string;
@@ -20,6 +22,7 @@ export function WorkspaceAliasPrompt({
   onCancel,
   onConfirm,
 }: WorkspaceAliasPromptProps) {
+  const stylesReady = useFeatureStylesReady(loadWorkspaceAliasModalStyles);
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -28,28 +31,36 @@ export function WorkspaceAliasPrompt({
     inputRef.current?.select();
   }, []);
 
+  if (!stylesReady) {
+    return null;
+  }
+
   return (
     <div
-      className="worktree-modal"
+      className="alias-modal"
       role="dialog"
       aria-modal="true"
       aria-label={t("sidebar.workspaceAliasDialogTitle")}
     >
-      <div className="worktree-modal-backdrop" onClick={isBusy ? undefined : onCancel} />
-      <div className="worktree-modal-card">
-        <div className="worktree-modal-title">
+      <div className="alias-modal-backdrop" onClick={isBusy ? undefined : onCancel} />
+      <div className="alias-modal-card">
+        <div className="alias-modal-title">
           {t("sidebar.workspaceAliasDialogTitle")}
         </div>
-        <div className="worktree-modal-subtitle">
-          {t("sidebar.workspaceAliasDialogSubtitle", { name: workspaceName })}
+        <div className="alias-modal-subtitle">
+          <Trans
+            i18nKey="sidebar.workspaceAliasDialogSubtitle"
+            values={{ name: workspaceName }}
+            components={{ code: <code className="alias-modal-subtitle-name" /> }}
+          />
         </div>
-        <label className="worktree-modal-label" htmlFor="workspace-alias">
+        <label className="alias-modal-label" htmlFor="workspace-alias">
           {t("sidebar.workspaceAliasLabel")}
         </label>
         <input
           id="workspace-alias"
           ref={inputRef}
-          className="worktree-modal-input"
+          className="alias-modal-input"
           value={alias}
           placeholder={t("sidebar.workspaceAliasPlaceholder")}
           onChange={(event) => onChange(event.target.value)}
@@ -69,13 +80,13 @@ export function WorkspaceAliasPrompt({
           }}
           disabled={isBusy}
         />
-        <div className="worktree-modal-hint">
+        <div className="alias-modal-hint">
           {t("sidebar.workspaceAliasEmptyHint")}
         </div>
-        {error ? <div className="worktree-modal-error">{error}</div> : null}
-        <div className="worktree-modal-actions">
+        {error ? <div className="alias-modal-error">{error}</div> : null}
+        <div className="alias-modal-actions">
           <button
-            className="ghost worktree-modal-button"
+            className="ghost"
             onClick={onCancel}
             type="button"
             disabled={isBusy}
@@ -83,7 +94,7 @@ export function WorkspaceAliasPrompt({
             {t("common.cancel")}
           </button>
           <button
-            className="primary worktree-modal-button"
+            className="primary"
             onClick={onConfirm}
             type="button"
             disabled={isBusy}

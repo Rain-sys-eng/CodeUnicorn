@@ -11,6 +11,7 @@ import engineTaskOutput from "./engineTaskOutput";
 import intentCanvas from "./intentCanvas";
 import memory from "./memory";
 import multiAgent from "./multiAgent";
+import piSession from "./piSession";
 import projectMap from "./projectMap";
 import promptDistill from "./promptDistill";
 import promptEnhancer from "./promptEnhancer";
@@ -34,6 +35,7 @@ const deferred = {
   ...intentCanvas,
   ...memory,
   ...multiAgent,
+  ...piSession,
   ...projectMap,
   ...promptDistill,
   ...promptEnhancer,

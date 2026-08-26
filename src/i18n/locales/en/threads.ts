@@ -9,11 +9,14 @@ const threads = {
     runtimeCompleted: "Completed",
     archive: "Archive",
     delete: "Delete",
+    openSessionManagement: "Bulk Delete in Session Management…",
     deleteThreadTitle: "Delete conversation",
     deleteThreadMessage: 'Are you sure you want to delete "{{name}}"?',
     deleteThreadHint:
       "This cannot be undone and the local session record will be removed.",
     pin: "Pin",
+    pinToGlobal: "Pin to global",
+    pinToProject: "Pin in project",
     unpin: "Unpin",
     sync: "Sync",
     reload: "Reload",
@@ -125,6 +128,8 @@ const threads = {
       "Switching to the merged follow-up and waiting for resume evidence...",
     turnFailed: "Turn failed.",
     turnFailedWithMessage: "Turn failed: {{message}}",
+    turnOrphanedRetryable:
+      "The engine sent no response events for this turn (backend restart or engine unavailable). The turn was aborted — please send again.",
     claudeMcpRouteMapped:
       "MCP routing notice: detected `playwright-mcp`, automatically mapped this session to `chrome-devtools`.",
     claudeMcpRouteUnavailable:

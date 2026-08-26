@@ -1,10 +1,12 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import SearchIcon from "lucide-react/dist/esm/icons/search";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
 import {
   searchWorkspaceText,
   type WorkspaceTextSearchFileResult,
+  type WorkspaceTextSearchMatch,
   type WorkspaceTextSearchResponse,
 } from "../../../services/tauri";
 
@@ -12,6 +14,18 @@ type FileOpenLocation = {
   line: number;
   column: number;
 };
+
+/** 超过该行数（文件头 + 展开的匹配行）后启用虚拟化；小结果保持原生 DOM。 */
+const SEARCH_VIRTUALIZATION_THRESHOLD = 200;
+
+type WorkspaceSearchRow =
+  | { kind: "file"; result: WorkspaceTextSearchFileResult }
+  | {
+      kind: "match";
+      path: string;
+      match: WorkspaceTextSearchMatch;
+      matchIndex: number;
+    };
 
 type WorkspaceSearchPanelProps = {
   workspaceId: string | null;
@@ -138,34 +152,90 @@ export function WorkspaceSearchPanel({
     });
   };
 
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+
+  // 拍平「文件头 + 展开的匹配行」为单列表，供虚拟化按行渲染。
+  const visibleRows = useMemo<WorkspaceSearchRow[]>(() => {
+    if (!searchResults) {
+      return [];
+    }
+    const rows: WorkspaceSearchRow[] = [];
+    for (const result of searchResults.files) {
+      rows.push({ kind: "file", result });
+      if (expandedFiles.has(result.path)) {
+        result.matches.forEach((match, matchIndex) => {
+          rows.push({ kind: "match", path: result.path, match, matchIndex });
+        });
+      }
+    }
+    return rows;
+  }, [expandedFiles, searchResults]);
+
+  const shouldVirtualize = visibleRows.length > SEARCH_VIRTUALIZATION_THRESHOLD;
+  const rowVirtualizer = useVirtualizer({
+    count: shouldVirtualize ? visibleRows.length : 0,
+    getScrollElement: () => resultsRef.current,
+    estimateSize: (index) =>
+      visibleRows[index]?.kind === "file" ? 28 : 26,
+    overscan: 16,
+    getItemKey: (index) => {
+      const row = visibleRows[index];
+      if (!row) {
+        return index;
+      }
+      return row.kind === "file"
+        ? `file:${row.result.path}`
+        : `match:${row.path}:${row.match.line}:${row.match.column}:${row.matchIndex}`;
+    },
+  });
+
+  const renderFileRow = (result: WorkspaceTextSearchFileResult) => {
+    const isExpanded = expandedFiles.has(result.path);
+    return (
+      <button
+        type="button"
+        className="workspace-search-result-file"
+        onClick={() => toggleExpanded(result.path)}
+      >
+        <span className={`file-tree-chevron${isExpanded ? " is-open" : ""}`}>›</span>
+        <span className="workspace-search-result-path">{result.path}</span>
+        <span className="workspace-search-result-count">{result.match_count}</span>
+      </button>
+    );
+  };
+
+  const renderMatchRow = (
+    path: string,
+    match: WorkspaceTextSearchMatch,
+    key?: string,
+  ) => (
+    <button
+      key={key}
+      type="button"
+      className="workspace-search-result-match"
+      onClick={() => onOpenFile(path, { line: match.line, column: match.column })}
+    >
+      <span className="workspace-search-result-location">
+        {match.line}:{match.column}
+      </span>
+      <span className="workspace-search-result-preview">{match.preview}</span>
+    </button>
+  );
+
   const renderResult = (result: WorkspaceTextSearchFileResult) => {
     const isExpanded = expandedFiles.has(result.path);
     return (
       <div key={result.path} className="workspace-search-result-group">
-        <button
-          type="button"
-          className="workspace-search-result-file"
-          onClick={() => toggleExpanded(result.path)}
-        >
-          <span className={`file-tree-chevron${isExpanded ? " is-open" : ""}`}>›</span>
-          <span className="workspace-search-result-path">{result.path}</span>
-          <span className="workspace-search-result-count">{result.match_count}</span>
-        </button>
+        {renderFileRow(result)}
         {isExpanded ? (
           <div className="workspace-search-result-matches">
-            {result.matches.map((match, index) => (
-              <button
-                key={`${result.path}-${match.line}-${match.column}-${index}`}
-                type="button"
-                className="workspace-search-result-match"
-                onClick={() => onOpenFile(result.path, { line: match.line, column: match.column })}
-              >
-                <span className="workspace-search-result-location">
-                  {match.line}:{match.column}
-                </span>
-                <span className="workspace-search-result-preview">{match.preview}</span>
-              </button>
-            ))}
+            {result.matches.map((match, index) =>
+              renderMatchRow(
+                result.path,
+                match,
+                `${result.path}-${match.line}-${match.column}-${index}`,
+              ),
+            )}
           </div>
         ) : null}
       </div>
@@ -254,10 +324,42 @@ export function WorkspaceSearchPanel({
           <div className="workspace-search-limit">{t("files.searchLimitReached")}</div>
         ) : null}
 
-        <div className="workspace-search-results scrollable">
+        <div
+          ref={resultsRef}
+          className={`workspace-search-results scrollable${
+            shouldVirtualize ? " is-virtualized" : ""
+          }`}
+        >
           {!workspaceId ? null : !isSearchMode ? null : searchLoading || searchError ? null :
             !searchResults || searchResults.files.length === 0 ? (
               <div className="workspace-search-empty">{t("files.noMatchesFound")}</div>
+            ) : shouldVirtualize ? (
+              <div
+                className="workspace-search-virtual-spacer"
+                style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const row = visibleRows[virtualRow.index];
+                  if (!row) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={virtualRow.key}
+                      ref={rowVirtualizer.measureElement}
+                      data-index={virtualRow.index}
+                      className={`workspace-search-virtual-row${
+                        row.kind === "match" ? " is-match" : ""
+                      }`}
+                      style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    >
+                      {row.kind === "file"
+                        ? renderFileRow(row.result)
+                        : renderMatchRow(row.path, row.match)}
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
               searchResults.files.map((result) => renderResult(result))
             )}

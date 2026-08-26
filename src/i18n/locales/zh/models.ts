@@ -14,6 +14,8 @@ const models = {
     discoverModels: "从 CLI 发现模型",
     discoveringModels: "正在发现模型…",
     refreshConfigFailed: "刷新失败：{{message}}",
+    searchModelsPlaceholder: "搜索模型…",
+    noMatchingModels: "无匹配模型",
     emptyChannelModelsTitle: "该供应商暂无可用模型",
     emptyChannelModelsHint: "可点击下方「添加模型」，在自定义模型中添加后使用",
     emptyDshHostHint: "请在 DeepSeek Harness 中配置模型。点击此项打开设置。",

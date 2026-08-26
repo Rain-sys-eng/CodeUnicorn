@@ -224,10 +224,10 @@ export function useOptionalHostSlice<K extends AppShellHostSliceName>(
   );
 }
 
-export function useHostFields<K extends AppShellHostSliceName>(
-  key: K,
-  fields: readonly string[],
-): Record<string, unknown> {
+export function useHostFields<
+  K extends AppShellHostSliceName,
+  F extends readonly string[],
+>(key: K, fields: F): Record<F[number], unknown> {
   const bus = useAppShellHostBus();
   const selectedRef = useRef<Record<string, unknown> | typeof UNSET>(UNSET);
   return useSyncExternalStore(
@@ -248,7 +248,7 @@ export function useHostFields<K extends AppShellHostSliceName>(
       selectedRef.current = next;
       return next;
     },
-  );
+  ) as Record<F[number], unknown>;
 }
 
 export function useHostSelector<T>(

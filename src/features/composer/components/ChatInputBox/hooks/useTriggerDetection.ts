@@ -578,5 +578,3 @@ export function useTriggerDetection() {
     getCursorPosition,
   };
 }
-
-export default useTriggerDetection;

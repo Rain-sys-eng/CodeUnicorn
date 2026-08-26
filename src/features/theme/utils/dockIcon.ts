@@ -1,12 +1,3 @@
-import defaultDockIcon from "../../../assets/dock-icons/default.png";
-import multiOrbitHubIcon from "../../../assets/dock-icons/orbit-routing/multi-orbit-hub.png";
-import openStarRingIcon from "../../../assets/dock-icons/orbit-routing/open-star-ring.png";
-import gravitationalCoreIcon from "../../../assets/dock-icons/orbit-routing/gravitational-core.png";
-import dualOrbitHandoffIcon from "../../../assets/dock-icons/orbit-routing/dual-orbit-handoff.png";
-import layeredControlPlaneIcon from "../../../assets/dock-icons/orbit-routing/layered-control-plane.png";
-import fourPortRouterIcon from "../../../assets/dock-icons/orbit-routing/four-port-router.png";
-import adaptiveRoutingFabricIcon from "../../../assets/dock-icons/orbit-routing/adaptive-routing-fabric.png";
-import triadicRouterIcon from "../../../assets/dock-icons/orbit-routing/triadic-router.png";
 import { setDockIcon } from "../../../services/tauri/settings";
 
 /** Dock / app logo preference id. `default` is the shipping product icon. */
@@ -23,72 +14,79 @@ export type DockIconId =
 
 export type DockIconOption = {
   id: DockIconId;
-  /** Vite-resolved asset URL used for UI + native Dock apply. */
-  src: string;
   labelKey: string;
 };
 
 export const DEFAULT_DOCK_ICON_ID: DockIconId = "default";
 
 export const DOCK_ICON_OPTIONS: readonly DockIconOption[] = [
-  {
-    id: "default",
-    src: defaultDockIcon,
-    labelKey: "settings.dockIconDefault",
-  },
-  {
-    id: "multi-orbit-hub",
-    src: multiOrbitHubIcon,
-    labelKey: "settings.dockIconMultiOrbitHub",
-  },
-  {
-    id: "open-star-ring",
-    src: openStarRingIcon,
-    labelKey: "settings.dockIconOpenStarRing",
-  },
-  {
-    id: "gravitational-core",
-    src: gravitationalCoreIcon,
-    labelKey: "settings.dockIconGravitationalCore",
-  },
-  {
-    id: "dual-orbit-handoff",
-    src: dualOrbitHandoffIcon,
-    labelKey: "settings.dockIconDualOrbitHandoff",
-  },
+  { id: "default", labelKey: "settings.dockIconDefault" },
+  { id: "multi-orbit-hub", labelKey: "settings.dockIconMultiOrbitHub" },
+  { id: "open-star-ring", labelKey: "settings.dockIconOpenStarRing" },
+  { id: "gravitational-core", labelKey: "settings.dockIconGravitationalCore" },
+  { id: "dual-orbit-handoff", labelKey: "settings.dockIconDualOrbitHandoff" },
   {
     id: "layered-control-plane",
-    src: layeredControlPlaneIcon,
     labelKey: "settings.dockIconLayeredControlPlane",
   },
-  {
-    id: "four-port-router",
-    src: fourPortRouterIcon,
-    labelKey: "settings.dockIconFourPortRouter",
-  },
+  { id: "four-port-router", labelKey: "settings.dockIconFourPortRouter" },
   {
     id: "adaptive-routing-fabric",
-    src: adaptiveRoutingFabricIcon,
     labelKey: "settings.dockIconAdaptiveRoutingFabric",
   },
-  {
-    id: "triadic-router",
-    src: triadicRouterIcon,
-    labelKey: "settings.dockIconTriadicRouter",
-  },
+  { id: "triadic-router", labelKey: "settings.dockIconTriadicRouter" },
 ] as const;
+
+/**
+ * Cold-start: the 9 dock PNGs (~2.4MB raw) must stay off the eager AppShell
+ * chunk. Each icon URL lives in its own lazily imported module; consumers get
+ * the URL via `resolveDockIconSrc` (async) or `peekDockIconSrc` (cache).
+ */
+const DOCK_ICON_SRC_LOADERS: Record<DockIconId, () => Promise<string>> = {
+  default: () =>
+    import("../../../assets/dock-icons/default.png?url").then(
+      (module) => module.default,
+    ),
+  "multi-orbit-hub": () =>
+    import("../../../assets/dock-icons/orbit-routing/multi-orbit-hub.png?url").then(
+      (module) => module.default,
+    ),
+  "open-star-ring": () =>
+    import("../../../assets/dock-icons/orbit-routing/open-star-ring.png?url").then(
+      (module) => module.default,
+    ),
+  "gravitational-core": () =>
+    import(
+      "../../../assets/dock-icons/orbit-routing/gravitational-core.png?url"
+    ).then((module) => module.default),
+  "dual-orbit-handoff": () =>
+    import(
+      "../../../assets/dock-icons/orbit-routing/dual-orbit-handoff.png?url"
+    ).then((module) => module.default),
+  "layered-control-plane": () =>
+    import(
+      "../../../assets/dock-icons/orbit-routing/layered-control-plane.png?url"
+    ).then((module) => module.default),
+  "four-port-router": () =>
+    import(
+      "../../../assets/dock-icons/orbit-routing/four-port-router.png?url"
+    ).then((module) => module.default),
+  "adaptive-routing-fabric": () =>
+    import(
+      "../../../assets/dock-icons/orbit-routing/adaptive-routing-fabric.png?url"
+    ).then((module) => module.default),
+  "triadic-router": () =>
+    import("../../../assets/dock-icons/orbit-routing/triadic-router.png?url").then(
+      (module) => module.default,
+    ),
+};
 
 const DOCK_ICON_ID_SET = new Set<string>(
   DOCK_ICON_OPTIONS.map((option) => option.id),
 );
 
-const DOCK_ICON_SRC_BY_ID: Record<DockIconId, string> = DOCK_ICON_OPTIONS.reduce(
-  (acc, option) => {
-    acc[option.id] = option.src;
-    return acc;
-  },
-  {} as Record<DockIconId, string>,
-);
+const dockIconSrcCache = new Map<DockIconId, string>();
+const dockIconSrcPromises = new Map<DockIconId, Promise<string>>();
 
 export function isDockIconId(value: unknown): value is DockIconId {
   return typeof value === "string" && DOCK_ICON_ID_SET.has(value);
@@ -98,10 +96,28 @@ export function sanitizeDockIconId(value: unknown): DockIconId {
   return isDockIconId(value) ? value : DEFAULT_DOCK_ICON_ID;
 }
 
-/** Resolve logo URL for Dock settings, About, lock screen, etc. */
-export function resolveDockIconSrc(iconId: unknown): string {
+/** Cached logo URL if that icon chunk already loaded this session, else null. */
+export function peekDockIconSrc(iconId: unknown): string | null {
+  return dockIconSrcCache.get(sanitizeDockIconId(iconId)) ?? null;
+}
+
+/** Resolve logo URL for Dock settings, About, lock screen, etc. (lazy chunk). */
+export function resolveDockIconSrc(iconId: unknown): Promise<string> {
   const safeId = sanitizeDockIconId(iconId);
-  return DOCK_ICON_SRC_BY_ID[safeId] ?? DOCK_ICON_SRC_BY_ID[DEFAULT_DOCK_ICON_ID];
+  let promise = dockIconSrcPromises.get(safeId);
+  if (!promise) {
+    promise = DOCK_ICON_SRC_LOADERS[safeId]().then((url) => {
+      dockIconSrcCache.set(safeId, url);
+      return url;
+    });
+    // Failed loads are evicted so a later call can retry instead of
+    // permanently caching the rejection.
+    promise.catch(() => {
+      dockIconSrcPromises.delete(safeId);
+    });
+    dockIconSrcPromises.set(safeId, promise);
+  }
+  return promise;
 }
 
 /** PNG signature: \x89PNG\r\n\x1a\n */
@@ -153,7 +169,7 @@ export async function applyDockIconPreference(iconId: unknown): Promise<void> {
   const generation = ++dockIconApplyGeneration;
   const safeId = sanitizeDockIconId(iconId);
   lastRequestedDockIconId = safeId;
-  const src = resolveDockIconSrc(safeId);
+  const src = await resolveDockIconSrc(safeId);
   const pngBytes = await loadPngBytes(src);
   if (generation !== dockIconApplyGeneration) {
     return;

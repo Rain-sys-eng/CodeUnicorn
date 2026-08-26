@@ -3,6 +3,7 @@ import {
   buildComparableUserMessageKey,
   isEquivalentUserObservation,
   normalizeComparableUserText,
+  normalizeUserImages,
 } from "../assembly/conversationNormalization";
 import { isOptimisticUserMessageId } from "../utils/queuedHandoffBubble";
 import { isProcessingGeneratedImageItem } from "../utils/generatedImagePlaceholder";
@@ -29,6 +30,93 @@ function isTextEquivalentUserTurn(
     normalizeComparableUserText(left.text) ===
     normalizeComparableUserText(right.text)
   );
+}
+
+function userMessageHasVisualPayload(item: UserMessageItem): boolean {
+  if (normalizeUserImages(item.images, item.text).length > 0) {
+    return true;
+  }
+  return Array.isArray(item.deferredImages) && item.deferredImages.length > 0;
+}
+
+/**
+ * 当前回合 hydrate：文案形状漂移（空 text + 图 vs 带 caption 的 optimistic）
+ * 仍视为同一句。两侧都有非空且不同的可见文案时，禁止折叠成一条。
+ */
+export function isPlausibleSameTurnUserPayload(
+  left: UserMessageItem,
+  right: UserMessageItem,
+): boolean {
+  if (
+    isEquivalentUserObservation(left, right) ||
+    isTextEquivalentUserTurn(left, right)
+  ) {
+    return true;
+  }
+  const leftText = normalizeComparableUserText(left.text);
+  const rightText = normalizeComparableUserText(right.text);
+  if (leftText.length > 0 && rightText.length > 0 && leftText !== rightText) {
+    return false;
+  }
+  return userMessageHasVisualPayload(left) && userMessageHasVisualPayload(right);
+}
+
+function bindTailTurnOptimisticReplacement(
+  localItems: ConversationItem[],
+  incomingItems: ConversationItem[],
+  unmatchedOptimisticUsers: UserMessageItem[],
+  unmatchedIncomingUsers: UserMessageItem[],
+  replacementByOptimisticId: Map<string, string>,
+) {
+  const incomingNewUsers = unmatchedIncomingUsers.filter(
+    (item) => !localItems.some((localItem) => localItem.id === item.id),
+  );
+  if (
+    unmatchedOptimisticUsers.length === 0 ||
+    incomingNewUsers.length === 0
+  ) {
+    return;
+  }
+  const tailOptimistic =
+    unmatchedOptimisticUsers[unmatchedOptimisticUsers.length - 1]!;
+  const incomingCandidate = incomingNewUsers[incomingNewUsers.length - 1]!;
+  let lastRealUserIndex = -1;
+  for (let index = localItems.length - 1; index >= 0; index -= 1) {
+    const candidate = localItems[index];
+    if (candidate && isUserMessageItem(candidate) && !isOptimisticUserMessage(candidate)) {
+      lastRealUserIndex = index;
+      break;
+    }
+  }
+  const tailOptimisticIndex = localItems.findIndex(
+    (item) => item.id === tailOptimistic.id,
+  );
+  if (
+    lastRealUserIndex >= 0 &&
+    tailOptimisticIndex >= 0 &&
+    tailOptimisticIndex <= lastRealUserIndex
+  ) {
+    return;
+  }
+  const lastRealUser =
+    lastRealUserIndex >= 0 ? localItems[lastRealUserIndex] : null;
+  const lastRealIncomingIndex = lastRealUser
+    ? incomingItems.findIndex((item) => item.id === lastRealUser.id)
+    : -1;
+  const incomingCandidateIndex = incomingItems.findIndex(
+    (item) => item.id === incomingCandidate.id,
+  );
+  if (
+    lastRealIncomingIndex >= 0 &&
+    incomingCandidateIndex >= 0 &&
+    incomingCandidateIndex <= lastRealIncomingIndex
+  ) {
+    return;
+  }
+  if (!isPlausibleSameTurnUserPayload(tailOptimistic, incomingCandidate)) {
+    return;
+  }
+  replacementByOptimisticId.set(tailOptimistic.id, incomingCandidate.id);
 }
 
 function dropMatchingOptimisticUserMessage(
@@ -135,16 +223,68 @@ export function buildOptimisticUserReplacementMap(
   );
   if (
     !hasLocalRealUser &&
-    unmatchedOptimisticUsers.length === 1 &&
-    unmatchedIncomingUsers.length === 1
+    unmatchedOptimisticUsers.length > 0 &&
+    unmatchedIncomingUsers.length > 0
   ) {
     replacementByOptimisticId.set(
-      unmatchedOptimisticUsers[0]!.id,
-      unmatchedIncomingUsers[0]!.id,
+      unmatchedOptimisticUsers[unmatchedOptimisticUsers.length - 1]!.id,
+      unmatchedIncomingUsers[unmatchedIncomingUsers.length - 1]!.id,
     );
+    return replacementByOptimisticId;
   }
 
+  bindTailTurnOptimisticReplacement(
+    localItems,
+    incomingItems,
+    unmatchedOptimisticUsers,
+    unmatchedIncomingUsers,
+    replacementByOptimisticId,
+  );
+
   return replacementByOptimisticId;
+}
+
+export function applyOptimisticVisibleTextToReplacements(
+  incomingItems: ConversationItem[],
+  localItems: ConversationItem[],
+  replacementByOptimisticId: ReadonlyMap<string, string>,
+): ConversationItem[] {
+  if (replacementByOptimisticId.size === 0) {
+    return incomingItems;
+  }
+  const optimisticById = new Map(
+    localItems.filter(isOptimisticUserMessage).map((item) => [item.id, item]),
+  );
+  const incomingIdToOptimistic = new Map<string, UserMessageItem>();
+  for (const [optimisticId, incomingId] of replacementByOptimisticId) {
+    const optimistic = optimisticById.get(optimisticId);
+    if (optimistic) {
+      incomingIdToOptimistic.set(incomingId, optimistic);
+    }
+  }
+  if (incomingIdToOptimistic.size === 0) {
+    return incomingItems;
+  }
+  return incomingItems.map((item) => {
+    if (!isUserMessageItem(item)) {
+      return item;
+    }
+    const optimistic = incomingIdToOptimistic.get(item.id);
+    if (!optimistic) {
+      return item;
+    }
+    if (normalizeComparableUserText(item.text).length > 0) {
+      return item;
+    }
+    const optimisticText = optimistic.text.trim();
+    if (!optimisticText) {
+      return item;
+    }
+    return {
+      ...item,
+      text: optimistic.text,
+    };
+  });
 }
 
 export function retargetGeneratedImageAnchor(

@@ -4,9 +4,7 @@
 //! 任何命令 `.md` 的新增/修改/删除在去抖后向前端 emit
 //! `claude-commands-changed`，由前端刷新命令补全，替代秒级轮询。
 
-use notify::{
-    Config as NotifyConfig, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
-};
+use notify::{Config as NotifyConfig, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

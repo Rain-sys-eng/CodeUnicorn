@@ -517,8 +517,7 @@ impl SharedRuntimeCoordinator {
                 attempt.owner.engine,
                 Some(attempt.owner.provider_runtime_key.as_str()),
                 native_session_id,
-            )
-            {
+            ) {
                 attempt.owner.native_session_id = Some(native_session_id);
             }
             attempt.owner.clone()
@@ -2627,11 +2626,12 @@ fn normalize_native_session_identity(
             let provider_profile_id = provider_runtime_key.and_then(
                 crate::engine::qoder_provider_profile::qoder_provider_profile_id_from_runtime_key,
             );
-            let identity = crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
-                normalized,
-                provider_profile_id,
-            )
-            .ok()?;
+            let identity =
+                crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
+                    normalized,
+                    provider_profile_id,
+                )
+                .ok()?;
             // Runtime ingress 的 raw ACP session id 没有 distribution。只有明确
             // 的 Qoder runtime key 才能把它升格为 durable Native identity；canonical
             // identity 自带 profile，可用于兼容已经落盘的历史事件。
@@ -2640,9 +2640,7 @@ fn normalize_native_session_identity(
             }
             Some(identity.canonical_id())
         }
-        EngineType::Codex | EngineType::Gemini | EngineType::Dsh => {
-            Some(normalized.to_string())
-        }
+        EngineType::Codex | EngineType::Gemini | EngineType::Dsh => Some(normalized.to_string()),
     }
 }
 

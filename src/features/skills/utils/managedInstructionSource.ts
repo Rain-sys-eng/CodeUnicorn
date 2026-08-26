@@ -38,9 +38,11 @@ export function classifyManagedInstructionAttribution(
   if (
     normalizedSource === "project_claude"
     || normalizedSource === "project_codex"
+    || normalizedSource === "project_pi"
     || normalizedSource === "global_claude"
     || normalizedSource === "global_codex"
     || normalizedSource === "global_gemini"
+    || normalizedSource === "global_pi"
   ) {
     return "engine_injected";
   }
@@ -63,6 +65,8 @@ export function classifyManagedInstructionAttribution(
     || normalizedPath.includes("/.codex/commands")
     || normalizedPath.includes("/.gemini/skills")
     || normalizedPath.includes("/.gemini/commands")
+    || normalizedPath.includes("/.pi/skills")
+    || normalizedPath.includes("/.pi/agent/skills")
   ) {
     return "engine_injected";
   }

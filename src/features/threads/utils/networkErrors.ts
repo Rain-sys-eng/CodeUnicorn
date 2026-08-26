@@ -51,3 +51,14 @@ export function classifyNetworkError(message: string): "dns" | "timeout" | "prox
   }
   return null;
 }
+
+export function classifyTurnStartReasonCode(rawMessage: string): string {
+  if (parseFirstPacketTimeoutSeconds(rawMessage)) {
+    return "first-packet-timeout";
+  }
+  const networkKind = classifyNetworkError(rawMessage);
+  if (networkKind) {
+    return `network-${networkKind}`;
+  }
+  return "turn-start-unclassified";
+}

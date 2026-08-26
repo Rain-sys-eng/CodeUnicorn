@@ -30,7 +30,7 @@ dist-ssr
 release-local
 CLAUDE.md
 .claude.github/workflows/release.yml
-
+.pi
 # AI workflow local-only state
 .claude/settings.local.json
 .codex/hooks/__pycache__/

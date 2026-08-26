@@ -13,6 +13,13 @@ export type DshModelVendorSection<
 export type DshModelDisplayLabelOptions = {
   /** Closed trigger shows `provider / lastSegment` so it cannot collide with other CLI names. */
   closed?: boolean;
+  /**
+   * List rows whose last segment collides with a sibling row (PI custom
+   * providers routing several upstreams under one provider, e.g.
+   * `cpa/cline/x` vs `cpa/fb2api/x`) keep the middle path so the rows stay
+   * distinguishable.
+   */
+  disambiguate?: boolean;
 };
 
 const SLASH_CATALOG_ENGINES = new Set(["dsh", "pi"]);
@@ -35,6 +42,9 @@ export function formatDshModelDisplayLabel(
 ): string {
   const lastSegment = resolveDshLastSegment(model);
   if (!options.closed) {
+    if (options.disambiguate) {
+      return resolveDshCollisionLabel(model) ?? lastSegment;
+    }
     return lastSegment;
   }
   const provider = firstPathSegment(model.id);
@@ -68,6 +78,25 @@ function takeAfterProviderSeparator(label?: string): string {
   return index >= 0
     ? value.slice(index + PROVIDER_LABEL_SEPARATOR.length).trim()
     : value;
+}
+
+/**
+ * Collision fallback for PI custom-provider rows: strip the vendor-section
+ * prefix (first id segment) so `cpa/cline/x` shows as `cline/x`. When
+ * nothing beyond the last segment remains (two-segment ids where the
+ * upstream only differs before the slash), keep the full catalog id.
+ */
+function resolveDshCollisionLabel(model: Pick<ModelInfo, "id">): string | null {
+  const id = model.id.trim();
+  const last = lastPathSegment(id);
+  if (!id || id === last) {
+    return null;
+  }
+  const rest = id.slice(id.indexOf("/") + 1).trim();
+  if (rest && rest !== last) {
+    return rest;
+  }
+  return id;
 }
 
 function firstPathSegment(value: string): string {

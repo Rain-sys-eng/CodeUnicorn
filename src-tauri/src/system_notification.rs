@@ -140,12 +140,10 @@ mod macos {
 
     fn center() -> Result<Retained<UNUserNotificationCenter>, String> {
         if !is_real_app_bundle() {
-            return Err(
-                "UNUserNotificationCenter requires a packaged .app bundle \
+            return Err("UNUserNotificationCenter requires a packaged .app bundle \
                  (not a bare target/debug binary). Use `cargo tauri dev` / \
                  release bundle, or fall back to the notification plugin."
-                    .to_string(),
-            );
+                .to_string());
         }
         Ok(UNUserNotificationCenter::currentNotificationCenter())
     }

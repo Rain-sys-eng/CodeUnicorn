@@ -114,6 +114,22 @@ impl CodexSessionAdapter {
 
     /// Emit a UsageUpdate event from a usage object
     fn emit_usage_from_object(&self, usage: &Value) {
+        let Some(event) = Self::build_usage_update_event(&self.workspace_id, usage) else {
+            return;
+        };
+        if let Some(sender) = &self.event_sender {
+            let _ = sender.send(event);
+        }
+    }
+
+    /// 从 usage object 构造 UsageUpdate 事件（纯函数，可单测）。
+    ///
+    /// window 缺失时透传 None，前端按「未上报」降级；禁止伪造 200K 默认值
+    /// （三方 provider 的真实窗口可能 128K 或 1M，伪造值产生的百分比必然
+    /// 误导）。auto-compaction 触发链路（app_server_auto_compaction）的窗口
+    /// 启发式是独立行为面，不经此事件
+    /// （fix-codex-third-party-provider-model-catalog）。
+    fn build_usage_update_event(workspace_id: &str, usage: &Value) -> Option<EngineEvent> {
         let input_tokens = Self::read_i64(usage, &["input_tokens", "inputTokens"]);
         let output_tokens = Self::read_i64(usage, &["output_tokens", "outputTokens"]);
         let cached_tokens = Self::read_i64(
@@ -134,25 +150,21 @@ impl CodexSessionAdapter {
             ],
         );
 
-        if input_tokens.is_some() {
-            if let Some(sender) = &self.event_sender {
-                let _ = sender.send(EngineEvent::UsageUpdate {
-                    workspace_id: self.workspace_id.clone(),
-                    input_tokens,
-                    output_tokens,
-                    cached_tokens,
-                    model_context_window: model_context_window.or(Some(200_000)),
-                    context_used_tokens: None,
-                    context_usage_source: None,
-                    context_usage_freshness: None,
-                    context_used_percent: None,
-                    context_remaining_percent: None,
-                    context_tool_usages: None,
-                    context_tool_usages_truncated: None,
-                    context_category_usages: None,
-                });
-            }
-        }
+        input_tokens.map(|input_tokens| EngineEvent::UsageUpdate {
+            workspace_id: workspace_id.to_string(),
+            input_tokens: Some(input_tokens),
+            output_tokens,
+            cached_tokens,
+            model_context_window,
+            context_used_tokens: None,
+            context_usage_source: None,
+            context_usage_freshness: None,
+            context_used_percent: None,
+            context_remaining_percent: None,
+            context_tool_usages: None,
+            context_tool_usages_truncated: None,
+            context_category_usages: None,
+        })
     }
 
     /// Convert a Codex app-server event to unified format
@@ -394,5 +406,59 @@ mod tests {
 
         let current = access_mode_to_sandbox_policy(None);
         assert_eq!(current["type"], "current");
+    }
+
+    #[test]
+    fn usage_event_passes_through_missing_context_window_as_none() {
+        let event = CodexSessionAdapter::build_usage_update_event(
+            "ws-relay",
+            &serde_json::json!({
+                "input_tokens": 1200,
+                "output_tokens": 300,
+                "cached_input_tokens": 800,
+            }),
+        )
+        .expect("usage event with token facts");
+
+        let EngineEvent::UsageUpdate {
+            model_context_window,
+            ..
+        } = &event
+        else {
+            panic!("expected UsageUpdate event");
+        };
+        assert_eq!(model_context_window, &None);
+    }
+
+    #[test]
+    fn usage_event_passes_through_reported_context_window() {
+        let event = CodexSessionAdapter::build_usage_update_event(
+            "ws-official",
+            &serde_json::json!({
+                "input_tokens": 1200,
+                "modelContextWindow": 272000,
+            }),
+        )
+        .expect("usage event with token facts");
+
+        let EngineEvent::UsageUpdate {
+            input_tokens,
+            model_context_window,
+            ..
+        } = &event
+        else {
+            panic!("expected UsageUpdate event");
+        };
+        assert_eq!(input_tokens, &Some(1200));
+        assert_eq!(model_context_window, &Some(272000));
+    }
+
+    #[test]
+    fn usage_event_skips_tokenless_payload() {
+        let event = CodexSessionAdapter::build_usage_update_event(
+            "ws-relay",
+            &serde_json::json!({ "modelContextWindow": 272000 }),
+        );
+        assert!(event.is_none());
     }
 }

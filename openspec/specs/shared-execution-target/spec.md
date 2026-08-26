@@ -270,6 +270,11 @@ mirror, but MUST be derived from `initialTarget.engine`; it MUST NOT be an indep
 authority. Legacy partial metadata MAY remain readable, but MUST NOT define the creation contract
 for new sessions.
 
+Create-time model rows for `initialTarget` MUST come from the **provider-scoped authoritative
+catalog** of the default create Provider (first ordered profile for the selected engine). The
+system MUST NOT build `initialTarget.model*` from a bare `get_engine_models(engine)` / non-force-
+refreshed engine status cache while labeling the snapshot as local/default.
+
 #### Scenario: complete initial target is persisted atomically
 
 - **WHEN** a user creates a Shared Session with a resolved local or managed Target
@@ -292,6 +297,17 @@ for new sessions.
   `initialTarget.engine`
 - **THEN** Session creation MUST fail closed
 - **AND** the system MUST NOT silently choose either value
+
+#### Scenario: create-time models match the default provider profile
+
+- **WHEN** Shared Session creation resolves default Provider P for engine E
+- **THEN** `initialTarget` model catalog entry id and runtime model MUST be chosen from models
+  loaded for `(E, P)` under authoritative load rules
+- **AND** if P is local/default, the load MUST force-refresh local settings rather than reuse a
+  stale engine-wide model cache
+- **AND** if P is managed, the load MUST use provider-scoped configuration for P
+- **AND** `providerProfileNameSnapshot` / `providerProfileSource` MUST describe P (local →
+  disk + local label; managed → managed id/name)
 
 ### Requirement: Shared Target Selection MUST Have One Complete Authority
 
@@ -386,4 +402,165 @@ provenance contract.
 
 - **WHEN** history load 开始后、结束前，store 的 persist generation 因 hydrate 递增
 - **THEN** loader MUST 跳过本次 hydrate 覆盖
+
+### Requirement: Atomic Model Selection MUST Link Reasoning Effort To Target Model Capability
+
+When the Atomic target picker (Shared Session or create-session) writes a complete `ExecutionTarget` for a model selection or provider-channel switch, the system MUST resolve `reasoning.effort` from the **target** engine and model capability, not from a cross-engine stale effort and not from an unrelated global `activeEngine` selection.
+
+For Codex models that declare catalog/custom reasoning metadata, the system MUST seed a supported default when inheritance does not apply. For Claude and Grok, the system MUST keep their fixed allowlists and MAY leave effort `null` to mean engine Default when inheritance does not apply.
+
+#### Scenario: Grok to Codex catalog model seeds model default
+
+- **WHEN** the user changes Shared Atomic target from Grok to Codex model `gpt-5.6-sol` (or equivalent catalog entry whose `defaultReasoningEffort` is `low`)
+- **THEN** the written `selectedNextTarget.reasoning.effort` MUST be `low`
+- **AND** MUST NOT retain the previous Grok effort
+- **AND** MUST NOT leave effort as `null` solely because the previous engine was Grok
+
+#### Scenario: same-profile Codex model switch keeps compatible effort
+
+- **WHEN** Shared Atomic target is already Codex on profile P with effort `high`
+- **AND** the user selects another Codex model on the same profile that still supports `high`
+- **THEN** the written effort MUST remain `high`
+
+#### Scenario: same-profile Codex model switch drops unsupported effort
+
+- **WHEN** Shared Atomic target effort is `ultra`
+- **AND** the user selects a Codex model whose supported efforts do not include `ultra`
+- **THEN** the written effort MUST fall back to that model’s default (or first supported effort)
+- **AND** MUST NOT keep `ultra`
+
+#### Scenario: unknown runtime Codex model stays capability-neutral
+
+- **WHEN** the selected Codex model has no catalog/custom reasoning metadata
+- **THEN** the system MUST NOT invent supported options
+- **AND** effort MAY be `null`
+
+### Requirement: Shared Atomic Reasoning Options MUST Follow Selected Next Target
+
+While Shared Session or create-session Atomic mode is active, the composer ReasoningSelect options MUST be derived from `selectedNextTarget` / Atomic `executionTarget` engine and model capability. The options MUST NOT be taken solely from the global composer `activeEngine` fixed allowlist when that engine differs from the Atomic target engine.
+
+#### Scenario: Codex target shows catalog options after leaving Grok
+
+- **WHEN** Shared `selectedNextTarget.engine` is `codex` and the selected model is `gpt-5.6-sol`
+- **AND** the global app-shell `activeEngine` is still `grok` or another non-codex engine
+- **THEN** ReasoningSelect options MUST include the Codex model’s supported efforts (including `xhigh` / `max` / `ultra` when declared by catalog)
+- **AND** MUST NOT be limited to Grok’s fixed `low` / `medium` / `high` allowlist alone
+
+#### Scenario: Claude or Grok target keeps fixed allowlist
+
+- **WHEN** Shared `selectedNextTarget.engine` is `claude` or `grok`
+- **THEN** ReasoningSelect options MUST use that engine’s fixed allowlist
+- **AND** the Default (`null`) option MAY remain available for those engines
+
+### Requirement: Shared Codex Effort MUST Reconcile Null Or Unsupported Values
+
+When Shared Session holds a Codex `selectedNextTarget` with a known catalog/custom model, the system MUST reconcile `reasoning.effort` that is `null` or outside the model’s supported set to the model default (or first supported effort). Reconciliation MUST apply to composer display and MUST apply again at Shared send boundary so UI and dispatch payload cannot diverge. Unknown runtime models without metadata remain capability-neutral and MUST NOT invent efforts.
+
+#### Scenario: hydrated null effort seeds catalog default before send
+
+- **WHEN** Shared history hydrates Codex `gpt-5.6-sol` with `reasoning` absent or `effort: null`
+- **THEN** composer display MUST show the model default (`low`) rather than a sticky empty Default state
+- **AND** the Shared send payload effort MUST also be `low` after reconciliation
+
+#### Scenario: unsupported effort is clamped on model capability
+
+- **WHEN** Shared Codex target effort is `ultra` but the selected model does not support `ultra`
+- **THEN** display and send MUST use that model’s default or first supported effort
+- **AND** MUST NOT dispatch `ultra`
+
+### Requirement: Shared Session Initialization MUST NOT Borrow Native Composer Reasoning State
+
+Creating or activating a Shared Session MUST derive reasoning options and effort from the Shared `selectedNextTarget` (or the create-session Atomic target), not from the global Native composer `activeEngine` / `selectedEffort` / model reasoning catalog. After a user has used Native Codex, initializing Shared Grok MUST show only Grok’s fixed allowlist and Default; it MUST NOT show Codex-only tiers such as `xhigh` / `max` / `ultra`, and MUST NOT preselect a leftover Native Codex effort.
+
+#### Scenario: Native Codex then Shared Grok init
+
+- **WHEN** the global Native composer last used Codex with a non-null effort and full model reasoning options
+- **AND** the user creates a Shared Session with initial engine Grok and a local default model
+- **THEN** the composer ReasoningSelect options MUST be limited to Grok’s fixed `low` / `medium` / `high` (plus Default)
+- **AND** MUST NOT include `xhigh` / `max` / `ultra`
+- **AND** the selected effort MUST NOT inherit the previous Native Codex effort solely because `activeEngine` is still Codex
+
+#### Scenario: Shared without hydrated target fail-closed for reasoning UI
+
+- **WHEN** the active conversation is Shared but `selectedNextTarget` is not yet available
+- **THEN** the composer MUST NOT fall back to Native/global reasoning options or effort
+- **AND** MAY show an empty option set and null effort until the Shared target hydrates
+
+### Requirement: Atomic Closed Trigger MUST Prefer Execution Target Snapshot For Selection Display
+
+When the composer Atomic target picker is active (`targetGroups` / Shared or create-session Atomic mode), the closed-state model trigger MUST treat `executionTarget` model identity as the selection-display authority. Provider-scoped model catalog rows MAY enrich the label when a matching row is loaded, but catalog miss MUST NOT collapse a present `executionTarget` model identity into the empty “select model” placeholder.
+
+#### Scenario: complete shared target shows model before catalog load
+
+- **WHEN** a Shared Session has a complete `selectedNextTarget` with engine, model identity, and local/managed provider snapshot
+- **AND** the Atomic model catalog for that engine+profile has not been loaded yet (user has not opened the menu)
+- **THEN** the closed model trigger MUST display a non-empty model label derived from `executionTarget.modelCatalogEntryId` and/or `executionTarget.model`
+- **AND** MUST NOT show only the empty select-model placeholder
+
+#### Scenario: wrong parent models do not hide shared selection
+
+- **WHEN** Atomic mode is active with a complete `executionTarget` for engine Grok
+- **AND** the parent composer `models` prop still contains only another engine’s catalog (non-empty)
+- **THEN** the closed trigger MUST still display the Grok `executionTarget` model identity
+- **AND** MUST NOT require a catalog hit in the foreign parent models list
+
+#### Scenario: catalog hit still preferred when available
+
+- **WHEN** Atomic mode has a complete `executionTarget` and the matching provider-scoped catalog row is loaded
+- **THEN** the closed trigger MAY use the catalog row’s display label / provider-scoped runtime name
+- **AND** the selected identity MUST remain the same `executionTarget` model entry
+
+### Requirement: Shared Composer MUST NOT Borrow Global Model Selection For Atomic Selected State
+
+While the active conversation is a Shared Session, the Atomic picker selected-state props MUST NOT fall back to the global/Native composer `selectedModelId` when `selectedNextTarget` is absent or incomplete. Empty next-target MUST render as unselected in the picker and MUST remain fail-closed for V2 send.
+
+#### Scenario: null next target stays unselected
+
+- **WHEN** the active thread is Shared and `selectedNextTarget` is null or not a resolved execution target
+- **AND** the global composer still holds a non-null Native/global `selectedModelId`
+- **THEN** the Atomic closed trigger MUST show the unselected state
+- **AND** the Shared send path MUST continue to reject incomplete targets (existing V2 contract)
+
+#### Scenario: complete next target ignores global selectedModelId
+
+- **WHEN** Shared `selectedNextTarget` is complete with model M
+- **AND** global `selectedModelId` is a different model N
+- **THEN** the Atomic closed trigger and selection identity MUST follow M
+- **AND** MUST NOT display N as the Shared selection
+
+### Requirement: Shared Complete Next Target MUST Eagerly Ensure Provider Catalog As Enrichment
+
+When Shared Session holds a complete `selectedNextTarget`, the composer MUST request the provider-scoped model catalog for that target’s engine and provider profile (mapping local/default to the engine’s local profile sentinel). Catalog load failure MUST NOT clear `selectedNextTarget` or revert the closed trigger to empty placeholder solely due to load failure.
+
+#### Scenario: ensure models after shared target hydrate
+
+- **WHEN** Shared history or create hydrates a complete `selectedNextTarget`
+- **THEN** the system MUST invoke catalog ensure for that engine+profile without requiring the user to open the model menu first
+- **AND** a later successful catalog load MAY upgrade the display label without changing the selected identity
+
+#### Scenario: ensure failure does not wipe target
+
+- **WHEN** catalog ensure for the current Shared next target fails or returns empty
+- **THEN** `selectedNextTarget` MUST remain unchanged
+- **AND** the closed trigger MUST continue to display snapshot-based model identity when present
+
+### Requirement: Shared Session Open MUST Not Re-Seed Create Defaults
+
+Hydrating or activating an existing Shared Session MUST publish the durable next target as the
+Composer authority. The create-time “first provider + default model” algorithm MUST run only on
+new session creation, never as a silent reseed on open.
+
+#### Scenario: activate existing session keeps durable next target
+
+- **WHEN** a Shared Session already stores a complete `selectedTarget`
+- **AND** the client activates that session
+- **THEN** `selectedNextTarget` MUST equal that durable target
+- **AND** the system MUST NOT replace it with a newly computed first-provider default
+
+#### Scenario: create and open remain separate authorities
+
+- **WHEN** session A is newly created with first-provider default D
+- **AND** session B was previously used with target T ≠ D
+- **THEN** activating B MUST show T
+- **AND** activating A MUST show D until the user changes the picker
 

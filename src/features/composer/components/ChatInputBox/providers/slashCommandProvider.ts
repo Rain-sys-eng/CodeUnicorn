@@ -42,5 +42,3 @@ export function commandToDropdownItem(command: CommandItem): DropdownItemData {
     data: { command },
   };
 }
-
-export default slashCommandProvider;

@@ -16,6 +16,7 @@ import Keyboard from "lucide-react/dist/esm/icons/keyboard";
 import Play from "lucide-react/dist/esm/icons/play";
 import Search from "lucide-react/dist/esm/icons/search";
 import type { OpenAppTarget, WorkspaceInfo } from "../../../types";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import type { ReactElement, ReactNode } from "react";
 import { OpenAppMenu, type OpenAppMenuExtraAction } from "./OpenAppMenu";
 import { ShortcutsGuideModal } from "./ShortcutsGuideModal";
@@ -29,6 +30,7 @@ import {
 } from "../../../services/clientStorage";
 import { pushErrorToast } from "../../../services/toasts";
 import { DEFAULT_OPEN_APP_TARGETS } from "../constants";
+import { useKnownOpenAppIcons } from "../hooks/useKnownOpenAppIcons";
 import { useOpenAppIcons } from "../hooks/useOpenAppIcons";
 import { getLaunchScriptIcon } from "../utils/launchScriptIcons";
 import { openPathInTarget, resolveOpenAppPath } from "../utils/openApp";
@@ -134,6 +136,9 @@ function MainHeaderImpl({
   onOpenShortcutsSettings,
 }: MainHeaderProps) {
   const { t } = useTranslation();
+  // Built-in open-app PNGs load lazily; re-render once cached so the pinned
+  // target buttons swap from the generic glyph to real logos.
+  const knownOpenAppIconsLoaded = useKnownOpenAppIcons();
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [projectQuery, setProjectQuery] = useState("");
   const [shortcutsGuideOpen, setShortcutsGuideOpen] = useState(false);
@@ -173,7 +178,7 @@ function MainHeaderImpl({
       label: t("files.copyPath"),
       icon: <ClipboardCopy size={18} aria-hidden />,
       onSelect: () => {
-        void navigator.clipboard?.writeText(resolvedWorktreePath);
+        void copyTextToClipboard(resolvedWorktreePath);
       },
     }),
     [resolvedWorktreePath, t],
@@ -501,7 +506,9 @@ function MainHeaderImpl({
             <img
               className="open-app-icon"
               src={
-                getKnownOpenAppIcon(target.id) ??
+                (knownOpenAppIconsLoaded
+                  ? getKnownOpenAppIcon(target.id)
+                  : null) ??
                 pinnedTargetIconById[target.id] ??
                 openAppIconById[target.id] ??
                 GENERIC_APP_ICON

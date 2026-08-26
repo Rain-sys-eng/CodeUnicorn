@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek};
 use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 
@@ -11,7 +11,7 @@ use crate::backend_budget::ScanCacheState;
 #[cfg(test)]
 use crate::shared::workspace_listing::WorkspaceDirectoryChildState;
 use crate::shared::workspace_listing::{
-    build_initial_directory_entries, is_special_directory_path,
+    build_initial_directory_entries, canonicalize_or_original, is_special_directory_path,
     normalize_workspace_relative_directory_path, normalize_workspace_relative_file_path,
     normalized_relative_to_pathbuf, should_always_skip, sort_and_truncate_named_entries,
     workspace_files_response, workspace_scan_budget_reached, WorkspaceScanState,
@@ -124,8 +124,7 @@ fn infer_workspace_item_kind(path: &Path) -> Result<WorkspaceFileItemKind, Strin
 }
 
 fn resolve_workspace_root(root: &PathBuf) -> Result<PathBuf, String> {
-    root.canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))
+    Ok(canonicalize_or_original(root))
 }
 
 fn resolve_workspace_item_path(
@@ -134,9 +133,7 @@ fn resolve_workspace_item_path(
 ) -> Result<(String, PathBuf, WorkspaceFileItemKind), String> {
     let normalized_path = normalize_workspace_relative_path(relative_path)?;
     let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve path {normalized_path}: {err}"))?;
+    let canonical_path = canonicalize_or_original(&candidate);
 
     if !canonical_path.starts_with(canonical_root) {
         return Err("Invalid file path".to_string());
@@ -156,9 +153,7 @@ fn resolve_workspace_target_directory(
     } else {
         canonical_root.join(normalized_relative_to_pathbuf(&normalized_path))
     };
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve target directory {normalized_path}: {err}"))?;
+    let canonical_path = canonicalize_or_original(&candidate);
 
     if !canonical_path.starts_with(canonical_root) {
         return Err("Invalid target directory".to_string());
@@ -899,13 +894,9 @@ fn read_workspace_file_with_limit_inner(
     max_bytes: u64,
 ) -> Result<WorkspaceFileResponse, String> {
     let normalized_path = normalize_workspace_relative_file_path(relative_path)?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_root = canonicalize_or_original(root);
     let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to open file: {err}"))?;
+    let canonical_path = canonicalize_or_original(&candidate);
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Invalid file path".to_string());
     }
@@ -926,6 +917,43 @@ fn read_workspace_file_with_limit_inner(
         buffer.truncate(max_bytes as usize);
     }
 
+    let content = decode_text_bytes(&buffer, "File")?;
+    Ok(WorkspaceFileResponse { content, truncated })
+}
+
+/// 2.3 按需 tail：读文件**末尾**最多 max_bytes（默认 8 KiB），byte budget 对齐
+/// tool-output 口径；首字节对齐（read 从头截断）不适用日志场景。
+pub(crate) fn read_workspace_file_tail_inner(
+    root: &PathBuf,
+    relative_path: &str,
+    max_bytes: u64,
+) -> Result<WorkspaceFileResponse, String> {
+    let normalized_path = normalize_workspace_relative_file_path(relative_path)?;
+    let canonical_root = canonicalize_or_original(root);
+    let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
+    let canonical_path = canonicalize_or_original(&candidate);
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err("Invalid file path".to_string());
+    }
+    let metadata = std::fs::metadata(&canonical_path)
+        .map_err(|err| format!("Failed to read file metadata: {err}"))?;
+    if !metadata.is_file() {
+        return Err("Path is not a file".to_string());
+    }
+    let file_len = metadata.len();
+    let read_from = file_len.saturating_sub(max_bytes);
+    let mut file =
+        File::open(&canonical_path).map_err(|err| format!("Failed to open file: {err}"))?;
+    let mut buffer = Vec::new();
+    file.seek(std::io::SeekFrom::Start(read_from))
+        .map_err(|err| format!("Failed to seek file: {err}"))?;
+    file.take(max_bytes + 1)
+        .read_to_end(&mut buffer)
+        .map_err(|err| format!("Failed to read file: {err}"))?;
+    let truncated = buffer.len() > max_bytes as usize;
+    if truncated {
+        buffer.truncate(max_bytes as usize);
+    }
     let content = decode_text_bytes(&buffer, "File")?;
     Ok(WorkspaceFileResponse { content, truncated })
 }
@@ -979,13 +1007,9 @@ pub(crate) fn resolve_workspace_preview_handle_inner(
     root: &PathBuf,
     relative_path: &str,
 ) -> Result<WorkspacePreviewHandleResponse, String> {
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_root = canonicalize_or_original(root);
     let candidate = canonical_root.join(relative_path);
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to open file: {err}"))?;
+    let canonical_path = canonicalize_or_original(&candidate);
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Invalid file path".to_string());
     }
@@ -1061,17 +1085,14 @@ fn resolve_allowed_external_absolute_path(
         return Err(invalid_path_message.to_string());
     }
 
-    let canonical_path = raw_path
-        .canonicalize()
-        .map_err(|err| format!("Failed to open file: {err}"))?;
+    let canonical_path = canonicalize_or_original(&raw_path);
 
     let mut within_allowed_root = false;
     for root in allowed_roots {
-        if let Ok(canonical_root) = root.canonicalize() {
-            if canonical_path.starts_with(&canonical_root) {
-                within_allowed_root = true;
-                break;
-            }
+        let canonical_root = canonicalize_or_original(root);
+        if canonical_path.starts_with(&canonical_root) {
+            within_allowed_root = true;
+            break;
         }
     }
     if !within_allowed_root {
@@ -1096,16 +1117,11 @@ pub(crate) fn write_workspace_file_inner(
     relative_path: &str,
     content: &str,
 ) -> Result<(), String> {
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_root = canonicalize_or_original(root);
     let candidate = canonical_root.join(relative_path);
 
-    // Ensure the parent directory exists so we can canonicalize safely.
     if let Some(parent) = candidate.parent() {
-        let canonical_parent = parent
-            .canonicalize()
-            .map_err(|err| format!("Failed to resolve parent directory: {err}"))?;
+        let canonical_parent = canonicalize_or_original(parent);
         if !canonical_parent.starts_with(&canonical_root) {
             return Err("Invalid file path".to_string());
         }
@@ -1134,16 +1150,11 @@ pub(crate) fn create_workspace_directory_inner(
     relative_path: &str,
 ) -> Result<(), String> {
     let normalized_path = normalize_workspace_relative_path(relative_path)?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_root = canonicalize_or_original(root);
     let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
 
-    // Ensure the parent directory exists and resolves inside workspace root.
     if let Some(parent) = candidate.parent() {
-        let canonical_parent = parent
-            .canonicalize()
-            .map_err(|err| format!("Failed to resolve parent directory: {err}"))?;
+        let canonical_parent = canonicalize_or_original(parent);
         if !canonical_parent.starts_with(&canonical_root) {
             return Err("Invalid directory path".to_string());
         }
@@ -1167,13 +1178,9 @@ pub(crate) fn trash_workspace_item_inner(
     relative_path: &str,
 ) -> Result<(), String> {
     let normalized_path = normalize_workspace_relative_path(relative_path)?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_root = canonicalize_or_original(root);
     let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve path: {err}"))?;
+    let canonical_path = canonicalize_or_original(&candidate);
 
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Invalid file path".to_string());
@@ -1391,7 +1398,8 @@ mod tests {
         resolve_external_absolute_preview_handle_inner, resolve_external_spec_preview_handle_inner,
         resolve_workspace_preview_handle_inner, search_workspace_text_inner,
         sort_and_truncate_named_entries, write_external_absolute_file_inner,
-        WorkspaceDirectoryChildState, WorkspaceScanState, WorkspaceTextSearchOptions,
+        write_workspace_file_inner, WorkspaceDirectoryChildState, WorkspaceScanState,
+        WorkspaceTextSearchOptions,
     };
     use crate::backend_budget::ScanCacheState;
     use crate::utils::normalize_git_path;
@@ -1451,6 +1459,21 @@ mod tests {
         assert!(normalize_workspace_relative_directory_path("/").is_err());
         assert!(normalize_workspace_relative_directory_path("../outside").is_err());
         assert!(normalize_workspace_relative_directory_path(".git/config").is_err());
+    }
+
+    #[test]
+    fn write_workspace_file_updates_relative_file() {
+        let root = std::env::temp_dir().join(format!("mossx-write-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("docs")).expect("create docs");
+        std::fs::write(root.join("docs/note.md"), "before").expect("seed file");
+
+        write_workspace_file_inner(&PathBuf::from(&root), "docs/note.md", "after")
+            .expect("write workspace file");
+
+        let content = std::fs::read_to_string(root.join("docs/note.md")).expect("read file");
+        assert_eq!(content, "after");
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
     }
 
     #[test]

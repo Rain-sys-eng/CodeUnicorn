@@ -33,6 +33,7 @@ export type TimelineProjectionRow =
         reasoningCount: number;
         toolCount: number;
         exploreCount: number;
+        proseCount?: number;
       };
       /** Insert drawer header immediately before this process item. */
       insertBeforeItemId: string;
@@ -104,6 +105,7 @@ export type TimelineProcessPhaseChip = {
     reasoningCount: number;
     toolCount: number;
     exploreCount: number;
+    proseCount?: number;
   };
   /** First process item of the phase (present only when expanded / remounted). */
   insertBeforeItemId: string;
@@ -127,7 +129,9 @@ export function buildTimelineProjectionRows(input: {
   processPhaseChips?: readonly TimelineProcessPhaseChip[];
   shouldRenderUserInputAtTail: boolean;
 }): TimelineProjectionRow[] {
-  const phaseByFirstItemId = new Map<string, TimelineProcessPhaseChip>();
+  // 同一锚点可挂多个 chip（极简模式外层 turn chip 展开时与内层 trailing chip
+  // 同锚第一个可见 entry）；按 phases 数组顺序渲染，外层 header 在上。
+  const phaseByFirstItemId = new Map<string, TimelineProcessPhaseChip[]>();
   const phaseByAssistantId = new Map<string, TimelineProcessPhaseChip>();
   /** Process rows only exist when expanded — tag them for remount fade-in. */
   const expandedProcessMeta = new Map<
@@ -140,7 +144,12 @@ export function buildTimelineProjectionRows(input: {
       continue;
     }
     if (phase.expanded) {
-      phaseByFirstItemId.set(phase.insertBeforeItemId, phase);
+      const anchored = phaseByFirstItemId.get(phase.insertBeforeItemId);
+      if (anchored) {
+        anchored.push(phase);
+      } else {
+        phaseByFirstItemId.set(phase.insertBeforeItemId, [phase]);
+      }
       phase.hiddenItemIds.forEach((itemId, revealIndex) => {
         expandedProcessMeta.set(itemId, {
           phaseKey: phase.phaseKey,
@@ -148,7 +157,12 @@ export function buildTimelineProjectionRows(input: {
         });
       });
     } else if (phase.collapsedAnchorItemId) {
-      phaseByFirstItemId.set(phase.collapsedAnchorItemId, phase);
+      const anchored = phaseByFirstItemId.get(phase.collapsedAnchorItemId);
+      if (anchored) {
+        anchored.push(phase);
+      } else {
+        phaseByFirstItemId.set(phase.collapsedAnchorItemId, [phase]);
+      }
     } else {
       // Collapsed: process rows are hard-unmounted; park the header above prose.
       phaseByAssistantId.set(phase.assistantItemId, phase);
@@ -180,9 +194,11 @@ export function buildTimelineProjectionRows(input: {
 
     // Expanded: header before first process row (drawer top).
     for (const itemId of entryItemIds) {
-      const phase = phaseByFirstItemId.get(itemId);
-      if (phase) {
-        pushPhaseHeader(phase);
+      const anchoredPhases = phaseByFirstItemId.get(itemId);
+      if (anchoredPhases) {
+        for (const phase of anchoredPhases) {
+          pushPhaseHeader(phase);
+        }
         break;
       }
     }

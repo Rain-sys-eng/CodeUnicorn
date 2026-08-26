@@ -54,6 +54,13 @@ const persistedWorkerFailureAtByReason = new Map<string, number>();
 const WORKER_FAILURE_PERSIST_INTERVAL_MS = 60_000;
 const DEFAULT_WORKER_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_WORKER_REQUEST_TIMEOUT_MS = 60_000;
+// 崩溃循环退避：崩溃的 worker 若每次请求都重建再崩，每个请求都要白付一次
+// 「建 worker → 崩」往返（实测 88–325ms × 同内容 10 次）。首崩立即重建，
+// 连续第 2 次起按 30s 起步指数退避，5min 封顶；成功响应清零计数。
+const WORKER_CRASH_BACKOFF_BASE_MS = 30_000;
+const WORKER_CRASH_BACKOFF_MAX_MS = 300_000;
+let consecutiveWorkerCrashes = 0;
+let workerBackoffUntilMs = 0;
 
 const pendingRequests = new Map<string, PendingWorkerRequest>();
 
@@ -169,8 +176,24 @@ export function disposeFastMarkdownWorker() {
   workerDiagnostics.setHasWorker(false);
 }
 
+export function __resetFastMarkdownWorkerBackoffForTests() {
+  if (sharedWorker) {
+    sharedWorker.terminate();
+  }
+  sharedWorker = null;
+  listenersAttached = false;
+  rejectAllPendingRequests(new Error("Fast Markdown worker disposed"));
+  consecutiveWorkerCrashes = 0;
+  workerBackoffUntilMs = 0;
+  persistedWorkerFailureAtByReason.clear();
+}
+
 function getSharedWorker(): Worker | null {
   if (typeof Worker === "undefined") {
+    return null;
+  }
+  if (Date.now() < workerBackoffUntilMs) {
+    workerDiagnostics.setHasWorker(false);
     return null;
   }
   if (!sharedWorker) {
@@ -242,7 +265,32 @@ function handleWorkerMessage(event: MessageEvent<unknown>) {
     );
     return;
   }
+  // 成功响应证明 worker 健康，连续崩溃计数与退避窗一并清零。
+  consecutiveWorkerCrashes = 0;
+  workerBackoffUntilMs = 0;
   pending.resolve(message.result);
+}
+
+export function classifyFastMarkdownWorkerRuntimeError(
+  message: string | null | undefined,
+): string {
+  const text = (message ?? "").trim().toLowerCase();
+  if (!text || text === "script error." || text === "script error") {
+    return "script-error";
+  }
+  if (text.includes("out of memory") || /\boom\b/.test(text)) {
+    return "out-of-memory";
+  }
+  if (
+    text.includes("failed to fetch") ||
+    text.includes("failed to load") ||
+    text.includes("loading chunk") ||
+    text.includes("networkerror") ||
+    text.includes("network error")
+  ) {
+    return "worker-load-failed";
+  }
+  return "worker-uncaught";
 }
 
 function handleWorkerError(event: ErrorEvent) {
@@ -259,7 +307,36 @@ function disposeBrokenWorker(error: Error) {
   rejectAllPendingRequests(error);
   workerDiagnostics.recordFallback("worker-disposed-after-error");
   workerDiagnostics.setHasWorker(false);
-  persistWorkerFailureDiagnostic("worker-runtime-error");
+  consecutiveWorkerCrashes += 1;
+  const backoffMs = currentWorkerCrashBackoffMs();
+  workerBackoffUntilMs = backoffMs > 0 ? Date.now() + backoffMs : 0;
+  // 完整 message 只进 console（不受 diagnostics 脱敏约束），落盘只留指纹。
+  if (typeof console !== "undefined") {
+    console.warn(
+      "[fast-markdown-worker] worker crashed and was disposed; falling back to main-thread compile.",
+      error,
+    );
+  }
+  const message = error.message ?? "";
+  persistWorkerFailureDiagnostic(
+    "worker-runtime-error",
+    classifyFastMarkdownWorkerRuntimeError(message),
+    {
+      messageHash: hashStableString(message).slice(0, 16),
+      messageLength: message.length,
+    },
+  );
+}
+
+function currentWorkerCrashBackoffMs(): number {
+  // 首崩不退避：多数崩溃是偶发（如单次 OOM），立即重建代价最低。
+  const excessCrashes = consecutiveWorkerCrashes - 1;
+  if (excessCrashes <= 0) {
+    return 0;
+  }
+  const exponentialMs =
+    WORKER_CRASH_BACKOFF_BASE_MS * 2 ** Math.min(excessCrashes - 1, 4);
+  return Math.min(exponentialMs, WORKER_CRASH_BACKOFF_MAX_MS);
 }
 
 function rejectAllPendingRequests(error: Error) {
@@ -407,7 +484,11 @@ function throwIfWorkerRequestIsStale(
   throw new Error("fast-markdown-worker-result-stale");
 }
 
-function persistWorkerFailureDiagnostic(reasonCode: string) {
+function persistWorkerFailureDiagnostic(
+  reasonCode: string,
+  errorClass?: string,
+  fingerprint?: { messageHash: string; messageLength: number },
+) {
   const now = Date.now();
   const previousAt = persistedWorkerFailureAtByReason.get(reasonCode);
   if (
@@ -420,9 +501,11 @@ function persistWorkerFailureDiagnostic(reasonCode: string) {
   const snapshot = workerDiagnostics.snapshot();
   appendRendererDiagnostic("fast-markdown-worker/failed", {
     reasonCode,
+    errorClass: errorClass ?? reasonCode,
     fallbackCount: snapshot.fallbackCount,
     pendingRequestCount: snapshot.pendingRequestCount,
     postMessageFailureCount: snapshot.postMessageFailureCount,
+    ...(fingerprint ?? {}),
   });
 }
 

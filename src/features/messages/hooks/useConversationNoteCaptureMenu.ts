@@ -13,6 +13,7 @@ import {
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
 import type { ConversationItem } from "../../../types";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import { buildSemanticThreadNote } from "../../../utils/threadText";
 import type { NoteCaptureDraft } from "../../note-cards/types";
 import { resolveUserMessagePresentation } from "../presentation/messagesUserPresentation";
@@ -106,13 +107,7 @@ export function useConversationNoteCaptureMenu({
           id: "copy-conversation-selection",
           label: t("messages.copy"),
           onSelect: async () => {
-            try {
-              await navigator.clipboard.writeText(selectionSnapshot.text);
-            } catch (error) {
-              console.warn("Failed to copy conversation selection", {
-                message: error instanceof Error ? error.message : String(error),
-              });
-            }
+            await copyTextToClipboard(selectionSnapshot.text);
           },
         });
         if (onCaptureNote) {

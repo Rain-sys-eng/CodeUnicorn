@@ -224,5 +224,3 @@ export const ProviderSelect = ({
     </>
   );
 };
-
-export default ProviderSelect;

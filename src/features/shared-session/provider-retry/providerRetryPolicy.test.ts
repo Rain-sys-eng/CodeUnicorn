@@ -13,7 +13,7 @@ describe("providerRetryPolicy", () => {
   it("clamps out-of-range fields back into the published bounds", () => {
     expect(
       clampSharedProviderRetrySettings({
-        maxAttempts: 99,
+        maxAttempts: 5000,
         baseDelaySec: 0,
         maxDelaySec: 4000,
         backoff: "linear" as never,
@@ -21,7 +21,7 @@ describe("providerRetryPolicy", () => {
       }),
     ).toEqual({
       ...SHARED_PROVIDER_RETRY_DEFAULTS,
-      maxAttempts: 10,
+      maxAttempts: 999,
       baseDelaySec: 1,
       maxDelaySec: 1200,
     });

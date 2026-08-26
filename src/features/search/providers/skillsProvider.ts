@@ -1,4 +1,5 @@
 import type { SkillOption } from "../../../types";
+import { normalizePathSeparators } from "../../../utils/path";
 import type { SearchResult } from "../types";
 
 type NormalizedSkillEntry = {
@@ -7,10 +8,6 @@ type NormalizedSkillEntry = {
   path: string;
   source: string;
 };
-
-function normalizeSkillPath(value: string): string {
-  return value.replace(/\\/g, "/");
-}
 
 function normalizeSkillSource(value: string | undefined): string {
   return value?.trim() ?? "";
@@ -46,7 +43,7 @@ export function searchSkills(
       continue;
     }
     const description = skill.description?.trim() ?? "";
-    const path = normalizeSkillPath(skill.path?.trim() ?? "");
+    const path = normalizePathSeparators(skill.path?.trim() ?? "");
     const source = normalizeSkillSource(skill.source);
     const entry: NormalizedSkillEntry = {
       name,

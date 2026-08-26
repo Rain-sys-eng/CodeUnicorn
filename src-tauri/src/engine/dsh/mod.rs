@@ -214,7 +214,9 @@ pub async fn send_user_turn(
     let dsh_workspace_id = session::workspace_id_from_create(&workspace)?;
 
     let resume_id = resume_id.map(str::trim).filter(|value| !value.is_empty());
-    let agent_preset = agent_preset.map(str::trim).filter(|value| !value.is_empty());
+    let agent_preset = agent_preset
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let native_session_id = if continue_session {
         match resume_id {
             Some(value) if session::is_pending_thread(value) => {
@@ -478,11 +480,7 @@ pub async fn respond_to_control(
             let questions = events::pending_questions(&rpc_id).await;
             let outcome = if is_dsh_question_cancel(result) {
                 client
-                    .respond_error(
-                        &rpc_id,
-                        "cancelled",
-                        "the user cancelled ask_user_question",
-                    )
+                    .respond_error(&rpc_id, "cancelled", "the user cancelled ask_user_question")
                     .await
             } else {
                 client
@@ -545,10 +543,9 @@ fn is_dsh_question_cancel(result: &Value) -> bool {
                     .get("answers")
                     .and_then(Value::as_array)
                     .is_none_or(|items| {
-                        items.iter().all(|item| {
-                            item.as_str()
-                                .is_none_or(|text| text.trim().is_empty())
-                        })
+                        items
+                            .iter()
+                            .all(|item| item.as_str().is_none_or(|text| text.trim().is_empty()))
                     })
             })
         })
@@ -867,10 +864,7 @@ mod tests {
             models[0].supported_reasoning_efforts,
             vec!["off", "low", "high", "max"]
         );
-        assert_eq!(
-            models[0].default_reasoning_effort.as_deref(),
-            Some("high")
-        );
+        assert_eq!(models[0].default_reasoning_effort.as_deref(), Some("high"));
         assert!(models[1].supported_reasoning_efforts.is_empty());
         assert!(models[1].default_reasoning_effort.is_none());
     }

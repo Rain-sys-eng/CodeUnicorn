@@ -1886,7 +1886,9 @@ mod tests {
             fs::create_dir_all(&dir).expect("create backup dir");
             fs::write(dir.join("manifest.json"), format!("{index}")).expect("write marker");
             let _ = fs::File::open(&dir).and_then(|file| {
-                file.set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000 + index as u64))
+                file.set_modified(
+                    UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000 + index as u64),
+                )
             });
         }
         gc_relationship_backups(&root).expect("gc backups");

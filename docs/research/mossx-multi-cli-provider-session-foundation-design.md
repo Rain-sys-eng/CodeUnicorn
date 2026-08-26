@@ -12,7 +12,8 @@ status: implemented
 > 内容类型：Architecture Decision Record
 > 生命周期：accepted / implemented in slices；原始 A–D 路线已归档，后续修复与收口 change 独立演进
 > 初始日期：2026-07-27
-> 最近校准：2026-08-22 · Shared-owned Native 侧栏泄漏收口（`fix-shared-owned-native-sidebar-leak`：live `thread/started` 按 Execution Target 认 pending；Qoder 终态 `qoder:<profile>:<raw>`；`ensureThread` 认 Shared-owned 而不靠 `parent.startsWith("shared:")`；hide 未就绪不放出新 grok/pi/qoder Index 行）。同日 · Qoder 进 Shared 支持集合（`enable-qoder-shared-target`：前后端双集合 + context/runtime-key/provisioning/send/interrupt 补臂 + canonical fact engine 枚举 + 四级 picker 目录；runtime-only 模型目录发送路径按空目录 + Allow 放行）。同日 · Qoder history 主通道切换：磁盘 jsonl primary（`~/.qoder/projects/<cwd-slug>/*.jsonl`，Grok/PI/Kimi NativeHistoryReader 形态）+ ACP `session/list`/`session/load` fallback；delete 仍走 ACP `session/delete`（红线 21 不变）。同日 · Qoder runtime contract 校准：requested model/reasoning effort fail-closed；cancel 先取 `stopReason:"cancelled"` typed terminal、仅 2s 后 kill 未结算 child；prompt `usage.inputTokens` / `outputTokens` 投影 unified usage；`forkSessionId` 路由 ACP `session/fork`；status/model probe 与 runtime 共用 resolved `home_dir`。同日 · Qoder 黄金 turn 补采（qodercli 1.1.28 + PAT 注入，probe6/7/8/9）：capability matrix `streaming.reasoning` / `streaming.tool-output` / `input.mid-turn` / `session.fork` 由 unknown 升 supported；cancel ACK 升级为实测（`stopReason:"cancelled"`）；ACP usage shape live（PAT 账号零值，非零值仍待实测）；`session.tree` 保持 unknown；仍不进 Shared。此前 2026-08-21 · Qoder 成为第 9 个 Native Engine（第四条协议族 `acp-stdio`，spawn-per-turn + ACP `session/resume`）；第一期不进 Shared；Spike 与校准行见下表 Qoder 条目。此前 2026-08-19 · DSH Composer 任务条 / 占用环接 host `session/projection`：`todos`、`contextPressure`、`contextBreakdown` 与 billed `tokenUsage` / `sessionStats` 独立 last-wins；空 `todos` 清空 standing plan。此前 2026-08-17：DSH Goal continuation：completed hop `turn/end` 不解绑；Goal `active` 抑制 `TurnCompleted`；`source.kind === "goal"` 投影为 `dsh-goal` 折叠卡。同日 Session Index 有界 DSH writer 入 first-paint。此前 2026-08-15：DSH 成为第 7 个 Native Engine（`dsh-host-rpc` + 全局 `dsh web` supervisor）；第一期不进 Shared；pending 晋升 / spawned host 退出回收 / 侧栏 workspace 成员集已按 L2 收口；校准行见下表 DSH 条目
+2026-08-26 · PI 后台任务 canonical `backgroundTask` item 契约与三路状态表（`pi-background-task-experience`）：pi 扩展 bg 工具在事件层投影为 backgroundTask item（start→item/started / receipt+notification→item/backgroundTask/updated），前端会话级状态表 + BackgroundTaskCard 活体卡/终态折叠 + composer 后台任务 pill + 历史重载合并；post-settle orphan 通知被 per-turn forwarder 丢弃为已知缺口（B registry watcher P2 根治），详见下方校准表 PI background-task 行。
+> 最近校准：2026-08-25 · Atomic 思考强度联动扩到 PI（`expand-shared-atomic-reasoning-linkage-to-pi`）：native PI composer 思考档位已在 `add-pi-thinking-level-selector`（2026-08-25）落地，但 Shared / create-session Atomic 对话框走的是另一条前端链路（`atomicModelReasoning.ts` + `Composer.tsx` 的 `atomicModelReasoningRef` + shared target hydrate reconcile effect），只接 Codex / Claude / Grok，对 PI 直接返空档位 / 清空 effort，导致用户在 Shared Session 选 PI 模型看不到 `ReasoningSelect`、send 边界 reconcile 把 effort 清成 null。修复接 PI 单引擎到这套原子化联动（DSH / Qoder / Kimi / Grok / OpenCode 由各自 change 评估）：① `atomicModelReasoning.ts` 新增 private `enrichModelReasoningForEngine`（PI 透传，不发明）；`resolveAtomicReasoningOptions` / `reconcileAtomicReasoningEffort` / `resolveAtomicDefaultReasoningEffort` / `resolveAtomicReasoningEffort` 四个 export 扩 `engine === "pi"` 分支，与 Codex 同形态（命中 allowlist 保留、不命中落 default、capability-neutral 保留 current）；`enrichModelInfoWithAtomicReasoning` 保持 codex-only 早退，不污染 `useProviderTargetCatalogOwners.ts` / `ModelSelect.tsx` native 路径；② `Composer.tsx atomicModelReasoningRef` 非 codex 分支扩为：当 `target.engine === "pi"` 时按 id/model 匹配 `providerModelCatalogs["pi"]`，灌 `supportedReasoningEfforts` / `defaultReasoningEffort`；其它非 codex 非 pi 引擎保持「只填 id/model」（向后兼容）；catalog 选择器由 `providerModelCatalogs?.codex` 改为 `providerModelCatalogs?.[target.engine]`（codex 行为不变）；③ shared target hydrate reconcile effect 早退白名单扩 `codex | claude | grok | pi`，让 Shared Session hydrate 时 PI 模型的 effort 也按 PI allowlist 收敛；④ 后端零改动 —— PI RPC `set_thinking_level` / fallback `--thinking` 与 Shared V2 dispatch `engine_send_message` 透传 `owner.target.reasoning_effort`（`shared_session_v2.rs` ~L4605 的 `Kimi | Grok | OpenCode | Pi | Qoder` 臂）已就位，本次纯前端联动；⑤ native PI composer 0 回归——`useAtomicReasoningProjection = isSharedSessionResolved || createSessionTargetPicker` 让 native 路径不走 atomicModelReasoningRef，hydrate effect 早退条件 `!isSharedSessionResolved` 屏蔽 native，enrich helpers codex-only 早退不污染 native 路径（详见 proposal.md §「不回归 native 红线」）。事实源：`src/features/models/atomicModelReasoning.ts` 新增 `enrichModelReasoningForEngine` + 四个 export 的 pi 分支、`src/features/composer/components/Composer.tsx` atomicModelReasoningRef 非 codex 分支 + shared target hydrate reconcile effect 白名单、`src/features/models/atomicModelReasoning.test.ts`（24 cases 含 PI 七档 / map holes / unknown-neutral / cross-engine inherit）、`src/features/composer/components/ChatInputBox/selectors/ModelSelect.test.tsx`（新增 4 个 PI buildProviderExecutionTarget cases）、`src/features/composer/components/Composer.shared-pi-reasoning.test.tsx`（新建 5 cases：catalog allowlist 投影 / map holes 子集 / runtime-only capability-neutral / effort 越界 reconcile / native 不消费 providerModelCatalogs 回归断言）、OpenSpec `expand-shared-atomic-reasoning-linkage-to-pi`。此前 2026-08-24 · AskUserQuestion 结算墓碑与 completed ACK 对齐（`fix-askuserquestion-settlement-tombstone`）：用户实证「答了也没用、开始执行了又弹框」幽灵卡——成功结算只 remove 队列、无 session 级 tombstone，且 Claude 成功应答几乎不 emit `completed=true`，resume 重放/迟到 `item/tool/requestUserInput` 把同题卡重新入队。落地三层：① FE session 级有界 settlement tombstone（MAX=2048 溢出 clear+re-mark；identity = `requestUserInputIdentityKey`，带 workspace + Shared owner/attempt 维度），accepted / stale 结算与收到 `completed=true` 时 mark；`useThreadUserInputEvents` 入队前检查 + reducer `addUserInputRequest` 双闸门 fail-closed 丢弃（history reopen 同被挡）；非 stale 提交失败不写墓碑、保留重试。② BE Claude `respond_to_user_input` 成功（MCP oneshot / native notify 两路径）后写 session 级 `settled_user_input_request_ids`（cap 2048 溢出 clear）并 emit `RequestUserInput { completed: true, questions: [] }`，与超时结算路径 completed 语义对齐；MCP request_id 漂移时 fallback sole waiter 交付，双 id 均 mark + emit（skip/submit 不挂死）。③ Native 重入 guard：`convert_ask_user_question_to_request` 对已 settled request_id（`ask-<DefaultHasher(tool_id)>`）只发 completed=true、不注册 pending；stream wait 条件收紧为 `matches!(RequestUserInput { completed: false })`，completed 生命周期事件不再进 kill+`--resume` 等待。新 tool_id 派生新 request_id 仍可正常弹窗；不改 Codex 本地 plan 卡协议、无新 IPC。事实源：`src/utils/userInputSettlementTombstone.ts` `markUserInputRequestSettled` / `isUserInputRequestSettled`、`src/features/threads/hooks/{useThreadUserInputEvents.ts,useThreadUserInput.ts,useThreadsReducer.ts}`（`addUserInputRequest` 闸门）、`src/utils/requestUserInputIdentity.ts` `requestUserInputIdentityKey`、`src-tauri/src/engine/claude/user_input.rs` `respond_to_user_input` / `emit_user_input_request_completed` / `convert_ask_user_question_to_request` / `mark_user_input_request_settled` / `take_sole_mcp_answer_waiter`、`src-tauri/src/engine/claude.rs` stream `is_user_input_request`（`completed: false`）。此前 2026-08-24 · 并行 Native 跨供应商 model residual 止血（`fix-native-parallel-provider-model-isolation`）：用户实证并行多个绑定不同 managed provider 的 native Claude 会话后，回历史会话二次发送把上一会话产品模型名（`MiniMax-M3`）当 freeform 静默 `--model` 上送 DeepSeek API 触发 400（`supported API model names are deepseek-v4-pro or deepseek-v4-flash`）。修复以 send 边界为唯一强制闸门：① managed runtime resolver 的跨供应商 residual 启发式从「仅 `k3`/`kimi-*`」扩展为 Kimi 系 + MiniMax 系 + 常见第三方产品前缀（`deepseek`/`glm-`/`qwen`/`doubao`/`moonshot`/`abab`/`ernie`/`baichuan`/`yi-`/`step-`/`longcat`），且仅当 catalog 就绪且 `!legal.has(value)`（catalog entry 命中 / runtime 反查 / profile env 合法集均优先于启发式）时才 repair 到 catalog default（`repaired=true`），拒绝「全 unlisted 封杀」保住合法 freeform（`my-org-router-v2`、`claude-opus-4-6` 不回归）；② catalog 空窗仍放行 freeform，不拿产品名启发式误杀 catalog 未就绪时的合法会话；③ composer draft 闸维持 `*-pending-*` 限定，finalized 历史会话不吃上一会话 draft selection；④ Shared `selectedNextTarget` 路径零代码 diff。design D3 后端 `record_engine_provider_binding_at_path` 防静默覆盖为可选 P1，本批未落地（解析优先级仍 request > catalog）。事实源：`src/features/models/claudeManagedRuntimeModel.ts` `FOREIGN_RUNTIME_RESIDUE_HINTS` / `isForeignClaudeRuntimeResidue` / `resolveClaudeManagedRuntimeModel`、`src/app-shell/domains/useAppShellComposerModelSection.ts` `resolvedModel`、`src/app-shell/domains/selectedComposerSession.ts` `shouldApplyDraftComposerSelectionToThread`、两个同名 `.test.ts`、commit `a98c10dbc`。此前 2026-08-24 · Shared 创建默认 Provider 改「有序列表第一项 + profile 权威 catalog/mapping」（`fix-shared-create-default-provider-catalog`）：`handleStartSharedConversation` 弃用裸 `getEngineModels(engine)`（Claude 本地路径吃 engine status 过期 cache，渠道 chip 标「本地配置」却显示过期 MiniMax 映射，用户实证全串 MiniMax-M3），改走 `resolveSharedSessionCreateInitialTarget`——`loadOrderedSharedCreateProviders` 取与 Atomic picker 同序的 Provider 列表（本地 sentinel 优先；Qoder 无 provider CRUD 固定 global/cn 双 profile；PI 落 sentinel），`resolveFirstSharedCreateProvider` 定第一项（disk/managed source + 名称快照，禁止硬编码「永远 local」或「永远第一个 managed」），`loadAuthoritativeModelsForCreateProvider` 按 profile 权威取数（本地 sentinel + `forceRefresh: true` 重读 settings；managed 带 providerProfileId 走 provider-scoped 实时 config）；Claude 创建前 `syncClaudeModelMappingForProfile(profileId)` 与渠道切换同源（失败不阻断创建）；`buildSharedSessionInitialTarget` 统一产出完整 ExecutionTarget（默认 model = catalog `isDefault` 行否则首行、runtime = `model || id`、reasoning 按 target capability 播种 inherit:false、空 catalog fail-closed 不建会话）。打开既有会话硬边界：create/open 分叉，hydrate 路径不得调用创建默认解析 reseed last `selectedTarget`；配套展示对齐——`ChatInputBox` 在完整 executionTarget 变化时对 Claude 补 sync mapping（不挡 ensure），`resolveClaudeCatalogModelLabel` / `resolveModelIdForIcon` 文案与图标改 catalog runtime 优先、禁陈旧 localStorage mapping 盖权威 `model.model`，`providerBrandIcon` 补 Moonshot 短 id `k3`/`k3-256k` → kimi（置于宽泛规则前）。事实源：`src/app-shell/sections/core/useAppShellSections.ts` `handleStartSharedConversation`、`src/features/shared-session/target/resolveSharedSessionCreateInitialTarget.ts`（`loadOrderedSharedCreateProviders` / `resolveFirstSharedCreateProvider` / `loadAuthoritativeModelsForCreateProvider` / `resolveSharedSessionCreateInitialTarget`）、`src/features/shared-session/target/initialTarget.ts` `buildSharedSessionInitialTarget`、`src/features/composer/components/ChatInputBox/ChatInputBox.tsx`（executionTarget effect）、`src/features/composer/components/ChatInputBox/selectors/ModelSelect.tsx`（`resolveClaudeCatalogModelLabel` / `resolveModelIdForIcon`）、`src/features/vendors/providerBrandIcon.ts`。此前 2026-08-24 · Shared Codex 上下文投影改走 portable transcript（`fix-shared-codex-context-projection`）：① 第三方 Codex 兼容 provider 会拒绝缺 provider-private `reasoning` item 的重构 message/tool 链，且确定性失败——`thread/inject_items` 方法存在不再作为 structured import 证据；`context_capabilities` Codex 臂关闭 `structured_history_import` / `tool_history` / `strong_context_ack`，compiler 按 capability 选择 `portable-transcript`（超预算回退 bounded `checkpoint`），tool call/result 按 atomic pair 省略并经 manifest omission 记录（category `tool-exchange`、NotRetrievable），user/assistant 文本、transcript budget、checkpoint 压缩与 original-task 保留不变；② `shared-provider-retry` 分类器把 `invalid_request_error` 且含 `required reasoning item` 判 permanent `config`，同 Binding 不再自动重试，429/timeout 等暂态分类不变；③ 被否决：仅 omit `function_call`（assistant message 仍依赖私有 reasoning，无法闭合协议）与 provider-specific item-schema probe（无无副作用探测，超范围）；存量已污染 binding 不做在位修复，走既有 recovery exit / target actions。事实源：`src-tauri/src/shared_session_v2.rs` `context_capabilities`（Codex 臂 + 测试 `codex_shared_context_uses_weak_portable_transcript`）、`src-tauri/src/shared_context/compiler.rs` `select_mode` / tool-exchange omission 分支、`src/features/shared-session/provider-retry/classifySharedProviderRetryError.ts` `classifyPermanent`。此前 2026-08-24 · Qoder 单 engine 双分发 immutable distribution binding（`add-qoder-dual-distribution`）：Qoder Global（`__qoder_global__` / `qodercli` / `QODER_CONFIG_DIR` / `QODER_PERSONAL_ACCESS_TOKEN` / `~/.qoder` / `qoder-auth.json`）与 Qoder CN（`__qoder_cn__` / `qoderclicn` / `QODERCN_CONFIG_DIR` / `QODERCN_PERSONAL_ACCESS_TOKEN` / `~/.qoder-cn` / `qoder-cn-auth.json`）建模为同一 `qoder` engine 下的两个 `QoderDistribution`，不新增顶层 engine；`providerProfileId` 语义升为不可变 distribution binding 持久化进 Native thread 与 Shared Binding，空值 / `__local_qoder__` / 旧 `qoder:<raw>` 仅作 legacy Global 兼容输入，新持久化一律 `qoder:<profile>:<raw>`（`QoderNativeSessionIdentity.canonical_id`），Qoder special ids 不得被普通 local sentinel 归一化为 `null`；spawn / send / fork / interrupt / status / doctor / `get_engine_models` / history list-load-delete 统一走 `resolve_qoder_provider_launch_profile` 产出的 `QoderProviderLaunchProfile`（bin / home / runtime key 按 distribution 解析，`qoder_runtime_key` 隔离 manager ownership），history 磁盘 primary + ACP fallback 均锁死当前 distribution（`distribution_launch_profiles_never_cross_read_disk_history` 断言不跨 root）；catalog 行按 distribution scope（`scope_qoder_models_to_distribution`），仅打开 picker / 手动刷新 / 发送前缺目录时请求，切会话零 catalog IPC；Shared Tx1 `validate_qoder_distribution_identity` 对未知 Qoder profile fail-closed（`invalid-target`，不写 `conversation.turnRequested` / Binding）；UI 保持单 Qoder 侧栏父入口（`new-session-qoder` children Global/CN）+ 单 Vendor 页内 Global/CN segmented tabs（切换只换视图，不触发 rebinding / catalog refresh）。事实源：`src-tauri/src/engine/qoder_provider_profile.rs`（`QoderDistribution` / `resolve_qoder_provider_launch_profile` / `qoder_canonical_provider_profile_id` / `QoderNativeSessionIdentity`）、`src-tauri/src/engine/{qoder.rs,qoder_auth.rs,status.rs,manager.rs,qoder_history.rs}`、`src-tauri/src/shared_session_v2.rs` `validate_qoder_distribution_identity`、`src/features/threads/constants/codexProviderProfiles.ts`、`src/features/app/hooks/useSidebarMenus.ts`、`src/features/vendors/components/VendorSettingsPanel.tsx`。此前 2026-08-24 · PI RPC 收口与附件链路批次（`enhance-pi-native-rpc-session` 收尾）：① turn 结算改**看门狗对账**——typed `agent_settled` 迟到时按「进程活性 + 事件推进」对账继续等，取代固定 timeout（长任务误杀实证）；② RPC 内联回归漏点收口（终态 / 锁 / 图片 / daemon）；③ 历史用户附图从 RPC image block 还原，带图提问 hydrate 后用户气泡不再粘连助手尾巴；④ 中文路径附件切片 panic、侧栏标题 `<file name>` tag 泄漏、fork 静默 no-op 误藏主线、长会话会话树递归爆栈、resident 模型选型漂移（发送前对账）、compact 链路 500s 独立超时 + 活跃 run 守卫整批加固。事实源：`src-tauri/src/engine/{pi.rs,pi_rpc.rs}`，commits `7f91b7389` / `4e14b02c1` / `cfad29b82` / `0fdcdb27c` / `d38dc9850` / `acf122187` / `3f8946709` / `4c56cefe3` / `f46e46829` / `c66e67970`。此前 2026-08-24 · PI RPC resident 真并行（`enhance-pi-native-rpc-session` §33）：`PiSession.residents` 按 session/scratch 分进程，撤销 workspace 单飞 `switch_session` 互斥（用户实证「另一 PI 会话的 turn 仍在进行中」误伤并行）。事实源：`src-tauri/src/engine/pi.rs` `ensure_resident` / `pi_resident_map_key`。此前 2026-08-25 · Claude/Gemini turn 结算「成功 result 优先于进程退出码」（`fix-turn-false-failure-retry-storm`）：用户实证（shared Claude Code + 中转渠道，Windows CLI 2.1.233）已完成 turn（`stop_reason=end_turn`、tool_use 零悬挂、零 API error）被进程非零退出翻成 TurnError，经 shared provider-retry 放大为 auto-resume 死循环（单 session 106 连发、每枪 ~160K token）。修复对齐 §14.3.2 既有设计（「Process Exit 只作缺失 Result 的错误兜底」）：`claude.rs` 新增 `saw_success_result`（`is_error != true` 且 subtype 非 `error*`），非零退出降级 warn 日志；`gemini.rs` 同款 inversion 以 `saw_turn_completed` 守卫；kimi/grok/pi 无流内 terminal 概念不适用，opencode 已有 `quiesced_without_terminal` 守卫，qoder/dsh 无退出码否决路径。配套：`shared-provider-retry` 分类器新增 permanent `quota`（预扣费/余额不足先于 pool 401/403 判定）+ identical-failure 熔断（同 signature 连败 3 次即 exhausted）。事实源：`src-tauri/src/engine/claude.rs` `is_success_result_event`、`src-tauri/src/engine/gemini.rs`、`src/features/shared-session/provider-retry/{classifySharedProviderRetryError.ts,noteSharedProviderRetryTurn.ts}`。此前 2026-08-25 · Qoder PAT 注入优先级收口（`fix-qoder-pat-env-precedence`）：spawn 注入改为 stored PAT（`~/.ccgui/qoder-auth.json` / `qoder-cn-auth.json`）**优先于** mossx 进程 env（此前 env 优先导致 Windows 持久环境变量遮蔽设置页新 PAT，用户「换新 token 仍被要求重新认证」）；`qoder_auth_status` 新增 `envPresent` 暴露 stored+env 共存，设置页提示 env 被忽略；凭据解析顺序文案同步反转。事实源：`src-tauri/src/engine/qoder_auth.rs` `select_spawn_pat`。此前 2026-08-23 · PI 迁移 `pi --mode rpc` 长驻进程（`enhance-pi-native-rpc-session`）：`src-tauri/src/engine/pi_rpc.rs` resident client（strict JSONL / id 关联 / extension UI auto-cancel / typed `agent_settled` 终态），`pi.rs` 主路径 idle→`prompt` / streaming→`steer`（attached turn 随 run 同结算），`abort` + 2s kill 兜底，spawn/handshake 失败回退 print-json（fallback 下拒绝并发发送防双进程交叉写 session 文件）；图片改 base64 `images[]` 传输。capability matrix pi 行：`input.mid-turn` / `session.fork`（fork-to-new-file 语义，非树内 lane）/ `session.tree`（只读 + fork，RPC 无 leaf-move）/ `rpc.server` 升 supported，`session.switch` 保持 unknown，`tool.mcp` 维持 unsupported（upstream 反 MCP 立场）。前端 `src/features/pi-session/**`：气泡 ⑂ fork（源文本回填 composerDraftStore）、只读会话树 overlay、tab 分支 chip、侧栏 ⑂N 徽标、composer /compact 入口；状态走 feature-local 外部 store，不进 AppShell domain bag。同日收口（用户实测通过后 review）：RPC pending 先注册后写（response 早到竞态）；turn 超时摘 run 全 waiter 一次结算 + `Settled` 臂防 TurnError 重发；mismatch/align 臂 TurnError 双发根除；`interrupt()` 空闲不再 abort+2s grace；侧栏 live disk list 归一化补 `parentSessionId`（index 快照后新建派生会话泄漏修复）；树高亮改激活路径跨 lane 贯通染色 + turn 结束自动刷新。此前 2026-08-22 · Shared-owned Native 侧栏泄漏收口（`fix-shared-owned-native-sidebar-leak`：live `thread/started` 按 Execution Target 认 pending；Qoder 终态 `qoder:<profile>:<raw>`；`ensureThread` 认 Shared-owned 而不靠 `parent.startsWith("shared:")`；hide 未就绪不放出新 grok/pi/qoder Index 行）。同日 · Qoder 进 Shared 支持集合（`enable-qoder-shared-target`：前后端双集合 + context/runtime-key/provisioning/send/interrupt 补臂 + canonical fact engine 枚举 + 四级 picker 目录；runtime-only 模型目录发送路径按空目录 + Allow 放行）。同日 · Qoder history 主通道切换：磁盘 jsonl primary（`~/.qoder/projects/<cwd-slug>/*.jsonl`，Grok/PI/Kimi NativeHistoryReader 形态）+ ACP `session/list`/`session/load` fallback；delete 仍走 ACP `session/delete`（红线 21 不变）。同日 · Qoder runtime contract 校准：requested model/reasoning effort fail-closed；cancel 先取 `stopReason:"cancelled"` typed terminal、仅 2s 后 kill 未结算 child；prompt `usage.inputTokens` / `outputTokens` 投影 unified usage；`forkSessionId` 路由 ACP `session/fork`；status/model probe 与 runtime 共用 resolved `home_dir`。同日 · Qoder 黄金 turn 补采（qodercli 1.1.28 + PAT 注入，probe6/7/8/9）：capability matrix `streaming.reasoning` / `streaming.tool-output` / `input.mid-turn` / `session.fork` 由 unknown 升 supported；cancel ACK 升级为实测（`stopReason:"cancelled"`）；ACP usage shape live（PAT 账号零值，非零值仍待实测）；`session.tree` 保持 unknown；仍不进 Shared。此前 2026-08-21 · Qoder 成为第 9 个 Native Engine（第四条协议族 `acp-stdio`，spawn-per-turn + ACP `session/resume`）；第一期不进 Shared；Spike 与校准行见下表 Qoder 条目。此前 2026-08-19 · DSH Composer 任务条 / 占用环接 host `session/projection`：`todos`、`contextPressure`、`contextBreakdown` 与 billed `tokenUsage` / `sessionStats` 独立 last-wins；空 `todos` 清空 standing plan。此前 2026-08-17：DSH Goal continuation：completed hop `turn/end` 不解绑；Goal `active` 抑制 `TurnCompleted`；`source.kind === "goal"` 投影为 `dsh-goal` 折叠卡。同日 Session Index 有界 DSH writer 入 first-paint。此前 2026-08-15：DSH 成为第 7 个 Native Engine（`dsh-host-rpc` + 全局 `dsh web` supervisor）；第一期不进 Shared；pending 晋升 / spawned host 退出回收 / 侧栏 workspace 成员集已按 L2 收口；校准行见下表 DSH 条目
 > 适用范围：Native Session、Shared Session、Provider Runtime、Session Catalog、Sidebar Projection、未来 Plugin / Orchestration
 > 核心决策：Native Session 保持原生身份；Shared Session 承担跨 CLI、跨 Provider 的逐 Turn 切换
 
@@ -23,22 +24,27 @@ status: implemented
 本文继续作为多 CLI 会话的 ADR。原始 Change A1–A3、B、C、D 已归档；截至 2026-08-06，Native/Shared 的后续修复、兼容、Phase 5 Squad 与 multi-agent collab 以 [OpenSpec main specs](../../openspec/specs/README.md)、对应 change 与代码为准，不应回写成「原路线未实现」。
 
 | 契约面 | 当前代码事实 | 事实源 |
-|--------|--------------|--------|
+| -------- | -------------- | -------- |
 | Built-in engines | 9：Claude/Codex/Gemini/Grok/Kimi/OpenCode/PI/DSH/**Qoder** | `src/features/engine/engineIds.json`、`src/types/engine.ts` `EngineType`、`src-tauri/src/engine/mod.rs` `EngineType::Qoder` |
-| Qoder protocol / runtime | 第四条 Builtin 协议族 `acp-stdio`，`executionModel: one-shot`（**spawn-per-turn**：`qodercli --acp` → initialize → `session/new` / `session/resume` / `session/fork` → requested `set_model`/`set_config_option` 成功后 → `set_mode bypassPermissions` → `session/prompt` → JSON-RPC response 即 typed terminal）；requested setting error fail-closed；cancel 发送 `session/cancel` 后保留 reader 等 typed response（2s watchdog 只 kill 原 turn 仍 active 的 child）；usage 只投影 `inputTokens` / `outputTokens`，不把 `_meta.quota` 当 billing；`inputAck: "first-event"`；第一期不进 Shared（picker disabled + reason） | `src-tauri/src/engine/qoder.rs`、`src-tauri/src/engine/adapter_registry.rs` `EngineProtocolFamily::AcpStdio`、`src/features/engine/engineIds.json`、OpenSpec `harden-qoder-native-runtime-contracts`、`docs/research/mossx-qoder-capability-spike.md` |
-| Qoder identity / history / models | thread `qoder:<sessionId>` / `qoder-pending-<uuid>`；`session/new` / `session/fork` 均以真实 child sessionId 通过 `SessionStarted` 晋升（禁止双行 / 禁止伪造 id）；history 走**磁盘 jsonl primary + ACP fallback**：`list/load` 先读 `~/.qoder/projects/<cwd-slug>/<sessionId>.jsonl`（`encode_qoder_project_slug`，NativeHistoryReader 形态；readable empty JSONL 是 authoritative soft-empty；仅本地缺失、不可读或全损坏时回退 ACP），delete 仍走 ACP `session/delete`（红线 21：只读 vendor 文件）；模型目录 = ACP `models.availableModels` + `configOptions.reasoning_effort`，status/model/runtime 使用同一 resolved `home_dir`（runtime-only，不进静态 fallback roster）；权限 attach 后 `bypassPermissions` + `session/request_permission` 兜底 auto-approve，`fs/*` 限 workspace；未登录 → not-authenticated 诊断指向 `qodercli login` | `src-tauri/src/engine/{qoder,qoder_history,qoder_provider_profile}.rs`、`src-tauri/src/engine/status.rs` `detect_qoder_status_with_home`、`src-tauri/src/engine/commands.rs`、OpenSpec `harden-qoder-native-runtime-contracts` |
+| Qoder protocol / runtime | 第四条 Builtin 协议族 `acp-stdio`，`executionModel: one-shot`（**spawn-per-turn**：`qodercli --acp`（Global）/ `qoderclicn --acp`（CN）双分发，全部运行路径经 `resolve_qoder_provider_launch_profile` 解析 per-distribution bin / config env / PAT env / home，`QoderSession.distribution` + `qoder_runtime_key` 隔离 runtime ownership（2026-08-24 `add-qoder-dual-distribution`）→ initialize → `session/new` / `session/resume` / `session/fork` → requested `set_model`/`set_config_option` 成功后 → `set_mode bypassPermissions` → `session/prompt` → JSON-RPC response 即 typed terminal）；requested setting error fail-closed；cancel 发送 `session/cancel` 后保留 reader 等 typed response（2s watchdog 只 kill 原 turn 仍 active 的 child）；usage 只投影 `inputTokens` / `outputTokens`，不把 `_meta.quota` 当 billing；`inputAck: "first-event"`；第一期不进 Shared（picker disabled + reason）；PAT 注入优先级 stored PAT（Global `qoder-auth.json` / CN `qoder-cn-auth.json`）> 进程 env（2026-08-25 `fix-qoder-pat-env-precedence`） | `src-tauri/src/engine/qoder.rs`、`src-tauri/src/engine/qoder_provider_profile.rs`（`QoderDistribution` / `resolve_qoder_provider_launch_profile`）、`src-tauri/src/engine/adapter_registry.rs` `EngineProtocolFamily::AcpStdio`、`src/features/engine/engineIds.json`、OpenSpec `harden-qoder-native-runtime-contracts`、`docs/research/mossx-qoder-capability-spike.md` |
+| Qoder identity / history / models | thread `qoder:<profile>:<raw>`（`QoderNativeSessionIdentity.canonical_id`；空值 / `__local_qoder__` / 旧 `qoder:<raw>` 仅作 legacy Global 兼容输入）/ `qoder-pending-<uuid>`；`session/new` / `session/fork` 均以真实 child sessionId 通过 `SessionStarted` 晋升（禁止双行 / 禁止伪造 id）；history 走**磁盘 jsonl primary + ACP fallback**：`list/load` 按 distribution 分 root（Global `~/.qoder` / CN `~/.qoder-cn`）先读 `projects/<cwd-slug>/<sessionId>.jsonl`（`encode_qoder_project_slug`，NativeHistoryReader 形态；readable empty JSONL 是 authoritative soft-empty；仅本地缺失、不可读或全损坏时回退 ACP（fallback 锁死同一 distribution，不跨 root）），delete 仍走 ACP `session/delete`（红线 21：只读 vendor 文件）；ACP 消费纪律：JSON-RPC result 与 `session/update` 交错，读到 response 必须续读至 idle 再收口（尾包截断实证 `af9372f78`）；模型目录 = ACP `models.availableModels` + `configOptions.reasoning_effort` 且按 distribution scope（`scope_qoder_models_to_distribution`，切会话零 catalog IPC），status/model/runtime 使用同一 resolved `home_dir`（runtime-only，不进静态 fallback roster）；权限 attach 后 `bypassPermissions` + `session/request_permission` 兜底 auto-approve，`fs/*` 限 workspace；未登录 → not-authenticated 诊断指向 `qodercli login` | `src-tauri/src/engine/{qoder,qoder_history,qoder_provider_profile}.rs`、`src-tauri/src/engine/status.rs` `detect_qoder_status_with_home`、`src-tauri/src/engine/commands.rs`、OpenSpec `harden-qoder-native-runtime-contracts` |
+| PI protocol / runtime | `pi --mode rpc` 长驻进程（**resident per workspace × session**：`PiSession.residents` map，同 workspace 多 PI 标签真并行；同会话二次发送 `steer`）。idle `prompt` / streaming `steer`（attached steer turn 随 run 同结算、空文本）；typed `agent_settled` = turn 终态，`response.success` 仅受理；settle 迟到时看门狗按「进程活性 + 事件推进」对账，禁固定 timeout 误杀长任务（2026-08-24）；`abort` + 2s grace 未 settle 才 kill；extension UI request 一律 auto-cancel；spawn/handshake 失败回退 `pi --print --mode json` spawn-per-turn（fallback 拒绝同会话并发进程交叉写）。tree/stats/compact/fork 按 session 取 resident；fork/compact 只挡本会话 run。用户附图 base64 `images[]` 发送、历史经 RPC image block 还原、侧栏标题剥离附件包装 tag、中文路径按字符边界处理（2026-08-24 批次）。fork = **fork-to-new-file + fork-then-switch-back**（fork 后立即切回源文件；本会话 turn 进行中禁止；RPC 无 leaf-move）；删除会话 `drop_resident` 只杀该进程。**派生会话族**：文件头 `parentSession` → catalog `parentSessionId`（session-index 与 live disk list 双通道归一化，缺一即泄漏顶层行）→ `useThreadRows` 侧栏隐藏派生行（不占顶层也不嵌套，与 subAgent 三处计数分域），中间对话区「上下右」dock（`PiConversationTreeSplit` pi 独立容器）合并 derived lanes（共享前缀 id 去重接分叉点）+ 派生 lane 经 store 请求 onSelectThread 跳转 + 激活路径跨 lane 贯通染色 + turn 结束自动刷新；树 = `get_tree` 只读 + fork；compact 事件经 Raw 映到 canonical `thread/compacting | compacted | compactionFailed` | `src-tauri/src/engine/{pi.rs,pi_rpc.rs}`、`src-tauri/src/engine/events.rs` Raw Pi 臂、`src/features/pi-session/**`、`src/features/layout/components/DesktopLayout.tsx`、`src/features/app/hooks/useThreadRows.ts`、OpenSpec `enhance-pi-native-rpc-session`、`docs/designs/pi-native-features/final-recommended.html` |
+| PI background-task item 契约（2026-08-26 `pi-background-task-experience`） | pi 扩展后台工具（`bg_run`/`bg_delegate`/`bg_run_pi_attested`/`fusion_*`）在 `pi.rs` 三臂拦截为 **canonical `backgroundTask` item**，取代普通工具卡：tool start → `EngineEvent::BackgroundTaskStarted` → AppServer `item/started`（`item.type=backgroundTask`，`tool/title`=bg 工具名，`input/arguments`=工具参数，`status=started`）；tool end receipt（`result.details.task` 结构化优先 / 文本兜底）与扩展 `<background-task-notification>`（`message_start` role=custom `customType=background-task-notification`，只拦 message_start，message_end 归 Other）→ `EngineEvent::BackgroundTaskUpdated{source:receipt | notification}` → AppServer `item/backgroundTask/updated`（`toolId`+`task`canonical snapshot+`source`；notification 路径`toolId=null` 按 `task.id`关联）。前端会话级状态表（messages feature store，`backgroundTaskStore.ts` 模块级 Map + 事件驱动 + 版本号订阅，**非 AppShell bag**）三路维护：item/started 幂等登记 → `onBackgroundTaskUpdated`(useThreadItemEvents) 合并快照 → 合成 item 走`item/updated`同路 upsert；`ToolBlockRenderer` 按 `toolType=backgroundTask` 分发 `BackgroundTaskCard`（运行中活体 elapsed 本地 tick、终态原地折叠`message-agent-task-fold`，Render Perf 红线合规）；`ComposerRunStatusStrip`「后台任务」pill（`useBackgroundTaskPill` useSyncExternalStore 事件驱动，live dot + `running/total`，无任务不占位）+ 就地展开分组面板（running 在上/终态在下 + exit code + 查看日志 reveal）。历史重载：`pi_history.rs` 把 bg call/result 投影 `backgroundTask`、通知投影`backgroundTaskNotification`，前端`piHistoryParser`预扫描按 taskId 合并三类入口 → 单张折叠卡锚定 call 位置（孤儿 call 不渲染、通知永不成行）。**POST-SETTLE 已知缺口**：任务长于收尾 turn 时先 settle，通知触发 pi orphan run（`new_orphan` 合成 turn_id）被 per-turn forwarder 过滤丢弃，实时折叠在 P1 不覆盖，B 通道（registry watcher，P2）根治 | `src-tauri/src/engine/{pi.rs,events.rs,pi_history.rs,agent_event_bus.rs}`、`src/features/messages/utils/backgroundTaskStore.ts`、`src/features/messages/rows/components/BackgroundTaskCard.tsx`、`src/features/composer/components/run-status/{ComposerRunStatusStrip.tsx,useBackgroundTaskPill.ts}`、`src/features/threads/{hooks/useThreadItemEvents.ts,hooks/useThreadEventHandlers.ts,loaders/piHistoryParser.ts}`、`src/features/app/hooks/useAppServerEvents.ts`、`src/features/engine-task-output/contracts/agentTaskNotification.ts`、OpenSpec `pi-background-task-experience` |
 | DSH protocol / runtime | 第三条 Builtin 协议臂 `dsh-host-rpc`，`executionModel: persistent`；全应用一个 `dsh web`（adopt 已有 3080，否则 spawn；adopted 不杀） | `src-tauri/src/engine/adapter_registry.rs` `BuiltinEngineProtocol`、`src-tauri/src/engine/dsh/{host,supervisor,session,events,history}.rs`、OpenSpec `add-dsh-engine` |
 | DSH identity / ACK | thread `dsh:<sessionId>` / `dsh-pending-<uuid>`；`session.create` 立即返回真实 sessionId；首轮在 prompt 前用 pending thread id 发 `SessionStarted`，mux bind 到 `dsh:<native>`；frontend `thread/started` + ACK cache 晋升，禁止双行。**terminal/ACK（2026-08-17）**：completed hop 只 notify waiter、不解绑；Goal `active` 抑制 `TurnCompleted`；`paused`/`complete`/clear 补发；`blocked` 发 TurnCompleted 但保持绑定；cancelled/error/interrupt/archive/shutdown 才 unbind。`source.kind === "goal"` 投影为 `dsh-goal` 折叠卡（空气泡、可见、默认可折叠）；其它 injected kinds 仍隐藏 | `src-tauri/src/engine/dsh/{mod,session,events,history}.rs`、`src/features/app/hooks/useAppServerEvents.ts`、`src/features/threads/hooks/useThreadTurnEvents.ts`、`src/features/threads/adapters/dshRealtimeAdapter.ts`、`src/features/threads/loaders/dshHistoryParser.ts`、`src/features/messages/components/context/DshGoalContextSummaryCard.tsx`、OpenSpec `adapt-dsh-goal-continuation`、`docs/research/mossx-dsh-capability-spike.md` |
 | DSH host lifecycle / list | `ExitRequested` 只 `drop_host()` 杀 spawned；adopted 保留。侧栏 `list_dsh_sessions` 用 `workspace.create` 的 `sessionIds - archivedSessionIds`，禁止 cwd suffix / 空 cwd 全匹配；Session Index 有界 writer（`sync_dsh_engine` / `rows_from_dsh_summaries`）参与 first-paint 索引，host 不可达 soft-empty | `src-tauri/src/engine/dsh/supervisor.rs` `should_kill_host`、`src-tauri/src/lib.rs` `ExitRequested`、`src-tauri/src/engine/dsh/history.rs`、`src-tauri/src/session_index/{commands,writers}.rs`、`src/features/threads/hooks/useThreadActions.ts` |
 | DSH models / config | 模型是 DSH `{provider,model}` 二元组，catalog 来自 `POST /api/llm.models`；mossx 不写 `$DSH_HOME` settings/credentials | `src-tauri/src/engine/dsh/mod.rs` `load_dsh_models`、`src-tauri/src/engine/dsh_provider_profile.rs`、`src-tauri/src/types.rs` `dshBin/dshHost/dshPort/dshAutoStart` |
 | Native rendering projection | 七引擎各有 realtime adapter + history loader（DSH：`dshRealtimeAdapter` / `dshHistoryLoader`）。DSH Goal 注入走 `presentationMetadata` kind `dsh-goal`，不新增 ConversationItem kind，也不复用 Codex `/goal`。**DSH Composer 投影（2026-08-19）**：mux / history 接 `todos` / `contextPressure` / `contextBreakdown`；任务 pill 以 `dshTodos` 为权威（`[]` 清空，`null` 才回退 TodoWrite 扫描）；占用环分子=`projectedTokens ?? pressureTokens`，分母=`contextWindow`，三分类 heuristic 带 `~`；billed `tokenUsage` 不得冲掉占用 / todos | `src-tauri/src/engine/dsh/{events,history}.rs`、`src/features/app/hooks/useAppServerEvents.ts`、`src/features/threads/hooks/{useThreadsReducer,useThreadTurnEvents}.ts`、`src/features/threads/loaders/dshHistoryLoader.ts`、`src/features/composer/components/{Composer.tsx,ChatInputBox/ClaudeContextCard.tsx}`、OpenSpec `wire-dsh-todos-and-context-usage` |
-| Shared target boundary | Claude/Codex/Kimi/Grok/OpenCode/PI/**Qoder**；Gemini **与 DSH** 排除（picker disabled + reason；禁止 normalize 成 claude 后写入 binding）。Qoder（2026-08-22 `enable-qoder-shared-target`）：Kimi 同档准入（typed terminal/cancel + 跨进程 resume + `session/list` probe 实测，spike §13/§14）；`inputAck: "first-event"` 弱语义；context 走 user channel（`strong_context_ack: false`）；canonical fact engine 枚举（TurnExecutionSnapshot / ProviderPrivateRef）同步加 `"qoder"` | `sharedSessionEngines.ts`、`src-tauri/src/shared_sessions.rs`、`src-tauri/src/shared_event_log/canonical/validator.rs`、OpenSpec `add-dsh-engine` / `add-qoder-engine` / `enable-qoder-shared-target` |
+| Claude turn settlement / terminal | stream-json 成功 `result`（`is_error != true` 且 subtype 非 `error*`）为 turn 终态权威；进程退出码只在缺失成功 result 时作错误兜底（2026-08-25 前为实现与 §14.3.2 设计相悖：非零退出无条件否决已完成 turn）。Gemini 同构：`saw_turn_completed` 守卫退出码检查。kimi/grok/pi 无流内 terminal，退出码仍是唯一终态信号 | `src-tauri/src/engine/claude.rs` `is_success_result_event` / settle guard、`src-tauri/src/engine/gemini.rs`、OpenSpec `fix-turn-false-failure-retry-storm` |
+| Claude AskUserQuestion ACK / settlement tombstone | 成功 respond_to_user_input（MCP oneshot / native notify 两路径）MUST emit RequestUserInput { completed: true, questions: [] }，与超时结算路径对齐；session 级 settled_user_input_request_ids（cap 2048 溢出 clear）挡 native 重入——已结算 request_id 在 convert 时只发 completed=true、不注册 pending；stream 仅 completed=false 进 kill+--resume wait。FE 有界 settlement tombstone（MAX=2048）：accepted / stale / completed 结算写墓碑，入队前 + addUserInputRequest 双闸门 fail-closed 抑制同 identity（workspace + Shared owner/attempt + request_id）迟到/重放/history reopen；非 stale 提交失败不写墓碑、可重试（2026-08-24 fix-askuserquestion-settlement-tombstone） | `src-tauri/src/engine/claude/user_input.rs` `respond_to_user_input` / `convert_ask_user_question_to_request` / `emit_user_input_request_completed` / `settled_user_input_request_ids`、`src-tauri/src/engine/claude.rs` stream `is_user_input_request`、`src/utils/userInputSettlementTombstone.ts`、`src/features/threads/hooks/{useThreadUserInputEvents.ts,useThreadsReducer.ts}`、OpenSpec `fix-askuserquestion-settlement-tombstone` |
+| Shared provider retry 分类与熔断 | 配额不足类（预扣费/余额不足/`insufficient balance | quota`/`quota exceeded`）= permanent`quota`，先于 pool 401/403；同一 series 连续 3 次 identical failure signature（kind + normalized message 前缀）即 exhausted 熔断，独立于 maxAttempts；Codex 缺 reasoning item 协议错误（`invalid_request_error` 且含 `required reasoning item`）= permanent`config`，禁止同 Binding 自动重试（2026-08-24`fix-shared-codex-context-projection`） | `src/features/shared-session/provider-retry/{classifySharedProviderRetryError.ts,noteSharedProviderRetryTurn.ts,providerRetryPolicy.ts}`、OpenSpec `fix-turn-false-failure-retry-storm` / `fix-shared-codex-context-projection` |
+| Shared target boundary | Claude/Codex/Kimi/Grok/OpenCode/PI/**Qoder**；Gemini **与 DSH** 排除（picker disabled + reason；禁止 normalize 成 claude 后写入 binding）。Qoder（2026-08-22 `enable-qoder-shared-target`）：Kimi 同档准入（typed terminal/cancel + 跨进程 resume + `session/list` probe 实测，spike §13/§14）；`inputAck: "first-event"` 弱语义；context 走 user channel（`strong_context_ack: false`）；canonical fact engine 枚举（TurnExecutionSnapshot / ProviderPrivateRef）同步加 `"qoder"`。Codex Shared（2026-08-24 `fix-shared-codex-context-projection`）：`thread/inject_items` 方法可用 ≠ structured import 协议安全证据，`structured_history_import` / `tool_history` / `strong_context_ack` 全 false，跨 Binding context 一律 portable transcript / bounded checkpoint，tool exchange 按 atomic pair omission 进 manifest。Qoder Shared target `providerProfileId` 即 immutable distribution binding，Tx1 `validate_qoder_distribution_identity` 对未知 profile fail-closed（`invalid-target`，不落 turnRequested / Binding）（2026-08-24 `add-qoder-dual-distribution`） | `sharedSessionEngines.ts`、`src-tauri/src/shared_session_v2.rs` `context_capabilities` / `validate_qoder_distribution_identity`、`src-tauri/src/shared_context/compiler.rs`、`src-tauri/src/shared_sessions.rs`、`src-tauri/src/shared_event_log/canonical/validator.rs`、OpenSpec `add-dsh-engine` / `add-qoder-engine` / `enable-qoder-shared-target` |
 | Gemini runtime | registry 中存在，但 runtime policy 默认 disabled | `src-tauri/src/engine_policy.rs` |
-| Provider selection | Native 原子选择；Shared 逐 Turn target | `close-native-session-provider-create-binding` 与 Shared target contracts |
+| Provider selection | Native 原子选择；Shared 逐 Turn target。**Shared 创建默认 Provider（2026-08-24 `fix-shared-create-default-provider-catalog`）**：该 CLI 有序 Provider 列表第一项（顺序同 Atomic picker，本地 sentinel 优先；Qoder 固定 global/cn profile），其 models/mapping 必须 profile 权威取数——本地 `forceRefresh` 重读 settings、managed provider-scoped 实时 config，禁止裸 `get_engine_models(engine)` 吃全局 status cache；打开既有会话回显 last `selectedTarget`，禁止用创建默认 reseed。managed send 边界 `resolveClaudeManagedRuntimeModel` 对跨供应商 residual（`!legal` 且命中产品名启发式）repair 到 catalog default，freeform 与 Shared target 语义不变（2026-08-24 `fix-native-parallel-provider-model-isolation`） | `close-native-session-provider-create-binding` 与 Shared target contracts、`src/features/shared-session/target/resolveSharedSessionCreateInitialTarget.ts`、`src/app-shell/sections/core/useAppShellSections.ts` `handleStartSharedConversation`、`src/features/models/claudeManagedRuntimeModel.ts` |
 | Shared send UI 状态机 | 九态 + Recovery Exit Ladder（Probe/Stop/停止并重建/放弃本轮） | `sendStateMachine.ts`、`SharedSendStatusBar.tsx`、`shared_session_v2.rs` |
 | Recovery Exit Closure | **设计见 §14.5.7**；已实现并收口（OpenSpec `fix-shared-session-recovery-exit-closure`） | abandon durable + stop-before-rebuild + fuse disabled reasons |
 | Shared 上下文续接 integrity | native 不可信时禁止假设 history 已在 native 内；zero-transfer 不等于可 rematerialize；`empty-context-handoff` 为一等 recovery 错误类别 | OpenSpec `fix-shared-context-resume-integrity`、`shared_context/compiler.rs`、`recoveryErrorMap.ts` |
-| Atomic 模型↔思考强度联动 | reasoning options / effort 由 **target 模型 capability** 驱动，禁止用全局 `activeEngine` 档位冒充；Shared 初始化禁止回落 Native 思考档位 | `atomicModelReasoning.ts`、`initialTarget.ts`、OpenSpec `fix-shared-atomic-model-reasoning-linkage` |
+| Atomic 模型↔思考强度联动 | reasoning options / effort 由 **target 模型 capability** 驱动，禁止用全局 `activeEngine` 档位冒充；Shared 初始化禁止回落 Native 思考档位；引擎覆盖 Codex / Claude / Grok / **PI**（DSH / Qoder / Kimi / Grok / OpenCode 待各自 change 评估） | `atomicModelReasoning.ts`、`initialTarget.ts`、`Composer.tsx atomicModelReasoningRef`、OpenSpec `fix-shared-atomic-model-reasoning-linkage` + `expand-shared-atomic-reasoning-linkage-to-pi` |
 | 用户附图 canonical 投影 | 用户附图单气泡投影，Shared 历史不丢图 | `shared_projection/projector.rs`、OpenSpec `fix-shared-user-image-bubble-projection` |
 | create-session 默认目标 | create-session Atomic picker 为全部 Atomic 引擎（含 Grok/Kimi/OpenCode）seed 默认 ExecutionTarget，不仅 claude/codex | `resolveDefaultCreationExecutionTarget.ts` |
 | Agent Squad V1 入口与形态 | 仅 Shared Session 显示 send 左侧 one-shot `Squad` button；plan/run card 留在 conversation，详情复用 SubAgent 右侧 full-height inspector host | `src/features/composer/components/Composer.tsx`、`src/features/squad-orchestration/**`、`ConversationInspectorSplit.tsx` |
@@ -104,7 +110,7 @@ Shared Session
 多 CLI 客户端至少存在四个独立维度：
 
 | 维度 | 回答的问题 | 示例 |
-|---|---|---|
+| --- | --- | --- |
 | CLI / Engine | 谁在执行 Agent Runtime | Claude Code、Codex CLI、Kimi CLI |
 | Provider | CLI 通过哪个配置与服务端通信 | Official、OpenRouter、Azure-compatible、Company Gateway |
 | Model | 本 Turn 使用哪个模型 | `claude-opus-*`、`gpt-5-*` |
@@ -283,7 +289,7 @@ memory.md
 这说明完整存储、当前窗口和长期记忆应该分离。mossx 可以对应为：
 
 | pi-chat | mossx |
-|---|---|
+| --- | --- |
 | `channel.jsonl` | Canonical Shared Log |
 | completed trigger boundary | target-scoped sync cursor |
 | transcript delta | Native Binding 增量注入 |
@@ -810,7 +816,7 @@ Context 数据分成三层：
 ### 6.1 四种关系不是同一种“Child”
 
 | 类型 | 创建者 | Sidebar | Parent 字段 | 主要用途 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Subagent | Engine/runtime | 嵌套在 Parent 下 | `parentSessionId` | Agent 协作执行 |
 | User Fork | 用户 | 顶层 Session | `lineageParentSessionId` | 从历史节点分叉 |
 | Provider Continuation | 用户 | 顶层 Session | `lineageParentSessionId` | 更换 Provider 后继续 |
@@ -915,7 +921,7 @@ Origin > Conversation Type > Engine > Provider > Model
 推荐展示：
 
 | Session | 主标签 | 次标签 |
-|---|---|---|
+| --- | --- | --- |
 | Native Root | Engine | Provider |
 | Subagent | 子代理 + role | Engine |
 | User Fork | Fork | Engine + Provider |
@@ -969,7 +975,7 @@ Turn 3 · Claude/OpenRouter
 当前 Shared Session 已验证了“一个逻辑会话绑定多个 Native Session”的产品方向，但数据面不足以承载多 CLI × 多 Provider：
 
 | 当前实现 | 事实 | 问题 |
-|---|---|---|
+| --- | --- | --- |
 | `SharedSessionMeta.bindings_by_engine` | Binding 只按 Engine 建索引 | 同一 Engine 的多个 Provider 会发生身份碰撞 |
 | Shared Codex Binding | 创建时未传 `provider_profile_id` | 实际落到 disk/default Provider |
 | Shared Claude Send | `provider_profile_id` 传 `None` | Shared Turn 没有 managed Provider routing |
@@ -1321,7 +1327,7 @@ Compatibility Transformer
 `ContextCompiler` 必须支持五种 Projection Mode：
 
 | Mode | 适用场景 | 注入策略 |
-|---|---|---|
+| --- | --- | --- |
 | `native-delta` | 恢复同一个 Hidden Binding | 复用 Native History，只补离开期间新增的 Shared facts/delta |
 | `native-history-import` | 目标 Runtime 官方支持结构化 History Import | 通过受支持协议写入兼容后的 role/tool items；Codex 可评估 `thread/inject_items` |
 | `native-history-clone` | CLI 官方支持 fork/clone/rebind，且来源 History 与目标 Runtime 兼容 | 使用 CLI 原生能力复制/分叉历史，禁止手改 vendor history file |
@@ -1467,7 +1473,7 @@ Compatibility Handoff V0
 V1 的方向不是把 4000 字符上限放大，而是换成**分类型确定性压缩**（规则参考 Headroom ContentRouter / SmartCrusher / CodeCompressor，不引入其 ML 压缩模型）：
 
 | 内容类型 | V1 压缩策略 |
-|---|---|
+| --- | --- |
 | Tool outcome（JSON / 数组） | 保留 schema、首尾样本行与 count，折叠中间重复结构 |
 | 代码块 / diff | 保留签名、路径与 hunk header，折叠函数体实现 |
 | 日志 / 命令输出 | 保留 error / warning 行与首尾行，折叠重复行 |
@@ -1563,7 +1569,7 @@ Managed Binding 一旦存在，不允许 ambient env 或全局配置静默接管
 借鉴 pi：
 
 | 语义 | 使用场景 | 时机 |
-|---|---|---|
+| --- | --- | --- |
 | `steer` | 运行中纠偏 | 当前原子执行段结束、下一决策点前 |
 | `followUp` | 接力继续 | 当前 Run settled 后 |
 | `nextTurn` | 被动铺垫 | 下一次用户 Turn 前，不主动触发 |
@@ -1759,7 +1765,7 @@ mossx 已具备：
 Shared Session V2 采用“保留壳，重建核”：
 
 | 保留 | 替换 |
-|---|---|
+| --- | --- |
 | Shared Session 产品入口 | frontend snapshot persistence |
 | logical session id 与 Sidebar 单行语义 | `bindingsByEngine` |
 | Lazy Hidden Binding 思路 | bounded text prefix 作为正式 Context Protocol |
@@ -1793,7 +1799,7 @@ A1–A3、B、C、D 的代码与自动化已完成；2026-07-29 又依据真实 
 业内没有一个项目同时解决 mossx 的多 Native CLI、多 Provider、单 Shared Thread。可复用的是四组成熟机制：
 
 | 来源 | 成熟做法 | mossx 吸收 | 不照搬 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | OpenAI Agents SDK Sessions | Run 前加载 Session History；Run 后只追加本 Run 新 Items；SQLite、Redis、SQLAlchemy 等 Storage 可替换 | Canonical History 与 Model Input 分离；只追加新 Fact | mossx 不把所有 Runtime 都降格成 SDK Agent |
 | LangGraph Persistence | 按 thread/checkpoint 保存状态；pending writes 防止恢复时重跑已成功步骤 | Delivery Pending、Accepted、Committed 分阶段持久化 | Shared Session 不是 Graph，不引入 Node/Super-step 抽象 |
 | Anthropic Managed Agents | Delta 是 best-effort preview；完整 buffered event 才是 authoritative record | streaming delta 只驱动 Live UI；Terminal Fact 才能进入 Canonical Commit | mossx 不依赖其云端 Session/Sandbox |
@@ -2082,7 +2088,7 @@ process exit / pipe EOF / stderr drain / post-turn usage
 #### 14.2.3 Failure Semantics
 
 | 故障点 | Canonical 状态 | 恢复动作 |
-|---|---|---|
+| --- | --- | --- |
 | `turnRequested` 前失败 | 无新 Fact | 用户可直接重试 |
 | Provisioning Intent 后、Native Identity ACK 前失败 | Binding 为 provisioning/recovery-required | Probe 原生 Session；禁止盲目再建 |
 | Context Compile 失败 | 有 `turnRequested`，无 delivery，Commit failed outcome | 显示 compile error；修复后复用同一 input，创建新 attempt |
@@ -2169,7 +2175,7 @@ prepared
 #### 14.3.2 当前 Capability Matrix
 
 | Runtime Adapter | History Import | Context/Input ACK | Run Started | Terminal | Ambiguous ACK Probe | mossx 当前缺口 |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | Codex App Server `0.144.6` | `thread/inject_items`；Responses API Items 持久化到 Thread | `thread/inject_items` 成功 response；`turn/start` 成功 response 返回 Turn | `turn/started` | `turn/completed`，状态含 completed/interrupted/failed | `clientUserMessageId` 可关联 User Item；History Import 的稳定 item-id/read-back 需要 Spike 验证 | 未调用 `thread/inject_items`；未系统使用 `clientUserMessageId`；未把 Provider Target 写入 envelope |
 | Claude Code `2.1.218` stream-json | 当前 CLI Surface 无 arbitrary history import；支持 resume/fork | 推荐启用 `--replay-user-messages`，以回显 user message/hash 作为 ACK | 第一个有效 assistant/tool event；System Init 只表示 Runtime ready | `result` event；Process Exit 只作缺失 Result 的错误兜底 | 当前 CLI 无稳定 request-id history query；Agent SDK 新版 `get_session_messages` 可作为未来 Adapter 能力 | 当前已使用 input/output stream-json + verbose，但未启用 replay flag；需要为输入生成 `clientTurnId`/checksum 并关联 echo |
 | Kimi Code `0.27.0` prompt stream-json | 无 | 当前无显式 ACK；`session.resume_hint` 或第一个合法 NDJSON event 只能作为弱 ACK | 第一个 assistant/tool event | Process Exit + 有效 output/tool activity | 无 | ACK 语义最弱；不适合作为首个 Shared V2 完整实现目标 |
@@ -2178,7 +2184,7 @@ prepared
 #### 14.3.3 Cursor 推进条件
 
 | 状态 | 推进条件 | 不得使用的替代信号 |
-|---|---|---|
+| --- | --- | --- |
 | `pendingDelivery` 写入 | Context Package 已编译且 Tx 3 Commit | 内存中刚生成 package |
 | `acceptedThroughSequence` | Runtime-specific Context ACK | process spawned、stdin write success |
 | `conversation.turnAccepted` | Runtime-specific Prompt ACK，已经拿到可恢复 Native Identity | first token（除非该 Adapter 明确只有 first-event ACK） |
@@ -2268,7 +2274,7 @@ PendingDelivery
 #### 14.4.1 方案比较
 
 | 方案 | 优点 | 缺点 | 判断 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 继续 JSONL | 可读、append 简单、与旧实现接近 | 多表状态无法原子提交；sequence/cursor/index/recovery 需要手写；尾行损坏处理复杂 | 只保留 Legacy Reader 与 Export |
 | SQLite WAL | 本地事务、Unique Constraint、Crash Recovery、Projection Query、单 writer/多 reader | 需要 schema migration 与 checkpoint 管理 | **推荐** |
 | 独立 EventStore/Postgres | 多进程与分布式能力强 | Desktop Local-first 过重，引入部署和运维实体 | YAGNI |
@@ -2438,7 +2444,7 @@ Artifact：
 `shared_event_log.fact_type` 与 `payload_json.type` 表达同一个 Canonical Fact discriminator，但承担不同职责：
 
 | 字段 | 职责 | 约束 |
-|---|---|---|
+| --- | --- | --- |
 | `fact_type` | SQLite index、幂等键、兼容 decode discriminator | 必须由 typed fact 派生，业务调用方不得单独指定另一种类型 |
 | `payload_json.type` | tagged enum decode 与跨层 payload contract | 新写入必须存在，并与 `fact_type` 完全一致 |
 | `payload_checksum` | immutable payload 完整性 | checksum 对应已落盘 payload；兼容读取不得改写 |
@@ -2635,7 +2641,7 @@ Cancel intent 不单独持久化；App 在 `CancelPending` 崩溃后由 `pending
 #### 14.5.3 UI Contract
 
 | 状态 | 主展示 | Picker | Composer | 用户动作 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `idle` | `Shared · Engine/Provider/Model` | 可用 | 可发送 | 选择 Next Target |
 | `preparing-context` | “正在为 Codex/OpenAI 准备上下文” + source range | V1 锁定 | 锁定 | Cancel |
 | `degraded-context` | 明确列出 omissions、mode、estimated tokens | 锁定 | 锁定 | 查看详情、继续、取消 |
@@ -2709,7 +2715,7 @@ Assistant · Claude / OpenRouter / ...  Failed
 ##### 14.5.7.0 设计 vs 实现缺口判定
 
 | 议题 | 基石原文是否覆盖 | 判定 | 说明 |
-|------|------------------|------|------|
+| ------ | ------------------ | ------ | ------ |
 | `recovery-required` 锁整会话 | §14.5.3 / §8.4 已写 | **设计已有 · 保留** | 线性顺序合同；ambiguous 不得放行其他 Target |
 | `target-unavailable` 可换 Picker、Send disabled | §14.5.3 / §8.4 已写 | **设计已有** | 与 recovery **分态** |
 | 纯 target 不可用却进入 recovery 锁死 | 设计要求分态 | **实现遗漏 / 分类偏差** | 若复现，按 §14.5.2 边与 §8.4 纠偏，不得用 recovery 顶替 unavailable |
@@ -2729,7 +2735,7 @@ Assistant · Claude / OpenRouter / ...  Failed
 ##### 14.5.7.1 术语与 Owner 校准（禁止混用）
 
 | 术语 | 含义 | 典型命令 / 路径 | 是否改 Runtime | 是否写 Canonical |
-|------|------|-----------------|----------------|------------------|
+| ------ | ------ | ----------------- | ---------------- | ------------------ |
 | **Probe Binding** | 只读读取 durable + runtime 健康快照 | `shared_session_v2_probe_binding` | 否 | 否 |
 | **Recover Attempt** | 按 disposition 接回 active 或提交 terminal/not-accepted | `shared_session_v2_recover_attempt` | 可 reattach observer | 可 commit |
 | **Stop / Interrupt** | 对 **已路由的 owner attempt** 发 interrupt | `shared_session_v2_interrupt_turn` | 是（停 native turn） | 不单独等于 terminal；后续仍要 Probe/Recover/Abandon 结算 |
@@ -2743,7 +2749,7 @@ UI 文案「检查状态」= Probe Binding ± 必要时 Recover Attempt（用户
 **Recovery Owner 两种（与实现 `findRecoveryOwner` 对齐）：**
 
 | Owner kind | 含义 | 优先动作 |
-|------------|------|----------|
+| ------------ | ------ | ---------- |
 | `attempt` | 存在 in-flight / unresolved attempt | Probe/Recover → Stop（若 active/own）→ Abandon 或（释放后）Rebuild |
 | `binding` | 无 in-flight attempt，但 Binding `provisioningState=recovery-required` | Probe → 条件满足后 **Rebuild**；Abandon 不适用或 no-op |
 | `clear` | 无可恢复 owner | 直接 Settling→Idle（解锁） |
@@ -2775,7 +2781,7 @@ UI 文案「检查状态」= Probe Binding ± 必要时 Recover Attempt（用户
 ```
 
 | 动作 | 语义 | durable / runtime | 成功后 UI 状态 | 失败后 |
-|------|------|-------------------|---------------|--------|
+| ------ | ------ | ------------------- | --------------- | -------- |
 | **检查状态** | Probe；必要时 Recover | 见术语表 | active→`running`；terminal/not-accepted→`settling`→`idle`；clear→`idle`；unknown→held 仍 `recovery-required` | held + 原因；**不**自动 Rebuild |
 | **停止投递** | interrupt 当前 attempt owner | 释放 `owns_attempt`；**不**自动等于 Turn 已 cancelled | **仍为** `recovery-required`（直到 Probe/Abandon/Rebuild 结算） | 保持 recovery；展示 interrupt 失败；引导 Abandon |
 | **重建连接** | 条件满足后 `rebuild_binding` | archive binding + replace attempts | 经 `settling`→`idle`；Shared identity 不变 | `recovery-active`→可操作错误；ambiguous→fail closed |
@@ -2790,7 +2796,7 @@ UI 文案「检查状态」= Probe Binding ± 必要时 Recover Attempt（用户
 **Disposition → 按钮启用（校准矩阵）：**
 
 | 最近 disposition / owner | 检查 | 停止 | 重建 | 放弃本轮 |
-|--------------------------|------|------|------|----------|
+| -------------------------- | ------ | ------ | ------ | ---------- |
 | `clear` | ✓（应变 idle） | — | — | — |
 | `not-accepted` / terminal 可 commit | ✓ | — | 可选 | ✓（若仍未 commit） |
 | `active` 且 owns | ✓ | ✓（capability） | ✓ 仅作「停止并重建」 | ✓ 强警告 |
@@ -2813,7 +2819,7 @@ UI **必须**映射为可操作步骤（先 Stop / 停止并重建），不得�
 **何时需要 Rebuild vs 只需 Abandon：**
 
 | 情况 | 优先 |
-|------|------|
+| ------ | ------ |
 | attempt 未决，Binding 仍 ready、Native 健康 | **Abandon 或 Probe 结算**；不必 Rebuild |
 | Binding provisioning 损坏 / Native identity 不可用 / 需新 Native Session | **Rebuild**（先满足前置） |
 | Runtime zombie own 且 interrupt 失败 | Abandon durable 结算 + 视情况再 Rebuild |
@@ -2833,7 +2839,7 @@ Abandon 是 **用户显式、可审计的 Terminal 路径**，不是 Retry，也
 **迟到证据（校准 · 必须实现）：**
 
 | 时序 | 规则 |
-|------|------|
+| ------ | ------ |
 | Abandon commit 成功后，迟到的 runtime ACK / terminal / tool 事件到达 | **不得** 再创建新 user turn 或第二次 `turnCommitted` 成功态；记 diagnostic / 吸收为 late observation；UI 不回到 recovery 锁死同一 attempt |
 | Rebuild 成功后，旧 native session 迟到事件 | 按 archived binding 丢弃或只读诊断；**不得** 写入新 binding 的 live turn |
 | Stop 成功但尚未 Abandon/Rebuild，迟到 terminal | Probe/Recover 应能结算为 terminal → Settling（优于强迫用户 Abandon） |
@@ -2912,7 +2918,7 @@ interface ConversationProjection {
 #### 14.6.2 真正可能产生回归的共享位置
 
 | 共享位置 | 回归风险 | 专业策略 | 必须保留的 Native 语义 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `MossxAgentEvent` / Event Bus | 为 Shared 修改既有 event meaning，导致 Native reducer、approval 或 lifecycle 断链 | 采用 additive envelope/独立 Canonical Sink；按 owner/run identity 路由，不改旧 event 的含义 | Claude/Codex 既有 event order、turn lifecycle、error/interrupt behavior |
 | `ConversationItem` | 把 ACK、Cursor、Persistence 塞入 UI Type，所有 Renderer 被迫理解 Shared Domain | 保持 Presentation-only；Shared 新建 Projection/metadata sidecar | text、thinking、tool、image、patch、error item 的现有 shape |
 | `threadItems.ts` | Shared replay/normalization 逻辑污染 Native History；现有裁剪被误当 Canonical Transform | 继续只做展示适配；Canonical normalization 放在 ingress Assembler/ContextCompiler | Native History 的顺序、显示裁剪、Tool Output/Image 展示 |
@@ -3363,7 +3369,7 @@ C: Shared Context Compiler
 新 Change 应扩展而不是复制现有基础：
 
 | 现有契约 | 复用点 | 新增边界 |
-|---|---|---|
+| --- | --- | --- |
 | `shared-session-thread` | Shared logical thread、Hidden Native Binding | V2 Canonical persistence 与 Legacy Reader |
 | `shared-session-engine-selection` | Next Turn engine selection | 扩展为完整 `ExecutionTarget` |
 | `conversation-fact-contract` | dialogue/reasoning/tool/control 分类 | 增加 assembled `conversation.turnCommitted` critical fact |
@@ -3389,7 +3395,7 @@ OpenSpec 验收不得只检查字段存在。必须同时验证：
 ### 17.1 Session Projection
 
 | 场景 | 预期 |
-|---|---|
+| --- | --- |
 | Runtime 创建 Subagent | 嵌套显示，带 `子代理` 标签 |
 | 用户创建 Fork | 顶层显示，带 `Fork` 标签 |
 | 用户尝试从 Shared 历史 Turn Fork | 第一阶段明确不支持；不创建 Native Fork 或 Hidden Binding |
@@ -3402,7 +3408,7 @@ OpenSpec 验收不得只检查字段存在。必须同时验证：
 ### 17.2 Provider Isolation
 
 | 场景 | 预期 |
-|---|---|
+| --- | --- |
 | 同 Workspace 两个 Claude Provider 并行 | Process/env/approval/interrupt 互不影响 |
 | Shared 在同一 Engine 切 Provider | 使用两个 Hidden Binding |
 | 删除 Provider | 历史保留，Resume fail closed |
@@ -3411,7 +3417,7 @@ OpenSpec 验收不得只检查字段存在。必须同时验证：
 ### 17.3 Context
 
 | 场景 | 预期 |
-|---|---|
+| --- | --- |
 | 切到新 Target | 注入 Handoff |
 | 切回旧 Target | 只同步离开期间新增事实 |
 | Context compile 失败 | 不写 pending，不推进任何 Cursor |
@@ -3441,7 +3447,7 @@ OpenSpec 验收不得只检查字段存在。必须同时验证：
 ### 17.4 Recovery
 
 | 场景 | 预期 |
-|---|---|
+| --- | --- |
 | App 重启 | 恢复 Shared selectedTarget 与 bindingsByTarget |
 | Hidden Native ID 延迟确定 | Target-aware Pending Rebind |
 | Native Session 已创建但 Identity 未 Commit | 先 Probe provisioning；不得盲目创建第二个 Binding |
@@ -3498,7 +3504,7 @@ Codex / Provider A
 ### 17.6 Native Canvas 防回归矩阵
 
 | 对象 | 场景 | 预期 |
-|---|---|---|
+| --- | --- | --- |
 | Claude Native History | 打开升级前 Session | item order/type/content 保持；不读取 Shared DB |
 | Claude Native Live | text/thinking/tool/permission/interrupt | 现有事件语义与 Renderer behavior 不变 |
 | Codex Native History | reasoning/tool/patch/error 混合历史 | Engine-specific fidelity 保留 |
@@ -3694,6 +3700,7 @@ User Fork / Provider Continuation
 - [Agent Client Protocol](https://github.com/agentclientprotocol/agent-client-protocol)
 - [ACP v2 Prompt Lifecycle RFD](https://agentclientprotocol.com/rfds/v2/prompt)
 - [Zed External Agents](https://zed.dev/docs/ai/external-agents)
+
 - [GitHub Copilot: Changing the AI Model](https://docs.github.com/en/copilot/how-tos/use-ai-models/change-the-chat-model)
 - [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
 - [SQLite Write-Ahead Logging](https://www.sqlite.org/wal.html)
@@ -3704,3 +3711,11 @@ User Fork / Provider Continuation
 - [AutoGen: Model Context](https://microsoft.github.io/autogen/stable/reference/python/autogen_core.model_context.html)
 - [Anthropic: How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
 - [Headroom: context compression layer for AI agents](https://github.com/headroomlabs-ai/headroom)（CCR 可逆压缩、CacheAligner 前缀稳定、ContentRouter 分类型压缩的模式参考；不引入其 proxy/wrap 部署形态与 ML 压缩模型）
+
+## 最近校准
+
+### 2026-08-24：Codex provider binding 与 GUI 启动环境
+
+| Trigger | Current implementation fact | OpenSpec / code source |
+| --- | --- | --- |
+| provider binding / Codex runtime launch | GUI 启动 Codex app-server 前，根据 effective `CODEX_HOME/config.toml` 的 `model_providers.*.env_key` 一次性批量解析缺失环境变量（单次 allowlisted login shell，单一 5s 超时），仅注入 child process | `src-tauri/src/codex/provider_env.rs`; `src-tauri/src/backend/app_server.rs`; `src-tauri/src/bin/cc_gui_daemon.rs`; `openspec/changes/fix-codex-macos-provider-env-key-resolution/` |

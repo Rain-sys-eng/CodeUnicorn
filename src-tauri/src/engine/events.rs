@@ -101,6 +101,35 @@ pub enum EngineEvent {
         delta: String,
     },
 
+    /// Background task card started (pi `bg_*` / `fusion_*` tool call from the
+    /// pi-background-tasks extension). Replaces the generic ToolStarted card so
+    /// the frontend renders a live task card instead.
+    #[serde(rename = "backgroundTask:started")]
+    BackgroundTaskStarted {
+        workspace_id: String,
+        tool_id: String,
+        tool_name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        input: Option<Value>,
+    },
+
+    /// Background task state update: launch receipt snapshot (source
+    /// "receipt") or terminal `<background-task-notification>` wakeup (source
+    /// "notification") from the pi-background-tasks extension.
+    #[serde(rename = "backgroundTask:updated")]
+    BackgroundTaskUpdated {
+        workspace_id: String,
+        /// Originating tool call id (receipt path only; the notification path
+        /// correlates by `task.id` instead).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_id: Option<String>,
+        /// Canonical snapshot from the extension (`result.details.task` /
+        /// notification `details`, or the text-envelope fallback fields).
+        task: Value,
+        /// "receipt" | "notification"
+        source: String,
+    },
+
     /// Approval request from engine
     #[serde(rename = "approval:request")]
     ApprovalRequest {
@@ -211,6 +240,8 @@ impl EngineEvent {
             EngineEvent::ToolCompleted { workspace_id, .. } => workspace_id,
             EngineEvent::ToolInputUpdated { workspace_id, .. } => workspace_id,
             EngineEvent::ToolOutputDelta { workspace_id, .. } => workspace_id,
+            EngineEvent::BackgroundTaskStarted { workspace_id, .. } => workspace_id,
+            EngineEvent::BackgroundTaskUpdated { workspace_id, .. } => workspace_id,
             EngineEvent::ApprovalRequest { workspace_id, .. } => workspace_id,
             EngineEvent::RequestUserInput { workspace_id, .. } => workspace_id,
             EngineEvent::TurnCompleted { workspace_id, .. } => workspace_id,
@@ -1020,6 +1051,80 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                         "params": Value::Object(params),
                     })
                 }
+            } else if matches!(engine, EngineType::Pi) {
+                // PI RPC compaction events → canonical thread/compaction methods
+                // (same surface Claude uses, so curtain rendering is shared).
+                let kind = data.get("kind").and_then(Value::as_str).unwrap_or("");
+                let payload = data.get("payload").cloned().unwrap_or(Value::Null);
+                match kind {
+                    "compaction_start" => {
+                        let reason = payload
+                            .get("reason")
+                            .and_then(Value::as_str)
+                            .unwrap_or("manual")
+                            .to_string();
+                        json!({
+                            "method": "thread/compacting",
+                            "params": {
+                                "threadId": thread_id,
+                                "reason": reason,
+                            }
+                        })
+                    }
+                    "compaction_end" => {
+                        let aborted = payload
+                            .get("aborted")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false);
+                        let error_message = payload
+                            .get("errorMessage")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                        if aborted || payload.get("result").is_none() || error_message.is_some() {
+                            json!({
+                                "method": "thread/compactionFailed",
+                                "params": {
+                                    "threadId": thread_id,
+                                    "reason": error_message.unwrap_or_else(|| {
+                                        if aborted {
+                                            "Compaction aborted".to_string()
+                                        } else {
+                                            "Compaction failed".to_string()
+                                        }
+                                    }),
+                                }
+                            })
+                        } else {
+                            let result = payload.get("result").cloned().unwrap_or(Value::Null);
+                            json!({
+                                "method": "thread/compacted",
+                                "params": {
+                                    "threadId": thread_id,
+                                    "tokensBefore": result.get("tokensBefore").cloned().unwrap_or(Value::Null),
+                                    "estimatedTokensAfter": result.get("estimatedTokensAfter").cloned().unwrap_or(Value::Null),
+                                    "firstKeptEntryId": result.get("firstKeptEntryId").cloned().unwrap_or(Value::Null),
+                                }
+                            })
+                        }
+                    }
+                    _ => {
+                        let mut params = match data {
+                            Value::Object(map) => map.clone(),
+                            _ => {
+                                let mut map = serde_json::Map::new();
+                                map.insert("data".to_string(), data.clone());
+                                map
+                            }
+                        };
+                        params
+                            .entry("threadId".to_string())
+                            .or_insert_with(|| Value::String(thread_id.to_string()));
+                        json!({
+                            "method": format!("{}/raw", engine.icon()),
+                            "params": Value::Object(params),
+                        })
+                    }
+                }
             } else {
                 let mut params = match data {
                     Value::Object(map) => map.clone(),
@@ -1038,6 +1143,40 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                 })
             }
         }
+        EngineEvent::BackgroundTaskStarted {
+            tool_id,
+            tool_name,
+            input,
+            ..
+        } => json!({
+            "method": "item/started",
+            "params": {
+                "threadId": thread_id,
+                "item": {
+                    "id": tool_id,
+                    "type": "backgroundTask",
+                    "tool": tool_name,
+                    "title": tool_name,
+                    "input": input,
+                    "arguments": input,
+                    "status": "started",
+                }
+            }
+        }),
+        EngineEvent::BackgroundTaskUpdated {
+            tool_id,
+            task,
+            source,
+            ..
+        } => json!({
+            "method": "item/backgroundTask/updated",
+            "params": {
+                "threadId": thread_id,
+                "toolId": tool_id,
+                "task": task,
+                "source": source,
+            }
+        }),
         _ => return None,
     };
 
@@ -1050,6 +1189,134 @@ pub fn engine_event_to_app_server_event_with_turn_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pi_background_task_events_map_to_canonical_items() {
+        let started = EngineEvent::BackgroundTaskStarted {
+            workspace_id: "ws".to_string(),
+            tool_id: "tool-1".to_string(),
+            tool_name: "bg_run".to_string(),
+            input: Some(json!({"name": "spike-task", "command": "sleep 3"})),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &started,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("backgroundTaskStarted should map");
+        assert_eq!(event.message["method"], "item/started");
+        assert_eq!(event.message["params"]["item"]["id"], "tool-1");
+        assert_eq!(event.message["params"]["item"]["type"], "backgroundTask");
+        assert_eq!(event.message["params"]["item"]["tool"], "bg_run");
+        assert_eq!(event.message["params"]["item"]["status"], "started");
+
+        let updated = EngineEvent::BackgroundTaskUpdated {
+            workspace_id: "ws".to_string(),
+            tool_id: Some("tool-1".to_string()),
+            task: json!({"id": "b2e2f48ad", "status": "running"}),
+            source: "receipt".to_string(),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &updated,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("backgroundTaskUpdated should map");
+        assert_eq!(event.message["method"], "item/backgroundTask/updated");
+        assert_eq!(event.message["params"]["toolId"], "tool-1");
+        assert_eq!(event.message["params"]["task"]["id"], "b2e2f48ad");
+        assert_eq!(event.message["params"]["source"], "receipt");
+
+        // 通知路径：无 tool_id，按 task.id 关联。
+        let notified = EngineEvent::BackgroundTaskUpdated {
+            workspace_id: "ws".to_string(),
+            tool_id: None,
+            task: json!({"id": "b2e2f48ad", "status": "completed", "exitCode": 0}),
+            source: "notification".to_string(),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &notified,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("notification update should map");
+        assert_eq!(event.message["method"], "item/backgroundTask/updated");
+        assert!(event.message["params"]["toolId"].is_null());
+        assert_eq!(event.message["params"]["task"]["exitCode"], 0);
+    }
+
+    #[test]
+    fn pi_rpc_compaction_events_map_to_canonical_thread_methods() {
+        let start = EngineEvent::Raw {
+            workspace_id: "ws".to_string(),
+            engine: EngineType::Pi,
+            data: json!({
+                "source": "pi_rpc",
+                "kind": "compaction_start",
+                "payload": {"type": "compaction_start", "reason": "manual"},
+            }),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &start,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("compaction_start should map");
+        assert_eq!(event.message["method"], "thread/compacting");
+        assert_eq!(event.message["params"]["reason"], "manual");
+
+        let end = EngineEvent::Raw {
+            workspace_id: "ws".to_string(),
+            engine: EngineType::Pi,
+            data: json!({
+                "source": "pi_rpc",
+                "kind": "compaction_end",
+                "payload": {
+                    "type": "compaction_end",
+                    "reason": "manual",
+                    "aborted": false,
+                    "result": {"tokensBefore": 150000, "estimatedTokensAfter": 32000},
+                },
+            }),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &end,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("compaction_end should map");
+        assert_eq!(event.message["method"], "thread/compacted");
+        assert_eq!(event.message["params"]["tokensBefore"], 150000);
+
+        let failed = EngineEvent::Raw {
+            workspace_id: "ws".to_string(),
+            engine: EngineType::Pi,
+            data: json!({
+                "source": "pi_rpc",
+                "kind": "compaction_end",
+                "payload": {
+                    "type": "compaction_end",
+                    "aborted": false,
+                    "errorMessage": "quota exceeded",
+                    "result": null,
+                },
+            }),
+        };
+        let event = engine_event_to_app_server_event_with_turn_context(
+            &failed,
+            "pi:s1",
+            "item-1",
+            Some("turn-1"),
+        )
+        .expect("compaction failure should map");
+        assert_eq!(event.message["method"], "thread/compactionFailed");
+        assert_eq!(event.message["params"]["reason"], "quota exceeded");
+    }
 
     #[test]
     fn event_serialization() {

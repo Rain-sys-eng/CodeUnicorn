@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
 import { useTranslation } from "react-i18next";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import type { ToolCallParam } from "../presentation/toolCallBlocks";
 import {
   ToolMarkerShell,
@@ -52,10 +53,9 @@ export const ToolCallBlock = memo(function ToolCallBlock({
   }, []);
 
   const handleCopy = useCallback(async () => {
-    if (!navigator.clipboard) {
+    if (!(await copyTextToClipboard(raw))) {
       return;
     }
-    await navigator.clipboard.writeText(raw);
     setCopied(true);
   }, [raw]);
 

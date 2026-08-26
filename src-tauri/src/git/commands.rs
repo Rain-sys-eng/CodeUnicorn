@@ -443,8 +443,8 @@ pub(crate) async fn revert_git_paths(
     }
     // Tracked files restore in one shot from the index; untracked paths may fail
     // restore and fall to clean. Do not pass `--staged`, or mixed files lose the index.
-    let _ = run_git_command_with_paths(&repo_root, &["restore", "--worktree", "--"], &expanded)
-        .await;
+    let _ =
+        run_git_command_with_paths(&repo_root, &["restore", "--worktree", "--"], &expanded).await;
     // Match single-file semantics: clean only when needed, and never fail the batch
     // solely because a tracked path is not cleanable.
     for path in &expanded {

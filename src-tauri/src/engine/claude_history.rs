@@ -50,7 +50,9 @@ struct ClaudeScanIoLog {
     entries: Vec<(String, u64, u64)>,
 }
 
-static CLAUDE_SCAN_IO: Mutex<ClaudeScanIoLog> = Mutex::new(ClaudeScanIoLog { entries: Vec::new() });
+static CLAUDE_SCAN_IO: Mutex<ClaudeScanIoLog> = Mutex::new(ClaudeScanIoLog {
+    entries: Vec::new(),
+});
 
 #[allow(dead_code)]
 pub(crate) fn reset_claude_list_io_stats() {
@@ -328,7 +330,7 @@ fn candidate_workspace_paths(workspace_path: &Path) -> Vec<PathBuf> {
         candidates.push(raw);
     }
 
-    let trimmed = raw_str.trim_end_matches(|c| c == '/' || c == '\\');
+    let trimmed = raw_str.trim_end_matches(['/', '\\']);
     if trimmed != raw_str && seen.insert(trimmed.to_string()) {
         candidates.push(PathBuf::from(trimmed.to_string()));
     }
@@ -563,7 +565,8 @@ fn cap_claude_scan_paths_by_mtime(
                 .map(str::to_string)
         })
         .collect();
-    subagent_jsonl_paths.retain(|(_, parent_session_id, _)| selected_parents.contains(parent_session_id));
+    subagent_jsonl_paths
+        .retain(|(_, parent_session_id, _)| selected_parents.contains(parent_session_id));
 }
 
 fn system_time_to_epoch_millis(value: SystemTime) -> Option<i64> {
@@ -1113,9 +1116,9 @@ async fn scan_session_source_file_with_depth(
                 "complete".to_string()
             },
             updated_at: match depth {
-                ClaudeSessionScanDepth::Preview => file_mtime_ms
-                    .or(last_timestamp)
-                    .unwrap_or(now_ms),
+                ClaudeSessionScanDepth::Preview => {
+                    file_mtime_ms.or(last_timestamp).unwrap_or(now_ms)
+                }
                 ClaudeSessionScanDepth::Full => last_timestamp.unwrap_or(now_ms),
             },
             created_at: first_timestamp.or(file_mtime_ms).unwrap_or(now_ms),
@@ -1907,7 +1910,7 @@ pub struct ClaudeSessionLoadResult {
     pub next_cursor: Option<String>,
 }
 
-const CLAUDE_WINDOW_TAIL_CHUNK: u64 = 256 * 1024;
+pub(crate) const CLAUDE_WINDOW_TAIL_CHUNK: u64 = 256 * 1024;
 
 fn rewrite_session_id_fields(value: &mut Value, source_session_id: &str, forked_session_id: &str) {
     match value {
@@ -2084,25 +2087,34 @@ async fn load_claude_session_window_from_path(
         .and_then(|value| value.trim().parse::<u64>().ok())
         .filter(|value| *value <= file_len)
         .unwrap_or(file_len);
-    let mut assembled = Vec::new();
+    // fix-claude-history-window-message-loss：整段组装、只对首段做一次行对齐。
+    // 旧实现逐 chunk drop 首行残段，跨界行尾部被丢弃后与下一完整行粘成非法 JSON，
+    // 被解析循环静默跳过（每个 256KB chunk 边界丢 2 行）。
+    let mut assembled: Vec<u8> = Vec::new();
     let mut window_start = end;
+    let mut newline_count = 0usize;
     while end > 0 {
         let (start, bytes) = read_claude_tail_window_bytes(path, end).await?;
         window_start = start;
-        let mut chunk = bytes;
-        if start > 0 {
-            if let Some(newline) = chunk.iter().position(|byte| *byte == b'\n') {
-                chunk = chunk.split_off(newline + 1);
-                window_start = start + newline as u64 + 1;
-            }
-        }
-        assembled.splice(0..0, chunk);
-        if assembled.iter().filter(|byte| **byte == b'\n').count() >= limit.saturating_mul(4)
-            || start == 0
-        {
+        newline_count += bytes.iter().filter(|byte| **byte == b'\n').count();
+        assembled.splice(0..0, bytes);
+        if newline_count >= limit.saturating_mul(4) || start == 0 {
             break;
         }
         end = start;
+    }
+    if window_start > 0 {
+        match assembled.iter().position(|byte| *byte == b'\n') {
+            Some(newline) => {
+                window_start += newline as u64 + 1;
+                assembled = assembled.split_off(newline + 1);
+            }
+            None => {
+                // 整个 window 是一条未终止片段（单行大于 byte window）：
+                // fail-closed，本页不产出消息；完整行由更早分页携带。
+                assembled.clear();
+            }
+        }
     }
     let has_more = window_start > 0;
     let mut result = parse_claude_session_from_reader(
@@ -2110,19 +2122,15 @@ async fn load_claude_session_window_from_path(
         session_id,
     )
     .await?;
-    if result.messages.len() > limit {
-        let skip = result.messages.len() - limit;
-        result.messages.drain(0..skip);
-        result.has_more = Some(true);
-        result.next_cursor = Some(window_start.to_string());
+    // 不再 drain：window 与分页均按行对齐，全量返回保证页间连续无损。
+    // 旧 drain 在 window_start == 0 时产出死游标 "0"（旧消息永远无法翻页加载），
+    // 在 window_start > 0 时把被裁行落在两页 byte 范围之间永久跳过。
+    result.has_more = Some(has_more);
+    result.next_cursor = if has_more {
+        Some(window_start.to_string())
     } else {
-        result.has_more = Some(has_more);
-        result.next_cursor = if has_more {
-            Some(window_start.to_string())
-        } else {
-            None
-        };
-    }
+        None
+    };
     Ok(result)
 }
 

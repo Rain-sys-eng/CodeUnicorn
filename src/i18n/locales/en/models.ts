@@ -14,6 +14,8 @@ const models = {
     discoverModels: "Discover Models from CLI",
     discoveringModels: "Discovering Models...",
     refreshConfigFailed: "Refresh failed: {{message}}",
+    searchModelsPlaceholder: "Search models…",
+    noMatchingModels: "No matching models",
     emptyChannelModelsTitle: "No models for this provider yet",
     emptyChannelModelsHint: "Click \u201cAdd Model\u201d below to add a custom model",
     emptyDshHostHint:

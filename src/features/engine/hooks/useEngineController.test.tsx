@@ -17,6 +17,7 @@ import {
 import type { DebugEntry, EngineStatus } from "../../../types";
 import { STORAGE_KEYS as MODEL_STORAGE_KEYS } from "../../models/constants";
 import { STORAGE_KEYS as PROVIDER_STORAGE_KEYS } from "../../composer/types/provider";
+import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -1854,5 +1855,39 @@ describe("useEngineController", () => {
         missedByGuiPath: true,
       },
     });
+  });
+
+  it("uses an on-demand orchestrator timeout that covers the backend probe chain", async () => {
+    detectEnginesMock.mockResolvedValue([createEngineStatus("pi", true, [])]);
+    getActiveEngineMock.mockResolvedValue("pi");
+    getEngineModelsMock.mockResolvedValue([]);
+
+    const runSpy = vi.spyOn(startupOrchestrator, "run");
+    try {
+      const { result } = renderHook(() =>
+        useEngineController({ activeWorkspace: null }),
+      );
+      await waitFor(() => expect(result.current.isInitialized).toBe(true));
+
+      const prewarmCall = runSpy.mock.calls
+        .map(([descriptor]) => descriptor)
+        .find((descriptor) =>
+          String(descriptor.id).startsWith("engine-models:pi:"),
+        );
+      expect(prewarmCall?.timeoutMs).toBe(8_000);
+
+      runSpy.mockClear();
+      await act(async () => {
+        await result.current.refreshEngineModels("pi", { forceRefresh: true });
+      });
+      const onDemandCall = runSpy.mock.calls
+        .map(([descriptor]) => descriptor)
+        .find((descriptor) =>
+          String(descriptor.id).startsWith("engine-models:pi:"),
+        );
+      expect(onDemandCall?.timeoutMs).toBe(22_000);
+    } finally {
+      runSpy.mockRestore();
+    }
   });
 });

@@ -69,6 +69,8 @@ export type ProcessPhaseBreakdown = {
   reasoningCount: number;
   toolCount: number;
   exploreCount: number;
+  /** 极简展示 turn chip 统计：被折叠的中间叙述 prose 段数（默认模式恒 0）。 */
+  proseCount: number;
 };
 
 export type ProcessPhaseCollapse = {
@@ -156,7 +158,7 @@ function resolvePhaseBreakdown(
       exploreCount += 1;
     }
   }
-  return { reasoningCount, toolCount, exploreCount };
+  return { reasoningCount, toolCount, exploreCount, proseCount: 0 };
 }
 
 export function findItemById(items: ConversationItem[], itemId: string | null) {
@@ -442,6 +444,8 @@ function collectContiguousProcessItemsForAssistant(
 
 const TRAILING_PROCESS_COLLAPSE_THRESHOLD = 5;
 const TRAILING_PROCESS_VISIBLE_TAIL_COUNT = 3;
+/** 极简展示 live turn 专用 trailing 阈值（默认模式保持 5，零回归）。 */
+const MINIMAL_TRANSCRIPT_TRAILING_COLLAPSE_THRESHOLD = 4;
 
 function groupedEntryProcessItems(entry: GroupedEntry): ConversationItem[] {
   return entry.kind === "item" ? [entry.item] : [...entry.items];
@@ -473,11 +477,15 @@ export function resolveCollapsedTimelineItems(options: {
   isThinking?: boolean;
   latestAssistantMessageId?: string | null;
   latestReasoningId?: string | null;
+  /** 极简展示：已完成 turn 整段折叠为单个 turn chip（含中间叙述 prose）。 */
+  minimalTranscriptEnabled?: boolean;
   timelineSourceItems: ConversationItem[];
 }): CollapsedTimelineItemsResult {
   const {
     activeEngine,
     expandedPhaseKeys = new Set<string>(),
+    isThinking = false,
+    minimalTranscriptEnabled = false,
     timelineSourceItems,
   } = options;
   // Shell/command tools stay off the canvas permanently (not only when collapsed)
@@ -496,21 +504,50 @@ export function resolveCollapsedTimelineItems(options: {
   if (canvasItems.length <= 2) {
     return emptyCollapsedTimelineResult(canvasItems);
   }
+  if (minimalTranscriptEnabled) {
+    return resolveMinimalTranscriptCollapsedTimeline({
+      activeEngine,
+      canvasItems,
+      expandedPhaseKeys,
+      isThinking,
+    });
+  }
+  return collectProcessPhaseCollapsedTimeline({
+    activeEngine,
+    canvasItems,
+    expandedPhaseKeys,
+  });
+}
 
-  const phases: ProcessPhaseCollapse[] = [];
-  const unmountedItemIds = new Set<string>();
+/**
+ * per-phase 折叠收集（默认模式形态）：对给定 items 逐条 assistant prose 收前序
+ * 过程为 chip，并对尾部超限过程收 trailing chip。phases / unmountedItemIds 由
+ * 调用方提供，极简模式展开 turn 时复用同一渲染形态（内层 chip 与默认模式一致）。
+ */
+function collectPerPhaseCollapsedInto(options: {
+  activeEngine: MessagesEngine;
+  items: ConversationItem[];
+  expandedPhaseKeys: ReadonlySet<string>;
+  phases: ProcessPhaseCollapse[];
+  unmountedItemIds: Set<string>;
+}): void {
+  const { activeEngine, items, expandedPhaseKeys, phases, unmountedItemIds } =
+    options;
 
-  for (let index = 0; index < canvasItems.length; index += 1) {
-    const item = canvasItems[index];
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
     if (!item || !isAssistantMessageWithVisibleText(item)) {
       continue;
     }
 
-    const phaseItems = collectContiguousProcessItemsForAssistant(canvasItems, index);
+    const phaseItems = collectContiguousProcessItemsForAssistant(items, index);
     if (phaseItems.length === 0) {
       continue;
     }
-    const renderableCount = countRenderableCollapsedEntries(phaseItems, activeEngine);
+    const renderableCount = countRenderableCollapsedEntries(
+      phaseItems,
+      activeEngine,
+    );
     // Empty phases stay expanded on the surface. Single-step process — including
     // lone reasoning ("思考过程") — still folds into the chip so Native/Shared
     // match the clean "已处理 · 思考 1 次" shape.
@@ -544,17 +581,20 @@ export function resolveCollapsedTimelineItems(options: {
   }
 
   let trailingBoundaryIndex = -1;
-  for (let cursor = canvasItems.length - 1; cursor >= 0; cursor -= 1) {
-    const candidate = canvasItems[cursor];
+  for (let cursor = items.length - 1; cursor >= 0; cursor -= 1) {
+    const candidate = items[cursor];
     if (!candidate) {
       continue;
     }
-    if (isUserMessageItem(candidate) || isAssistantMessageWithVisibleText(candidate)) {
+    if (
+      isUserMessageItem(candidate) ||
+      isAssistantMessageWithVisibleText(candidate)
+    ) {
       trailingBoundaryIndex = cursor;
       break;
     }
   }
-  const trailingProcessItems = canvasItems
+  const trailingProcessItems = items
     .slice(trailingBoundaryIndex + 1)
     .filter(isCollapsibleProcessItem);
   const trailingEntries = groupToolItems(trailingProcessItems);
@@ -563,7 +603,9 @@ export function resolveCollapsedTimelineItems(options: {
       .slice(0, trailingEntries.length - TRAILING_PROCESS_VISIBLE_TAIL_COUNT)
       .flatMap(groupedEntryProcessItems);
     const firstVisibleTailEntry =
-      trailingEntries[trailingEntries.length - TRAILING_PROCESS_VISIBLE_TAIL_COUNT];
+      trailingEntries[
+        trailingEntries.length - TRAILING_PROCESS_VISIBLE_TAIL_COUNT
+      ];
     const firstVisibleTailItem = firstVisibleTailEntry
       ? groupedEntryProcessItems(firstVisibleTailEntry)[0]
       : undefined;
@@ -573,7 +615,7 @@ export function resolveCollapsedTimelineItems(options: {
     );
     const firstHiddenItem = hiddenTrailingItems[0];
     if (firstHiddenItem && firstVisibleTailItem && trailingCount >= 1) {
-      const boundaryItem = canvasItems[trailingBoundaryIndex];
+      const boundaryItem = items[trailingBoundaryIndex];
       const phaseKey = `trailing:${boundaryItem?.id ?? "start"}`;
       const trailingExpanded = expandedPhaseKeys.has(phaseKey);
       if (!trailingExpanded) {
@@ -594,6 +636,27 @@ export function resolveCollapsedTimelineItems(options: {
       });
     }
   }
+}
+
+/**
+ * 默认模式：per-phase 折叠（既有行为，逻辑逐行保持，仅从
+ * resolveCollapsedTimelineItems 原函数体平移）。
+ */
+function collectProcessPhaseCollapsedTimeline(options: {
+  activeEngine: MessagesEngine;
+  canvasItems: ConversationItem[];
+  expandedPhaseKeys: ReadonlySet<string>;
+}): CollapsedTimelineItemsResult {
+  const { activeEngine, canvasItems, expandedPhaseKeys } = options;
+  const phases: ProcessPhaseCollapse[] = [];
+  const unmountedItemIds = new Set<string>();
+  collectPerPhaseCollapsedInto({
+    activeEngine,
+    items: canvasItems,
+    expandedPhaseKeys,
+    phases,
+    unmountedItemIds,
+  });
 
   if (phases.length === 0) {
     return emptyCollapsedTimelineResult(canvasItems);
@@ -606,6 +669,290 @@ export function resolveCollapsedTimelineItems(options: {
     };
   }
 
+  return {
+    timelineItems: canvasItems.filter((item) => !unmountedItemIds.has(item.id)),
+    phases,
+  };
+}
+
+/**
+ * 极简展示：按 user 消息切 turn，把每个已完成 turn 的「过程 + 中间叙述 prose」
+ * 整段折叠为单个 turn chip，锚定在该 turn 最终回答 prose 上方（复用投影层
+ * `phaseByAssistantId` 折叠放置路径，投影零改动）。
+ * 尾部活跃 turn（isThinking）走 foldLiveTurn：已落定过程与中间叙述实时折成
+ * 单个 live turn chip，只保留生长中的 prose 与尾部滚动窗口可见。
+ */
+function resolveMinimalTranscriptCollapsedTimeline(options: {
+  activeEngine: MessagesEngine;
+  canvasItems: ConversationItem[];
+  expandedPhaseKeys: ReadonlySet<string>;
+  isThinking: boolean;
+}): CollapsedTimelineItemsResult {
+  const { activeEngine, canvasItems, expandedPhaseKeys, isThinking } = options;
+  const phases: ProcessPhaseCollapse[] = [];
+  const unmountedItemIds = new Set<string>();
+
+  const foldCompletedTurn = (
+    segmentItems: ConversationItem[],
+    legacyExpandedKeys?: readonly string[],
+  ) => {
+    if (segmentItems.length === 0) {
+      return;
+    }
+    const proseItems = segmentItems.filter(isAssistantMessageWithVisibleText);
+    if (proseItems.length === 0) {
+      // 无 prose turn（纯工具/错误收尾）：不折叠、不产空 chip。
+      return;
+    }
+    let finalAnchor = proseItems.at(-1);
+    for (let index = proseItems.length - 1; index >= 0; index -= 1) {
+      const candidate = proseItems[index];
+      if (
+        candidate &&
+        candidate.kind === "message" &&
+        candidate.isFinal === true
+      ) {
+        finalAnchor = candidate;
+        break;
+      }
+    }
+    if (!finalAnchor) {
+      return;
+    }
+    // 只隐藏 process + 中间叙述 prose；其它类型（如系统提示）保持可见。
+    const hiddenItems = segmentItems.filter(
+      (item) =>
+        item.id !== finalAnchor.id &&
+        (isCollapsibleProcessItem(item) ||
+          isAssistantMessageWithVisibleText(item)),
+    );
+    if (hiddenItems.length === 0) {
+      return;
+    }
+    const hiddenProseItems = hiddenItems.filter(
+      isAssistantMessageWithVisibleText,
+    );
+    const processItems = hiddenItems.filter(isCollapsibleProcessItem);
+    const count =
+      countRenderableCollapsedEntries(processItems, activeEngine) +
+      hiddenProseItems.length;
+    if (count < 1) {
+      return;
+    }
+    const firstHiddenItem = hiddenItems[0];
+    if (!firstHiddenItem) {
+      return;
+    }
+    const phaseKey = `turn:${finalAnchor.id}`;
+    // legacyExpandedKeys：live turn chip（liveturn:）展开态迁移源，避免 turn
+    // 完成瞬间 chip key 切换导致用户已展开的过程突然折回。
+    const expanded =
+      expandedPhaseKeys.has(phaseKey) ||
+      (legacyExpandedKeys?.some((key) => expandedPhaseKeys.has(key)) ?? false);
+    const breakdown = {
+      ...resolvePhaseBreakdown(processItems, activeEngine),
+      proseCount: hiddenProseItems.length,
+    };
+    const durationMs = resolvePhaseDurationMs(processItems);
+    const hiddenItemIds = hiddenItems.map((item) => item.id);
+    if (!expanded) {
+      for (const hiddenItem of hiddenItems) {
+        unmountedItemIds.add(hiddenItem.id);
+      }
+      phases.push({
+        phaseKey,
+        assistantItemId: finalAnchor.id,
+        insertBeforeItemId: firstHiddenItem.id,
+        count,
+        breakdown,
+        durationMs,
+        expanded,
+        hiddenItemIds,
+      });
+      return;
+    }
+    // 展开态：外层 chip 保持渲染作为折回入口；turn 内部复用默认模式
+    // per-phase 形态渲染，内层 chip 可独立展开/折回。
+    const innerPhases: ProcessPhaseCollapse[] = [];
+    collectPerPhaseCollapsedInto({
+      activeEngine,
+      items: segmentItems,
+      expandedPhaseKeys,
+      phases: innerPhases,
+      unmountedItemIds,
+    });
+    // 外层 header 必须锚到内层折叠后仍可见的 item，否则投影层会把它
+    // 跌进 fallback 渲染到幕布底部。
+    const firstVisibleItem = segmentItems.find(
+      (item) => !unmountedItemIds.has(item.id),
+    );
+    phases.push({
+      phaseKey,
+      assistantItemId: finalAnchor.id,
+      insertBeforeItemId: (firstVisibleItem ?? firstHiddenItem).id,
+      count,
+      breakdown,
+      durationMs,
+      expanded,
+      hiddenItemIds,
+    });
+    phases.push(...innerPhases);
+  };
+
+  /**
+   * 流式活跃 turn：已落定过程 + 中间叙述实时折成单个 live turn chip，
+   * 幕布只保留「chip + 生长中的 prose + 尾部滚动窗口（阈值 4 / 可见 3）」。
+   */
+  const foldLiveTurn = (segmentItems: ConversationItem[], phaseKey: string) => {
+    if (segmentItems.length === 0) {
+      return;
+    }
+    const proseItems = segmentItems.filter(isAssistantMessageWithVisibleText);
+    const liveAnchor = proseItems.at(-1);
+    const anchorIndex = liveAnchor ? segmentItems.lastIndexOf(liveAnchor) : -1;
+    // 锚点之前：全部过程 + 中间叙述 prose 折叠（生长中的 anchor 本身不折）。
+    const hiddenBeforeAnchor = (
+      anchorIndex >= 0 ? segmentItems.slice(0, anchorIndex) : []
+    ).filter(
+      (item) =>
+        isCollapsibleProcessItem(item) ||
+        isAssistantMessageWithVisibleText(item),
+    );
+    // 锚点之后（无锚点时为整段）：trailing 滚动窗口，极简阈值 4。
+    const trailingSource =
+      anchorIndex >= 0 ? segmentItems.slice(anchorIndex + 1) : segmentItems;
+    const trailingEntries = groupToolItems(
+      trailingSource.filter(isCollapsibleProcessItem),
+    );
+    let hiddenTrailingItems: ConversationItem[] = [];
+    let firstVisibleTailItem: ConversationItem | undefined;
+    if (
+      trailingEntries.length > MINIMAL_TRANSCRIPT_TRAILING_COLLAPSE_THRESHOLD
+    ) {
+      hiddenTrailingItems = trailingEntries
+        .slice(0, trailingEntries.length - TRAILING_PROCESS_VISIBLE_TAIL_COUNT)
+        .flatMap(groupedEntryProcessItems);
+      const firstVisibleTailEntry =
+        trailingEntries[
+          trailingEntries.length - TRAILING_PROCESS_VISIBLE_TAIL_COUNT
+        ];
+      firstVisibleTailItem = firstVisibleTailEntry
+        ? groupedEntryProcessItems(firstVisibleTailEntry)[0]
+        : undefined;
+    }
+    const hiddenItems = [...hiddenBeforeAnchor, ...hiddenTrailingItems];
+    const firstHiddenItem = hiddenItems[0];
+    if (!firstHiddenItem) {
+      return;
+    }
+    const hiddenProseItems = hiddenItems.filter(
+      isAssistantMessageWithVisibleText,
+    );
+    const processItems = hiddenItems.filter(isCollapsibleProcessItem);
+    const count =
+      countRenderableCollapsedEntries(processItems, activeEngine) +
+      hiddenProseItems.length;
+    if (count < 1) {
+      return;
+    }
+    const expanded = expandedPhaseKeys.has(phaseKey);
+    const breakdown = {
+      ...resolvePhaseBreakdown(processItems, activeEngine),
+      proseCount: hiddenProseItems.length,
+    };
+    const durationMs = resolvePhaseDurationMs(processItems);
+    const hiddenItemIds = hiddenItems.map((item) => item.id);
+    if (expanded) {
+      // 展开态：外层 chip 保持渲染；turn 内部回落默认模式 per-phase 形态
+      // （trailing 阈值回到默认 5），与完成 turn 的展开语义一致。
+      const innerPhases: ProcessPhaseCollapse[] = [];
+      collectPerPhaseCollapsedInto({
+        activeEngine,
+        items: segmentItems,
+        expandedPhaseKeys,
+        phases: innerPhases,
+        unmountedItemIds,
+      });
+      const firstVisibleItem = segmentItems.find(
+        (item) => !unmountedItemIds.has(item.id),
+      );
+      phases.push({
+        phaseKey,
+        assistantItemId: liveAnchor ? liveAnchor.id : phaseKey,
+        insertBeforeItemId: (firstVisibleItem ?? firstHiddenItem).id,
+        count,
+        breakdown,
+        durationMs,
+        expanded,
+        hiddenItemIds,
+      });
+      phases.push(...innerPhases);
+      return;
+    }
+    for (const hiddenItem of hiddenItems) {
+      unmountedItemIds.add(hiddenItem.id);
+    }
+    if (liveAnchor) {
+      // 折叠态锚定生长中 prose 上方（复用 phaseByAssistantId 路径）。
+      phases.push({
+        phaseKey,
+        assistantItemId: liveAnchor.id,
+        insertBeforeItemId: firstHiddenItem.id,
+        count,
+        breakdown,
+        durationMs,
+        expanded,
+        hiddenItemIds,
+      });
+      return;
+    }
+    // 尚无 prose（纯工具跑动且超过阈值）：复用 trailing chip 自锚放置路径。
+    if (!firstVisibleTailItem) {
+      return;
+    }
+    phases.push({
+      phaseKey,
+      assistantItemId: phaseKey,
+      insertBeforeItemId: firstHiddenItem.id,
+      collapsedAnchorItemId: firstVisibleTailItem.id,
+      count,
+      breakdown,
+      durationMs,
+      expanded,
+      hiddenItemIds,
+    });
+  };
+
+  // 以 user 消息为边界切 turn；每个边界之前的 segment 都是已完成 turn。
+  let tailSegmentStart = 0;
+  for (let index = 0; index < canvasItems.length; index += 1) {
+    const item = canvasItems[index];
+    if (!item || !isUserMessageItem(item)) {
+      continue;
+    }
+    foldCompletedTurn(canvasItems.slice(tailSegmentStart, index));
+    tailSegmentStart = index + 1;
+  }
+
+  // live turn chip key：turn 周期内稳定（不随新 prose 落地而变化）。
+  const liveTurnPhaseKey = `liveturn:${
+    tailSegmentStart > 0
+      ? (canvasItems[tailSegmentStart - 1]?.id ?? "start")
+      : "start"
+  }`;
+
+  if (isThinking) {
+    foldLiveTurn(canvasItems.slice(tailSegmentStart), liveTurnPhaseKey);
+  } else {
+    foldCompletedTurn(canvasItems.slice(tailSegmentStart), [liveTurnPhaseKey]);
+  }
+
+  if (phases.length === 0) {
+    return emptyCollapsedTimelineResult(canvasItems);
+  }
+  if (unmountedItemIds.size === 0) {
+    return { timelineItems: canvasItems, phases };
+  }
   return {
     timelineItems: canvasItems.filter((item) => !unmountedItemIds.has(item.id)),
     phases,

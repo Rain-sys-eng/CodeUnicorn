@@ -6,6 +6,7 @@ import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
 import { pushErrorToast } from "../../../services/toasts";
 import type { OpenAppTarget } from "../../../types";
 import { openPathInTarget, resolveOpenAppPath } from "../utils/openApp";
+import { useKnownOpenAppIcons } from "../hooks/useKnownOpenAppIcons";
 import { useOpenAppIcons } from "../hooks/useOpenAppIcons";
 import {
   DEFAULT_OPEN_APP_ID,
@@ -76,6 +77,8 @@ export function OpenAppMenu({
   const openMenuRef = useRef<HTMLDivElement | null>(null);
   const availableTargets =
     openTargets.length > 0 ? openTargets : DEFAULT_OPEN_APP_TARGETS;
+  // Built-in open-app PNGs load lazily; recompute icons once they are cached.
+  const knownOpenAppIconsLoaded = useKnownOpenAppIcons();
   const lazyIconById = useOpenAppIcons(availableTargets, { enabled: openMenuOpen });
   const openAppId = useMemo(
     () =>
@@ -91,13 +94,13 @@ export function OpenAppMenu({
         id: target.id,
         label: target.label,
         icon:
-          getKnownOpenAppIcon(target.id) ??
+          (knownOpenAppIconsLoaded ? getKnownOpenAppIcon(target.id) : null) ??
           lazyIconById[target.id] ??
           iconById[target.id] ??
           GENERIC_APP_ICON,
         target,
       })),
-    [availableTargets, iconById, lazyIconById],
+    [availableTargets, iconById, knownOpenAppIconsLoaded, lazyIconById],
   );
 
   const fallbackTarget: OpenTarget = {

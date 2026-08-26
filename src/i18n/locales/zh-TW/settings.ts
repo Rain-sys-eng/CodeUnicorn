@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "清除",
     "modelMappingNote": "變更將反映在模型選擇下拉選單中。",
     "notificationSounds": "通知音效",
+    "minimalTranscript": "極簡展示",
+    "minimalTranscriptDesc": "開啟後，已完成的回覆只保留最終答案，思考、工具呼叫與中間說明摺疊成一條可展開的摘要。",
+    "minimalTranscriptNormal": "一般模式",
+    "minimalTranscriptMinimal": "極簡模式",
+    "topSessionTabsHide": "關閉頂部分頁",
+    "topSessionTabsShow": "開啟頂部分頁",
     "systemNotification": "系統通知",
     "systemNotificationDesc": "工作階段完成時傳送系統層級通知。",
     "testSound": "測試",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "高信賴度",
     "sessionManagementAttributionConfidenceMedium": "中信賴度",
     "sessionManagementThreadVisibilityLabel": "側邊欄預設工作階段數",
-    "sessionManagementThreadVisibilityHint": "控制此工作區在側邊欄收合時預設顯示多少個根工作階段。預設 {{defaultCount}}，支援範圍 {{min}}-{{max}}；目前生效值 {{count}}。",
+    "sessionManagementThreadVisibilityHint": "覆寫此專案在側邊欄收合時顯示的根工作階段數。未覆寫時跟隨工作區設定（目前 {{defaultCount}}）。範圍 {{min}}-{{max}}；目前生效值 {{count}}。",
     "sessionManagementThreadVisibilitySaved": "已將側邊欄預設工作階段數更新為 {{count}}。",
     "sessionManagementThreadVisibilitySaving": "正在儲存…",
     "sessionManagementLoadMore": "載入更多",
@@ -1402,6 +1408,7 @@ const settings = {
         "notConfigured": "未設定",
         "envActive": "環境變數生效中",
         "envActiveHint": "環境變數生效中（mossx 啟動 {{cliName}} 時繼承）。如需覆蓋，請設定 PAT。",
+        "envIgnoredStoredWins": "處理程序環境變數中同時存在 {{envVar}}，已忽略；以儲存的 PAT 為準。",
         "setKey": "設定金鑰",
         "overrideSet": "覆蓋",
         "edit": "編輯",
@@ -1415,7 +1422,7 @@ const settings = {
         "toggleKeyVisibility": "顯示 / 隱藏",
         "saveHint": "儲存後寫入 {{authFile}}（0600），啟動 {{cliName}} 時注入",
         "loadFailed": "讀取驗證狀態失敗",
-        "resolutionOrder": "解析順序：行程環境變數 → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "解析順序：{{authFile}} → 行程環境變數 → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI 驗證",

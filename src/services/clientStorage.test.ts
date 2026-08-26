@@ -1,6 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 
+// client_store_write/patch 的载荷必须以单一 pre-stringified JSON string 过桥：
+// WKWebView 桥按对象数同步转换嵌套对象图（实测 274KB patch 同步段 3338ms），字符串成本 O(len)。
+function expectRawStringPayloadCall(
+  invokeMock: ReturnType<typeof vi.mocked<typeof invoke>>,
+  command: "client_store_write" | "client_store_patch",
+  expectedParsed: Record<string, unknown>,
+) {
+  const call = invokeMock.mock.calls.find(([name]) => name === command);
+  expect(call, `expected a ${command} invoke`).toBeDefined();
+  const [, payload] = call as [string, Record<string, unknown>];
+  expect(Object.keys(payload).sort()).toEqual(["payloadJson", "store"]);
+  expect(typeof payload.payloadJson).toBe("string");
+  expect(JSON.parse(payload.payloadJson as string)).toEqual(expectedParsed);
+}
+
 describe("clientStorage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,12 +45,9 @@ describe("clientStorage", () => {
     await Promise.resolve();
 
     expect(storage.getClientStoreSync("layout", "sidebarWidth")).toBe(280);
-    expect(invokeMock).toHaveBeenCalledWith("client_store_write", {
-      store: "layout",
-      data: {
-        __schemaVersion: 1,
-        sidebarWidth: 280,
-      },
+    expectRawStringPayloadCall(invokeMock, "client_store_write", {
+      __schemaVersion: 1,
+      sidebarWidth: 280,
     });
   });
 
@@ -61,11 +73,8 @@ describe("clientStorage", () => {
     await Promise.resolve();
 
     expect(storage.getClientStoreFullSync("app")).toEqual({});
-    expect(invokeMock).toHaveBeenCalledWith("client_store_write", {
-      store: "app",
-      data: {
-        __schemaVersion: 1,
-      },
+    expectRawStringPayloadCall(invokeMock, "client_store_write", {
+      __schemaVersion: 1,
     });
   });
 
@@ -81,7 +90,7 @@ describe("clientStorage", () => {
     expect(storage.getClientStoreFullSync("layout")).toEqual({});
     expect(invokeMock).not.toHaveBeenCalledWith(
       "client_store_write",
-      expect.objectContaining({ data: { __schemaVersion: 1 } }),
+      expect.objectContaining({ payloadJson: expect.stringContaining("__schemaVersion") }),
     );
   });
 
@@ -102,12 +111,9 @@ describe("clientStorage", () => {
     expect(storage.getClientStoreSync("threads", "customNames")).toEqual({
       "ws:thread": "Name",
     });
-    expect(invokeMock).toHaveBeenCalledWith("client_store_patch", {
-      store: "threads",
-      patch: {
-        __schemaVersion: 1,
-        customNames: { "ws:thread": "Name" },
-      },
+    expectRawStringPayloadCall(invokeMock, "client_store_patch", {
+      __schemaVersion: 1,
+      customNames: { "ws:thread": "Name" },
     });
   });
 
@@ -129,12 +135,68 @@ describe("clientStorage", () => {
     expect(storage.getClientStoreFullSync("composer")).toEqual({
       promptHistory: { demo: ["hi"] },
     });
-    expect(invokeMock).toHaveBeenCalledWith("client_store_write", {
-      store: "composer",
-      data: {
-        __schemaVersion: 1,
-        promptHistory: { demo: ["hi"] },
-      },
+    expectRawStringPayloadCall(invokeMock, "client_store_write", {
+      __schemaVersion: 1,
+      promptHistory: { demo: ["hi"] },
+    });
+  });
+
+  it("never passes nested object graphs across the store write bridge", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const storage = await import("./clientStorage");
+    storage.resetClientStorageForTests();
+    invokeMock.mockResolvedValue(null);
+
+    storage.writeClientStoreValue(
+      "diagnostics",
+      "diagnostics.rendererLifecycleLog",
+      [{ timestamp: 1, label: "perf.frame-drop", payload: { deltaMs: 120 } }],
+      { immediate: true },
+    );
+    storage.writeClientStoreData(
+      "threads",
+      { customNames: { "ws:t": "T" } },
+      { immediate: true },
+    );
+    await Promise.resolve();
+
+    for (const [command, payload] of invokeMock.mock.calls) {
+      if (command !== "client_store_write" && command !== "client_store_patch") {
+        continue;
+      }
+      const args = payload as Record<string, unknown>;
+      expect(args.data).toBeUndefined();
+      expect(args.patch).toBeUndefined();
+      expect(typeof args.payloadJson).toBe("string");
+    }
+  });
+
+  it("round-trips unicode payloads through the raw string bridge unchanged", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const storage = await import("./clientStorage");
+    storage.resetClientStorageForTests();
+    invokeMock.mockResolvedValue(null);
+
+    // 中文 / emoji / 换行 / 引号：stringify→from_str 必须逐字节还原，
+    // 防止任何转义层把多字节内容弄脏。
+    const unicodeValue = {
+      "会话名": "中文会话 🎯",
+      note: 'line1\nline2 "quoted"',
+      nested: [{ deep: true, emoji: "🚀" }],
+    };
+    storage.writeClientStoreValue("threads", "customNames", unicodeValue, {
+      immediate: true,
+    });
+    await Promise.resolve();
+
+    const patchCall = invokeMock.mock.calls.find(
+      ([command]) => command === "client_store_patch",
+    );
+    expect(patchCall).toBeDefined();
+    const [, payload] = patchCall as [string, Record<string, unknown>];
+    expect(JSON.parse(payload.payloadJson as string)).toEqual({
+      __schemaVersion: 1,
+      customNames: unicodeValue,
     });
   });
 

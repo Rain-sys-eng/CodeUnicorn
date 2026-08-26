@@ -223,7 +223,7 @@ pub(crate) fn parse_acp_line(value: &Value) -> AcpLine {
         };
     }
     if let Some(id) = id {
-        let error = value.get("error").and_then(|err| {
+        let error = value.get("error").map(|err| {
             let code = err
                 .get("code")
                 .and_then(Value::as_i64)
@@ -233,7 +233,7 @@ pub(crate) fn parse_acp_line(value: &Value) -> AcpLine {
                 .and_then(Value::as_str)
                 .unwrap_or("JSON-RPC error")
                 .to_string();
-            Some(AcpRpcError { code, message })
+            AcpRpcError { code, message }
         });
         return AcpLine::Response {
             id,

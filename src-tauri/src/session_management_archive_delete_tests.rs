@@ -31,13 +31,16 @@
         .await
         .expect("assign session");
 
-        archive_workspace_sessions_core(
+        crate::session_archive_v2::archive_workspace_sessions_v2_with_lookups(
             &workspaces,
             &sessions,
-            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
-            vec!["codex-keep".to_string()],
+            vec![crate::session_archive_v2::SessionArchiveV2Target {
+                thread_id: "codex-keep".to_string(),
+                engine: None,
+            }],
+            &HashMap::new(),
         )
         .await
         .expect("archive session");

@@ -426,29 +426,55 @@ html.dark .crs-subagent-row.is-error .crs-subagent-status {
   font-variant-numeric: tabular-nums;
 }
 
-/* RollingStat（@number-flow/react）：位滚动需要一定上下留白，mask 过小会「看起来没动画」 */
+/* RollingStat：自实现 odometer 位滚动（纯 CSS transition，无 mask / blend-mode / will-change，
+ * Windows WebView2 合成安全；历史上 @number-flow 在此平台符号与首位数字重叠错位） */
 .composer-run-status-pill-count--edit .is-add,
 .composer-run-status-pill-count--edit .is-del {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   min-width: 1.5ch;
   min-height: 1.15em;
-  text-align: right;
   line-height: 1;
-  /* 允许 digit 上下滑出一点，再由 NumberFlow 自身 mask 裁切 */
-  overflow: visible;
 }
 
-.composer-run-status-pill-count--edit .composer-run-status-rolling-stat {
+.crs-rolling {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
-  line-height: 0.85;
-  --number-flow-mask-height: 0.25em;
-  --number-flow-mask-width: 0.35em;
 }
 
-/* 父级 pill 若 overflow:hidden 会裁掉滚动；编辑计数允许露出 */
-.composer-run-status-pill .composer-run-status-pill-count--edit {
-  overflow: visible;
+.crs-rolling-prefix {
+  flex-shrink: 0;
+}
+
+.crs-rolling-digit {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+}
+
+.crs-rolling-strip {
+  display: flex;
+  flex-direction: column;
+  transition-property: transform;
+  transition-timing-function: var(
+    --crs-rolling-easing,
+    cubic-bezier(0.22, 1, 0.36, 1)
+  );
+}
+
+.crs-rolling-strip-cell {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crs-rolling-strip {
+    transition: none;
+  }
 }
 
 /* pill 上 +/- 与 diff 语义一致：增绿删红 */
@@ -507,5 +533,159 @@ html.dark .composer-run-status-pill-count--edit .is-del {
 
   .composer-run-status-live-dot {
     opacity: 0.7;
+  }
+}
+
+/* ── 3.1/3.2 「后台任务」pill 就地展开面板：任务分组列表（running 在上，终态折叠其下）
+   配色与消息区 backgroundTaskCard 同源：--success/--destructive/--info/--text-secondary，
+   不写死色值，深浅主题自动适配。 */
+.composer-run-status-body--bg-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-run-status-bg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.composer-run-status-bg-list.is-done {
+  opacity: 0.72;
+}
+
+.composer-run-status-bg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 2px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.composer-run-status-bg-row.is-running {
+  background: color-mix(in srgb, var(--info) 8%, transparent);
+}
+
+.composer-run-status-bg-status {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--border-subtle) 72%, transparent);
+}
+
+.composer-run-status-bg-row.is-running .composer-run-status-bg-status {
+  color: color-mix(in srgb, var(--info) 82%, var(--text-stronger));
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+}
+
+.composer-run-status-bg-row.is-terminal .composer-run-status-bg-status.is-completed {
+  color: color-mix(in srgb, var(--success) 82%, var(--text-stronger));
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.composer-run-status-bg-row.is-terminal .composer-run-status-bg-status.is-failed,
+.composer-run-status-bg-row.is-terminal .composer-run-status-bg-status.is-killed {
+  color: color-mix(in srgb, var(--destructive) 82%, var(--text-stronger));
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+}
+
+.composer-run-status-bg-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--crs-ink);
+}
+
+.composer-run-status-bg-elapsed {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.composer-run-status-bg-exit {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.composer-run-status-bg-log {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--info) 88%, var(--text-stronger));
+  cursor: pointer;
+}
+
+.composer-run-status-bg-log:hover {
+  text-decoration: underline;
+}
+
+.composer-run-status-bg-tail {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.composer-run-status-bg-tail-pre {
+  max-height: 120px;
+  overflow: auto;
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+}
+
+.composer-run-status-bg-tail-empty {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 后台任务 pill 呼吸灯：--info 主题色（与活卡 running 徽标同源），深浅自适应。 */
+.composer-run-status-live-dot--info {
+  background: color-mix(in srgb, var(--info) 88%, var(--text-stronger));
+}
+
+/* 面板运行中徽标：currentColor 脉冲点（同 backgroundTaskCard 活卡口径）。 */
+.composer-run-status-bg-row.is-running .composer-run-status-bg-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 5px;
+  animation: crs-bg-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes crs-bg-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
   }
 }

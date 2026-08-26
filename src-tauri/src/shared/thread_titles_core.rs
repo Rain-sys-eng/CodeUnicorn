@@ -167,9 +167,7 @@ pub(crate) async fn rename_thread_title_core(
     let Some(previous) = store.titles.remove(&from) else {
         return Ok(());
     };
-    if !store.titles.contains_key(&to) {
-        store.titles.insert(to, previous);
-    }
+    store.titles.entry(to).or_insert(previous);
     write_store(&path, &store)
 }
 

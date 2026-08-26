@@ -1,0 +1,2 @@
+# 全仓 rustfmt + clippy --fix 纯格式提交（零业务变更），blame 时忽略
+ddf590b70

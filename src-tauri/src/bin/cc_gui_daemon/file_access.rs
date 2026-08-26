@@ -120,11 +120,11 @@ impl DaemonState {
         force_refresh: bool,
     ) -> Result<WorkspaceFilesResponse, String> {
         let root = workspaces_core::resolve_workspace_root(&self.workspaces, &workspace_id).await?;
-        Ok(tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             list_workspace_files_inner_with_refresh(&root, 12_000, force_refresh)
         })
         .await
-        .map_err(|err| format!("failed to join workspace file scan task: {err}"))?)
+        .map_err(|err| format!("failed to join workspace file scan task: {err}"))
     }
 
     pub(crate) async fn list_workspace_directory_children(
@@ -168,7 +168,7 @@ impl DaemonState {
             &self.workspaces,
             &workspace_id,
             &path,
-            |root, rel_path| read_workspace_file_inner(root, rel_path),
+            read_workspace_file_inner,
         )
         .await
     }
@@ -182,7 +182,7 @@ impl DaemonState {
             &self.workspaces,
             &workspace_id,
             &path,
-            |root, rel_path| read_workspace_file_preview_inner(root, rel_path),
+            read_workspace_file_preview_inner,
         )
         .await
     }

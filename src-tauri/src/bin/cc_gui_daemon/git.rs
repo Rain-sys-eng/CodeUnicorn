@@ -506,12 +506,10 @@ async fn update_non_current_local_branch(
     }
 
     let target_ref = format!("refs/heads/{}", refreshed_state.branch_name);
-    let args_owned = vec![
-        "update-ref".to_string(),
+    let args_owned = ["update-ref".to_string(),
         target_ref,
         upstream_oid.to_string(),
-        refreshed_state.local_oid.to_string(),
-    ];
+        refreshed_state.local_oid.to_string()];
     let arg_refs = args_owned.iter().map(String::as_str).collect::<Vec<_>>();
     if let Err(error) = git_core::run_git_command(&repo_root.to_path_buf(), &arg_refs).await {
         if load_local_branch_update_state(repo_root, refreshed_state.branch_name.as_str())
@@ -2542,7 +2540,7 @@ impl DaemonState {
             }
         }
 
-        let body_text = trim_optional(body).unwrap_or_else(|| "".to_string());
+        let body_text = trim_optional(body).unwrap_or_default();
         let head_ref = format!("{head_owner}:{head_branch}");
         let mut args = vec![
             "pr".to_string(),
@@ -2834,7 +2832,7 @@ impl DaemonState {
             &[
                 "log",
                 "--format=%H%x1f%an%x1f%ae%x1f%ct%x1f%s%x1f%B%x1e",
-                &format!("{target_branch}"),
+                &target_branch.to_string(),
                 &format!("^{current_branch}"),
                 "-n",
                 &max_items.to_string(),
@@ -2847,7 +2845,7 @@ impl DaemonState {
             &[
                 "log",
                 "--format=%H%x1f%an%x1f%ae%x1f%ct%x1f%s%x1f%B%x1e",
-                &format!("{current_branch}"),
+                &current_branch.to_string(),
                 &format!("^{target_branch}"),
                 "-n",
                 &max_items.to_string(),

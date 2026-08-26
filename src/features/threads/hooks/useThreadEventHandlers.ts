@@ -17,6 +17,7 @@ import type {
 } from "../../../types";
 import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
 import { useThreadItemEvents } from "./useThreadItemEvents";
+import { isSalvageableTerminalAssistantComplete } from "../contracts/realtimeEventContract";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
 import { queryTurnReconciliationStatusWithTimeout } from "./threadReconciliationStatusQuery";
 import { useThreadUserInputEvents } from "./useThreadUserInputEvents";
@@ -1264,6 +1265,7 @@ export function useThreadEventHandlers({
     onItemStarted,
     onItemUpdated,
     onItemCompleted,
+    onBackgroundTaskUpdated,
     onNormalizedRealtimeEvent,
     onReasoningSummaryDelta,
     onReasoningSummaryBoundary,
@@ -1738,9 +1740,17 @@ export function useThreadEventHandlers({
 
   const onNormalizedRealtimeEventTracked = useCallback(
     (event: NormalizedThreadEvent) => {
+      // fix-turn-terminal-live-text-commit-loss：exact-guard 与 quarantine 均仅
+      // 放行非空 assistant 终稿（salvageable complete），由下游 applyNormalized
+      // 统一同步合入 durable；其余迟到事件维持丢弃。quarantine 的目的防复燃，
+      // salvage 不复活 processing（turnId 全局唯一不会串 turn），且 codex 正常
+      // 完成即 quarantine——不放宽则迟到终稿永远被丢，正是本 change 要修的形态。
+      const salvageableTerminalComplete =
+        isSalvageableTerminalAssistantComplete(event);
       if (
         event.turnId &&
-        isRealtimeTurnTerminalExact(event.threadId, event.turnId)
+        isRealtimeTurnTerminalExact(event.threadId, event.turnId) &&
+        !salvageableTerminalComplete
       ) {
         onDebug?.({
           id: `${Date.now()}-realtime-terminal-exact-drop`,
@@ -1756,7 +1766,10 @@ export function useThreadEventHandlers({
         });
         return;
       }
-      if (shouldSkipLateCodexNormalizedEvent(event)) {
+      if (
+        !salvageableTerminalComplete &&
+        shouldSkipLateCodexNormalizedEvent(event)
+      ) {
         return;
       }
       onNormalizedRealtimeEvent(event);
@@ -2009,6 +2022,10 @@ export function useThreadEventHandlers({
       normalizedTurnId: string,
       rawTurnId: string | null = normalizedTurnId,
     ) => {
+      // fix-turn-terminal-live-text-commit-loss：所有 terminal 结算路径统一在
+      // barrier 前 drain 全部 pending 正文事件（含 contract batcher 积压 delta），
+      // 防止 barrier 后的 cadence flush 把末段正文当迟到事件丢弃。
+      flushPendingRealtimeEvents();
       // A4 二期：建立 terminal barrier 前把 reasoning/toolOutput 通道尾段
       // 灌回 durable items——结算不越过正文（与正文 drain 同一道 causal barrier）。
       drainLiveItemDeltasForThread(threadId);
@@ -2193,6 +2210,7 @@ export function useThreadEventHandlers({
       emitForegroundSettlementDiagnostic,
       emitTurnDomainEvent,
       finalizeTurnDiagnostic,
+      flushPendingRealtimeEvents,
       getThreadLifecycleSnapshot,
       interruptedThreadsRef,
       markRealtimeTurnTerminal,
@@ -2471,7 +2489,9 @@ export function useThreadEventHandlers({
   const onTurnCompletedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       const normalizedTurnId = resolveTerminalSettlementTurnId(threadId, turnId);
-      flushPendingRealtimeEvents();
+      // fix-turn-terminal-live-text-commit-loss：flush 统一收敛进
+      // settleCompletedTurn（barrier 前 drain 全部 pending 正文事件）；
+      // deferred 路径无 barrier，cadence flush 照常提交，无丢失风险。
       if (deferCodexTurnCompletionIfBlocked(workspaceId, threadId, normalizedTurnId)) {
         return;
       }
@@ -2479,7 +2499,6 @@ export function useThreadEventHandlers({
     },
     [
       deferCodexTurnCompletionIfBlocked,
-      flushPendingRealtimeEvents,
       resolveTerminalSettlementTurnId,
       settleCompletedTurn,
     ],
@@ -2651,6 +2670,7 @@ export function useThreadEventHandlers({
       onItemStarted: onItemStartedTracked,
       onItemUpdated: onItemUpdatedTracked,
       onItemCompleted: onItemCompletedTracked,
+      onBackgroundTaskUpdated,
       onReasoningSummaryDelta,
       onReasoningSummaryBoundary,
       onReasoningTextDelta,
@@ -2687,6 +2707,7 @@ export function useThreadEventHandlers({
       onItemStartedTracked,
       onItemUpdatedTracked,
       onItemCompletedTracked,
+      onBackgroundTaskUpdated,
       onReasoningSummaryDelta,
       onReasoningSummaryBoundary,
       onReasoningTextDelta,

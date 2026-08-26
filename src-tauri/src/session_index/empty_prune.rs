@@ -28,9 +28,7 @@ use crate::engine::grok_history::{
     candidate_encoded_cwd_names, first_user_prompt_from_line, resolve_grok_base_dir,
     session_dir_looks_valid,
 };
-use crate::engine::pi_history::{
-    locate_pi_session_file, scan_pi_jsonl_user_prompt, PiUserPromptScan,
-};
+use crate::engine::pi_history::{locate_pi_session_file, scan_pi_jsonl_user_prompt, PiUserPromptScan};
 use crate::state::AppState;
 use std::sync::Arc;
 
@@ -179,7 +177,7 @@ pub(crate) fn collect_empty_prune_plan(
     workspace_path: &str,
     now: i64,
 ) -> Result<EmptyPrunePlan, String> {
-    let rows = list_for_workspace_path(connection, workspace_path, PRUNE_SCAN_LIMIT)?;
+    let rows = list_for_workspace_path(connection, workspace_path, PRUNE_SCAN_LIMIT, false)?;
     let workspace = PathBuf::from(workspace_path);
     let mut plan = EmptyPrunePlan::default();
     for row in rows {
@@ -1502,7 +1500,7 @@ mod tests {
         assert_eq!(targets.len(), 1);
         tombstone_engine_sessions(&connection, &[("claude".into(), "to-tombstone".into())])
             .expect("tombstone");
-        let remaining = list_for_workspace_path(&connection, "/tmp/proj", 10).expect("list");
+        let remaining = list_for_workspace_path(&connection, "/tmp/proj", 10, false).expect("list");
         assert!(remaining.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "साफ़ करें",
     "modelMappingNote": "बदलाव मॉडल चयनकर्ता ड्रॉपडाउन में दिखाई देंगे।",
     "notificationSounds": "सूचना ध्वनियाँ",
+    "minimalTranscript": "मिनिमल व्यू",
+    "minimalTranscriptDesc": "चालू होने पर, पूर्ण उत्तर केवल अंतिम उत्तर दिखाते हैं; विचार, टूल कॉल और बीच की टिप्पणियाँ एक विस्तार-योग्य सारांश में समेटी जाती हैं।",
+    "minimalTranscriptNormal": "सामान्य",
+    "minimalTranscriptMinimal": "मिनिमल",
+    "topSessionTabsHide": "शीर्ष टैब छिपाएँ",
+    "topSessionTabsShow": "शीर्ष टैब दिखाएँ",
     "systemNotification": "सिस्टम सूचनाएँ",
     "systemNotificationDesc": "सत्र पूरा होने पर सिस्टम-स्तरीय सूचनाएँ भेजें।",
     "testSound": "परीक्षण",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "उच्च विश्वास",
     "sessionManagementAttributionConfidenceMedium": "मध्यम विश्वास",
     "sessionManagementThreadVisibilityLabel": "साइडबार डिफ़ॉल्ट सत्र गिनती",
-    "sessionManagementThreadVisibilityHint": "नियंत्रित करता है कि साइडबार संकुचित रहते हुए यह वर्कस्पेस डिफ़ॉल्ट रूप से कितने रूट सत्र दिखाता है। डिफ़ॉल्ट {{defaultCount}}, समर्थित सीमा {{min}}-{{max}}; प्रभावी मान {{count}}।",
+    "sessionManagementThreadVisibilityHint": "संकुचित साइडबार में यह प्रोजेक्ट कितने रूट सत्र दिखाए, इसे ओवरराइड करता है। बिना ओवरराइड के वर्कस्पेस सेटिंग (वर्तमान {{defaultCount}}) लागू होती है। सीमा {{min}}-{{max}}; प्रभावी मान {{count}}।",
     "sessionManagementThreadVisibilitySaved": "साइडबार डिफ़ॉल्ट सत्र गिनती को {{count}} पर अपडेट किया गया।",
     "sessionManagementThreadVisibilitySaving": "सहेजा जा रहा है...",
     "sessionManagementLoadMore": "और लोड करें",
@@ -1399,6 +1405,7 @@ const settings = {
         "notConfigured": "कॉन्फ़िगर नहीं",
         "envActive": "पर्यावरण चर सक्रिय",
         "envActiveHint": "mossx {{cliName}} चलाते समय प्रोसेस एन्वायरनमेंट सक्रिय रहता है। ओवरराइड करने के लिए PAT सेट करें।",
+        "envIgnoredStoredWins": "प्रोसेस एन्वायरनमेंट में भी {{envVar}} मौजूद है; इसे अनदेखा किया गया है—सहेजा गया PAT लागू होगा।",
         "setKey": "की सेट करें",
         "overrideSet": "ओवरराइड",
         "edit": "संपादित करें",
@@ -1412,7 +1419,7 @@ const settings = {
         "toggleKeyVisibility": "दिखाएँ / छिपाएँ",
         "saveHint": "{{authFile}} (0600) लिखता है और {{cliName}} लॉन्च पर इंजेक्ट करता है",
         "loadFailed": "ऑथ स्थिति पढ़ने में विफल",
-        "resolutionOrder": "रिज़ॉल्यूशन क्रम: प्रोसेस env → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "रिज़ॉल्यूशन क्रम: {{authFile}} → प्रोसेस env → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI सत्यापन",

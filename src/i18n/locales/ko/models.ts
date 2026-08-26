@@ -21,6 +21,8 @@ const models = {
     "emptyChannelModelsHint": "아래의 「모델 추가」를 클릭하여 사용자 지정 모델을 추가하세요",
     "emptyDshHostHint": "DeepSeek Harness에서 모델을 구성하세요. 여기를 클릭하면 설정이 열립니다.",
     "refreshConfigFailed": "새로고침 실패: {{message}}",
+    "searchModelsPlaceholder": "모델 검색…",
+    "noMatchingModels": "일치하는 모델 없음",
         "claude": {
       "fable5": {
         "label": "Fable 5",

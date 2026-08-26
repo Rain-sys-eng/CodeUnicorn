@@ -7,6 +7,7 @@ import type {
 } from "../../../services/tauri";
 import type { WorkspaceSessionAttributionMode } from "../../../types";
 import { withTimeout } from "./useThreadActions.helpers";
+import { normalizeGlobalVisibleThreadRootCount } from "../../app/constants";
 import {
   CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
   SESSION_CATALOG_INITIAL_PAGE_SIZE,
@@ -38,6 +39,7 @@ type UseThreadActionsSessionCatalogOptions = {
   canListWorkspaceSessions: boolean;
   listWorkspaceSessionsService: ListWorkspaceSessionsService | null;
   listWorkspaceSessionArchiveEvidenceService: ListWorkspaceSessionArchiveEvidenceService | null;
+  defaultVisibleThreadRootCount?: number | null;
 };
 
 function mergeFirstPartialSource(
@@ -80,6 +82,7 @@ export function useThreadActionsSessionCatalog({
   canListWorkspaceSessions,
   listWorkspaceSessionsService,
   listWorkspaceSessionArchiveEvidenceService,
+  defaultVisibleThreadRootCount = null,
 }: UseThreadActionsSessionCatalogOptions) {
   const loadArchivedSessionMap = useCallback(
     async (workspaceId: string): Promise<ArchivedSessionMapResult | null> => {
@@ -167,8 +170,10 @@ export function useThreadActionsSessionCatalog({
             scanQuality: "preview",
           },
           cursor: null,
-          // First-paint catalog page matches sidebar initial page (default 12).
-          limit: SESSION_CATALOG_INITIAL_PAGE_SIZE,
+          // First-paint catalog page matches sidebar initial page (default 5).
+          limit: normalizeGlobalVisibleThreadRootCount(
+            defaultVisibleThreadRootCount ?? SESSION_CATALOG_INITIAL_PAGE_SIZE,
+          ),
         }),
         CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
       );
@@ -219,7 +224,11 @@ export function useThreadActionsSessionCatalog({
         hiddenAutomaticSessionIds,
       };
     },
-    [canListWorkspaceSessions, listWorkspaceSessionsService],
+    [
+      canListWorkspaceSessions,
+      defaultVisibleThreadRootCount,
+      listWorkspaceSessionsService,
+    ],
   );
 
   return {

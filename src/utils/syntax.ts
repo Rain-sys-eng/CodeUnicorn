@@ -30,13 +30,7 @@ import "prismjs/components/prism-typescript";
 import "prismjs/components/prism-tsx";
 import "prismjs/components/prism-yaml";
 import { resolvePreviewLanguageFromPath } from "./fileLanguageRegistry";
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+import { escapeHtmlText as escapeHtml } from "./html";
 
 /**
  * Defense-in-depth sanitizer for Prism.highlight output.

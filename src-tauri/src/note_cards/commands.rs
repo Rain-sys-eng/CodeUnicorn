@@ -1,6 +1,4 @@
-use super::attachments::{
-    delete_note_card_files, hydrate_attachment_path, materialize_attachments,
-};
+use super::attachments::{delete_note_card_files, hydrate_attachment_path, materialize_attachments};
 use super::location::*;
 use super::markdown::*;
 use super::storage::*;

@@ -2127,6 +2127,40 @@
   z-index: 3;
 }
 
+/* 总折叠行：置顶区唯一段头，sticky 置顶；日组头让位到其下方。 */
+.sidebar-pinned-section-header {
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  z-index: 4;
+}
+
+.sidebar-pinned-section-header:hover,
+.sidebar-pinned-section-header:focus-visible {
+  background: var(
+    --desktop-sidebar-background,
+    var(--surface-sidebar-opaque, var(--surface-sidebar))
+  );
+}
+
+.sidebar-pinned-section-count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-pinned-section-chevron {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+/* 段展开时日组头 sticky 偏移一个段头高度，避免盖住总折叠行。 */
+.sidebar-pinned-day-header {
+  top: 30px;
+}
+
 .sidebar-pinned-day-header:hover,
 .sidebar-pinned-day-header:focus-visible {
   background: var(
@@ -2374,7 +2408,8 @@
 }
 
 .workspace-session-folder-children .thread-row.has-pin-toggle:hover,
-.workspace-session-folder-children .thread-row.has-pin-toggle:focus-within {
+.workspace-session-folder-children .thread-row.has-pin-toggle:focus-within,
+.workspace-session-folder-children .thread-row.has-pin-toggle.is-pinned-thread {
   padding-left: calc(16px + var(--thread-indent, 0px));
 }
 
@@ -2390,17 +2425,6 @@
   color: var(--text-faint, var(--text-muted));
   font-size: 11px;
   line-height: 1.4;
-}
-
-.thread-empty-state {
-  padding: 6px 10px 4px;
-  color: var(--text-faint, var(--text-muted));
-  font-size: var(--sidebar-meta-font-size);
-  line-height: 1.4;
-}
-
-.thread-empty-state-nested {
-  margin-left: 4px;
 }
 
 .thread-loading-state {
@@ -2539,9 +2563,11 @@
 }
 
 /* Pin 图标仅在悬停/聚焦时淡入，左侧留白也随之腾出；
-   平时保持紧凑，不为按钮预留固定的一列空间 */
+   平时保持紧凑，不为按钮预留固定的一列空间。
+   例外：已置顶会话 pin 图标常亮（.is-pinned-thread），行首留白与悬停态一致。 */
 .thread-row.has-pin-toggle:hover,
-.thread-row.has-pin-toggle:focus-within {
+.thread-row.has-pin-toggle:focus-within,
+.thread-row.has-pin-toggle.is-pinned-thread {
   padding-left: calc(20px + var(--thread-indent, 0px));
 }
 
@@ -2660,7 +2686,8 @@
 }
 
 .thread-row:hover .thread-pin-toggle,
-.thread-row:focus-within .thread-pin-toggle {
+.thread-row:focus-within .thread-pin-toggle,
+.thread-pin-toggle.is-pinned {
   opacity: 1;
   pointer-events: auto;
 }

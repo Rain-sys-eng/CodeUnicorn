@@ -341,5 +341,3 @@ export function agentToDropdownItem(agent: AgentItem): DropdownItemData {
     },
   };
 }
-
-export default agentProvider;

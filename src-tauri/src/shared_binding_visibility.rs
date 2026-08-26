@@ -42,10 +42,9 @@ pub(crate) fn insert_shared_binding_identity_with_context(
                 let preserves_legacy_global_aliases = identity.is_legacy
                     && matches!(
                         provider_profile_id.map(str::trim),
-                        None
-                            | Some(
-                                crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID
-                            )
+                        None | Some(
+                            crate::engine::qoder_provider_profile::QODER_LOCAL_PROVIDER_PROFILE_ID
+                        )
                     );
                 if preserves_legacy_global_aliases {
                     target.insert(format!(

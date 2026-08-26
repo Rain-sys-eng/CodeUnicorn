@@ -2,6 +2,233 @@
 
 ---
 
+### **2026年8月25日（v0.9.3）**
+
+中文：
+
+这一版升到 **0.9.3**，主线是 **PI 引擎更快更能干、删会话终于删得干净，外加一轮全界面提速和一批顽固问题的集中收口**。PI 会话改成长驻连接，不再每句话都重启一次进程，响应明显更快；一次带来四个新能力——从任意消息**分叉**新分支、用**会话树**纵览整条分支结构、把多个会话**融合**成一个、上下文太长时一键**压缩**瘦身；后台任务也首次全程可见，运行中有实时任务卡和状态入口，结束后原地折叠、随时翻看日志。PI 启动失败会自动回退旧模式，其他 8 个引擎完全不受影响。删除与归档彻底重做：确认删除的会话立刻从侧栏消失、后台真正清理文件，「删了过几分钟又冒回来」的幽灵会话被根除；归档即时生效、不再整表重载；快捷键里那个叫「归档」的按钮也终于真的在归档了。界面侧，幕布新增**极简模式**、置顶拆成**全局 / 项目内**双作用域、模型菜单支持**搜索**、PI 可按模型选**思考强度**、供应商认证支持**自定义供应商**；设置页、搜索、模型菜单首开、会话列表等热路径做了一轮系统提速。稳定性上集中收口了 Windows 上对话结束消息消失、后端不可用时「响应中」永久卡死、中转断流回合永挂、PI 长任务被误杀、Linux 通知音崩溃等一批反馈集中的问题。
+
+✨ Features
+
+- **PI 常驻连接，响应更快**：PI 会话改用长驻连接，不再每条消息都重启一次进程，从发送到开始响应的等待明显缩短；PI 启动失败会自动回退旧模式，其他 8 个引擎零影响
+- **PI 四大新能力：分叉 / 会话树 / 融合 / 压缩**：从任意一条消息**分叉**出新分支探索不同方案；用**会话树**纵览整条分支结构，分支关系一目了然；把多个会话**融合**成一个、延续全部上下文；上下文太长时一键**压缩**瘦身，不必重开会话从头聊
+- **分叉与压缩体验顺手**：分叉弹窗做了全语言本地化，遇到不能分叉的会话会说明原因并给出下一步建议；压缩入口并入上下文指示圆圈、弹窗就地展开，成功后原地反馈；会话树隐藏了冗余头部栏、精修底部状态栏
+- **PI 后台任务全程可见**：PI 在后台跑的任务（后台命令、委派任务、融合）第一次有了完整体验——运行中显示实时任务卡，输入框上方出现「后台任务」状态 pill，点开就能看到运行中 / 已结束列表和退出码，还能就地查看日志末尾；任务结束后原地折叠成一行，随时重新展开；重开会话时历史任务不丢，尚未完结的任务会自动收敛到最终状态，不再无感知
+- **删会话真的删了**：确认删除的会话立刻从侧栏消失，文件清理由后台接续完成；个别删不掉的残留会自动重试，不会再「删掉又冒回来」；批量删除一次完成、实时显示进度，失败的项目可以单独回滚恢复；右键菜单新增「在会话管理中批量删除…」直达入口；rewind / 分叉产生的附带会话同样走新链路清理
+- **归档即时生效**：归档 / 取消归档秒级完成，侧栏立刻摘行，不再整个列表重新加载；之前名叫「归档」的快捷键实际在删会话，这次改成真正的归档
+- **侧栏默认显示的会话数可调**：全局默认 5 个，可以在设置里调 1~20；每个工作区还能单独设置覆盖全局值，已保存的设置不会被改写
+- **幕布极简模式**：设置里开启后，按回合整段折叠思考 / 工具过程，幕布只留正文；流式中的回合同样整段折叠，展开时内部仍按阶段逐段呈现；随时可以切回常规模式
+- **置顶双作用域**：侧栏置顶拆成「全局置顶」与「项目内置顶」两个互斥作用域，恢复总折叠行；已置顶会话的图钉常亮，区段头与工作区对齐
+- **模型菜单可搜索、同名可辨**：模型选择子菜单支持输入即筛，模型再多也一搜即得；同一供应商配置多个上游出现同名模型时，条目保留中段路径加以区分，不再拿错
+- **PI 按模型选思考强度**：PI 接入按模型的思考强度档位选择，并打通发送闸门确保选择真正生效；Shared / Atomic 上的思考档位联动也同步扩展到 PI
+- **自定义供应商**：供应商认证新增自定义供应商区块，可以在应用内直接读写 `models.json`，接入自己的中转或私有部署
+- **自动续跑上限放宽**：供应商断线 / 报错后的自动续跑上限从 10 次提高到 999 次，更多失败状态码纳入自动续跑判定，挂机跑长任务更不容易被打断
+
+🔧 Improvements
+
+- 版本号统一升到 `0.9.3`，前端包信息与打包元数据同步对齐
+- **设置页打开更快**：6 个重的设置分区改为按需加载，打开设置明显提速
+- **大结果搜索更流畅**：工作区搜索对大结果集接入虚拟化，几千条命中也能顺滑滚动
+- **界面重渲染收紧**：五个占资源的面板收紧刷新范围，一个面板里的状态变化不再拖动整个布局
+- **运行时日志提速降噪**：本地错误 / 性能日志链路的卡顿点收口，后台记录不再拖慢前台
+- **模型菜单首开提速**：PI / Kimi / Grok 的模型列表改为缓存优先，首次打开下拉不再同步等待底层引擎探测（此前最长可达数十秒）；手动刷新仍走完整探测
+- **会话列表更稳更快**：列表查询不再被后台全引擎扫描阻塞（此前偶发数秒停顿）；加载全程显示分阶段进度，不再闪现「暂无会话」的假空态；切回最近会话时行更早出现
+- **超大终端输出不再拖慢界面**：终端工具输出设置上限，再大的输出也不会拖垮页面
+- **PI 压缩更稳**：压缩有 500 秒时间余量和运行中防重入保护，成功后原地反馈，不再中途失败
+- **在应用外建的 PI 会话也能找到**：首次打开后后台补做磁盘扫描，应用外创建的 PI 会话会陆续出现在列表里
+- **PI 会话丢失更容易诊断**：新增全链路埋点，会话从列表消失时更容易定位问题
+- **PI 输出口径校准**：工具输出统计口径对齐、思考内容计数夹紧、技能目录补齐，用量展示更可信
+- **工作区别名弹窗重写**：打开更快、样式更顺手
+- **多语言补齐**：会话树加载失败重试、极简展示、顶部会话页签等文案补齐全部支持语言
+
+🐛 Fixes
+
+- **PI 长会话打不开会话树**：超长会话绘制分支树时的崩溃已修复
+- **PI 分叉后主线消失**：分叉静默失败导致主会话被隐藏、分叉条目挤占侧栏、分支泄漏成顶层会话、树连线断开等一系列显示问题已修复
+- **PI 中文路径会话打不开**：附件路径包含中文时的崩溃已修复，相关会话不再永远进不去
+- **PI 标题与历史回放泄漏原始标记**：侧栏标题与历史消息不再显示 `<file name="...">` 这类原始包装
+- **PI 切换模型不生效**：会话里换了模型、发送时却仍用旧模型的问题已修复
+- **PI 长任务被误杀**：回合结算改为看门狗对账，长时间运行的任务不再被当成失败中途打断
+- **PI 多会话并行卡死**：多个 PI 会话并行不再互相卡死；连接故障被熔断后会冷却自恢复，不用重启应用
+- **PI 后端不可用时发送卡住**：PI 不可用期间发送改为立即失败并给出可操作的提示，不再一直挂着
+- **PI 历史附图丢失**：历史中的用户附图会被还原；带图提问刷新后，用户气泡不再接到助手回复的尾部
+- **三方供应商 Codex 模型三类事实修正**：绑定三方供应商的 Codex 会话，此前思考强度选择器不可用、模型列表混入中转并不提供的官方模型、上下文窗口一律按 200K 算出误导性百分比；现在思考强度恢复可用（低 / 中 / 高 / 超高，默认中），列表只显示该供应商真实提供的模型，窗口未上报时如实显示「未上报」
+- **macOS 图形界面启动时三方供应商不可用**：从 Dock / 启动台打开应用时，Codex 供应商配置依赖的环境变量解析失败导致供应商失效的问题已修复
+- **对话结束那一刻消息消失**（Windows / Claude 反馈集中）：对话过程中内容一直可见、回合结束消息却消失且刷新不回来的问题已修复——历史加载的翻页游标、大文件边界丢行、回合后全量替换三处叠加缺陷一次修清
+- **后端不可用时「响应中」永久卡死**：后端重启等窗口内产生的孤儿回合由看门狗自动结算为可重试状态，不再永远转圈
+- **中转断流回合永挂**：Claude 回合中途流静默时由看门狗接管结算，不再永远卡在「生成中」
+- **Shared 续跑死循环**：已完成回合被进程退出码误判为失败、进而无限续跑的死循环已修复
+- **回合结尾丢字**：AI 回复最后一段偶尔丢失的问题已修复
+- **新会话刷不出来**：侧栏「重新加载」现在强制重扫索引，在应用外新建的会话立刻出现
+- **侧栏第一段会话列表空白**：残留的共享会话空目录不再拖垮可见性计算
+- **关闭最后一个页签后停在空白**：现在会自动清空选择并回到工作区首页
+- **Qoder 登录凭证优先级**：已保存的凭证不再被系统环境变量覆盖，登录恢复正常
+- **Windows 数字错位**：「改动文件」计数的前缀符号与首位数字重叠的问题已修复
+- **Windows 文件链接打不开**：补齐 Windows 文件链接解析规则，Markdown 里的文件链接能正常在资源管理器打开
+- **网络盘项目加载失败**：网络驱动器 / 映射盘上的项目，Files 面板现在能正常打开
+- **Linux 通知音崩溃**：Linux 上播放通知音导致的崩溃已修复
+- **模型菜单空目录**：打开模型菜单时自动恢复只剩兜底条目的引擎目录
+
+English:
+
+This release moves the app to **0.9.3**, with **a faster and far more capable PI engine, deletes that finally delete for good, and a broad speed-up plus a sweep of long-standing issues**. PI sessions now keep a long-lived connection instead of relaunching a process for every message, and PI gains four new powers in one go: **fork** a branch from any message, browse the whole branch structure in a **session tree**, **fuse** multiple sessions into one, and one-click **compact** an over-long context; background tasks are visible end-to-end for the first time, with live task cards and a status pill while running and a folded summary you can reopen anytime. If PI fails to start it falls back to the old mode automatically, with zero impact on the other 8 engines. Delete and archive were rebuilt from the ground up: confirming a delete removes the row instantly and files are cleaned up in the background, the "deleted sessions that resurrect minutes later" ghost problem is gone, archiving takes effect immediately without a full-list reload, and the shortcut that used to silently delete things when it said "archive" now actually archives. On the interface side, the canvas gains a **minimal mode**, pins split into **global / in-project** scopes, the model menu is **searchable**, PI gets per-model **thinking effort**, and vendor auth accepts **custom providers** backed by `models.json`; Settings, search, the first open of the model menu, and the session list were systematically sped up. Stability work closed out a batch of widely-reported issues: messages vanishing the moment a reply finished on Windows, turns stuck on "responding" forever during backend restarts, turns hung forever on relay stalls, PI long tasks killed mid-run, and the Linux notification-sound crash.
+
+✨ Features
+
+- **PI keeps a persistent connection, faster responses**: PI sessions use a long-lived connection and no longer relaunch a process for every message, so the wait before a response starts is noticeably shorter; if PI can't start it falls back to the old mode automatically, with zero impact on the other 8 engines
+- **Four new PI powers: fork / session tree / fusion / compaction**: **fork** a new branch from any message to explore alternatives; see the whole branch structure at a glance in a **session tree**; **fuse** multiple sessions into one that carries all the context; one-click **compact** an over-long context instead of starting the conversation over
+- **Forking and compaction feel right**: the fork dialog is fully localized and explains why a session can't be forked plus what to do next; the compaction entry lives in the context indicator with an anchored popover and in-place success feedback; the session tree drops its redundant header bar and polishes the bottom status bar
+- **PI background tasks, visible end-to-end**: PI tasks that run in the background (background commands, delegated tasks, fusion) get a full experience for the first time — live task cards while running, a "background tasks" status pill above the input that opens the running / finished list with exit codes and a log-tail viewer; finished tasks fold into a single row you can reopen anytime; history survives reopening a session, and unfinished tasks settle to their final state automatically instead of passing silently
+- **Deletion that actually deletes**: the row vanishes from the sidebar the moment you confirm while files are cleaned up in the background; leftovers retry automatically instead of resurrecting; batch delete finishes in one shot with live progress, and failed items can be rolled back individually; the context menu gains a "Delete in Session Management…" entry; sessions left behind by rewind / fork are cleaned up through the same new pipeline
+- **Instant archiving**: archive / unarchive completes in seconds, the row leaves the sidebar immediately, and the list no longer reloads; the shortcut that used to silently delete things under the name "archive" now truly archives
+- **Adjustable sidebar session count**: 5 sessions by default, adjustable 1–20 in settings; each workspace can still override the global value, and existing settings are never rewritten
+- **Minimal canvas mode**: once enabled in settings, each turn's thinking / tool process folds into one block and the canvas keeps only the body; live turns fold the same way, expanding reveals the per-phase breakdown, and you can switch back any time
+- **Dual pin scopes**: sidebar pins split into mutually-exclusive "global" and "in-project" scopes with the fold-all row restored; pinned sessions keep a lit pin, and section headers align with workspaces
+- **Searchable, disambiguated model menu**: the model picker submenu filters as you type, so even a long model list is one search away; when one provider has multiple upstreams exposing same-named models, entries keep a path segment to tell them apart
+- **Per-model thinking effort on PI**: PI gains per-model thinking-effort selection wired through the send gate so the choice actually takes effect; Shared / Atomic effort linking extends to PI as well
+- **Custom provider configs**: vendor auth gains a custom-provider section that reads and writes `models.json` in-app, so you can plug in your own relay or private deployment
+- **Higher auto-retry cap**: automatic continue after vendor failures goes from 10 attempts to 999, more failure codes qualify for auto-continue, and long unattended runs are far less likely to be interrupted
+
+🔧 Improvements
+
+- Bump the app version to `0.9.3`, aligning frontend package metadata and bundle configuration
+- **Settings opens faster**: six heavy settings sections load on demand
+- **Smoother large search results**: workspace search virtualizes big result sets, so thousands of hits scroll smoothly
+- **Tighter interface re-renders**: five resource-heavy panels narrow their refresh scope, so a state change in one panel no longer drags the whole layout along
+- **Quieter, faster runtime logging**: stalls in the local error / performance logging path are closed out, so background logging no longer slows the foreground
+- **Faster first open of the model menu**: PI / Kimi / Grok model lists are cache-first, so the first open of the dropdown no longer waits synchronously on underlying engine probing (which could take tens of seconds); manual refresh still runs the full probe
+- **A steadier, faster session list**: list queries are no longer blocked by full-engine background scans (which could stall for seconds); loading shows staged progress instead of flashing a fake "no sessions" state; rows appear sooner when switching back to a recent session
+- **Huge terminal output no longer slows the UI**: terminal tool output is capped so large outputs can't bog the page down
+- **More reliable PI compaction**: a generous 500-second time budget, re-entry protection while a compaction is running, and in-place success feedback — no more mid-compaction failures
+- **External PI sessions come back**: after the first open, a background disk scan picks up PI sessions created outside the app so they show up in the list
+- **Diagnosable PI session loss**: end-to-end instrumentation makes it much easier to pinpoint why a session went missing from the list
+- **PI output accounting calibrated**: tool-output accounting aligned, thinking length clamped, and the skill catalog completed, so usage numbers are more trustworthy
+- **Workspace alias dialog rewritten**: opens faster with a cleaner look
+- **Localization gaps filled**: session-tree retry, minimal display, top session tabs, and other copy now exist in every supported language
+
+🐛 Fixes
+
+- **Long PI sessions couldn't open the session tree**: fixed the crash when rendering branch trees for very long sessions
+- **Main line vanished after a PI fork**: fixed the cluster of fork display issues — silent fork failures hiding the main session, fork entries crowding the sidebar, branches leaking as top-level sessions, and broken connector lines in the tree
+- **PI sessions with Chinese paths wouldn't open**: fixed the crash on attachments with Chinese paths that locked those sessions out forever
+- **Raw tags leaking into PI titles and history**: sidebar titles and replayed history no longer show raw wrappers like `<file name="...">`
+- **PI model switch not taking effect**: fixed sending with the old model after switching models in a session
+- **PI long tasks killed mid-run**: turn settlement now reconciles via watchdog, so long-running tasks are no longer reaped as failures
+- **Parallel PI sessions restored**: concurrent PI sessions no longer stall each other; after a connection fault trips the breaker it cools down and recovers on its own, without restarting the app
+- **Sends hanging while PI is unavailable**: sending during a PI outage now fails fast with an actionable message instead of hanging
+- **PI history images restored**: user attachments are recovered from history; after a refresh, an image question's user bubble no longer glues onto the assistant's reply
+- **Third-party Codex provider model facts corrected**: on Codex sessions bound to a third-party provider, the thinking-effort selector used to be unavailable, the model list mixed in official models the relay doesn't actually serve, and the context window was always computed as 200K, producing misleading percentages; the effort selector now works (low / medium / high / extra-high, default medium), the list shows only the models that provider actually offers, and an unreported window honestly shows "not reported"
+- **Third-party providers broken when launched from the macOS GUI**: fixed the failure to resolve environment variables required by Codex provider configs when the app is opened from Dock / Launchpad
+- **Messages vanishing the moment a reply finished** (concentrated on Windows / Claude): content stayed visible during the conversation, then disappeared when the turn ended and never came back after refresh — three stacked defects in history pagination, large-file boundary parsing, and post-turn replacement were fixed in one pass
+- **Turns stuck on "responding" forever during backend restarts**: orphaned turns created in a backend-unavailable window are now settled by a watchdog into a retryable state instead of spinning forever
+- **Turns hung forever on relay stalls**: a mid-turn silence watchdog settles the turn when a Claude stream goes quiet
+- **Shared auto-continue death loop**: a finished turn misjudged as failed by its exit code no longer triggers endless continuation
+- **Text lost at the end of replies**: fixed the last chunk of an AI reply occasionally going missing
+- **New sessions not appearing**: sidebar "Reload" now forces an index rescan, so sessions created outside the app show up at once
+- **First sidebar section rendering empty**: leftover empty shared-session directories no longer break visibility computation
+- **Blank screen after closing the last tab**: the selection now clears and lands on the workspace home
+- **Qoder credential priority**: saved credentials are no longer overridden by system environment variables, fixing sign-in
+- **Misaligned digits on Windows**: fixed the "files changed" counter's prefix sign overlapping the first digit
+- **Windows file links wouldn't open**: Windows file-link parsing rules completed, so Markdown file links open in Explorer as expected
+- **Files panel failing on network drives**: projects on network / mapped drives now open normally in the Files panel
+- **Linux notification-sound crash**: fixed the crash caused by playing the notification sound on Linux
+- **Empty model menus**: opening the model menu now restores catalogs for engines that only had fallback entries
+
+
+---
+
+### **2026年8月22日（v0.9.2）**
+
+中文：
+
+这一版将应用升到 **0.9.2**，主线是「Qoder 成为第九个一等引擎、工作台壁纸可逛市场、Shared 供应商失败自动续跑」：Qoder CLI 经第四条协议族 acp-stdio 接入，Global 与 CN 双分发、profile 限定会话身份贯穿 index / catalog / Shared，并进入 Shared Session 执行目标；自定义壁纸升级为本地图库 + Wallhaven 在线市场，支持视频与播放 / 模糊 / 压暗效果；Shared 号池在 401 / 403 / 429 / 超时 / 过载后按结果论同一家自动续跑，幕布气泡标注次数与时间。DSH 侧按供应商分组模型菜单、接通官方套餐额度与 DeepSeek 思考强度；另收口协作模板选择器卡死、Shared 下崽隐藏、暗色主题石墨化与设置卡片毛玻璃。
+
+✨ Features
+
+- **Qoder CLI 第九个 Native 引擎**：新增第四条协议族 acp-stdio——每轮 spawn `qodercli --acp`，initialize → session/new 或 session/resume → 可选 set_model / set_config_option → set_mode bypassPermissions 后发 session/prompt，JSON-RPC 响应为 typed terminal；thread 身份 `qoder:<sessionId>` / `qoder-pending-<uuid>`，pending 晋升合并不伪造 id；覆盖对话发送 / 流式 / 中断、ACP session/list|load|delete 历史、create-session 模型选择、Settings doctor 与自定义路径、侧栏新建入口与 10 语言文案；PAT 存 `~/.ccgui/qoder-auth.json` 注入 `QODER_PERSONAL_ACCESS_TOKEN`，不写 `~/.qoder`；模型目录走 ACP availableModels（runtime-only，不进静态 fallback roster）；detect 只认 qodercli，拒绝 IDE launcher 与 CN 版
+- **Qoder Global / CN 双分发 + profile 限定身份**：双分发接入；session index 行迁移为 profile-qualified identity 并贯穿写入链路；catalog 与 provider binding 全面携带 Qoder 分发归属；前端发送 / 恢复 / 历史链路适配 canonical 身份；Windows 补官方安装目录检测；本地优先读取会话历史；收齐 ACP 回放尾包以免历史截断
+- **Qoder 进入 Shared Session 执行目标**：Shared 链路按 profile-qualified identity 认主与隐藏，写路径 `assertSharedSessionWriteEngine` 拒绝把 qoder 静默改写成 claude 落盘
+- **工作台壁纸图库 + Wallhaven 市场**：自定义壁纸从单个本地路径升级为 managed library + 在线 SFW 市场；导入复制进 `~/.ccgui/wallpapers/<uuid>.<ext>`（png / jpg / webp / gif / bmp / mp4），软删除隐藏、按 sourcePath 去重，删除只动 managed 目录内文件；新增 wallpaperBlur / wallpaperDarken / playbackRate / flip / objectFit / paused / rotation 效果；选中丢失时回退首个可见项再到 legacy customImagePath，不改写 mode
+- **Shared 供应商失败自动续跑**：号池 403 / 429 / 超时 / 过载落账后按结果论再开一轮续跑指令，不改发送九态、不换供应商；401 无效 Key 纳入号池重试；405 / 424 / 429 / 502 错误码纳入自动续跑；Claude 静默进程退出同样纳入；自动续跑标记收进气泡并标注次数与时间，协作旁提供按会话×CLI 的内存设置
+- **Shared 回合徽章 runtime 回执**：回合徽章展示 runtime 回执信息
+- **DSH 模型菜单按供应商分组**：官方供应商模型选择走 host catalog；按供应商补齐官方套餐额度查询；为 DeepSeek 模型接入思考强度选择
+- **响应中条实时显示本轮 token**
+- **Browser Dock 面板关闭按钮**：内嵌浏览器面板可直接关闭
+- **增强提示词弹窗重做**：并修复 DSH catalog 发送
+
+🔧 Improvements
+
+- 将应用版本号提升到 `0.9.2`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 patch 发版对齐 SemVer 与打包元数据
+- **暗色主题石墨化**：dark surfaces 重铸为无彩色石墨；提升 dark secondary ink 可读性；隔离 wallpaper picker 表面；invert-fill primary 标签在浅色主题保持可读
+- **设置卡片毛玻璃**：所有设置卡片在工作台壁纸之上统一 frost；frost 默认 0px 让壁纸保持清晰
+- **PI 模型菜单按供应商分组展示**
+- **Session HUD 图标 tooltip 不再被裁切**：overflow 保持 visible
+- **DSH 自动模式接 danger-full-access**：并折叠审批调试字段
+- **DSH 超长会话流式合并**：token 级流式 delta 合并，超长会话不再逐 token 打根
+- **Daemon ModelInfo 补 reasoning 字段**
+- **rustfmt 闸门钉死**：避免整仓重排
+
+🐛 Fixes
+
+- **协作模板选择器卡在加载中**
+- **Shared 下崽会话隐藏**：按 Target 认主并隐藏 Shared 子会话；保留 Codex Shared 协议行以免侧栏漏崽；收住 Codex native 子代理侧栏升顶
+- **Shared 上下文投影与重试分类修复**
+- **共享待确认队列卡死**
+- **Qoder Native runtime 契约收口**
+- **DSH 修复群**：适配 v1 credentials refs 修复额度查询；补齐 `commands/execute` 必填 images 字段；暴露 plugin tree 内层启动失败原因；切回 DSH 会话时还原引擎与模型绑定；接通对话框已编辑文件变更列表
+- **Git unstaged discard 从 index 恢复**：不再误用 HEAD
+- **OpenCode 隔离 Bun 临时原生产物**
+- **删除供应商时回退新建菜单记忆**
+- **空幕布不再漏出 leftover Exploring**
+- **Composer 队列删除 fallback 与 onRemove 签名对齐**；首页 create-session 跳过空 DSH branch row
+- **消化存量测试欠账**：codex 目录漂移 + app-shell bridge 白名单
+
+English:
+
+This release moves the app to **0.9.2**. The headline is Qoder as the ninth first-class engine, a browsable wallpaper market, and Shared auto-continue on vendor failure: Qoder CLI lands via a fourth protocol family (acp-stdio) with Global / CN dual distribution and a profile-qualified session identity carried through index / catalog / Shared, plus a Shared Session execution target; custom wallpaper upgrades to a managed local library plus the Wallhaven online market with video and playback / blur / darken effects; the Shared key pool auto-continues with the same vendor after 401 / 403 / 429 / timeout / overload, with retry count and time annotated in the bubble. On the DSH side, the model menu groups by vendor, official plan quota lands, and DeepSeek models gain reasoning effort. Also closed: the collab template picker stuck on loading, Shared spawn hiding, an achromatic-graphite dark theme, and frosted settings cards.
+
+✨ Features
+
+- **Qoder CLI as the 9th Native engine**: a fourth protocol family, acp-stdio — each turn spawns `qodercli --acp`, runs initialize → session/new or session/resume → optional set_model / set_config_option → set_mode bypassPermissions, then session/prompt, with typed-terminal JSON-RPC responses; thread identity is `qoder:<sessionId>` / `qoder-pending-<uuid>` with pending promotion and no forged ids; covers send / streaming / interrupt, ACP session/list|load|delete history, create-session model selection, Settings doctor and custom paths, the sidebar entry, and 10-locale copy; the PAT lives in `~/.ccgui/qoder-auth.json` injected as `QODER_PERSONAL_ACCESS_TOKEN` without writing `~/.qoder`; the model catalog comes from ACP availableModels (runtime-only, no static fallback roster); detect accepts only qodercli, rejecting the IDE launcher and the CN build
+- **Qoder Global / CN dual distribution + profile-qualified identity**: dual distribution onboarded; session-index rows migrate to a profile-qualified identity carried through the write path; catalog and provider binding carry the Qoder distribution attribution; frontend send / resume / history adapt to the canonical identity; Windows official install-dir detection; local-first history reads; ACP replay tail packets fully collected so history is not truncated
+- **Qoder as a Shared Session execution target**: the Shared chain owns and hides by profile-qualified identity, and `assertSharedSessionWriteEngine` refuses to silently rewrite qoder as claude on disk
+- **Wallpaper library + Wallhaven market**: custom wallpaper upgrades from a single local path to a managed library plus an online SFW market; imports copy into `~/.ccgui/wallpapers/<uuid>.<ext>` (png / jpg / webp / gif / bmp / mp4) with soft-delete hiding, sourcePath dedupe, and deletes scoped to the managed directory; new wallpaperBlur / wallpaperDarken / playbackRate / flip / objectFit / paused / rotation effects; a missing selection falls back to the first visible item then the legacy customImagePath without rewriting mode
+- **Shared auto-continue on vendor failure**: after 403 / 429 / timeout / overload is recorded, a continuation instruction runs by outcome — the send nine-state is unchanged and the vendor is not switched; 401 invalid keys join key-pool retry; 405 / 424 / 429 / 502 join auto-continue; silent Claude process exits count too; the auto-continue marker folds into the bubble with retry count and time, with a per-session×CLI in-memory setting beside collaboration
+- **Runtime receipt on Shared turn badges**
+- **DSH model menu grouped by vendor**: official-vendor model selection goes through the host catalog; official plan quota per vendor; reasoning-effort selection for DeepSeek models
+- **Live per-turn token count in the responding bar**
+- **Close control for the embedded Browser Dock panel**
+- **Prompt Enhancer dialog rework**, plus the DSH catalog send fix
+
+🔧 Improvements
+
+- Bump the app version to `0.9.2` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship aligns SemVer and packaging metadata
+- **Achromatic-graphite dark theme**: dark surfaces recast to neutral graphite; lifted dark secondary ink; isolated wallpaper-picker surfaces; invert-fill primary labels stay readable on light themes
+- **Frosted settings cards**: all settings cards frost over the workspace wallpaper; frost defaults to 0px so wallpapers stay sharp
+- **PI model menu grouped by vendor**
+- **Session HUD icon tooltips no longer clipped**: overflow stays visible
+- **DSH auto mode wired to danger-full-access**, with approval debug fields folded
+- **DSH long-session streaming merge**: token-level delta merging so long sessions no longer hit the root per token
+- **Daemon ModelInfo gains the reasoning field**
+- **rustfmt gate pinned** to avoid whole-tree reformatting
+
+🐛 Fixes
+
+- **Collab template picker stuck on loading**
+- **Shared spawn hiding**: own and hide Shared child sessions by Target; keep Codex Shared protocol rows so the sidebar doesn't leak spawns; stop Codex native subagents from promoting to the sidebar top level
+- **Shared context projection and retry classification fixes**
+- **Shared pending-confirmation queue deadlock**
+- **Qoder Native runtime contract closeout**
+- **DSH fix cluster**: adapt to v1 credentials refs to repair quota queries; supply the required images field on `commands/execute`; surface inner plugin-tree startup failure reasons; restore engine and model binding when switching back to a DSH session; wire the edited-files change list into the dialog
+- **Git unstaged discard restores from the index**, not HEAD
+- **OpenCode isolates Bun temp native artifacts**
+- **New-session menu memory falls back when a vendor is deleted**
+- **Blank canvas no longer leaks leftover Exploring**
+- **Composer queue-delete fallback and widened onRemove signature aligned**; home create-session skips the empty DSH branch row
+- **Test debt paydown**: codex directory drift + app-shell bridge whitelist
+
+---
+
 ### **2026年8月19日（v0.9.1）**
 
 中文：
@@ -9,6 +236,7 @@
 这一版将应用升到 **0.9.1**，主线是「大会话打开只画最新一页、侧栏 Session Index 真冷路径不蒸发、Windows 流体背景与 DSH Preset」：切会话改 Spine 幕布并带阶段进度；DSH 等大会话默认只装最新一页，上翻 / All 再按页取更早；侧栏首屏零扫盘、按页展开、按创建时间排序，并恢复后台扫盘把漏掉的新会话补回来。外观解禁 Windows 流体背景，五档动势含中国龙游走；空白 DSH 会话可选 Agent Preset，任务条 / 占用环 / 额度与问答卡接通。另收口 Shared 历史卡在 58%、幕布用户气泡连堆、空 Session 下崽、同名模型误开新会话、点选模型假切换、managed Codex 重启丢失，以及置顶按日折叠、会话 Tab 开关与推送目标记忆。
 
 ✨ Features
+
 - **会话历史 Spine 幕布 + 阶段进度**：切会话从 spinner+进度条换成 13 Spine（Native 爬光、Shared 四段真相位、DSH 布尔幕布）；大会话打开显示准备 / 快照 / 解析 / 组装百分比，DSH 按页报号，方便定位 6000+ 会话卡在 host 翻页还是 hydrate
 - **流体背景五档动势 + Windows 解禁**：工作台增加 drift / taiji / storm / tornado / chase 与 ash 配色，游走为中国龙形制（角 / 鬃 / 须 / 爪 / 尾鳍）；设置外观重新展示页面背景与五档动势。Mac 走 full 60fps、上限 2 条游走；Windows 走 lite（半分辨率 / 12fps / 延迟编译），WebView2 按动势拆 program、attach 后再打孔，禁止套用 Mac 路径
 - **DSH Agent Preset 选择器**：空白 DSH 会话可在工具条选 standard / code / minimal / cordis，首发经 `session.create({ agentPreset })` 传到 host；开聊后锁定，resume 展示 session.list header
@@ -18,6 +246,7 @@
 - **Git 推送记住最近三次目标**：推送对话框记住 workspace 最近 3 个 remote / branch / Gerrit 组合，打开时回填上次目标
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.9.1`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 patch 发版对齐 SemVer 与打包元数据
 - **大会话首屏只装最新一页**：DSH 打开默认只拉 1 页 host history，幕布在 tail hydrate 后卸下；更早内容走统一 older-page；hydrate 改线性 working-set，芯片按 500 翻页并提供 All，上翻不再自动翻页、prepend 不再吸底
 - **Session Index 真冷路径**：first-paint / focus-refresh / 软再同步只读 SQLite，不再探 DSH / PI 盘；路径钥匙收 Windows 长路径与盘符大小写；超时只标 partial，不再用空数组盖账本
@@ -28,6 +257,7 @@
 - **左侧消息锚点贴边**：rail 左移到 12px，默认短线 14→9px；窄幕布不再隐藏锚点
 
 🐛 Fixes
+
 - **切项目恢复上次会话**：非当前工作区行走 `onSelectWorkspace` 并恢复 last thread，不再误入 workspace home
 - **未加载会话切回先拉幕布**：select 帧显示 history-loading，避免 emptyThread 闪烁
 - **Claude 磁盘尾窗翻页**：芯片读磁盘 `hasMore`，pending 耗尽后按 cursor 加载更早一页
@@ -61,6 +291,7 @@ English:
 This release moves the app to **0.9.1**. The headline is open-large-session by the latest page only, a Session Index cold path that does not evaporate, Windows fluid wallpaper, and DSH Agent Presets: session switches use a Spine curtain with stage progress; DSH and other large threads hydrate the newest page first, then page older history on scroll-up / All; the sidebar first-paints from SQLite with no disk probe, expands by page, sorts by created time, and restores background scan so missed new sessions come back. Appearance unbans Windows fluid wallpaper with five motion presets including a Chinese-dragon chase; blank DSH sessions pick an Agent Preset, and the task pill / occupancy ring / quota / Q&A card light up. The rest closes Shared history stuck at 58%, stacked user bubbles, empty-session spawn, same-name model opening a new chat, fake model switches, managed Codex disappearing on restart, plus calendar-day pin folding, a session-tab toggle, and remembered push targets.
 
 ✨ Features
+
 - **History Spine curtain + stage progress**: session switch replaces spinner+bar with 13 Spines (Native light crawl, Shared four real phases, DSH boolean curtain); large opens show prepare / snapshot / parse / assemble %; DSH emits page numbers so a 6000+ thread can be told apart as host paging vs hydrate
 - **Five fluid-motion presets + Windows unban**: the workbench adds drift / taiji / storm / tornado / chase and an ash palette; chase is a Chinese dragon (horns / mane / whiskers / claws / tail fins); Appearance shows wallpaper and the five motions again. Mac keeps the full 60fps path with at most two chases; Windows stays lite (half-res / 12fps / deferred compile), WebView2 splits programs per motion and punches the hole only after attach — never the Mac path
 - **DSH Agent Preset picker**: a blank DSH session can pick standard / code / minimal / cordis in the toolbar; the first send goes through `session.create({ agentPreset })`; after chat starts it locks, and resume shows the session.list header
@@ -70,6 +301,7 @@ This release moves the app to **0.9.1**. The headline is open-large-session by t
 - **Remember the last three Git push targets**: the push dialog stores the workspace’s last 3 remote / branch / Gerrit combos and prefills the previous target
 
 🔧 Improvements
+
 - Bump the app version to `0.9.1` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship aligns SemVer and packaging metadata
 - **Large sessions load the newest page first**: DSH open fetches 1 page of host history and drops the curtain after tail hydrate; older content uses the shared older-page contract; hydrate is a linear working-set; the chip pages by 500 and offers All; scroll-up no longer auto-pages, and prepend no longer snaps to the bottom
 - **True Session Index cold path**: first-paint / focus-refresh / soft resync read SQLite only and do not probe DSH / PI disks; path keys normalize Windows long-path prefixes and drive-letter case; timeouts mark partial instead of covering the ledger with an empty array
@@ -80,6 +312,7 @@ This release moves the app to **0.9.1**. The headline is open-large-session by t
 - **Left message anchors hug the canvas**: rail moves to 12px, default dash 14→9px; narrow canvases no longer hide the rail
 
 🐛 Fixes
+
 - **Switching projects restores the last session**: a non-current workspace row runs `onSelectWorkspace` and restores the last thread instead of dumping into workspace home
 - **Unloaded sessions raise the curtain on switch-back**: the select frame shows history-loading so emptyThread does not flash
 - **Claude disk-tail paging**: the chip reads disk `hasMore` and loads the next older page by cursor after pending is exhausted
@@ -117,6 +350,7 @@ This release moves the app to **0.9.1**. The headline is open-large-session by t
 这一版将产品线升到 **0.9.0**，主线是「DeepSeek Harness 与 PI 成为一等引擎、新用户能走完首次设置、工作台可换背景」（#1099 / #1100）：composer 可选 DSH / PI，DSH 会话进侧栏、可续聊并跟随 Goal hop；设置页用连接优先面板对接本机 `dsh web`；全新安装走欢迎 → IDE → CLI 装验；外观可关 / 流体 / 自定义封面。另把 Browser Dock 嵌进中心分屏，首页改时间分组卡片，并收口长对话按段折叠、后台任务通知、切会话卡顿与 Windows 拉起 DSH。
 
 ✨ Features
+
 - **DeepSeek Harness 一等引擎（#1099）**：第 7 个 Native Engine；自动探测 / adopt / spawn 本机 `dsh web`；composer 选 `{ provider, model }`，侧栏可列 / 续 / fork，live mux 与审批桥接通；第一期不进 Shared
 - **DSH Goal 续跳与连接面板**：Goal `active` 时不提早 idle，跟随 host 下一 hop；`source.kind=goal` 显示「上下文注入」折叠卡；设置页区分未装 / 未运行 / 已连接，可显式启动或关闭本机 host，Windows 补扫 Hermes / Scoop / mise / fnm
 - **DSH 自定义路由附图 + 会话速度条**：可写 `llm-pi-ai` 路由附图时自动声明 `[text, image]`，不必手改 `settings.yaml`；composer 展示首 token 平均、tok/s、缓存命中%；弱标题用首条真实提问升级
@@ -127,6 +361,7 @@ This release moves the app to **0.9.1**. The headline is open-large-session by t
 - **Git 变更行「在访达 / 资源管理器中显示」**：单仓 / 多仓、扁平 / 树形均可跳到磁盘；已删文件打开父目录
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.9.0`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 minor 发版对齐 SemVer 与打包元数据
 - **会话历史窗口加大**：DOM 默认窗口 150 → 800，首屏尾窗 16 → 300，长会话不再一打开就缩成「更早历史」chip
 - **Session Index 后台导入 + keyset 翻页**：90s 有界 sync 外部 CLI；首页 20 条 keyset，「加载更早」走 Index 游标；Claude 磁盘尾窗默认 80
@@ -139,6 +374,7 @@ This release moves the app to **0.9.1**. The headline is open-large-session by t
 - **AskUserQuestion 更稳**：CLI MCP 超时加 30s、过期可识别、墙上时钟倒计时、闸门结算前 drain live 尾
 
 🐛 Fixes
+
 - **Windows 拉起 `dsh web`**：走 `node.exe + lib/bin.js`，spawn 前修空的 sharp constructor；Mac 保持 shebang；设置页回传 spawn stderr
 - **DSH 无名 bash 不再当成 Agent**：缺 name 时按参数判 `commandExecution`；完成项不再用 `Call-|fc` 当标题；普通 shell 不进 subagent 计数
 - **后台任务通知折叠**：Claude wakeup `<task-notification>` 不再进用户蓝气泡；Background / SubAgent / 真用户三分流；wakeup 不当 shadow 边界，避免再追加一份已落盘正文
@@ -154,6 +390,7 @@ English:
 This release moves the product line to **0.9.0**. The headline is DeepSeek Harness and PI as first-class engines, a first-run setup that actually finishes, and a workbench you can wallpaper (#1099 / #1100): pick DSH or PI in the composer; DSH sessions land in the sidebar, resume, and follow Goal hops; Settings uses a connection-first panel against local `dsh web`; a fresh install walks Welcome → IDE → CLI verify; Appearance can turn wallpaper off, use the fluid backdrop, or a custom image. Browser Dock embeds in the center split, Home becomes time-grouped cards, and the rest closes long-turn process walls, background-task leak bubbles, session-switch jank, and Windows DSH spawn.
 
 ✨ Features
+
 - **DeepSeek Harness as a first-class engine (#1099)**: 7th Native Engine; detect / adopt / spawn one local `dsh web`; composer picks `{ provider, model }`; sidebar list / resume / fork with live mux and the approval bridge; not in Shared for this ship
 - **DSH Goal continuation + connection panel**: while Goal is `active`, do not idle early — stay bound for the next host hop; `source.kind=goal` renders a “Context injection” fold card; Settings distinguishes not-installed / not-running / connected, with explicit start/stop and Windows scans of Hermes / Scoop / mise / fnm
 - **DSH custom-route images + session speed line**: on writable `llm-pi-ai` routes, auto-declare `[text, image]` so users never hand-edit `settings.yaml`; composer shows TTFT average, tok/s, and cache-hit %; weak sidebar titles upgrade from the first real user prompt
@@ -164,6 +401,7 @@ This release moves the product line to **0.9.0**. The headline is DeepSeek Harne
 - **Reveal in Finder / Explorer on git diff rows**: flat and tree, single-repo and multi-repo; deleted files open the parent folder
 
 🔧 Improvements
+
 - Bump the app version to `0.9.0` across frontend package metadata, the lockfile, and Tauri bundle configuration so this minor ship aligns SemVer and packaging metadata
 - **Larger in-session history window**: DOM default 150 → 800, first-paint tail 16 → 300, so long threads no longer collapse into an older-history chip on open
 - **Session Index background import + keyset paging**: 90s bounded sync of external CLIs; Home page is a 20-row keyset; “Load older” follows the Index cursor; Claude disk tail defaults to 80
@@ -176,6 +414,7 @@ This release moves the product line to **0.9.0**. The headline is DeepSeek Harne
 - **AskUserQuestion hardening**: +30s CLI MCP margin, recognizable expired routing, wall-clock countdown, drain the live tail before the gate settles
 
 🐛 Fixes
+
 - **Windows `dsh web` spawn**: CreateProcess-safe `node.exe + lib/bin.js`, repair an empty sharp constructor before spawn; Mac keeps the shebang; Settings surfaces spawn stderr
 - **Nameless DSH bash is not an Agent**: infer `commandExecution` from args when name is missing; completed items no longer take `Call-|fc` as the title; ordinary shells stay out of the subagent tally
 - **Fold background task notifications**: Claude wakeup `<task-notification>` no longer becomes a user bubble; Background / SubAgent / real user split three ways; wakeup is not a shadow-recovery turn boundary, so a settled assistant is not appended twice
@@ -195,11 +434,13 @@ This release moves the product line to **0.9.0**. The headline is DeepSeek Harne
 这一版将应用升到 **0.8.9**，主线是「流式不卡、长会话不钝、Windows 冷启可点」（#1092）：思考与工具输出不再逐条打根，长思考 / 刷工具时页面保持跟手；流式 Markdown 改为增量排版，单帧成本不再随正文变长；长会话只保留最近一段 DOM，上翻可分页展开；AppShell 分域瘦身，打字、贴图、回合切换不再扇出整棵壳；Windows 安装或升级后前几秒点版本记录 / 权限 / 任意控件不再整窗假死约一分钟。另下线听写与看板 / 任务中心，并收口 Grok 思考碎片、隐藏窗口背压、会话列表预览扫描与搜索自动扫仓。
 
 ✨ Features
+
 - **思考 / 工具输出走 live 通道**：`reasoningContent` / `reasoningSummary` / `toolOutput` 按行订阅，不再逐条 `dispatch` 进根；首条建壳、后续 48ms 节流发布、回合结束一次写回；长思考回合根更新从两百多次降到个位数
 - **流式增量 Markdown**：全文切块后只重排尾部最多 2 块，已冻结块不再整篇 re-parse / Prism 同步高亮；全引擎统一走增量 full，折叠兜底阈值放宽到 24k
 - **会话内历史分页窗口**：数据层 items 全量保留，DOM 默认只留最近 150 条；进行中的回合不裁、不在底部时冻结窗口；上翻复用折叠 chip 分页展开并保持 scrollTop
 
 🔧 Improvements
+
 - **AppShell 分域瘦身 + Host 订阅收窄**：composer / settings / layout 三巨域从 141 / 147 / 103 收到 41 / 36 / 48；删除 legacy flatten；Assembly 只订自己读的字段，流式热字段不再灌回根
 - **冷启错峰与让渡**：gate-ready 后 pointerdown 仍软取消在途列表水合；catalog 落账遇待输入让出一拍；idle 预热 Markdown；非关键 store / deferred i18n 延后；Composer 切断 1110 张彩图 SVG
 - **搜索不再自动全仓库扫描**：打开搜索按需读关系快照，过期 backup 当缓存回收
@@ -209,6 +450,7 @@ This release moves the product line to **0.9.0**. The headline is DeepSeek Harne
 - **下线听写与看板 / 任务中心**：去掉 dictation 原生链路与设置页；删除 Kanban / Task Center 功能面，Home 发送抽到 ComposerSend；本地用户数据与项目图标保留
 
 🐛 Fixes
+
 - **Windows 冷启动点击假死**：版本记录自动弹出改为 startup-gate-ready + 交互空闲后再开；关闭弹窗会作废在途加载，避免关完再被晚到的 catalog 打回来
 - **Composer 冷启不升 full**：`ComposerGate` 必须等 startup-gate-ready，且 Light 最短停留；早期点击只推迟升级，不再挂 `ComposerImpl`
 - **Light 输入区不再泄漏模型选择**：没有 `onExecutionTargetChange` 时不传可点 picker，也不走 atomic catalog
@@ -222,11 +464,13 @@ English:
 This release moves the app to **0.8.9**. The headline is smoother streaming, bounded long histories, and a clickable Windows cold start (#1092): reasoning and tool output no longer dispatch into the root on every chunk, so long thoughts and tool spam stay followable; streaming Markdown becomes incremental so per-frame cost no longer grows with the whole body; long sessions keep a recent DOM window and expand upward by page; AppShell domains slim down so typing, paste, and turn changes no longer fan out the whole shell; in the first seconds after a Windows install or upgrade, tapping release notes, permission / mode select, or any visible chrome no longer stalls the window for about a minute. Dictation and Kanban / Task Center leave the product surface. Grok first-token salad, hidden-window backpressure, session-preview full-file reads, and search auto-scans close the rest.
 
 ✨ Features
+
 - **Live channel for reasoning / tool output**: `reasoningContent` / `reasoningSummary` / `toolOutput` subscribe per row instead of per-chunk root `dispatch`; first delta still shells the item, later deltas publish on a 48ms cadence, settle drains once; long-reasoning turns drop root updates from 200+ to single digits
 - **Incremental streaming Markdown**: split the accumulated body and re-layout at most the last 2 blocks; frozen blocks skip full re-parse / sync Prism; every engine uses incremental full mode; lightweight fold fallback moves to 24k
 - **In-session history window**: reducer items stay complete; the DOM defaults to the latest 150; in-flight turns are not split and the window freezes when the user is not at the bottom; scroll-up reuses the collapse chip to page in older rows without jumping `scrollTop`
 
 🔧 Improvements
+
 - **AppShell domain slim-down + Host field subscribe**: composer / settings / layout shrink from 141 / 147 / 103 keys to 41 / 36 / 48; delete legacy flatten; Assembly subscribes only to fields it reads so streaming-hot values stay off the root
 - **Cold-start stagger and yield**: after gate-ready, pointerdown still soft-cancels in-flight list hydration; catalog commits yield one tick when input is pending; idle-prewarm Markdown; defer non-critical stores / i18n; Composer drops the 1110-image color SVG set
 - **Search no longer auto-scans the repo**: open-search reads the relation snapshot on demand; stale backups are cache, not a sync sweep
@@ -236,6 +480,7 @@ This release moves the app to **0.8.9**. The headline is smoother streaming, bou
 - **Retire dictation and Kanban / Task Center**: remove the native dictation path and its settings page; drop the Kanban / Task Center surface and lift Home send into ComposerSend; keep local user data and project icons
 
 🐛 Fixes
+
 - **Windows cold-start click freeze**: auto-open release notes only after startup-gate-ready plus an interactive quiet slice; closing the overlay invalidates in-flight loads so a late catalog resolve cannot reopen it
 - **Composer stays light on cold start**: `ComposerGate` requires startup-gate-ready and a Light floor; early clicks delay the upgrade instead of mounting `ComposerImpl`
 - **Light composer no longer leaks ModelSelect**: do not pass a clickable picker or the atomic catalog unless `onExecutionTargetChange` is actually wired
@@ -253,6 +498,7 @@ This release moves the app to **0.8.9**. The headline is smoother streaming, bou
 这一版将应用升到 **0.8.8**，主线是「侧栏 Session Index 冷路径、冷启再削重、界面缩放永久 100%、跨目录可授权」：对话列表冷启与日常刷新改为本地 SQLite Session Index，不再默认全量多引擎 catalog 扫描；版本说明拆索引 + 分版本 chunk，并延后自动弹窗与 first-paint 错峰；新用户路径打断 mermaid 静态依赖、CSS/统计分级延后；界面缩放永久锁定 100% 消除 WebView 假死路径；Claude Read/Bash 越界时内联目录授权卡（写入 L1，下次 `--add-dir`）；另收口 Shared 历史非阻塞、Markdown 表行计数白屏、AskUserQuestion 幽灵卡、macOS 通知、Grok 标题污染、并行会话模型 residual 与「用…打开」等。
 
 ✨ Features
+
 - **侧栏 Session Index 冷路径**：冷启 / 日常刷新从本地 SQLite Session Index 取 list 级行（Claude / Codex / Kimi + 有界 Gemini/Grok/OpenCode writer）；first-paint 合并 index 水合后，有多引擎种子则不再自动 post-first-paint full-catalog；会话管理 / load-older / 强制刷新仍走完整 catalog；OpenSpec：`rewrite-sidebar-session-index`
 - **会话目录授权（DirectoryGrant）**：Read/Bash 因 allowed working directories 越界时合成内联授权卡（#1062 方案 A）；批准写入 session L1，下次 Claude CLI 启动注入 `--add-dir`；拒绝保持 fail-closed
 - **「用…打开」跨平台配置与当前文件打开**：预设探测 / Browse、可点击健康态重检、系统图标与深浅色主题；顶栏应用打开当前文件，访达仍开工作区；修复底栏下拉不可点
@@ -260,6 +506,7 @@ This release moves the app to **0.8.9**. The headline is smoother streaming, bou
 - **首页 Composer 几何对齐**：去掉 HomeChat 对输入区 padding / min-height / 字号的覆盖，与会话 Composer 共用 `ChatInputBox` 尺寸（含响应式断点）
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.8`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），与本补丁发版元数据对齐
 - **版本说明分片 + 冷启降本**：`CHANGELOG` 生成轻量 index + 分版本 JSON；冷路径只加载 index + 当前版本正文；codegen 接入 dev/build 与 tauri frontend bootstrap
 - **版本说明自动弹窗延后与 lastSeen 时机**：版本 bump 后延迟 2s 再 auto-open，错开 first-paint / AppShell hydrate；内容加载成功即写 `releaseNotesLastSeenVersion`，避免中途卡死导致每次启动重弹
@@ -268,6 +515,7 @@ This release moves the app to **0.8.9**. The headline is smoother streaming, bou
 - **Codex ThreadPreview 分区早停**：按 YYYY/MM/DD 分区 recent-first 收集候选并带 early-stop 预算，避免为小分页先全树 collect 再 sort
 
 🐛 Fixes
+
 - **界面缩放永久锁定 100%**：设置 / 快捷键 / 命令面板不再可调 uiScale；`clamp` / `sanitize` / `apply` 恒为 identity；历史 `settings.json` 非 1 值忽略并回写 1；清除 startup-guard residual，从产品侧关掉 WKWebView / WebView2 假死路径
 - **Markdown 表行计数栈溢出白屏（#1066）**：`countMarkdownTableRows` 加 WeakSet 断环 + 深度上限 64；仅 heavy-defer kill-switch 开启时遍历；产品路径零树遍历，避免多代理场景 `RangeError: Maximum call stack size exceeded`
 - **Shared 历史 V0 先画 + 软超时 projection**：snapshot 就绪即卸 curtain 可对话；projection 默认 12s 软超时后后台 merge；迟到结果与 live 画布 items 合并而非整表覆盖
@@ -284,6 +532,7 @@ English:
 This release moves the app to **0.8.8**. The headline is a Session Index cold path for the sidebar, another cold-start cost cut, permanently locked 100% UI scale, and session directory grants: conversation list cold start and ordinary refresh load list rows from a local SQLite Session Index instead of exhaustive multi-engine catalog projection; release notes become an index plus per-version chunks with deferred auto-open off first paint; new-user paths drop static mermaid, defer non-critical CSS/analytics, and load i18n as a whole package again; interface scale is product-locked at 100% to close WebView freeze paths; Claude Read/Bash out-of-cwd prompts can grant directories into session L1 (`--add-dir` next launch); Shared history non-blocking paint, Markdown table row-count stack overflow, AskUserQuestion ghost cards, macOS notifications, Grok title pollution, parallel-session model residual, and Open With polish round out the ship.
 
 ✨ Features
+
 - **Sidebar Session Index cold path**: cold start and ordinary refresh read list-level rows from a local SQLite Session Index (Claude / Codex / Kimi + bounded Gemini/Grok/OpenCode writers); after first-paint index hydration seeds multi-engine rows, automatic post-first-paint full-catalog stops; Session Management / load-older / force refresh still use full catalog; OpenSpec: `rewrite-sidebar-session-index`
 - **Session directory grant (DirectoryGrant)**: when Read/Bash hit allowed-working-directories bounds, synthesize an inline grant card (#1062 plan A); approvals persist in session L1 and inject `--add-dir` on the next Claude CLI start; deny stays fail-closed
 - **Cross-platform Open With + open current file**: preset probe / Browse, clickable health recheck, system icons and light/dark themes; titlebar apps open the current file while Finder still opens the workspace; fix unclickable bottom-bar dropdown
@@ -291,6 +540,7 @@ This release moves the app to **0.8.8**. The headline is a Session Index cold pa
 - **Home Composer geometry alignment**: drop HomeChat overrides for input padding / min-height / font size so home inherits shared `ChatInputBox` geometry (including responsive breakpoints)
 
 🔧 Improvements
+
 - Bump the app version to `0.8.8` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship matches SemVer and packaging metadata
 - **Release-notes sharding + cold-start cost cut**: generate a light index plus per-version JSON so cold path loads index + current version only; wire codegen into dev/build and tauri frontend bootstrap
 - **Deferred release-notes auto-open and earlier lastSeen**: delay auto-open 2s after a version bump to clear first-paint / AppShell hydrate; write `releaseNotesLastSeenVersion` as soon as content loads successfully so a freeze mid-modal no longer re-triggers every launch
@@ -299,6 +549,7 @@ This release moves the app to **0.8.8**. The headline is a Session Index cold pa
 - **Codex ThreadPreview partition early-stop**: collect candidates recent-first by YYYY/MM/DD partitions with an early-stop budget instead of full-tree collect-then-sort for a small page
 
 🐛 Fixes
+
 - **UI scale permanently locked to 100%**: settings / shortcuts / command palette no longer change uiScale; clamp / sanitize / apply always identity; legacy non-1 `settings.json` values ignored and rewritten to 1; clear startup-guard residual and retire the WKWebView / WebView2 freeze path at product level
 - **Markdown table row-count stack overflow white screen (#1066)**: bound `countMarkdownTableRows` with WeakSet cycle breaks + depth cap 64; traverse only when heavy-defer kill-switch is on; product path zero tree walks so multi-agent `RangeError: Maximum call stack size exceeded` no longer takes ErrorBoundary
 - **Shared history V0-first paint + soft-timeout projection**: drop the curtain when the V0 snapshot is ready; projection soft-times out at 12s then merges in the background; late results merge into live canvas items instead of replacing the whole table
@@ -319,6 +570,7 @@ This release moves the app to **0.8.8**. The headline is a Session Index cold pa
 这一版将应用升到 **0.8.7**，主线是「发送前可挑记忆、Shared 下崽侧栏不串台、Cmd+R 冷启可点」：Native / Shared / Collab 统一接入发送前记忆挑选闸门（pick / always），always 预勾可改且 8s 读秒可取消；Phase-2/3 补齐 hybrid 检索、习惯持久化与本地语义模型；Shared 子代理按 parent-id 改挂并在侧栏隐藏下崽；同时收口冷启猛点假死（`ComposerGate` 轻量输入区 + 模型位 loading）与队列 auto-drain 启动门对齐。Mac 验收不卡死（约 98% 收口）。
 
 ✨ Features
+
 - **发送前记忆挑选闸门（Phase-1）**：Native / Shared / Collab 统一 `pick` / `always` 闸门与 memory-pick 注入；always 可改预勾条数并记忆，8s 读秒可取消；详情 Dialog portal + Markdown；底栏 icon 文案、固定行高；侧栏标题剥离 `project-memory-pack`；幕布与 Composer 模式同步
 - **Hybrid 检索与可感注入转接（Phase-2）**：统一 Pick / Scout 检索核（lexical + 可选 semantic/hybrid）；`emptyReason` 走主幕时间线 status 可感；telemetry 白名单禁正文；Pack Instruction 钉死 Primary task 与 UNTRUSTED 参考语义；闸门 / 空结果 UI 中性色与列表高度收口（采集 ABCD 路径零改动）
 - **项目记忆习惯与本地语义（Phase-3）**：session 策略 localStorage 持久化；Composer dismiss 恢复为 pick；设置「项目记忆」规则说明 + 语义模型按需下载到用户主目录 `.ccgui/models/embedding/`（展示本机绝对路径，跨平台）；embed-index 旁路异步索引；用户可关语义强制词面；hybrid 最低门槛与词面满分抬升；匹配最短 1s 冻结
@@ -326,6 +578,7 @@ This release moves the app to **0.8.8**. The headline is a Session Index cold pa
 - **模型位 / Readiness 静态占位**：轻量路径经 `sendReadiness` 渲染 Readiness 模型位，**不**在冷启开 atomic catalog（避免假死复现）；未解析模型时转圈 + 文案，就绪后替换
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.7`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），与本补丁发版元数据对齐
 - **队列 drain 非对抗调度**：无 queue/inflight 时 drain signal 稳定 `empty`；有队列才跟 status；放行与 `startup-gate-ready` / force-enter 对齐，gate 后短静默再开 auto-drain；用户 `handleSend` / `queueMessage` 始终可用
 - **冷启 list / restore quiet 副线**：first-paint 与 restore 错峰、点击 soft-cancel 进行中 list；home 无 active 时 stamp `home-input-ready`；uiScale healthy 确认 rAF 延后
@@ -333,6 +586,7 @@ This release moves the app to **0.8.8**. The headline is a Session Index cold pa
 - 联调证据与收口文档：`docs/analysis/cold-start-composer-freeze-closeout-2026-08-11.md`、二分 checklist 与截图包
 
 🐛 Fixes
+
 - **Shared 子代理 parent 改挂**：隐藏 native owner 后，按引擎无关 lookup（raw / `engine:` 变体）将子代理 parent 改挂到 shared 会话，避免仅 exact 匹配漏挂并升为顶层根；统一 list / Grok / Kimi / live 改挂路径，不扩大 hide、不删子代理行
 - **侧栏隐藏 Shared 下崽**：在 `useThreadRows` 按 parent-id 精准剔除 Shared-owned 子代理（含 raw / `engine:` 与 `shared:` parent）；threads store 保留行供幕布 / Strip / `childSubagentThreads`，不改幕布展示规则
 - **记忆挑选匹配态与 always 读秒**：匹配品牌改用项目 logo 并轻微呼吸动画，最短展示 1s 避免闪断；仅闸门以 always 进入 awaiting 时武装 8s 读秒，任意交互打断后本轮不重启；顶栏单行 ellipsis，策略菜单虚线框
@@ -345,6 +599,7 @@ English:
 This release moves the app to **0.8.7**. The headline is a pre-send memory pick gate, Shared subagents that stay out of the sidebar tree, and cold starts that stay clickable under Cmd+R thrash: Native / Shared / Collab share a pick / always gate before send (always countdown cancellable, preview counts remembered); Phase-2/3 unifies hybrid retrieval, habit persistence, and local semantic models; Shared children reparent by parent-id and are filtered from the sidebar; cold-start click freeze is closed with `ComposerGate` (light shell + model-slot loading) and queue auto-drain aligned to `startup-gate`. Mac verification: no hard freeze (~98% closeout).
 
 ✨ Features
+
 - **Pre-send memory pick gate (Phase-1)**: unified `pick` / `always` gate and memory-pick injection across Native / Shared / Collab; always remembers editable pre-check counts with an 8s cancellable countdown; portal Dialog + Markdown details; icon+label footer, fixed row height; strip `project-memory-pack` from sidebar titles; canvas and Composer modes stay in sync
 - **Hybrid retrieval and explainable injection (Phase-2)**: shared Pick / Scout kernel (lexical + optional semantic/hybrid); `emptyReason` surfaces on the main timeline status lane; telemetry whitelist excludes body text; pack instructions pin Primary task and UNTRUSTED reference semantics; neutral empty-state chrome and list height polish (capture ABCD paths unchanged)
 - **Project memory habits and local semantics (Phase-3)**: persist session policy in localStorage; Composer dismiss restore to pick; Settings “Project Memory” rules + on-demand semantic model download under user-home `.ccgui/models/embedding/` (absolute path per machine); async embed-index side path; optional force-lexical toggle; hybrid min thresholds and full-lexical score floor; match UI min 1s frozen
@@ -352,6 +607,7 @@ This release moves the app to **0.8.7**. The headline is a pre-send memory pick 
 - **Model slot / Readiness static placeholder**: light path uses `sendReadiness` so Readiness shows the model slot without enabling the atomic catalog on cold start; spinner + copy while unresolved, then replace
 
 🔧 Improvements
+
 - Bump the app version to `0.8.7` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship matches SemVer and packaging metadata
 - **Non-adversarial queue drain scheduling**: stable `empty` drain signal with no queue/inflight; status only for threads with work; release after `startup-gate-ready` / force-enter plus a short quiet; `handleSend` / `queueMessage` always available
 - **Cold-start list / restore quiet side path**: staggered first-paint and restore, soft-cancel in-flight list on click; stamp `home-input-ready` when no active workspace; defer uiScale healthy localStorage write via rAF
@@ -359,6 +615,7 @@ This release moves the app to **0.8.7**. The headline is a pre-send memory pick 
 - Investigation notes and evidence: `docs/analysis/cold-start-composer-freeze-closeout-2026-08-11.md`, bisect checklist, screenshot pack
 
 🐛 Fixes
+
 - **Shared subagent parent reattach**: after native owners are hidden, engine-agnostic lookup (raw / `engine:` variants) reparents children onto the shared session so exact-only matches no longer promote them to top-level roots; list / Grok / Kimi / live reparent paths share the fix without widening hide or deleting child rows
 - **Hide Shared children in the sidebar**: `useThreadRows` drops Shared-owned subagents by parent-id (raw / `engine:` and `shared:` parents); the threads store keeps rows for canvas / Strip / `childSubagentThreads` without changing canvas display rules
 - **Memory-pick match chrome and always countdown**: match state uses the project logo with a light pulse and a 1s minimum display; the 8s always countdown arms only when the gate enters awaiting as always, and any interaction cancels restart for that turn; top bar single-line ellipsis and dashed strategy menu chrome
@@ -375,14 +632,17 @@ This release moves the app to **0.8.7**. The headline is a pre-send memory pick 
 这一版将应用升到 **0.8.6**，主线是「中转额度可看、Windows 冷启可点、协作首段有主幕上下文」：Session Control HUD 接入 Sub2API / New API 中转额度与 Grok 本地用量；冷启 CSS 写入按 macOS WKWebView / Windows WebView2 分轨，修 Windows 点击假死且不回归 mac 首点死锁；协作首段把主幕已有对话 digest 注入模型侧，右栏可解释、主幕卡标题不泄漏；侧栏同组项目长按重排；`!` 提示词列表 soft-failure 与 Grok/Kimi/Shared 记忆整轮写入一并压实。
 
 ✨ Features
+
 - **中转站额度查询与 HUD 展示**：未知中转 base+key 先探 `GET /v1/usage`，失败回退 `/api/user/self`；Grok local 读 `~/.grok/config.toml`；Session Control HUD 展示余额与用量摘要（供应商 `{origin} {source}`、金额两位小数），失败友好中文文案
 - **协作首段注入主幕对话上下文**：主幕已有对话时，触发协作将 digest 置顶写入首段 `model text`（后续段仍只吃可见任务 + 上游产出）；主幕协作卡标题优先 `userVisibleText`，右栏「注入上下文」首段增加「主幕对话上下文」分区
 - **侧栏同组项目长按重排**：长按折叠/文件夹控件武装拖拽（约 380ms），组内调整 `sortOrder` 并持久化；无独立拖柄列，列表内就地重排
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.6`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），与本补丁发版元数据对齐
 
 🐛 Fixes
+
 - **Windows 冷启点击假死 / macOS 首点死锁分轨**：冷启 `applyUiScale` 按平台分支——Windows WebView2 首帧零冗余 CSS 写入（避免 Blink style recalc 堵 hit-test），macOS WKWebView 恢复预热写入（避免 CSSOM 懒初始化首点死锁）；blank-screen watchdog 冷启窗延迟；StartupGateOverlay 减少 `color-mix` 负担
 - **`!` 自定义提示词列表 soft-failure 永久空态**：启动编排 timeout/stale 不再把空数组 stamp 为权威拉取；空态 on-demand revalidate，并发 refresh 共享 in-flight
 - **Grok / Kimi / Shared 项目记忆整轮写入**：Native Gemini 系 TurnCompleted 始终走 text-lane，驱动完整 `conversation_turn` 融合；Shared V2/V1 补 `captureTurnInput`，terminal 投影后仍触发完成融合
@@ -392,14 +652,17 @@ English:
 This release moves the app to **0.8.6**. The headline is visible relay quota, Windows cold starts that stay clickable, and collab first stages that inherit main-canvas dialogue: Session Control HUD adds Sub2API / New API relay balance plus local Grok usage; cold-start CSS writes split by macOS WKWebView vs Windows WebView2 so Windows no longer freezes on click without regressing mac first-click lockups; collab injects a main-canvas dialogue digest into the first stage (explainable in the Inspector, clean titles on the main card); long-press reorder for projects in a sidebar group; `!` custom-prompt soft-failure and Grok/Kimi/Shared memory turn capture round out the patch.
 
 ✨ Features
+
 - **Relay quota probe and HUD display**: unknown relay base+key probes `GET /v1/usage` first, falls back to `/api/user/self`; Grok local reads `~/.grok/config.toml`; Session Control HUD shows balance and usage summary (provider as `{origin} {source}`, two-decimal amounts) with friendly Chinese failure copy
 - **Main-canvas dialogue into collab first stage**: when the main canvas already has turns, starting collab prepends a capped digest to the first-stage model text (later stages still take visible task + upstream only); collab card titles prefer `userVisibleText`; Inspector inject-context gains a first-stage “main-canvas dialogue” section
 - **Long-press reorder for projects in a group**: long-press the collapse/folder control (~380ms) arms drag; reorder within the same group and persist `sortOrder`; no separate handle column, in-list reorder only
 
 🔧 Improvements
+
 - Bump the app version to `0.8.6` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship matches SemVer and packaging metadata
 
 🐛 Fixes
+
 - **Windows cold-start click freeze / macOS first-click deadlock, platform-split**: `applyUiScale` branches by platform—Windows WebView2 keeps residual-only clears on the first frame (no Blink style-recalc hit-test stall), macOS WKWebView restores warm-up writes (no CSSOM lazy-init first-click deadlock); blank-screen watchdog delays force-layout in the cold window; StartupGateOverlay reduces `color-mix` cost
 - **`!` custom-prompt list soft-failure permanent empty**: startup orchestration timeout/stale no longer stamps an empty array as authoritative; empty state revalidates on demand with shared in-flight refresh
 - **Grok / Kimi / Shared project-memory full-turn capture**: Native Gemini-family TurnCompleted always emits text-lane item/completed so `onAgentMessageCompleted` fuses full `conversation_turn`s; Shared V2/V1 capture turn input and still fuse after terminal projection
@@ -413,6 +676,7 @@ This release moves the app to **0.8.6**. The headline is visible relay quota, Wi
 这一版将应用升到 **0.8.5**，主线是「供应商设置可日常管、对话贴底更稳、切项目不再卡」：CLI 设置拆成引擎设置 / 供应商通道，官方配置可应用内编辑（懒加载 CodeMirror）；消息画布去掉虚拟列表、重写贴底跟随；工作区切换热路径不再做全量会话投影扫描；启动全屏遮罩默认关闭（可本机测试恢复）；侧栏内联改名与归档即时消失、工具行统一 kind 标签与文件图标；纯图发送与 Git 行默认进 DIFF 一并压实。
 
 ✨ Features
+
 - **供应商设置分层与官方/三方切换**：各 CLI 页拆为「引擎设置」与「供应商通道」；官方/本地统一 `VendorOfficialConfigCard`（使用 / 停用 / 授权）；Grok/Kimi/OpenCode 本地官方迁出三方表；启用徽章改为 `VendorProviderActiveSwitch`（关当前通道可 `__disabled__` 回退全局官方配置，不改写 `~/.codex` / `~/.grok` 等文件）
 - **官方配置应用内编辑（Kimi / Grok / OpenCode + Claude / Codex 对齐）**：读/写各自全局 config（TOML/JSON/JSONC），校验 + 原子写 + Unix `0o600`；可「打开所在文件夹」；对话框统一多面板 chrome
 - **官方配置 CodeMirror 编辑器**：懒加载 Syntax 高亮 / 行号 / 折叠；JSON 解析 lint；跟随主题；不进入设置页首屏关键路径
@@ -422,6 +686,7 @@ This release moves the app to **0.8.6**. The headline is visible relay quota, Wi
 - **Git Diff 行默认打开可编辑 DIFF**：文件行点击进 DIFF 审阅；行内动作改为「打开文件」；刷新时保留分区/文件夹折叠
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.5`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），与本补丁发版元数据对齐
 - **消息贴底跟随重写并移除虚拟化**：以紧凑 `useMessagesCanvasFollow` 取代旧 scroll authority / 收敛环 / echo 指纹；时间线静态全量 DOM 渲染；发送 / 开历史 / settle 走 force-pin；手动回底支持平滑滚动（`resumeFollowAndSmoothPin`）
 - **启动遮罩默认隐藏**：主窗冷启不再挂全屏 `StartupGateOverlay`；「其他设置」底部提供本机测试开关（默认关、下次启动生效）；后台 first-paint / gate-ready 契约不变
@@ -430,6 +695,7 @@ This release moves the app to **0.8.6**. The headline is visible relay quota, Wi
 - **应用图标全平台补边距**：桌面 / Windows tile / Android / iOS 启动图标统一留白，避免系统圆角裁切品牌标
 
 🐛 Fixes
+
 - **切换工作区主线程卡死**：AppShell 导航所需 owner topology 改为本地 `workspaces` 推导，切换热路径不再调用 `get_workspace_session_projection_summary`（9999 全源扫描）；list 在 stale/cancel 后协作式早退，禁止迟到 setThreads；Settings/会话管理显式统计查询不变
 - **Markdown/工具增高误取消贴底**：仅在 `scrollTop` 上移且高度未缩小时视为用户离开底部；高度增长 + scrollTop 不动保持跟随；pin 后双 rAF 宽限，抑制 reflow 滚动回声；ResizeObserver 与 live-text stick 合并到每帧最多 pin 一次
 - **归档成功后侧栏不消失**：优先精确 `sessionId` 匹配（后端归一化 id 时单结果回退），`deletedThreadIds` 传入加载守卫，行即时移除，避免等全量 catalog 重扫与 continuity 竞态
@@ -441,6 +707,7 @@ English:
 This release moves the app to **0.8.5**. The headline is vendor settings you can actually manage day to day, a calmer stick-to-bottom conversation canvas, and workspace switches that no longer freeze the UI: CLI settings split into engine vs provider channels with in-app official config editors (lazy CodeMirror); the message canvas drops virtualization and rewrites follow; workspace-switch hot paths no longer run exhaustive session projection scans; the startup full-screen gate is off by default (opt-in for local repro); sidebar inline rename + instant archive, unified tool kind labels/file icons; image-only sends and Git row → DIFF by default round out the ship.
 
 ✨ Features
+
 - **Vendor settings hierarchy and official/third-party switching**: each CLI tab splits into Engine settings vs Provider channels; official/local rows use `VendorOfficialConfigCard` (Use / Stop using / Authorize); Grok/Kimi/OpenCode local official rows leave the third-party table; enable badges become `VendorProviderActiveSwitch` (turning off the active channel can clear managed `current` via `__disabled__` and fall back to global official config without rewriting `~/.codex` / `~/.grok`, etc.)
 - **In-app official config editors (Kimi / Grok / OpenCode + Claude / Codex aligned)**: read/write each engine’s global config (TOML/JSON/JSONC) with validation, atomic write, and Unix `0o600`; open containing folder; shared multi-pane dialog chrome
 - **Lazy CodeMirror for official configs**: syntax highlight / line numbers / folding; JSON parse lint; theme-aware; kept off the settings shell critical path
@@ -450,6 +717,7 @@ This release moves the app to **0.8.5**. The headline is vendor settings you can
 - **Git Diff rows open editable DIFF by default**: row click reviews the diff; the row action becomes “Open file”; section/folder collapse survives git watch refreshes
 
 🔧 Improvements
+
 - Bump the app version to `0.8.5` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship matches SemVer and packaging metadata
 - **Stick-to-bottom rewrite + end virtualization**: compact `useMessagesCanvasFollow` replaces the old scroll-authority / convergence / echo-fingerprint stack; timeline renders a static full DOM; send / history-open / settle use force-pin; manual back-to-bottom supports smooth scroll (`resumeFollowAndSmoothPin`)
 - **Startup gate overlay off by default**: main window no longer mounts full-screen `StartupGateOverlay` on cold start; Other settings gains a local test switch (default off, next launch); background first-paint / gate-ready contracts unchanged
@@ -458,6 +726,7 @@ This release moves the app to **0.8.5**. The headline is vendor settings you can
 - **Padded app icons across platforms**: desktop / Windows tiles / Android / iOS launchers share consistent padding so OS masks no longer clip the mark
 
 🐛 Fixes
+
 - **Workspace-switch main-thread stall**: AppShell navigation owner topology is derived locally from `workspaces`—the switch hot path no longer calls `get_workspace_session_projection_summary` (9999 full-source scan); list paths abandon cooperatively after stale/cancel and never apply late `setThreads`; explicit Settings/session-management projection queries stay
 - **False unfollow on Markdown/tool height growth**: leave-bottom only when `scrollTop` moves up and height did not shrink; height growth with stable `scrollTop` keeps follow armed; two-rAF grace after pin blocks reflow scroll echoes; ResizeObserver and live-text stick coalesce to at most one pin per frame
 - **Archived rows stick in the sidebar**: prefer exact `sessionId` match (single-result fallback when the backend normalizes ids) and pass `deletedThreadIds` into the load guard so the row drops immediately instead of racing a full catalog rescan + continuity merge
@@ -473,6 +742,7 @@ This release moves the app to **0.8.5**. The headline is vendor settings you can
 这一版将应用升到 **0.8.4**，主线是「冷启动编排闭环、协作可解释、Composer 会话控制一体化」：冷启按 first-paint 契约限流重活、遮罩恢复自动关闭，可交互时间从 ~22s 收到 ~4.4s；协作链路补齐注入上下文 Header、上游摘要/全文喂料与批准补充说明；Composer 升级为 Session Control HUD（多供应商实时用量）+ 改文件 pill 对齐 git 统计；自定义模型可按供应商绑定写入 Claude/Codex；本地 HTML 直开内置浏览器。
 
 ✨ Features
+
 - **自定义模型按供应商绑定**：模型管理弹窗前置供应商选择（本地配置 + 三方列表）；选三方双写 provider-owned customModels 与引擎 catalog，Claude/Codex 同一套 UX 与写盘语义；双写失败可见、per-engine 串行队列防并发丢模型
 - **本地 HTML 内置浏览器打开**：HTML/HTM 文件统一走内置 Browser Agent（`file://`），覆盖内容区右键、文件树与 Git Changes 三入口；错误统一映射可读 i18n 文案，禁止原始英文技术串进 UI
 - **Session Control HUD 与实时用量**：Composer 工具菜单改为双栏 HUD（宽度锚定输入框），复用会话概览同源额度链路；覆盖 Codex 官方 rate limit、Claude/Codex 绑定 DeepSeek/MiniMax/智谱 HTTP、Kimi CLI OAuth refresh；无公开额度 API 的供应商给出明确提示
@@ -483,6 +753,7 @@ This release moves the app to **0.8.5**. The headline is vendor settings you can
 - **Shared Run Status Strip 数据源合成**：已编辑与子代理 pills 改为主时间线 ∪ agent-canvas ∪ 子会话合成，补 session side-effect ledger 与侧栏 child 保留
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.4`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），与本补丁发版元数据对齐
 - **冷启 first-paint 编排闭环**：冷启 ensure 默认 first-paint、禁止首进 full-catalog；gate-ready 仅认 first-paint-complete / home input-ready / force-enter；full-catalog 超时/降级后 60s 禁自动重扫；OpenCode 子源 3s 预算；遮罩恢复自动关闭（late ready + ≥8s 或 20s 顶强制进入）；诊断 dump 固定 firstPaintPresent/gateReadyReason 并支持一键复制；同机实测可交互 ~4.4s（基线假 ready ~22s）
 - **改文件 pill 对齐 git**：行数统计叠加 `git status` 与工具产出，回合中实时更新；同路径多次改写取最新不累加；Revert 后签名级隐藏跨重挂载生效；新增 `@number-flow/react` 滚动数字动画
@@ -492,6 +763,7 @@ This release moves the app to **0.8.5**. The headline is vendor settings you can
 - **贴底滚动接管重写**：仅在真底部（≤1px）重新跟随，滚轮/键盘/拖拽意图才释放跟随，内容增长不再误判为用户离开；ResizeObserver 替代长定时复查；回合时长标签改紧凑 h/m/s
 
 🐛 Fixes
+
 - **切换工作区过期扫描放弃**：取消 soft-ignore 后不再继续 titles/shared/分页/多引擎 fan-out 与后台 gemini/kimi/grok 刷新，杜绝陈旧列表回写
 - **误报错误 toast 抑制**：斜杠指令列表 soft-cancel（stale/cancelled）不再弹「命令列表不可用」；Shared 发送目标切走会话或 meta ENOENT 时静默，真失败仍提示
 - **子代理 Strip 与详情链路**：Strip 可见性与 todo/plan/edit 铁律解耦（仅子代理也能挂载）；宽识别对齐 S10 `isSubagentTool` 口径并全引擎 seed；有可解析 sessionThreadId 时优先开幕布；子会话仅 user 时从父线补 assistant；过滤 tool JSON 信封
@@ -506,6 +778,7 @@ English:
 This release moves the app to **0.8.4**. The headline is a closed-loop cold-start orchestration, explainable collaboration, and a consolidated Composer session-control surface: cold starts now follow a first-paint contract with throttled heavy work and an auto-dismissing gate (interactive at ~4.4s vs a fake-ready ~22s baseline); the collab chain gains an injection-context header, per-stage summary/full upstream feeding, and approval notes; Composer becomes a Session Control HUD with multi-provider live quota plus a git-aligned edited-files pill; custom models bind per provider into Claude/Codex; local HTML opens in the built-in browser.
 
 ✨ Features
+
 - **Provider-bound custom models**: the model manager dialog now picks a provider first (local config + third-party list); third-party selection dual-writes provider-owned customModels and the engine catalog with one shared UX for Claude/Codex; dual-write failures surface and per-engine serial queues prevent concurrent loss
 - **Open local HTML in the built-in browser**: HTML/HTM files route to the internal Browser Agent (`file://`) across the content context menu, file tree, and Git Changes entries; errors map to readable i18n copy instead of raw technical strings
 - **Session Control HUD with live quota**: the Composer tool menu becomes a two-column HUD anchored to the input width, reusing the session-overview quota pipeline; covers Codex official rate limits, Claude/Codex bound to DeepSeek/MiniMax/Zhipu HTTP, and Kimi CLI OAuth refresh; providers without a public quota API get an explicit notice
@@ -516,6 +789,7 @@ This release moves the app to **0.8.4**. The headline is a closed-loop cold-star
 - **Shared Run Status Strip synthesis**: edited-files and subagent pills now merge the main timeline ∪ agent-canvas ∪ child sessions, with a session side-effect ledger and sidebar child retention
 
 🔧 Improvements
+
 - Bump the app version to `0.8.4` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship matches SemVer and packaging metadata
 - **Cold-start first-paint orchestration closed loop**: cold-start ensure defaults to first-paint and never enters full-catalog first; gate-ready only accepts first-paint-complete / home input-ready / force-enter; 60s auto-rescan cooldown after full-catalog timeout/degradation; 3s budget for the OpenCode sub-source; the gate overlay auto-dismisses again (late ready + ≥8s, or force-enter at the 20s ceiling); diagnostic dumps pin firstPaintPresent/gateReadyReason with one-click copy; measured interactive at ~4.4s vs a fake-ready ~22s baseline on the same machine
 - **Git-aligned edit pill**: line counts overlay `git status` with tool-derived paths and update mid-turn; repeated edits to one path keep the latest stats instead of summing; revert hides rows by signature across remounts; adds `@number-flow/react` odometer animation
@@ -525,6 +799,7 @@ This release moves the app to **0.8.4**. The headline is a closed-loop cold-star
 - **Stick-to-bottom rewrite**: follow re-arms only at the true bottom (≤1px) and releases only on wheel/key/drag intent; content growth no longer reads as the user leaving; ResizeObserver replaces long timer rechecks; turn-duration labels switch to compact h/m/s
 
 🐛 Fixes
+
 - **Abandon stale scans after workspace switch**: after soft-ignore, no more titles/shared/pagination/multi-engine fan-out or background gemini/kimi/grok refreshes, so stale lists never write back
 - **Suppress false error toasts**: slash-command list soft-cancels (stale/cancelled) no longer raise “command list unavailable”; Shared send targets stay silent on thread switch or meta ENOENT while real failures still toast
 - **Subagent Strip and detail chain**: Strip visibility decouples from the todo/plan/edit rule (subagent-only activity mounts it); wide recognition aligns with the S10 `isSubagentTool` contract and seeds all engines; a resolvable sessionThreadId opens the canvas ahead of launch acks; child sessions with only user messages backfill assistant output from the parent; tool JSON envelopes are filtered out
@@ -543,6 +818,7 @@ This release moves the app to **0.8.4**. The headline is a closed-loop cold-star
 这一版将应用升到 **0.8.3**，主线是「Shared 多 CLI 协作可日常用、冷启动不再假死、运行态与恢复出口更清晰」：Shared Session 内按模板串行驱动 plan / implement / review 等多引擎节点；桌面全平台启动门控挡住 hydrate 窗口期误点；Composer 用常驻 run-status 条替代旧状态坞；卡住会话有可完成恢复出口；终端与「在资源管理器中显示」等日常路径一并压实。
 
 ✨ Features
+
 - **Shared 多 CLI 协作编排（阶段交付）**：在 Shared Session 内按模板串行驱动多 CLI 节点（每段可独立 CLI·供应商绑定）；主幕 sticky 编排卡 + 历史轮折叠卡，右栏节点 Inspector 直播/精读；Composer「协作 · 模板」入口，支持内置/自定义模板与页内模板管理；协作中锁定普通发送，强制停止后可恢复对话
 - **协作 Context Fan-in**：图 / skill / 记忆 / 便签进入首段（stages[0]），后续段仅文字接力；修复协作 drive 静默丢图；skill 注入 SKILL.md 正文；智能体 persona 叠入 worker prompt；首段可纯图
 - **节点恢复**：强制停止解锁、整轮重试、单节点重试（`shared_agent_retry_stage`）；livePhase 与归档正文择优；完成态主幕仅短汇总
@@ -550,6 +826,7 @@ This release moves the app to **0.8.4**. The headline is a closed-loop cold-star
 - **改文件面板可确认还原**：`TurnFilesChangedCard` 支持单文件 / 全部 Revert，经 ConfirmDialog 后走 git restore；成功后乐观隐藏，全清则卸载卡片
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.3`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），与本补丁发版元数据对齐
 - **启动门控（全桌面 Tauri）**：冷启动 full-catalog hydrate 期间显示全局遮罩，避免点击侧栏/按钮必现假死；自动关闭：`startup-gate-ready`（或 home 仅 input-ready）且至少展示 8s，20s 绝对天花板；约 10s 出现「直接进入」强关；强关/天花板走 force-enter + 取消排队重扫，不 stamp gate-ready
 - **uiScale 冷启动延后**：始终先 apply(1)；任意 `uiScale ≠ 1` 延后到 gate-ready、force-enter+2s 或 12s 天花板；**不改写** `settings.json`
@@ -558,6 +835,7 @@ This release moves the app to **0.8.4**. The headline is a closed-loop cold-star
 - 终端滚动条对齐全局细条：默认隐藏 thumb，hover/focus 再显现，暗色终端不再常亮一条亮轨
 
 🐛 Fixes
+
 - **冷启动点击假死（Win/Mac 同路径）**：hydrate 占满主线程/IPC 时误点必卡；门控 + force-enter 与 hydrate fallback 认 `stale`/`cancelled`，避免强关后仍 publish/重扫
 - **协作 worker 侧栏泄漏**：隐藏 MOSSX 控制面 / collab worker 下崽（含截断半截 `MOSSX_*`、SUMMARY、管线碎片、改名 Agent N 等）；不单凭 Agent N 误杀用户真会话；realtime hide registry 与 catalog 双闸
 - **右栏 Inspector 串台**：LIVE/settle 按 run+stage+attempt 隔离；空 LIVE 不顶出上一节点；徽章补齐 reasoningEffort
@@ -572,6 +850,7 @@ English:
 This release moves the app to **0.8.3**. The headline is multi-CLI collaboration you can actually use daily in Shared sessions, cold starts that stay click-safe, and clearer run-time / recovery surfaces: Shared Session drives plan / implement / review nodes serially from templates; a desktop-wide startup gate blocks mis-clicks during hydrate; Composer shows a persistent run-status strip instead of the old status dock; stuck sessions get a finishable recovery exit; terminal and “Reveal in …” paths get hardened along the way.
 
 ✨ Features
+
 - **Shared multi-CLI collaboration (phase delivery)**: serially drive multi-CLI stages in a Shared Session (per-stage CLI/provider bindings); sticky orchestration card + foldable history on the main canvas, live/read Inspector on the right; Composer “Collaboration · template” entry with built-in/custom templates and in-page template management; lock ordinary send while collaborating, unlock after force-stop
 - **Context Fan-in**: images / skills / memory / notes inject only into stages[0]; later stages relay user-visible text; fix silent image drop on collab drive; inject SKILL.md body; stack persona into worker prompts; pure-image first stage allowed
 - **Node recovery**: force-stop unlock, whole-run retry, single-node retry (`shared_agent_retry_stage`); livePhase merge + prefer longer archived body; main canvas keeps short final summaries only
@@ -579,6 +858,7 @@ This release moves the app to **0.8.3**. The headline is multi-CLI collaboration
 - **Confirmable file revert in edited-files panel**: per-file and “Revert all” via ConfirmDialog into existing git restore hooks; optimistic hide on success; card unmounts after full clear
 
 🔧 Improvements
+
 - Bump the app version to `0.8.3` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship matches SemVer and packaging metadata
 - **Startup gate (all desktop Tauri)**: global overlay during cold-start full-catalog hydrate so sidebar/button clicks do not freeze the UI; auto-dismiss on `startup-gate-ready` (or home input-ready only) after ≥8s shown, 20s hard ceiling; “Enter now” force-enter ~10s; force/ceiling cancel queued rescan without stamping gate-ready
 - **Deferred uiScale**: always apply `1` first; any non-identity scale waits until gate-ready, force-enter+2s, or a 12s ceiling; **never rewrites** `settings.json`
@@ -587,6 +867,7 @@ This release moves the app to **0.8.3**. The headline is multi-CLI collaboration
 - Terminal scrollbar matches global thin hover-reveal tokens so dark terminals no longer show a permanent bright track
 
 🐛 Fixes
+
 - **Cold-start click freezes (Windows and macOS)**: mis-clicks during hydrate no longer hard-lock; gate + force-enter treat hydrate fallback as `stale`/`cancelled` so force-enter does not republish or reschedule
 - **Collab worker sidebar leaks**: hide MOSSX control-plane / collab worker spawns (truncated `MOSSX_*`, SUMMARY titles, pipeline fragments, renamed Agent N, etc.); never delete real user threads on Agent N alone; realtime hide registry + catalog dual gates
 - **Inspector cross-talk**: LIVE/settle isolated by run+stage+attempt; empty LIVE does not surface prior node; badges include reasoningEffort
@@ -605,9 +886,11 @@ This release moves the app to **0.8.3**. The headline is multi-CLI collaboration
 这一版将应用升到 **0.8.2**，主线是「界面缩放全平台不再假死、坏缩放可自救」：macOS / Linux 与 Windows 一样不再对 WebView 使用 `uiScale ≠ 1` 的 native zoom；统一走 CSS `transform: scale()`，并加上启动 guard——上次缩放把渲染打挂时，下次启动临时回退 100%，**不改写**用户已保存的偏好，避免进不了设置页的锁死循环。
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.2`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），与本补丁发版元数据对齐
 
 🐛 Fixes
+
 - 修复全平台 native WebView zoom 假死（Windows WebView2 已证实；macOS WKWebView `setPageZoom` 在 2026-08-06 现场同样复现）：所有平台的 `uiScale` 仅通过 CSS `transform: scale()` + body `100/scale%` 布局补偿应用；native `setZoom` 每会话只钉死为 `1` 一次以清除旧构建残留，**禁止**再调用 `≠ 1`
 - 新增 `uiScaleStartupGuard`：应用 `uiScale ≠ 1` 时写入 pending 标记，约 8s + rAF 证明绘制链路健康后清除；若标记残留，下一会话仅临时强制 100% 并弹出运行时提示，**从不改写** `settings.json` 里的用户缩放偏好，用户可自行改回或留在安全值
 
@@ -616,9 +899,11 @@ English:
 This release moves the app to **0.8.2**. The headline is interface scaling that no longer freezes the renderer on any platform, with self-recovery when a bad scale bricks a session: macOS / Linux join Windows in never applying `uiScale ≠ 1` via native WebView zoom; everything uses CSS `transform: scale()`, plus a startup guard that temporarily falls back to 100% on the next launch when the previous scale hung the paint pipeline—**without rewriting** the user's saved preference, so Settings remains reachable.
 
 🔧 Improvements
+
 - Bump the app version to `0.8.2` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship matches SemVer and packaging metadata
 
 🐛 Fixes
+
 - Fixed native WebView zoom freezes on all platforms (WebView2 already confirmed on Windows; macOS WKWebView `setPageZoom` reproduced in the field on 2026-08-06): apply `uiScale` everywhere through CSS `transform: scale()` plus body `100/scale%` layout compensation; pin native `setZoom` to `1` once per session to clear residual zoom from older builds, and **never** call native zoom at a non-identity factor
 - Added `uiScaleStartupGuard`: write a pending mark when applying `uiScale ≠ 1`, clear it after ~8s + rAF proves the paint pipeline is alive; a leftover mark forces temporary 100% for the next session only and shows a runtime notice, **without rewriting** the stored user scale so a lockout loop is breakable without hand-editing settings
 
@@ -631,13 +916,16 @@ This release moves the app to **0.8.2**. The headline is interface scaling that 
 这一版将应用升到 **0.8.1**，主线是「Windows 缩放铺满、关窗可确认、单行代码可复制」：Windows 在 CSS 缩放后不再留黑边，主窗点 X 先二次确认再退出，消息 / Spec Hub 里单行围栏代码块也有复制按钮。
 
 ✨ Features
+
 - Windows 主窗关闭二次确认：点右上角 X 弹出应用内 AlertDialog（非系统对话框），确认后才关闭；连点不叠层，关闭失败可观测；不改动 macOS hide-on-close、菜单退出与 Alt+F4
 - 单行围栏代码块复制：消息与 Spec Hub 中单行 fenced code 与多行块对齐，始终显示复制按钮（纯文本 / 带围栏两种），无语言头、无行号，布局用右上角定位与右侧内边距避免压住代码
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.1`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 patch 发版对齐 SemVer 与打包元数据
 
 🐛 Fixes
+
 - 修复 Windows `uiScale ≠ 1` 时 CSS `zoom` 无法铺满视口留下黑边：改为 body `transform: scale()` + `100/scale%` 尺寸补偿填满 WebView2 视口；当时 macOS / Linux 仍走 native `setZoom` 并清理残留 CSS（全平台统一 CSS 缩放见 v0.8.2）
 
 English:
@@ -645,13 +933,16 @@ English:
 This release moves the app to **0.8.1**. The headline is Windows scaling that fills the viewport, a confirm step before closing the main window, and copy controls on single-line code fences: Windows no longer leaves black bars after CSS scale, the main-window X asks once in-app before quit, and one-liner fenced blocks in chat / Spec Hub gain the same copy control as multi-line blocks.
 
 ✨ Features
+
 - Windows main-window close confirmation: clicking the top-right X opens an in-app AlertDialog (not a system sheet) and only closes after confirm; rapid clicks do not stack dialogs; close failures are observable; macOS hide-on-close, menu Quit, and Alt+F4 are unchanged
 - Single-line fenced code copy: message and Spec Hub one-liner fences match multi-line blocks with an always-visible copy control (plain value and fenced value); no language header or line numbers; top-right action positioning and right padding keep code from sitting under the button
 
 🔧 Improvements
+
 - Bump the app version to `0.8.1` across frontend package metadata, the lockfile, and Tauri bundle configuration so this patch ship aligns SemVer and packaging metadata
 
 🐛 Fixes
+
 - Fixed Windows black bars when `uiScale ≠ 1`: CSS `zoom` could not fill the WebView2 viewport, so scaling moved to body `transform: scale()` plus `100/scale%` size compensation; macOS / Linux still used native `setZoom` and cleared residual CSS at that point (full-platform CSS-only scale lands in v0.8.2)
 
 ---
@@ -663,11 +954,13 @@ This release moves the app to **0.8.1**. The headline is Windows scaling that fi
 这一版将产品线升到 **0.8.0**，主线是「侧栏列表真就绪、Windows 冷启动可交互、额度与输入反馈补齐」：侧栏 hydration / 冷启动竞态与永久「加载中…」一并收口，Windows 在 `uiScale ≠ 1` 时不再因 WebView2 假死，DeepSeek 余额进会话概览，`$` skill 选中后 ContextBar 重新有 chip，并继续压 Messages 空集合 thrash 导致的 React #185。
 
 🔧 Improvements
+
 - 将应用版本号提升到 `0.8.0`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 minor 发版对齐 SemVer 与打包元数据
 - 会话列表首屏拉取收紧为 5 条（对齐默认可见根预算），「加载更早」与恢复路径仍用更大分页（50/100），冷启动更轻、历史仍可按需拉
 - 检查更新 `check()` 增加 15s 超时：更新源不可达时不再永久停在「正在检查更新…」，超时按失败收敛为 idle
 
 🐛 Fixes
+
 - 修复侧栏会话列表 hydration 完成后仍卡在「加载中…」：`hydratedThreadListWorkspaceIds` 改为发布新的 Set 身份（禁止原地 mutate 共享 Set），使 `memo(Sidebar)` 在完成 / 超时后能重渲染；AppShell 域上下文透传 state 快照；`listThreadTitles` / `listSharedSessions` 拉取加超时，避免超时后列表路径长期半完成
 - 修复冷启动侧栏 hydration 竞态：`activeWorkspaceId` 早于 `workspacesById` 就绪时不再永久跳过列表加载；有缓存时先展示快照；未连接工作区显示空态而非永久转圈
 - 修复 Windows 冷启动在 `uiScale ≠ 1`（常见 0.8）时 WebView2 渲染假死：Windows 改走 CSS `zoom`，native `setZoom` 仅钉死为 1 一次；macOS / Linux 仍用 native `setZoom(uiScale)`；并强制顶栏工具 / 右侧工具栏默认可见，一次性迁移展开历史默认折叠的右侧面板
@@ -680,11 +973,13 @@ English:
 This release moves the product line to **0.8.0**. The headline is a sidebar list that truly becomes ready, Windows cold starts that stay interactive, and quota / input feedback that no longer go missing: hydration races and permanent "Loading…" are closed, Windows no longer freezes when `uiScale ≠ 1`, DeepSeek balance lands in Session Overview, `$` skill selection shows ContextBar chips again, and Messages empty-collection thrash behind React #185 is tightened further.
 
 🔧 Improvements
+
 - Bump the app version to `0.8.0` across frontend package metadata, the lockfile, and Tauri bundle configuration so this minor ship aligns SemVer and packaging metadata
 - Shrink first-paint thread list / session catalog fetches to 5 items (aligned with the default visible root budget); "Load older" and recovery keep larger pages (50/100) so cold start is cheaper while history still loads on demand
 - Wrap the updater plugin `check()` in a 15s timeout so an unreachable update server no longer leaves the toast stuck on "Checking for updates…"; timeout is treated as failure and non-interactive flows return to idle
 
 🐛 Fixes
+
 - Fixed the sidebar thread list stuck on "Loading…" after hydration: `hydratedThreadListWorkspaceIds` now publishes a new Set identity instead of mutating a shared Set in place, so `memo(Sidebar)` re-renders on complete / timeout; AppShell domain contexts pass the state snapshot; `listThreadTitles` / `listSharedSessions` fetches are wrapped with a timeout so a hang no longer leaves partial hydration unresolved
 - Fixed the cold-start sidebar hydration race: auto-hydrate no longer permanently skips list load when `activeWorkspaceId` resolves before `workspacesById`; cached / snapshot threads show immediately; disconnected workspaces get an empty state instead of a forever spinner
 - Fixed Windows cold-start freezes when `uiScale ≠ 1` (often 0.8): Windows applies CSS `zoom` and pins native `setZoom` to 1 once; macOS / Linux keep native `setZoom(uiScale)`; essential top-tool and right-toolbar chrome stay visible by default, with a one-shot migration that expands a historically collapsed right panel
@@ -701,6 +996,7 @@ This release moves the product line to **0.8.0**. The headline is a sidebar list
 这一版的主菜是「Git 历史看得清、设置钉上手、会话归属与 Shared / 子代理更稳」：Git Graph 仍在底部 half-dock（可拖高），内部接上多泳道提交图并加宽提交列，侧栏设置可 pin、工作区可右键改分组，应用图标可换肤并全平台品牌刷新，Git 变更支持批量 unstage / 丢弃，Claude 后台 Shell 不再被 5 秒宽限误杀；空工作区不再串入外项目历史，首页引擎 / 模型选择可持久恢复，Shared 续接 / 附图 / 思考档位与子代理卡状态一并压实。
 
 ✨ Features
+
 - Git Graph 工作台更密：底部 half-dock 历史面板保留可拖拽调高；面板内三列默认比例改为 4:11:5，提交列表更宽、信息更好读
 - 多泳道提交图：按拓扑分配 lane，合并 / 旁支 / 穿越边可见；提供 Spine（仅 first-parent）与 Denoise（隐藏默认 trellis session-record 并改写 parent 保持连续）开关；作者头像、upstream-aware 的 ahead/behind tooltip、变更文件 flat/tree 与主 Git Diff 面板同步
 - 侧栏设置 pin：锁屏 / Spec Hub / 项目记忆 / Git 历史 / 运行时通知可在设置菜单项旁勾选 pin，在齿轮旁生成一键图标按钮；最多 2 个并持久化到 clientStorage，未知 id 自动过滤，超限后禁用继续 pin 并给出中英提示
@@ -710,6 +1006,7 @@ This release moves the product line to **0.8.0**. The headline is a sidebar list
 - 品牌图标全面刷新：桌面（含 Windows Store 方块 logo）、Web、iOS AppIcon、Android launcher 全套换为新品牌图，安装包与各 UI 表面视觉统一
 
 🔧 Improvements
+
 - 文件树右键菜单补齐 Lucide 图标（git / 新建 / 复制 / LSP / 删除等），删除项走 danger 样式并加分隔，扫读更快
 - 右键菜单贴系统习惯：优先在光标右下展开；空间不足时整块翻到上方或左侧（对齐 Finder / VS Code），再 clamp 进视口，首帧即按估算位置落点
 - Git History 筛选与选择器：项目 / 分支切换改用 Command + Popover；分支筛选前置，图开关与清除联动；密集状态 chip 的 tooltip 近乎即时
@@ -720,6 +1017,7 @@ This release moves the product line to **0.8.0**. The headline is a sidebar list
 - 文档治理：OpenSpec 三波归档 64 个已落地提案并同步 main specs；新增文档生命周期规范、新 CLI 接入 A~H 全量注册点核对矩阵、Native vs Shared CLI 产品口径说明文档
 
 🐛 Fixes
+
 - 修复 Claude 后台 Shell / PowerShell 任务被 5 秒宽限误杀（issue #983）：stream 携带结构化 backgroundTaskId 时进入 WaitBgTasks 等待任务终态，期间禁止 grace tree-kill；任务清空后重新武装完整 5s 宽限（禁止 remaining=0 秒杀），Unix killpg / Windows taskkill 不再误杀合法后台任务与 MCP / Stop-hook 管道
 - 修复空 / 新建工作区串入外项目会话历史：OpenCode 改用 JSON 列表并按 `directory` 归属过滤；Claude 以 transcript `cwd` 为权威并失效旧缓存（scanner v5），收紧 CJK 编码路径前缀匹配；Gemini / Grok / Kimi 改为一向 ownership（会话路径须为工作区或其子路径），去掉反向 home 匹配，避免 Desktop 中文空文件夹继承 `$HOME` 下无关历史
 - 修复首页创建会话时 Grok / Kimi / OpenCode 等 Atomic 引擎闭合选择器长期停在「选择模型」：为全部 Atomic 引擎播种默认 ExecutionTarget（catalog 优先，空 catalog 时用 selectedModelId 合成），Shared 会话不自动 seed，避免跨会话污染
@@ -747,6 +1045,7 @@ English:
 The headline of this release is a readable Git history, pinned settings, and steadier workspace ownership plus Shared / subagent surfaces: Git Graph stays a bottom half-dock (resizable height) with a multi-lane commit graph and a wider commit column, sidebar actions pin next to the gear and workspaces can be regrouped from the context menu, the app icon is switchable with a full brand refresh, the changes panel gains bulk unstage / discard, Claude background shell tasks survive the 5-second grace; empty workspaces no longer inherit foreign session history, the home engine / model picker restores across restarts, and Shared resume / attachments / reasoning plus subagent card status get hardened.
 
 ✨ Features
+
 - Denser Git Graph workbench: the history panel remains a bottom half-dock with a drag resize handle; the in-panel three-column default ratio becomes 4:11:5 so the commit list is wider and messages stay readable
 - Multi-lane commit graph: topology-aware lanes with merge / side-branch / pass-through edges; Spine (first-parent only) and Denoise (hide default trellis session-record commits and rewrite parents so the graph stays continuous); author avatars, upstream-aware ahead/behind tooltips, and changed-files flat/tree mode shared with the main Git Diff panel
 - Pinned sidebar settings: lock screen, Spec Hub, project memory, git history, and runtime notice can be pinned from the settings menu to one-click icon buttons beside the gear; max 2, persisted in client storage, unknown ids filtered, further pins disabled with accessible en/zh tooltip copy
@@ -756,6 +1055,7 @@ The headline of this release is a readable Git history, pinned settings, and ste
 - Full brand icon refresh: desktop (including Windows Store square logos), web, iOS AppIcon, and Android launcher sets all updated to the new artwork for consistent installs and UI surfaces
 
 🔧 Improvements
+
 - File-tree context menus gain Lucide icons (git, new file, copy, LSP, delete, etc.) with a danger style and separator on delete for faster scanning
 - Context menus follow OS habit: prefer open below-right of the cursor; when space is tight, flip wholesale above or left (Finder / VS Code style), then clamp into the viewport, with an estimated first-paint position
 - Git History filters and pickers: project / branch switchers move to Command + Popover; branch filter leads, graph toggles clear together; dense status-chip tooltips are near-instant
@@ -766,6 +1066,7 @@ The headline of this release is a readable Git history, pinned settings, and ste
 - Documentation governance: three OpenSpec archive waves moved 64 shipped proposals into the archive with main specs synced; new doc-lifecycle rules, an A–H full registration-point checklist for onboarding new CLIs, and a Native vs Shared CLI product explainer
 
 🐛 Fixes
+
 - Fixed Claude background Shell / PowerShell tasks being killed by the 5-second grace (issue #983): when the stream carries a structured backgroundTaskId the reader enters WaitBgTasks and waits for task terminal states with grace tree-kill disabled; once tasks drain, the full 5s grace re-arms (no remaining=0 instant kill), so Unix killpg / Windows taskkill no longer kill legitimate background tasks or MCP / Stop-hook pipelines
 - Fixed empty / newly created workspaces inheriting foreign session history: OpenCode lists sessions as JSON and filters by `directory` ownership; Claude treats transcript `cwd` as authoritative and invalidates old caches (scanner v5), with tighter CJK encoded-path prefix matching; Gemini / Grok / Kimi use one-way ownership (session path must be the workspace or a child) and drop reverse home matching so Chinese Desktop empty folders no longer inherit unrelated `$HOME` history
 - Fixed the home create-session closed picker stuck on "select model" for Atomic engines such as Grok / Kimi / OpenCode: seed a default ExecutionTarget for every Atomic engine (catalog preferred; synthesize from selectedModelId when the catalog is empty); Shared sessions never auto-seed to avoid cross-session contamination
@@ -797,6 +1098,7 @@ The headline of this release is a readable Git history, pinned settings, and ste
 这一版的主菜是「子代理看得见、会话概览清楚、跨引擎更稳」：幕布上的小队有了独立卡片与详情抽屉，结果区换成会话概览并接上套餐额度，Shared / 续接与冷启动白屏也一并压实。
 
 ✨ Features
+
 - 子代理幕布升级：Agent / Task 从扁条变成带人格的小队卡片，可点开幕布内 inspector 抽屉看子会话全文，不再挤进全局右侧 Tab
 - 跨引擎子代理对齐：Codex Collab、Grok spawn、Kimi Swarm 与 Shared 投影也能识别为子代理；会话树补齐父子层级，交付正文与启动回执分开
 - 会话概览进结果区：默认展示会话静态信息与运行态；官方 runtime 与 Coding Plan 可查 Codex / Kimi / MiniMax / 智谱额度，Shared 会话支持多供应商额度列表
@@ -806,6 +1108,7 @@ The headline of this release is a readable Git history, pinned settings, and ste
 - 侧栏工作区分组：整行单击即可折叠，不再依赖双击或小三角
 
 🔧 Improvements
+
 - 过程时间线更干净：纯 shell 默认收起，文件读写类命令保留在过程折叠里；单步 / 孤儿思考也会并进 chip，展开动画更顺
 - 结果 Tab 默认只留会话概览，治理证据改为开发者开关 opt-in
 - 下线「会话活动」面板与 Solo 模式，减少常驻入口与派生开销（雷达与底部活动面板不受影响）
@@ -813,6 +1116,7 @@ The headline of this release is a readable Git history, pinned settings, and ste
 - 侧栏会话状态指示更克制；隐藏的自动 helper 不再混入侧栏合并
 
 🐛 Fixes
+
 - 多处收敛 React #185 冷启动 / 折叠动画 / file-ref 引用环导致的白屏
 - 修复 Linux 启动空白页，同时保留百度统计；收紧访客 Cookie 提交时序
 - 修复 Claude managed 渠道模型与进程环境串台；空白幕布可恢复，并去掉多余 skill chips
@@ -828,6 +1132,7 @@ English:
 The headline of this release is visible subagents, a clearer session overview, and steadier cross-engine work: squad cards open an in-canvas inspector, the results area becomes a session overview with plan quotas, and Shared / continuation / cold-start white screens get hardened.
 
 ✨ Features
+
 - Subagent canvas upgrade: Agent / Task steps become persona squad cards with an in-canvas inspector drawer for the child transcript — no more stuffing into the global right tab
 - Cross-engine subagent parity: Codex Collab, Grok spawn, Kimi Swarm, and Shared projections resolve as subagents; the session tree gets parent–child hierarchy, and delivery text is separated from launch receipts
 - Session overview in the results area: static session info plus runtime state by default; official runtime / Coding Plan quotas for Codex, Kimi, MiniMax, and Zhipu; multi-vendor quota lists on Shared sessions
@@ -837,6 +1142,7 @@ The headline of this release is visible subagents, a clearer session overview, a
 - Sidebar workspace groups: single-click the full header row to collapse (no more double-click-only)
 
 🔧 Improvements
+
 - Quieter process timelines: pure shell stays folded by default while file read/write commands remain in the phase; single-step / orphan reasoning joins the chip, with smoother expand animation
 - Results tab defaults to session overview only; governance evidence is an opt-in developer switch
 - Retired the Session Activity panel and Solo mode to cut permanent chrome and derivation cost (radar and bottom activity panels are unchanged)
@@ -844,6 +1150,7 @@ The headline of this release is visible subagents, a clearer session overview, a
 - Quieter sidebar status indicators; hidden automatic helpers no longer merge into the sidebar
 
 🐛 Fixes
+
 - Multiple React #185 cold-start / collapse-animation / file-ref cycle white-screen fixes
 - Fixed Linux blank startup while keeping Baidu analytics; tightened visitor cookie submit timing
 - Fixed Claude managed-channel model vs process-env cross-talk; blank curtains recover, and stray skill chips are dropped
@@ -863,6 +1170,7 @@ The headline of this release is visible subagents, a clearer session overview, a
 这一版的主菜是「设置焕新、过程更清、思考可调」：偏好设置整体重排更易扫读，多引擎对话幕布统一过程投影并默认折叠已完成步骤，Grok / 自定义模型也接上了思考强度。
 
 ✨ Features
+
 - 设置页焕新：偏好区改为更密的行式布局，界面缩放与代码字号改为预设选择；打开应用编辑进对话框；快捷键与供应商 CLI 在移动端支持主从导航
 - 对话过程更安静：已完成的推理 / 工具 / 探索步骤按因果阶段自动折叠成可展开摘要，进行中的步骤保持展开，正文更突出
 - 多引擎幕布对齐：统一轻量下线策略，Grok / Kimi / OpenCode 接齐过程投影（含 Grok 实时工具桥），读 / 写 / 搜呈现更接近 Claude
@@ -871,12 +1179,14 @@ The headline of this release is visible subagents, a clearer session overview, a
 - 应用图标更新：刷新桌面端图标资源
 
 🔧 Improvements
+
 - 会话管理与设置区块布局简化；移除本地 usage 看板等冗余表面
 - 提示词库与设置页选择器外壳统一，排版更整齐
 - 收敛幕布滚动所有权与权威回底通道，快流下吸底更稳
 - 开发体验：支持隔离启动多个 Tauri 开发实例（端口可配）
 
 🐛 Fixes
+
 - 修复冷启动 React #185：effort 双写导致的死循环，并保留 freeform / catalog 外模型名选择
 - 修复 Claude 切换供应商后模型列表不刷新；Native 会话供应商与模型切换不再互相盖盘
 - 对齐 Grok / Kimi / OpenCode Hidden Binding 隐藏逻辑；修复切换后的实时投影
@@ -893,6 +1203,7 @@ English:
 The headline of this release is a fresher Settings, quieter process timelines, and tunable reasoning: preferences are easier to scan, multi-engine canvases collapse finished work by default, and Grok / custom models pick up reasoning effort.
 
 ✨ Features
+
 - Settings redesign: denser preference rows, preset selects for UI scale and code font size, open-app editing in a dialog, and master–detail mobile flows for shortcuts and vendor CLI
 - Quieter process output: completed reasoning / tool / explore steps auto-collapse into expandable causal phase summaries; in-progress work stays open so answers stay front and center
 - Unified multi-engine canvas: lightweight summary walls step aside; Grok / Kimi / OpenCode get aligned process projection (including a Grok live tool bridge) with read / write / search presentation closer to Claude
@@ -901,12 +1212,14 @@ The headline of this release is a fresher Settings, quieter process timelines, a
 - Refreshed application icon set
 
 🔧 Improvements
+
 - Simpler session-management and settings section layouts; remove the local usage dashboard and other redundant surfaces
 - Unified prompt-library and settings select chrome for cleaner typography
 - Converged canvas scroll ownership and authoritative “scroll to bottom” so fast streams stick to the end more reliably
 - Dev ergonomics: isolated multi-instance Tauri development launches with configurable ports
 
 🐛 Fixes
+
 - Fixed React #185 cold-start effort double-write loops while keeping freeform / out-of-catalog model names
 - Fixed Claude model-list refresh after vendor switch; Native session vendor/model switches no longer overwrite each other
 - Aligned Grok / Kimi / OpenCode hidden-binding behavior and fixed live projection after switches
@@ -927,6 +1240,7 @@ The headline of this release is a fresher Settings, quieter process timelines, a
 这一版的主菜是「回复更透明、设置更干净」：助手回复底下能看到用时与 token，设置侧栏瘦身，选模与 CLI 路径也更顺手。
 
 ✨ Features
+
 - 回复底栏更完整：助手消息完成后，在操作行旁展示完成时间、本轮耗时，以及输入/输出 token（有数据才显示）
 - 选模统一体验：Native 会话也走 Atomic 双栏选模，不再分两套路
 - 自定义 CLI 路径集中管理：各引擎路径配置收到统一对话框与供应商设置面板，改路径更省事
@@ -936,6 +1250,7 @@ The headline of this release is a fresher Settings, quieter process timelines, a
 - Grok 会话时间更准：侧栏优先用 chat_history 修改时间，避免 bulk summary 把时间刷成「刚刚」
 
 🐛 Fixes
+
 - 修复流式正文在消息 id 切换时丢尾巴的问题
 - 修复取消附件选择后再次弹出文件框
 - 修复 AI 生成 commit message 时遇 Codex 运行时断开（如 Broken pipe）只会裸报系统错误：可恢复则自动重试，否则给出可重试的本地化提示
@@ -949,6 +1264,7 @@ English:
 The headline of this release is clearer replies and a leaner Settings: assistant turns show timing and tokens, the sidebar is quieter, and model / CLI path setup is easier.
 
 ✨ Features
+
 - Richer message footer: when an assistant turn finishes, the action row shows completion time, elapsed duration, and input/output tokens when available
 - One model picker path: Native sessions reuse the Atomic dual-pane picker instead of a separate flow
 - Centralized custom CLI paths: engine path settings live in a shared dialog and vendor settings panel
@@ -958,6 +1274,7 @@ The headline of this release is clearer replies and a leaner Settings: assistant
 - More accurate Grok session times: the sidebar prefers chat_history mtime so bulk summaries don't rewrite everything to “just now”
 
 🐛 Fixes
+
 - Fixed live assistant text dropping its tail when the item id switches mid-stream
 - Fixed canceling an attachment pick reopening the file dialog
 - Fixed AI commit-message generation surfacing raw OS errors (e.g. Broken pipe) on Codex runtime disconnects — recover when possible, otherwise show a localized retryable message
@@ -975,6 +1292,7 @@ The headline of this release is clearer replies and a leaner Settings: assistant
 这一版的主菜是「跨 CLI 续接」：对话不再被单个引擎锁死，聊了一半可以换家接着聊。
 
 ✨ Features
+
 - 对话可以跨 CLI 续接了：Claude 里聊了一半的会话，能交给 Kimi、Grok 或 OpenCode 接着聊；续接卡片会捎上来源会话的最后一轮，上下文不断片
 - 原生续接更靠谱：用原供应商继续旧会话时，历史消息会完整「搬家」；实在搬不全的，会明确列出降级了哪些内容，不再悄悄丢
 - 新建会话一个入口：三种 CLI 的创建、校验、选择一次到位，不用再猜哪个能用
@@ -982,6 +1300,7 @@ The headline of this release is clearer replies and a leaner Settings: assistant
 - 底层打地基：重建了会话数据的存储与投递底座，为后续更多跨 CLI 能力铺路（本期无感知，但很重要）
 
 🐛 Fixes
+
 - 修复 Grok / OpenCode 切换模型不生效的问题
 - 修复跨 CLI 切换后「历史恢复」和「原生续接」串线，消息不再张冠李戴
 - 修复会话结束后偶发「复活」（状态回跳）的问题
@@ -993,6 +1312,7 @@ English:
 The headline of this release is cross-CLI continuation: a conversation is no longer locked to one engine — hand it off mid-way and keep going.
 
 ✨ Features
+
 - Continue conversations across CLIs: take a chat started in Claude and let Kimi, Grok, or OpenCode pick it up; the continuation card carries the source session's last turn so context isn't lost
 - More trustworthy native continuation: resuming an old session with its original vendor now migrates the full history, and anything that couldn't come along is listed explicitly instead of being silently dropped
 - One entry point for new sessions: creation, validation, and selection for all three CLIs in a single flow — no more guessing which one works
@@ -1000,6 +1320,7 @@ The headline of this release is cross-CLI continuation: a conversation is no lon
 - Foundation work: rebuilt the session storage and delivery base to pave the way for more cross-CLI capabilities (invisible today, but important)
 
 🐛 Fixes
+
 - Fixed model switching not taking effect for Grok / OpenCode
 - Fixed cross-talk between "history restore" and "native resume" after switching CLIs — messages no longer get mixed up
 - Fixed finished sessions occasionally "coming back to life"
@@ -1013,14 +1334,17 @@ The headline of this release is cross-CLI continuation: a conversation is no lon
 中文：
 
 ✨ Features
+
 - 新引擎上岗：Grok 现在可以直接在 App 里开聊了
 - OpenCode 引擎回归，可用的运行时又多一个
 
 🔧 Improvements
+
 - 危险操作确认弹窗的按钮在窄窗口下会自动换行，不再挤成一团
 - 设置页诊断标签不再加粗，页面更清爽
 
 🐛 Fixes
+
 - 手动重命名过的会话标题能正常显示了（含 Grok 会话）
 - 浅色主题下，下拉框等系统原生控件不再冒出深色「补丁」
 - 关闭的终端会被安全清理，不再留下「僵尸终端」
@@ -1029,14 +1353,17 @@ The headline of this release is cross-CLI continuation: a conversation is no lon
 English:
 
 ✨ Features
+
 - A new engine joins: you can now chat with Grok directly in the app
 - The OpenCode engine is back, adding one more runtime to choose from
 
 🔧 Improvements
+
 - Buttons in danger-confirmation dialogs now wrap on narrow windows instead of cramming together
 - Diagnostic labels in Settings are no longer bold, making the page cleaner
 
 🐛 Fixes
+
 - Manually renamed session titles now display correctly (including Grok sessions)
 - Under light themes, native controls like dropdowns no longer show up as dark patches
 - Closed terminals are cleaned up safely — no more zombie sessions
@@ -1049,6 +1376,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.10`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(composer)`: 沉淀技能调用契约与对话命令，润色器接入本地化缓存，curated skills 变更改为事件化刷新，技能链路响应更及时
 - `feat(git)`: AI commit message 支持一键按上次配置生成，无需重复选择引擎与参数
@@ -1062,6 +1390,7 @@ English:
 - `feat(curated-skills)`: 设置侧 Skills 更名为内置精选并补充行为说明
 
 🔧 Improvements
+
 - `refactor(markdown)`: 收敛文件预览渲染边界并遵循渲染器大文件基线，清理旧渲染器路径
 - `refactor(git)`: 拆分文件与差异高频入口；worktree 面板收敛共享 AI commit 配置事实源，消除多处重复定义
 - `refactor(git-history)`: 恢复核心面板类型保护，摘除 `GitHistoryPanelPickers` 的 `@ts-nocheck`
@@ -1072,6 +1401,7 @@ English:
 - `refactor(claude)`: 建立供应商会话隔离基础
 
 🐛 Fixes
+
 - `fix(composer)`: 修复提交生成与命令执行的并发边界，避免并发操作互相干扰
 - `fix(navigation)`: 缓存消息索引并移除随机分支名，导航跳转更稳定
 - `fix(files)`: 修复文件读取失败导致的加载卡死
@@ -1086,6 +1416,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.10` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(composer)`: formalize the skill-invocation contract and conversation commands, add localized caching for the prompt polisher, and switch curated-skill updates to event-driven refresh
 - `feat(git)`: allow AI commit messages to be regenerated with one click using the last-used configuration, without reselecting the engine and options
@@ -1099,6 +1430,7 @@ English:
 - `feat(curated-skills)`: rename the settings-side Skills entry to built-in curated skills and add behavior documentation
 
 🔧 Improvements
+
 - `refactor(markdown)`: consolidate file-preview rendering boundaries under the large-file renderer baseline and remove the legacy renderer path
 - `refactor(git)`: split high-frequency file and diff entry points; converge the worktree panel on a single shared source of truth for AI commit configuration
 - `refactor(git-history)`: restore type safety in the core panel and remove `@ts-nocheck` from `GitHistoryPanelPickers`
@@ -1109,6 +1441,7 @@ English:
 - `refactor(claude)`: lay the foundation for vendor session isolation
 
 🐛 Fixes
+
 - `fix(composer)`: fix the concurrency boundary between commit generation and command execution so concurrent actions no longer interfere
 - `fix(navigation)`: cache the message index and remove random branch names, making navigation jumps stable
 - `fix(files)`: fix the loading deadlock caused by file-read failures
@@ -1127,11 +1460,13 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.9`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(extensions)`: 新增 Skills Hub 与 MCP inventory 视图，集中管理技能与 MCP 服务清单
 - `feat(session-activity)`: 接线语义 diff AI review 按需生产者，会话活动支持按需触发 AI 审查
 
 🔧 Improvements
+
 - `perf(client)`: 降低 worktree / kanban / output / dock 常驻轮询开销；录音电平事件降频至 100ms 并跳过相同值
 - `perf(skills)`: 大技能列表保持响应，避免加载卡顿
 - `refactor`: 清理波次收敛——删除响应式布局死分支、JCEF bridge no-op 桩、app-shell 死链、notice dock streaming 死分支与 orchestration 残留死字段
@@ -1139,6 +1474,7 @@ English:
 - 优化文件 tab 当前打开标识
 
 🐛 Fixes
+
 - `fix(settings)`: 损坏的设置文件先隔离备份再回退默认值，加载成功后提示恢复结果并补齐错误日志与 i18n 文案
 - `fix(workspaces)`: 损坏的 workspaces.json 同样先隔离备份再回退，前端挂载后提示工作区损坏恢复
 - `fix(engine-task-output)`: 修复引擎二元假设并透传真实引擎归因，任务输出不再误判来源
@@ -1148,11 +1484,13 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.9` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(extensions)`: add a Skills Hub and an MCP inventory view to centrally manage skills and MCP server listings
 - `feat(session-activity)`: wire an on-demand semantic-diff AI review producer so session activity can trigger AI review when needed
 
 🔧 Improvements
+
 - `perf(client)`: reduce standing polling overhead across worktree, kanban, output, and dock surfaces; throttle dictation level events to 100ms and skip unchanged values
 - `perf(skills)`: keep large skill lists responsive without load-time stalls
 - `refactor`: cleanup-wave convergence — remove dead responsive-layout branches, the JCEF bridge no-op stub, dead app-shell links, dead notice-dock streaming branches, and leftover orchestration fields
@@ -1160,6 +1498,7 @@ English:
 - refine the currently-open indicator on file tabs
 
 🐛 Fixes
+
 - `fix(settings)`: quarantine and back up a corrupted settings file before falling back to defaults, surface the recovery after a successful load, and add error logging plus i18n copy
 - `fix(workspaces)`: apply the same quarantine-then-fallback flow to a corrupted workspaces.json and notify about workspace recovery after the frontend mounts
 - `fix(engine-task-output)`: fix the binary engine assumption and propagate true engine attribution so task output is no longer misattributed
@@ -1173,6 +1512,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.8`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(extensions)`: 扩展管理独立隔离，形成自包含的 extensions 模块边界
 - `feat`: 接入 tokenpacker CLI，扩展 Token 处理能力
@@ -1180,16 +1520,19 @@ English:
 - `feat(theme)`: 增加主题感知代码与差异配色，代码块与 diff 随主题自动适配
 
 🔧 Improvements
+
 - `refactor(orchestration)`: 移除编排中心本体、装配与派发接线，open-task-run 事件总线迁移至 tasks 模块，精简应用骨架
 - `refactor(client)`: 清理未使用的客户端模块
 
 🐛 Fixes
+
 - `fix(quick-switcher)`: 修复文件激活时主区路由错误
 - `fix(styles)`: 修复扩展页签 sticky 布局间隙
 
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.8` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(extensions)`: isolate extension management into a self-contained module boundary
 - `feat`: connect to the tokenpacker CLI to extend token-processing capabilities
@@ -1197,10 +1540,12 @@ English:
 - `feat(theme)`: add theme-aware code and diff colors so code blocks and diffs adapt to the active theme
 
 🔧 Improvements
+
 - `refactor(orchestration)`: remove the orchestration center along with its assembly and dispatch wiring, migrate the open-task-run event bus to the tasks module, and slim down the app shell
 - `refactor(client)`: remove unused client modules
 
 🐛 Fixes
+
 - `fix(quick-switcher)`: fix incorrect main-area routing when activating a file
 - `fix(styles)`: fix the sticky layout gap on extension tabs
 
@@ -1211,6 +1556,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.7`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(composer)`: 完善提示词增强入口，将增强操作收敛到 Composer 主操作区，并统一按钮状态、提示文案与主题样式
 - `feat(files)`: 文件编辑器新增 workspace-scoped 语义导航历史，支持 Back / Forward 快捷返回跳转前后的文件、光标与滚动视口
@@ -1220,11 +1566,13 @@ English:
 - `feat(vendors)`: Vendor Settings 增加 Grok CLI 文档入口与 unsupported 状态占位，不误导为已完成集成
 
 🔧 Improvements
+
 - `fix(app)`: workspace Home 复用共享 Composer，pinned threads 复用统一 ThreadList 行为；session title 会过滤 AGENTS、environment 与 SessionStart bootstrap 内容，避免内部上下文成为会话标题
 - `fix(ui)`: Git Update / Commit / Push 收敛为 branch header 快捷操作，recent branches 默认展开；文件树支持单击打开或折叠，Markdown 增加明确的编辑/预览切换
 - `fix(ui)`: 统一 workspace project dropdown、Home、message anchors 与 Market 导航的布局、token、图标和文案；窄对话容器会自动隐藏 anchor rail，长会话折叠态限制 marker 数量
 
 🐛 Fixes
+
 - `fix(composer)`: 修复 `#` 智能体补全菜单包含 section header 或 separator 时的选择索引错位；鼠标点击以及 Enter / Tab 键确认现在都会选中界面高亮的真实智能体，不再误选相邻项
 - `fix(code-intel)`: 稳定 LSP request timeout、cancellation、session eviction 与 provider failure 生命周期，避免软超时误杀可复用会话或影响其他 workspace / language server
 - `fix(files)`: 修复文件编辑器快捷键映射与 context menu shortcut 展示，保持 macOS / Windows / Linux 的平台语义一致
@@ -1236,6 +1584,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.7` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(composer)`: complete the prompt-enhancer entry point by consolidating the action in the Composer primary controls and aligning button state, guidance, and theme styling
 - `feat(files)`: add workspace-scoped semantic navigation history to the file editor, with Back / Forward restoring the target file, cursor, and scroll viewport
@@ -1245,11 +1594,13 @@ English:
 - `feat(vendors)`: add a Grok CLI documentation entry and explicit unsupported placeholder to Vendor Settings without implying a completed integration
 
 🔧 Improvements
+
 - `fix(app)`: reuse the shared Composer on workspace Home and unified ThreadList behavior for pinned threads; filter AGENTS, environment, and SessionStart bootstrap content out of generated session titles
 - `fix(ui)`: expose Git Update, Commit, and Push as branch-header quick actions, expand recent branches by default, support single-click file opening and folder toggling, and add an explicit Markdown edit/preview switch
 - `fix(ui)`: align the workspace project dropdown, Home, message anchors, and Market navigation across layout, tokens, icons, and copy; hide the anchor rail in narrow conversation containers and cap collapsed markers for long sessions
 
 🐛 Fixes
+
 - `fix(composer)`: fix selection index drift in the `#` agent completion menu when section headers or separators are present; mouse selection and Enter / Tab confirmation now choose the actual highlighted agent instead of an adjacent item
 - `fix(code-intel)`: stabilize LSP request timeout, cancellation, session eviction, and provider-failure lifecycles so soft timeouts do not kill reusable sessions or affect unrelated workspaces and language servers
 - `fix(files)`: correct file-editor shortcut mappings and context-menu shortcut labels while preserving native semantics across macOS, Windows, and Linux
@@ -1265,6 +1616,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.6`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(curated-skills)`: 内置 Caveman 精选技能，补齐资源注册、设置入口、provider 支持状态与 Desktop / remote daemon 持久化链路，可直接启用简洁技术沟通模式
 - `feat(git)`: 为多仓库工作区增加全局 branch 操作，并统一单仓与多仓 Git History branch tree；各 repository 保持独立 branch catalog、状态与操作 scope
@@ -1275,10 +1627,12 @@ English:
 - `feat(mermaid)`: Mermaid 全屏预览支持将图表保存为 PNG，并接入 native file save 流程
 
 🔧 Improvements
+
 - `refactor(messages)`: 重组消息展示架构，将 row、timeline、orchestration、Markdown、tool presentation 与共享 domain helpers 拆分到明确边界，同时保持 streaming、virtualization 与公共输入 contract 不变
 - `style(composer)`: 压缩多仓库 Git 操作菜单的信息密度，并统一 pinned session 与 workspace row 的视觉对齐
 
 🐛 Fixes
+
 - `fix(messages)`: 修复消息行 context 与延迟图片 hydration 的 stale state，使用 workspace / thread / message scope 和 generation guard 阻止旧异步结果覆盖当前内容，并正确释放 object URL
 - `fix(status-panel)`: 正确区分 Kimi 提交信息引擎，避免状态面板将其投影为其他 provider
 - `fix(git)`: 稳定跨平台 branch tree 排序并恢复历史分支树的细节交互，避免多仓切换后 branch 信息或操作入口缺失
@@ -1290,6 +1644,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.6` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(curated-skills)`: bundle the Caveman curated skill with resource registration, settings entry points, provider support state, and Desktop / remote-daemon persistence, making concise technical communication available out of the box
 - `feat(git)`: add global branch operations for multi-repository workspaces and unify the Git History branch tree across single- and multi-repository modes, while keeping each repository's branch catalog, state, and action scope isolated
@@ -1300,10 +1655,12 @@ English:
 - `feat(mermaid)`: allow fullscreen Mermaid diagrams to be saved as PNG files through the native file-save flow
 
 🔧 Improvements
+
 - `refactor(messages)`: reorganize message presentation into explicit row, timeline, orchestration, Markdown, tool-presentation, and shared-domain boundaries while preserving streaming, virtualization, and public-input contracts
 - `style(composer)`: tighten the multi-repository Git action menu and align pinned session rows visually with workspace rows
 
 🐛 Fixes
+
 - `fix(messages)`: prevent stale message-row context and deferred image hydration from overwriting current content by scoping results to workspace, thread, message, and generation identity, while releasing owned object URLs correctly
 - `fix(status-panel)`: distinguish the Kimi commit-message engine correctly instead of projecting it as another provider in the status panel
 - `fix(git)`: stabilize cross-platform branch-tree ordering and restore detailed Git History branch interactions so branch information and actions remain available after repository switches
@@ -1319,6 +1676,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.5`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(files)`: 文件编辑器新增按需 Git Blame —— 默认关闭且零额外 IPC，启用后在 CodeMirror gutter 按可见行展示日期与作者，当前行可查看 commit SHA、完整时间和摘要；编辑后标记为 stale、保存后受控刷新，并支持 Desktop / Web Service 与多仓库 scope
 - `feat(git-history)`: 新增独立 File History 工作台，可从文件树或 Git Diff 文件菜单打开目标文件的提交历史；左侧按 rename chain 分页展示相关 commits，右侧复用现有 Diff viewer 查看单次文件变化，并对 repository、path、分页与异步响应做隔离
@@ -1334,6 +1692,7 @@ English:
 - `feat(cli)`: Vendor Settings header 新增 Claude、Codex、Kimi 的 CLI lifecycle 控制，支持本地版本探测、npm registry allowlist 查询、installed / outdated / unavailable 状态展示，以及 install、update、refresh 操作；Claude 安装和更新改走官方 native installer 与 `claude update`
 
 🔧 Improvements
+
 - `feat(git-history)`: 将 Git History 收敛为 Branch、Commit、Details 三栏主布局，移除重复的 overview 区域并按 `3:4:3` 分配默认宽度；作者 timeline 使用基于 email/name 的稳定主题色，跨刷新、分页与搜索保持一致
 - `feat(git-history)`: 变更文件树复用 shared diff-tree compact folders 规则，压缩无分叉的单子目录链，同时保留 branch boundary、canonical path、Windows separator、展开状态与键盘交互
 - `feat(git)`: 收紧多仓库 Git Diff 工作区的信息密度并补齐 repository-scoped modal preview；快速切换同名路径时丢弃 stale response，full-context loader、编辑路径和 preview source 始终绑定同一 repository
@@ -1345,6 +1704,7 @@ English:
 - `style(git-history)`: 压缩 Git History 顶部工具栏间距并强化 pane boundary，在不牺牲可读性的前提下提升内容密度与视觉层级
 
 🐛 Fixes
+
 - `fix(git)`: 修复多仓库文件打开、Git Blame、Diff preview、Discard 与 File History 链路中的 repository identity 丢失；workspace-root、nested repository、相同 relative path 与 longest-prefix owner 均使用正确 scope，避免串仓或错误禁用
 - `fix(git)`: 恢复多仓库 unstaged 文件回退入口与状态刷新，修复 repository switch chrome、分组折叠和刷新入口回归；回退继续经过确认弹窗，成功后只刷新目标 repository 的状态
 - `fix(search)`: 全局文件搜索不再把 progressive file tree 的 shallow / empty 结果当成完整索引；当前与全局 scope 会按 active-first、bounded concurrency 补齐 full snapshot，并区分 partial、complete、error 状态，失败可重试且 stale hydration 不覆盖新 workspace
@@ -1366,6 +1726,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.5` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(files)`: add opt-in Git Blame to the file editor with zero extra IPC while disabled; when enabled, render date and author annotations for visible CodeMirror lines and expose the commit SHA, full timestamp, and summary for the active line, with stale-on-edit, controlled refresh after save, Desktop / Web Service parity, and multi-repository scoping
 - `feat(git-history)`: add a dedicated File History workbench reachable from the file tree and Git Diff file menus; page through commits that touched the file across its rename chain on the left, reuse the existing Diff viewer for each selected revision on the right, and isolate repository, path, pagination, and asynchronous response identity
@@ -1381,6 +1742,7 @@ English:
 - `feat(cli)`: add CLI lifecycle controls to Vendor Settings headers for Claude, Codex, and Kimi, including local version probing, allowlisted npm registry checks, installed / outdated / unavailable state, and install, update, and refresh actions; Claude install and update now use the official native installer and `claude update`
 
 🔧 Improvements
+
 - `feat(git-history)`: focus Git History on a three-column Branch, Commit, and Details layout, remove the duplicate overview region, and assign default widths at `3:4:3`; author timelines now use stable theme-aware colors derived from email or name and remain consistent across refreshes, pagination, and searches
 - `feat(git-history)`: reuse the shared diff-tree compact-folders rules for changed files, collapsing unbranched single-child directory chains while preserving branch boundaries, canonical paths, Windows separators, expansion state, and keyboard behavior
 - `feat(git)`: tighten the information density of the multi-repository Git Diff workspace and complete repository-scoped modal previews; stale responses are discarded when rapidly switching identical relative paths, while the full-context loader, edit path, and preview source remain bound to the same repository
@@ -1392,6 +1754,7 @@ English:
 - `style(git-history)`: reduce Git History toolbar spacing and strengthen pane boundaries, improving information density and visual hierarchy without sacrificing readability
 
 🐛 Fixes
+
 - `fix(git)`: preserve repository identity across multi-repository file opening, Git Blame, Diff preview, Discard, and File History flows; workspace-root repositories, nested repositories, identical relative paths, and longest-prefix ownership now resolve to the correct scope instead of crossing repositories or being incorrectly disabled
 - `fix(git)`: restore the discard action and status refresh for unstaged files in multi-repository workspaces, and fix regressions in repository-switch chrome, group collapsing, and refresh entry points; discard still requires confirmation and refreshes only the target repository after success
 - `fix(search)`: stop treating shallow or empty progressive file-tree results as a complete global file index; current and global scopes now hydrate full snapshots with active-first bounded concurrency, distinguish partial, complete, and error states, allow retries, and prevent stale hydration from overwriting a new workspace
@@ -1417,6 +1780,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.4`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(git)`: 将 Composer branch badge 升级为多仓库 Git command center，自动发现 workspace root 与 bounded nested repositories，按仓库展示 branch、upstream、ahead/behind 与 working-tree 摘要；单仓保持直接操作，多仓先选择 repository，再执行 Update、Commit、Push、Create Branch 与 Checkout
 - `feat(git)`: 文件树为 root / nested repository 增加 repository-scoped Git submenu 与多仓文件状态投影，支持 Commit、Add、Ignore、Diff、Compare、History、Rollback、Push、Pull、Fetch；所有 write action 显式携带 repository root，并保持 Desktop / remote daemon 与跨平台路径一致
@@ -1425,12 +1789,14 @@ English:
 - `feat(settings)`: 重构 CLI 配置中心，提供可搜索的 Claude Code / Codex catalog、支持状态、文档入口、official / third-party provider 分区和共享 table 管理；支持编辑 Claude `settings.json`、Codex `config.toml` 与 `auth.json`，并保留 provider 切换、排序、自定义模型和 local provider 工作流
 
 🔧 Improvements
+
 - `perf(app)`: repository discovery 移至 blocking worker 并跳过常见生成目录；Git polling 保留等价 state、避免 background refresh 闪回 loading，并通过 memoized component/callback 与复用 status 结果降低大 workspace 的主线程阻塞和 root render
 - `refactor(threads)`: 将高频 streaming latency 的内部诊断 state 与 `useSyncExternalStore` 对外 snapshot 分离，只有可观察类别或 mitigation 变化时才发布新引用，避免 measurement-only delta 触发同步重渲染与 React tearing 检查
 - `style(ui)`: 统一 tooltip 延迟与滚轮 dismiss 行为，收敛 sidebar、topbar、footer、file tab 与 settings 的间距、层级和主题色；OpenAI / Codex icon 与 token 视觉改用 theme-aware `currentColor`
 - `fix(models)`: 兼容 string/object、camelCase/snake_case 的 reasoning effort metadata，并在 thread 未设置 effort 时回退到 shared Codex selection；reasoning blocks 统一分段、合并与 tool-call boundary 展示
 
 🐛 Fixes
+
 - `fix(codex)`: 新建 `codex-pending-*` 磁盘会话不再被误判为 history restore，首次发送前直接显示可用的空白会话；真正未加载的历史会话仍由专用 loading lifecycle 控制
 - `fix(git)`: 稳定多仓库 branch menu 的 repository 切换、折叠 section、搜索展开、submenu positioning 与 loading feedback，并修复显式 repository update 被全局 selection 提前拦截的问题
 - `fix(git)`: 修复多仓文件树只消费 active Git root 状态的问题；所有 repository 的 file / ancestor folder decoration 现在在单次 aggregate scan 中合并，partial failure 仅降级对应仓库，dirty repository folder 与普通 changed folder 保持不同视觉语义
@@ -1441,6 +1807,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.4` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(git)`: evolve the Composer branch badge into a multi-repository Git command center that discovers the workspace root and bounded nested repositories, showing branch, upstream, ahead/behind, and working-tree summaries per repository; single-repository workspaces remain direct, while multi-repository workspaces select a target before Update, Commit, Push, Create Branch, or Checkout
 - `feat(git)`: add repository-scoped Git submenus and multi-repository file-status projection to root and nested repository rows in the file tree, with Commit, Add, Ignore, Diff, Compare, History, Rollback, Push, Pull, and Fetch; every write action carries an explicit repository root with Desktop / remote daemon and cross-platform path parity
@@ -1449,12 +1816,14 @@ English:
 - `feat(settings)`: redesign the CLI configuration center with a searchable Claude Code / Codex catalog, support status, documentation links, official / third-party provider sections, and shared table management; edit Claude `settings.json`, Codex `config.toml`, and `auth.json` while retaining provider switching, ordering, custom models, and local-provider workflows
 
 🔧 Improvements
+
 - `perf(app)`: move repository discovery onto blocking workers and skip common generated directories; preserve equivalent Git polling state, avoid background refreshes flashing back to loading, and reduce main-thread stalls and root renders in large workspaces through memoized components/callbacks and reused status results
 - `refactor(threads)`: separate high-frequency streaming-latency diagnostics from the `useSyncExternalStore` snapshot exposed to React, publishing a new reference only when an observable category or mitigation changes so measurement-only deltas cannot trigger synchronous rerenders or tearing checks
 - `style(ui)`: unify tooltip delays and wheel-dismiss behavior, tighten spacing, hierarchy, and theme colors across the sidebar, topbar, footer, file tabs, and settings, and render OpenAI / Codex icons and token visuals with theme-aware `currentColor`
 - `fix(models)`: accept reasoning-effort metadata in string/object and camelCase/snake_case forms, fall back to the shared Codex selection when a thread has no effort override, and align reasoning block paragraph merging and tool-call boundaries
 
 🐛 Fixes
+
 - `fix(codex)`: stop treating new `codex-pending-*` disk sessions as history restoration, presenting a usable empty conversation before the first send while retaining the dedicated loading lifecycle for genuinely unloaded history
 - `fix(git)`: stabilize repository switching, collapsible sections, search expansion, submenu positioning, and loading feedback in the multi-repository branch menu, and allow explicit repository updates without being blocked by missing global selection
 - `fix(git)`: fix the file tree consuming status from only the active Git root; file and ancestor-folder decorations from every repository are now merged in one aggregate scan, partial failures degrade only the affected repository, and dirty repository folders retain semantics distinct from ordinary changed folders
@@ -1469,6 +1838,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.3`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(i18n)`: 语言支持扩展到 10 种，并在设置页提供语言下拉入口，语言解析、切换与持久化流程同步覆盖新语言
 - `feat(sidebar)`: 侧栏线程列表 hydration 前显示加载占位，避免工作区会话恢复期间出现空白区域
@@ -1477,11 +1847,13 @@ English:
 - `feat(messages)`: 回合文件变更汇总中的文件可直接打开现有 Git Diff modal，并默认以最大化模式查看对应 staged / unstaged 差异
 
 🔧 Improvements
+
 - `refactor(i18n)`: 将中英文大体积 part locale 拆分为 per-namespace locale folder，降低翻译文件维护与局部更新成本
 - `refactor(git)`: 统一主 Git 面板、Git History worktree 与 commit details 的 changed-file renderer 和弹窗预览链路，收敛文件树、键盘激活与 editable / read-only Diff 入口，避免同类界面继续分叉
 - `build(i18n)`: 新增本地化构建、抽取、分块检查与 merge workflow，为多语言扩展提供可重复的脚本链路
 
 🐛 Fixes
+
 - `fix(terminal)`: 终端选中文本发送到 Composer 时不再重复插入内容，并补充外部输入回显回归覆盖
 - `fix(markdown)`: 保留 Markdown / LaTeX 公式容器边界并避免重复包裹，兼容紧凑多行公式写法
 - `fix(settings)`: 语言选择器改用 native select，移除 Radix portaled popup 几何计算链，修复 WebView UI Scale 大于 100% 时出现页面级空白浮层的问题
@@ -1496,6 +1868,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.3` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(i18n)`: expand language support to 10 languages and add a language dropdown in settings, with language resolution, switching, and persistence updated for the expanded set
 - `feat(sidebar)`: show a loading placeholder before thread-list hydration so restored workspaces no longer present a blank sidebar area
@@ -1504,11 +1877,13 @@ English:
 - `feat(messages)`: open files from turn-level change summaries in the existing Git Diff modal, maximized by default and resolved against the current staged / unstaged model
 
 🔧 Improvements
+
 - `refactor(i18n)`: split large English and Chinese part locale files into per-namespace locale folders to make translation maintenance and localized updates more targeted
 - `refactor(git)`: unify the changed-file renderer and preview-modal flow across the main Git panel, Git History worktree, and commit details, consolidating file trees, keyboard activation, and editable / read-only Diff entry points so equivalent surfaces no longer drift apart
 - `build(i18n)`: add repeatable localization scripts for build, extraction, chunk checks, and merge workflows
 
 🐛 Fixes
+
 - `fix(terminal)`: prevent duplicated text when sending a terminal selection to the Composer, with regression coverage for external input echo behavior
 - `fix(markdown)`: preserve Markdown / LaTeX math container boundaries and avoid duplicate wrapping, including compact multi-line formula layouts
 - `fix(settings)`: move the language selector to a native select and remove the Radix portaled-popup geometry path, fixing the page-sized blank popup at WebView UI Scale values above 100%
@@ -1527,11 +1902,13 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.2`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(search)`: 全局搜索结果按文件、看板、会话、消息、历史、技能与命令分组展示，文件结果以文件名作为主标题并保留完整路径；跨分组的键盘选择、排序与打开行为保持不变
 - `feat(web)`: 打通 Web 前端资源下载安装闭环 —— Release 额外生成一份跨平台版本化 ZIP 与 SHA-256，设置页支持状态检测、下载安装、同版本修复、本地包安装与重新检测；backend 在原子替换前完成 checksum、ZIP path、manifest、版本和入口校验，资源未就绪时阻止本地 Web Service 启动且不破坏已有可用版本
 
 🐛 Fixes
+
 - `fix(ui)`: 从结构上消除 Tooltip 首次启动更新回环 —— `TooltipIconButton` 改用 native button 与 Floating UI portal，退出 Radix `PopperAnchor / SlotClone` 组合，修复 `Maximum update depth exceeded` 导致 AppShell 被 ErrorBoundary 替换的问题
 - `fix(sidebar)`: 会话行正常态不再批量挂载 Radix Tooltip / Popover provider 与 anchor，删除确认仅在交互时按需挂载；修复首次安装启动、批量恢复会话时的 React #185，同时保留 tooltip、置顶、删除与键盘交互
 - `fix(ui)`: 将 `@radix-ui/react-presence` 固定到兼容 React 19 的 `1.1.6`，修复首次启动 React 渲染崩溃
@@ -1539,11 +1916,13 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.2` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(search)`: group global search results into files, kanban items, threads, messages, history, skills, and commands; use the basename as each file result's primary title while preserving its full path, ranking, cross-group keyboard navigation, and open behavior
 - `feat(web)`: complete the Web frontend assets installation flow — publish one cross-platform versioned ZIP plus SHA-256 with each Release, add status checks, download/install, same-version repair, local-package install, and recheck actions to settings, and validate checksums, ZIP paths, manifests, versions, and entrypoints before atomic activation; local Web Service startup stays blocked until assets are ready without damaging an existing valid installation
 
 🐛 Fixes
+
 - `fix(ui)`: structurally remove the startup Tooltip update loop by moving `TooltipIconButton` to a native button with a Floating UI portal and out of the Radix `PopperAnchor / SlotClone` composition, preventing `Maximum update depth exceeded` from replacing AppShell with the ErrorBoundary
 - `fix(sidebar)`: stop mounting Radix Tooltip / Popover providers and anchors for every idle thread row, and mount delete confirmation only on demand; this fixes React #185 during first-run bulk session hydration while preserving tooltip, pin, delete, and keyboard behavior
 - `fix(ui)`: pin `@radix-ui/react-presence` to the React 19-compatible `1.1.6` release to fix the first-launch React render crash
@@ -1555,18 +1934,21 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.1`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(note-cards)`: 将便签从右侧窄面板迁移到中央 `1:2` 分栏工作台，宽屏采用可搜索的 Master-Detail 列表与编辑器、窄屏自动回退上下布局；支持分隔线拖动、键盘调整、双击复位和比例持久化
 - `feat(note-cards)`: 加固便签编辑工作流 —— 增加 dirty draft 保护与保存状态反馈，切换便签、collection 或新建前不再静默覆盖草稿；支持归档撤销、永久删除确认，并可将当前便签显式引用到 Composer
 - `feat(messages)`: 对话时间线新增回合级文件变更汇总卡，聚合每轮编辑文件数、增删行与失败状态，历史回合显示 inline card、最新回合显示 session cumulative card，并支持长列表展开
 
 🔧 Improvements
+
 - `perf(ui)`: 降低 idle chrome 的样式重算与渲染成本 —— 将 scrollbar 样式从全局 `*` 收窄到明确的 scroll container，非活动 workspace diff 直接卸载，文件树虚拟化阈值从 250 降至 30，并为 Prism highlight、DiffBlock、GitDiffViewer 与侧栏更新增加缓存或稳定引用
 - `feat(ui)`: 前端产品入口收敛到 Claude 与 Codex，移除 MCP 设置与 AI commit message 菜单中的 Gemini / OpenCode 入口
 - `style(ui)`: Runtime Pool 与加载弹窗统一使用 shadcn semantic tokens；侧栏会话行仅在 hover / focus 时为 pin toggle 预留空间，静止态更紧凑
 - `docs(openspec)`: 校准并归档便签工作台、idle render performance 等已完成变更
 
 🐛 Fixes
+
 - `fix(terminal)`: 终端面板跟随应用亮暗主题并限制在主内容列，不再遮挡右侧文件面板；移除重复分隔线并修复暗色模式下的亮色 scrollbar gutter
 - `fix(messages)`: 新回合等待回复时，将上一回合的文件变更卡固定在原回合边界，避免累计卡漂移到新用户消息之后
 - `fix(ui)`: 修复 Tooltip trigger 更新回环导致的会话区域空白，并补充重复 rerender 回归测试
@@ -1574,18 +1956,21 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.1` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(note-cards)`: move notes from the narrow right panel into a central `1:2` split workbench with a searchable Master-Detail list/editor on wide screens and a stacked fallback on narrow screens; support pointer and keyboard resizing, double-click reset, and persisted split ratios
 - `feat(note-cards)`: harden the note editing workflow with dirty-draft protection and explicit save states so switching notes, collections, or creation cannot silently overwrite work; add archive undo, permanent-delete confirmation, and an explicit action to reference the active note in the Composer
 - `feat(messages)`: add turn-level file-change summary cards to the conversation timeline, aggregating edited files, added/deleted lines, and failures; historical turns use inline cards, the latest turn uses a session-cumulative card, and long file lists can expand
 
 🔧 Improvements
+
 - `perf(ui)`: reduce idle chrome style recalculation and rendering cost by scoping scrollbar rules to explicit scroll containers, unmounting inactive workspace diffs, lowering the file-tree virtualization threshold from 250 to 30, and adding caching or stable references around Prism highlighting, DiffBlock, GitDiffViewer, and sidebar updates
 - `feat(ui)`: narrow frontend product entry points to Claude and Codex by removing Gemini / OpenCode from MCP settings and AI commit-message menus
 - `style(ui)`: align Runtime Pool and the loading dialog with shadcn semantic tokens, and reserve sidebar pin-toggle space only on hover or focus for denser idle rows
 - `docs(openspec)`: align and archive completed changes for the note workbench, idle render performance, and related work
 
 🐛 Fixes
+
 - `fix(terminal)`: make the terminal follow the app theme and stay within the main content column so it no longer covers the right file panel; remove duplicate dividers and the bright scrollbar gutter in dark mode
 - `fix(messages)`: pin the previous turn's file-change card to its own boundary while a new turn is pending instead of letting the cumulative card drift below the new user message
 - `fix(ui)`: fix the Tooltip trigger update loop that could blank the conversation area, with repeated-rerender regression coverage
@@ -1597,6 +1982,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.7.0`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(claude)`: AskUserQuestion 走出 Plan 模式 —— 通过进程内 MCP 桥在 default / acceptEdits 模式下重新暴露 AskUserQuestion 工具，agent 可以在回合中途弹出结构化单选问题卡片，无需 kill/resume 循环；提问卡片锚定到自身请求（askuserquestion-<request_id>）固定在输入框上方，不再随长回合流式滚出视野；线程有待回答提问时暂缓 Composer 发送队列；MCP 服务器以每进程随机 bearer token 鉴权，拒绝本机其他进程伪造弹窗
 - `feat(settings)`: 设置页新增 MCP 服务器面板 —— 展示 Claude 启动时上报的运行时 MCP 服务器（按工作区快照），内置 ccgui 服务器带徽标，无服务器时显示空态
@@ -1606,12 +1992,14 @@ English:
 - `feat(menu)`: 原生菜单栏按已保存的界面语言本地化 —— Rust 侧新增 MenuLabels 按语言构造菜单文案（含终端 / 开发者工具项），Linux 启动时即以目标语言构建菜单，切换语言下次启动生效
 
 🔧 Improvements
+
 - `perf(messages)`: 四项定点优化削减流式卡顿 —— 流式 tick 间缓存 exit-plan 去重与消息操作目标计算不再逐 token 全量重扫、同一 flush tick 内被覆盖的 item/updated 快照按 (workspace, thread, item) 合并只留最新、流式动画全部改为合成器友好实现（shimmer / spinner / agent 图标去掉逐帧重绘）、Bash 输出按绝对行号 key 让滑动截断窗口复用 DOM
 - `perf(composer)`: @-mention 自动补全 memo 化，修复输入时逐键卡顿
 - `build`: 缩减包体积 —— 前端资源去重（不再二进制内嵌 + dist 双份打包，改为按版本导出到应用数据目录供 daemon web 服务使用）、release profile 开启 strip + fat LTO + opt-level "s"、Windows 安装器 WebView2 从离线运行时改为 embedBootstrapper 按需下载
 - `docs(openspec)`: 补齐 AskUserQuestion MCP 桥、Linux 原生菜单本地化、流式渲染性能、/compact 时长上限移除、MCP 服务器面板等变更提案
 
 🐛 Fixes
+
 - `fix(compact)`: 移除手动 `/compact` 的 120 秒总时长硬上限 —— 大上下文压缩本就需要数分钟，之前会在进行中被强杀；真正的挂起保护仍由 90 秒首事件看门狗承担
 - `fix(history)`: 恢复 Claude 会话时保留带参数的斜杠命令用户提问 —— `<command-args>` 有实际内容的用户记录不再被当作内部记录隐藏（前后端分类器同步修正），无参数的控制命令（/resume、/clear）仍保持过滤
 - `fix(messages)`: 修复 exit-plan 去重在 identity 级重算时失效 —— 选区冻结触发的引用级重算不再把已去重的尾项写回结果，杜绝「执行计划就绪」卡片复活重复
@@ -1622,6 +2010,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.7.0` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(claude)`: AskUserQuestion beyond plan mode — re-expose AskUserQuestion as an in-process MCP tool in default/acceptEdits modes so agents can ask structured, one-tap questions mid-turn without a kill/resume cycle; the ask card anchors to its own request (askuserquestion-<request_id>) and stays pinned above the composer instead of scrolling away with a long streaming turn; the composer send queue holds while a thread has a pending ask; the MCP server authenticates with a per-process random bearer token so no other local process can forge a native-looking dialog
 - `feat(settings)`: add an MCP servers panel to settings — show the runtime MCP servers Claude reports at init (per-workspace snapshot), badge the built-in ccgui server, and render an empty state when none are reported
@@ -1631,12 +2020,14 @@ English:
 - `feat(menu)`: localize the native menu bar in the saved UI language — a Rust-side MenuLabels struct builds every menu item (including terminal/devtools) per language, Linux builds the menu in-language up front, and a live language switch applies on the next launch
 
 🔧 Improvements
+
 - `perf(messages)`: reduce streaming lag with four targeted fixes — cache exit-plan dedupe and message-action-target computation across streaming ticks instead of rescanning the full history per token, coalesce superseded item/updated snapshots per (workspace, thread, item) within a flush tick, replace per-frame streaming animations with compositor-friendly equivalents (shimmer / spinner glow / agent icon), and key Bash output lines by absolute index so the sliding truncation window reuses DOM
 - `perf(composer)`: memoize the @-mention autocomplete to fix the per-keystroke stall
 - `build`: cut bundle size via web asset dedup and release profile tuning — stop shipping the frontend twice (export embedded assets once per version to app data for the daemon web service instead of bundling a dist/ copy), enable strip + fat LTO + opt-level "s" in the release profile, and switch the Windows installer's WebView2 mode from offlineInstaller to embedBootstrapper
 - `docs(openspec)`: backfill change proposals for the AskUserQuestion MCP bridge, Linux native menu localization, streaming render performance, the /compact wall-clock cap removal, and the MCP servers panel
 
 🐛 Fixes
+
 - `fix(compact)`: remove the fixed 120s wall-clock cap on manual `/compact` — compacting a large context legitimately takes minutes and was killed mid-progress; true hang protection remains with the 90s first-event watchdog
 - `fix(history)`: keep slash-command user prompts with args visible when restoring Claude sessions — user records whose `<command-args>` carry real content are no longer classified as hidden internal records (Rust and frontend classifiers fixed in lockstep), while argument-less control commands (/resume, /clear) stay filtered
 - `fix(messages)`: keep exit-plan dedupe intact across identity-level recompute — a selection-freeze-driven reference-level recompute no longer writes the deduped tail entry back onto the result, so the duplicate "Execution Plan Ready" card can't resurrect
@@ -1651,16 +2042,19 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.9`，同步前端包配置与 Tauri 打包配置
 - `feat(threads)`: Codex 会话乐观创建 —— 点击新建后会话立即出现在侧栏（先创建 `codex-pending-*` 占位线程并在后台预热 thread/start），首条消息发送时无缝换绑到真实线程 id；全新线程在启动确认阶段直接软就绪，跳过约 5.8s 的重试等待，新建会话从数秒白等降至即时可用
 - `feat(codex)`: 侧栏工作区菜单记住上次选择的 Codex provider —— 子菜单里选 provider 只记录偏好（localStorage 持久化）不再立即建会话，主入口一键用记住的 provider 创建；子菜单项带选中勾选标记与 `menuitemradio` 无障碍语义，并支持 ArrowRight 键盘展开
 - `feat(codex)`: 添加 5.6 系列模型
 
 🔧 Improvements
+
 - `refactor(app-shell)`: 继续拆解 AppShell 根组件，将 git 工作区操作、worktree chrome、OpenCode 线程绑定、回合结束 git 状态刷新、协作模式同步、Claude 模型刷新、工作区路径接入等七块内联逻辑抽为 `app-shell-parts` 下带独立单测的 hooks；顺带修复全新线程会在持久化引擎偏好加载完成前被提前种子化默认模型的问题
 - `docs(openspec)`: 归档实时对话渲染提案
 
 🐛 Fixes
+
 - `fix(codex)`: 加固 pending 线程换绑与删除的竞态 —— 排队消息迁移改为仅在 finalize 记录的别名确认后执行，避免手动切换到无关 Codex 线程时队列被误路由；finalize 每一步检查删除标志，删除中的线程不再被复活、也不再产生孤儿后端线程；发送路径统一使用 finalize 解析后的线程 id
 - `fix(threads)`: 修复直播文字与工具块的渲染割裂 —— 分段递增前先将直播正文尾段回灌 reducer 防止段落文本丢失，工具启动时清空已积累的 agent 文本，回合完成只落地最后一段
 - `fix(messages)`: 修复发送消息触发虚拟化开启时行高全按估算布局、新气泡与上一条长回复重叠的问题（虚拟化翻转瞬间立即实测行高）
@@ -1671,16 +2065,19 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.9` across frontend package metadata and Tauri bundle configuration
 - `feat(threads)`: optimistic Codex session creation — new sessions appear in the sidebar instantly (a `codex-pending-*` placeholder thread is created and thread/start is prewarmed in the background), then seamlessly rebind to the real thread id on the first send; brand-new threads soft-ready immediately during start confirmation, skipping the ~5.8s retry ladder
 - `feat(codex)`: remember the last picked Codex provider in the sidebar workspace menu — picking a provider in the submenu now only records the choice (persisted in localStorage) instead of creating a session, and the main Codex entry creates sessions with the remembered provider; submenu items carry a selected check mark with `menuitemradio` semantics, and the flyout opens with ArrowRight for keyboard access
 - `feat(codex)`: add the 5.6 model series
 
 🔧 Improvements
+
 - `refactor(app-shell)`: continue the AppShell decomposition by extracting seven inline logic blocks — git workspace ops, worktree chrome, OpenCode thread binding, turn-settle git status refresh, collaboration mode sync, Claude model refresh, and workspace paths intake — into individually tested hooks under `app-shell-parts`; also fix brand-new pending threads being seeded with the engine default model before persisted engine preferences finished loading
 - `docs(openspec)`: archive the live conversation rendering proposal
 
 🐛 Fixes
+
 - `fix(codex)`: harden pending-thread rebind and delete races — queued-message migration now requires the alias recorded by the finalize flow, so manually switching to an unrelated Codex thread no longer misroutes the queue; every finalize step checks the deleted flag so a delete racing a finalize neither resurrects the thread nor mints an orphan backend thread; the send path always re-enters with the finalize-resolved thread id
 - `fix(threads)`: fix live text / tool block rendering splits — drain the live assistant text tail into the reducer before incrementing the agent segment so segment text is not lost, clear accumulated agent text on tool start, and land only the last segment on turn completion
 - `fix(messages)`: fix rows being laid out at estimated heights when sending a message flips virtualization on, which made the new bubble overlap the previous long reply (measure rows immediately on the flip)
@@ -1695,17 +2092,20 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.8`，同步前端包配置与 Tauri 打包配置
 - `feat(files)`: 新增工作区文件对比工具 —— 文件树多选（2–4 个文件）右键发起对比，新增顶部功能区入口可打开临时左右文本对比面板；独立 fileCompare 中心模式复用现有 CodeMirror 编辑，支持行级差异、高亮、差异导航、轻量同步滚动与缺失行 gap 对齐
 - `feat(messages)`: 消息幕布锚点栏下方新增「直达底部」按钮，一键回到最新消息并恢复实时跟随
 - `feat(browser-agent)`: Browser Dock 新增网页元素选择器 —— 进入选择模式后连续点选一个或多个可见元素，将结构化元素证据（URL / 标题 / 文本 / 角色 / 位置 / 隐私元数据）注入当前 Composer 提问；同时调大默认窗口尺寸，避免常见网页首屏被压扁变形
 
 🔧 Improvements
+
 - `perf(dialogue)`: 流式正文改走 `liveAssistantTextChannel` 外部化通道，去除根链高频 setState 与 orchestration / taskRun store 的秒级轮询双胞胎（改为写入即广播），debug 日志在面板关闭时缓冲，显著降低对话过程的主线程开销
 - `perf(streaming)`: 修复对话流式输出卡顿并优化渲染路径 —— 节流诊断落盘、关闭 DEV 默认 trace、流式 lightweight markdown 与 delta flush 降频，并补充虚拟化与 hotspot 观测
 - `fix(storage)`: 降低客户端存储写入与诊断空转开销 —— store patch 改为进程内缓存 + compact JSON，启动后清理存量大数据，高频 diagnostics / shadow transcript 改为过滤截断节流，Kanban 图片改为 best-effort 落盘后只保存文件路径
 
 🐛 Fixes
+
 - `fix(editor)`: 按工作区恢复文件标签并修正最大化布局 —— 文件最大化时隐藏外层 composer 占满内容区，文件标签状态改为 workspace-scoped，切换工作区时保留各自打开的文件与 active tab
 - `fix(messages)`: 修复流式滚动更新回环
 - `fix(messages)`: 手动上滑后恢复焦点跟随并重新滚到底部
@@ -1713,17 +2113,20 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.8` across frontend package metadata and Tauri bundle configuration
 - `feat(files)`: add a workspace file compare tool — multi-select 2–4 files in the file tree to start a comparison via the context menu, and open an ad-hoc left/right text compare panel from a new top entry; a dedicated fileCompare center mode reuses the existing CodeMirror editor with line-level diffs, highlighting, diff navigation, lightweight synced scrolling, and missing-line gap alignment
 - `feat(messages)`: add a “jump to bottom” button below the message curtain anchor rail to return to the latest message and re-arm live auto-follow
 - `feat(browser-agent)`: add a page element selector to the Browser Dock — enter selection mode to click one or more visible elements and inject structured element evidence (URL / title / text / role / bounds / privacy metadata) into the active Composer, and enlarge the default window size so common pages are no longer visually compressed
 
 🔧 Improvements
+
 - `perf(dialogue)`: externalize streaming body text onto the `liveAssistantTextChannel`, drop high-frequency root setState and the per-second polling twins in the orchestration / taskRun stores (broadcast on write instead), and buffer debug logs while the panel is closed, significantly lowering main-thread cost during conversations
 - `perf(streaming)`: fix conversation streaming jank and optimize the render path — throttle diagnostics persistence, disable the default DEV trace, lower lightweight-markdown and delta-flush frequency, and add virtualization/hotspot instrumentation
 - `fix(storage)`: reduce client store write and idle diagnostics cost — move store patches to an in-process cache with compact JSON, clean up accumulated large data on startup, filter/truncate/throttle high-frequency diagnostics and shadow transcript writes, and persist Kanban images to disk best-effort while storing only the file path
 
 🐛 Fixes
+
 - `fix(editor)`: restore file tabs per workspace and fix the maximize layout — hide the outer composer when a file is maximized so it fills the content area, make file-tab state workspace-scoped, and keep each workspace’s open files and active tab when switching
 - `fix(messages)`: fix the streaming scroll update loop
 - `fix(messages)`: re-arm focus follow and scroll back to bottom after a manual scroll up
@@ -1735,11 +2138,13 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.7`，同步前端包配置、lockfile 与 Tauri 打包配置
 - `feat(files)`: 文件树根标题栏新增创建文件、创建文件夹与刷新操作，并显示当前 workspace root 标签，让根目录操作不再藏在上下文菜单里
 - `feat(diff)`: Git Diff 模式菜单恢复仓库切换入口，同时保留紧凑工具栏布局
 
 🔧 Improvements
+
 - `refactor(diff)`: Git 变更列表拆成可折叠的 staged / unstaged 分区，使用更轻的数量徽标、警示色修改标记与紧凑文件行，减少 diff 面板噪音
 - `refactor(app-shell)`: 将权限、Composer 偏好、desktop chrome、编辑器布局、搜索面板与 agent radar 编排拆入 `app-shell-parts`，降低主壳层大文件债务
 - `refactor(tauri)`: 将 `src/services/tauri.ts` 收敛为 facade，并按 commit message、email、file picker、menu、messaging、settings、skills、window、workspace config 等领域拆分 wrapper
@@ -1751,17 +2156,20 @@ English:
 - `docs(openspec)`: 补齐并归档近期 UI、消息、设置、性能、构建与运行时稳定性变更提案
 
 🐛 Fixes
+
 - `fix(desktop)`: 长回复完成恢复完整历史后保持聊天窗口定位在末尾，并让 Windows 标题栏拖拽在首次有效移动时立即触发
 - `fix(codex)`: 启动 / 后台检测改为仅解析 Codex CLI 元数据路径，避免打开应用时执行失效或被系统拦截的 CLI 并弹出 macOS 安全提示
 
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.7` across frontend package metadata, the lockfile, and Tauri bundle configuration
 - `feat(files)`: add create-file, create-folder, and refresh actions to the File Tree root header, with the active workspace root label visible
 - `feat(diff)`: restore Git repository switching through the Git Diff mode menu while keeping the compact toolbar layout
 
 🔧 Improvements
+
 - `refactor(diff)`: split Git changes into collapsible staged / unstaged sections with quieter count badges, warning-colored modified markers, and compact file rows
 - `refactor(app-shell)`: move access mode, Composer preference persistence, desktop chrome, editor layout, search palette, and agent radar orchestration into `app-shell-parts`
 - `refactor(tauri)`: turn `src/services/tauri.ts` into a facade and split wrappers by domain, including commit messages, email, file pickers, menu, messaging, settings, skills, window, and workspace config
@@ -1773,6 +2181,7 @@ English:
 - `docs(openspec)`: fill in and archive recent change proposals for UI, messages, settings, performance, build, and runtime-stability work
 
 🐛 Fixes
+
 - `fix(desktop)`: keep the chat view pinned to the bottom after long replies restore full history, and trigger Windows titlebar dragging on the first valid movement
 - `fix(codex)`: switch startup/background Codex detection to metadata-only path resolution so opening the app does not execute stale or blocked CLI binaries and trigger macOS security prompts
 
@@ -1783,16 +2192,19 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.6`，同步前端包配置与 Tauri 打包配置
 - `feat(sidebar)`: 一级导航新增「插件」入口（Puzzle 图标、默认置灰），点击弹出「即将开放」提示
 
 🔧 Improvements
+
 - `refactor(diff)`: 重构 Git 差异面板工具栏 —— 平铺 / 树形切换与历史入口收敛进模式下拉菜单，工具组改为常驻显示，不再依赖 hover 浮现
 - `refactor(diff)`: 提交区默认展开，文件 / 文件夹改用彩色文件树图标；diff.css 全面迁移到 shadcn 令牌并新增圆角阶梯
 - `refactor(thinking)`: 思考可见性写死常开，忽略下游上报，避免设置读取时机把它翻回关闭
 - `refactor(ui)`: 收敛对话与设置侧细节 —— 思考块移除标题图标、正文降噪，会话雷达历史默认折叠，侧栏标题 / 线程标题统一字重字号与颜色令牌
 
 🐛 Fixes
+
 - `fix(engine)`: 收到 result 后给 stderr 抽干加 2s 超时上限，避免逃逸进程组的后代（MCP server / Stop hook）持有继承的 stderr 写端导致回合卡在「生成中」
 - `fix(settings)`: 修复 Radix ScrollArea 宽内容导致设置整页右移，长文本改为内部滚动
 - `fix(diff)`: 消息内联 diff 去除 hunk 头（@@…@@）与自带边框，消除与外层 marker 叠成的双层边框噪音
@@ -1800,16 +2212,19 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.6` across frontend package metadata and Tauri bundle configuration
 - `feat(sidebar)`: add a “Plugins” entry to the primary navigation (Puzzle icon, disabled by default) that opens a “coming soon” notice on click
 
 🔧 Improvements
+
 - `refactor(diff)`: rework the Git diff panel toolbar — fold the flat/tree toggle and history entry into a mode dropdown, and keep the tool group always visible instead of hover-revealed
 - `refactor(diff)`: expand the commit area by default, switch files/folders to colored file-tree icons, and migrate diff.css fully to shadcn tokens with a new radius scale
 - `refactor(thinking)`: hardwire thinking visibility to always-on and ignore downstream reports so settings-read timing can’t flip it back off
 - `refactor(ui)`: tighten conversation and settings details — strip the thinking-block title glyph and soften its body, collapse the session radar history by default, and unify sidebar/thread title weight, size, and color tokens
 
 🐛 Fixes
+
 - `fix(engine)`: cap the post-result stderr drain at 2s so descendants that escape the process group (MCP server / Stop hook) holding an inherited stderr write end can’t stall the turn in “generating”
 - `fix(settings)`: fix the whole settings page shifting right on wide Radix ScrollArea content by scrolling long text internally instead
 - `fix(diff)`: drop the hunk header (@@…@@) and self border from the inline message diff to remove the double border stacked with the outer marker
@@ -1821,11 +2236,13 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.5`，同步前端包配置与 Tauri 打包配置
 - `feat(settings)`: 优化快捷键录入交互，并统一供应商面板配色
 - `feat(sidebar)`: 侧栏底部新增可点击的版本号标签
 
 🔧 Improvements
+
 - `refactor(app-shell)`: 从主顶栏移除分支切换与 worktree 重命名 UI
 - `refactor`: 重设计设置面板，并稳定空闲轮询渲染
 - `perf(conversation)`: 压制长对话流式渲染的 O(L²) 与全历史开销
@@ -1836,6 +2253,7 @@ English:
 - `refactor(diff)`: 收敛面板强调蓝到主题令牌，并压平多余内阴影
 
 🐛 Fixes
+
 - `fix(claude)`: 收到 result 后按宽限期结算回合，并强杀残留进程组
 - `fix`: 加固实时回合生命周期，并精修设置样式
 - `fix(panel-tabs)`: 面板不再因 live 状态强制外显，仅按激活 / 勾选常驻
@@ -1844,11 +2262,13 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.5` across frontend package metadata and Tauri bundle configuration
 - `feat(settings)`: refine the shortcut-recording interaction and unify provider panel colors
 - `feat(sidebar)`: add a clickable version tag at the bottom of the sidebar
 
 🔧 Improvements
+
 - `refactor(app-shell)`: remove the branch switcher and worktree rename UI from the MainHeader
 - `refactor`: redesign the settings panel and stabilize idle polling renders
 - `perf(conversation)`: suppress O(L²) and full-history overhead in long-conversation streaming rendering
@@ -1859,6 +2279,7 @@ English:
 - `refactor(diff)`: converge the panel accent blue to theme tokens and flatten redundant inner shadows
 
 🐛 Fixes
+
 - `fix(claude)`: settle the turn after receiving result within a grace period and force-kill leftover process groups
 - `fix`: harden the realtime turn lifecycle and refine settings styling
 - `fix(panel-tabs)`: stop panels from force-showing on live state; keep them resident only when active/checked
@@ -1871,6 +2292,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.4`，同步前端包配置与 Tauri 打包配置
 - 重做文件树面板，并新增可固定的右侧面板标签页
 - 点击即可在灯箱中打开延迟加载的 Claude 图片
@@ -1879,12 +2301,14 @@ English:
 - 新增锚点导航栏，用于在用户消息间快速跳转
 
 🐛 Fixes
+
 - 计划面板默认折叠，并在切换线程时保持折叠
 - 修复 `contain: strict` 导致滚动视口塌陷为 0px 的问题
 
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.4` across frontend package metadata and Tauri bundle configuration
 - rework file tree panel and add pinnable right-panel tabs
 - open deferred Claude images in the lightbox on click
@@ -1893,6 +2317,7 @@ English:
 - add anchor rail for jumping between user messages
 
 🐛 Fixes
+
 - keep the plan panel collapsed by default and on thread switch
 - stop `contain: strict` from collapsing scroll viewports to 0px
 
@@ -1903,6 +2328,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.3`，同步前端包配置与 Tauri 打包配置
 - `feat(models)`: 新增内置 Claude 模型目录，并支持覆盖优先级
 - `feat`: 以 ai-elements 风格重做上下文用量指示器
@@ -1910,17 +2336,20 @@ English:
 - `feat(skills)`: 新增 vercel-optimize 与 writing-guidelines 两个 agent 技能
 
 🔧 Improvements
+
 - `perf`: 暂停后台轮询，消除 idle 空闲渲染风暴
 - `perf`: 消除 O(L²) 流式合并开销，并保持重型依赖懒加载
 - `perf`: app-shell 根渲染时不再牵动重型子树重渲染
 - `perf`: 将 Composer 状态移出 app-shell 根，收敛渲染风暴
 
 🐛 Fixes
+
 - `fix(timeline)`: 改为重测已挂载行而非清空虚拟化尺寸缓存，减少时间线跳动
 
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.3` across frontend package metadata and Tauri bundle configuration
 - `feat(models)`: add a builtin Claude model catalog with override precedence
 - `feat`: rework the context-usage indicator with an ai-elements style
@@ -1928,12 +2357,14 @@ English:
 - `feat(skills)`: add the vercel-optimize and writing-guidelines agent skills
 
 🔧 Improvements
+
 - `perf`: pause background polling to cut idle render storms
 - `perf`: eliminate O(L²) streaming-merge overhead and keep heavy vendors lazy
 - `perf`: stop heavy subtrees from re-rendering on every app-shell root render
 - `perf`: move composer state out of the app-shell root to tame render storms
 
 🐛 Fixes
+
 - `fix(timeline)`: remeasure mounted rows instead of wiping the virtualizer size cache to reduce timeline jumpiness
 
 ---
@@ -1943,6 +2374,7 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.2`，同步前端包配置与 Tauri 打包配置
 - `feat(ui)`: 迁移到 shadcn 默认 zinc 主题并统一组件库到 Radix，消息、Composer 与设置面板整体换肤
 - `feat(composer)`: 新增分支徽章，并打磨输入框与消息时间线观感
@@ -1952,6 +2384,7 @@ English:
 - `feat(menu)`: 新增“切换开发者工具”菜单项
 
 🔧 Improvements
+
 - `refactor(messages)`: 工具块整体迁移到 shadcn Marker 折叠外壳，turn boundary 改用 Marker 分隔条，尺寸对齐官方规格
 - `refactor(messages)`: 抽取代码块语言徽标与复制按钮为共享组件，文件变更统一渲染为每文件紧凑行
 - `refactor(composer)`: 将权限模式与推理深度上提到主行，工具表面统一收纳进“+”下拉菜单，重构 composer 选择器并移除首页虚拟化
@@ -1962,6 +2395,7 @@ English:
 - `refactor(i18n)`: 拆分 browserAgent 语言包到 zh.part8
 
 🐛 Fixes
+
 - `fix(build)`: 将 DMG 卷名改为 `ccgui`，修复 macOS 26 打包 EPERM 报错
 - `fix(markdown)`: 补齐 HTML 序列化依赖声明
 - `fix(messages)`: 优化 Mermaid 卡片操作按钮
@@ -1970,6 +2404,7 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.2` across frontend package metadata and Tauri bundle configuration
 - `feat(ui)`: migrate to the shadcn default zinc theme and unify the component library on Radix, re-skinning messages, the composer, and settings panels
 - `feat(composer)`: add a branch badge and polish the input box and message timeline
@@ -1979,6 +2414,7 @@ English:
 - `feat(menu)`: add a “Toggle Developer Tools” menu item
 
 🔧 Improvements
+
 - `refactor(messages)`: migrate tool blocks to the shadcn Marker collapsible shell, switch turn boundaries to a Marker divider, and align sizing with the official spec
 - `refactor(messages)`: extract the code-block language badge and copy button into shared components, and render file changes as compact per-file rows
 - `refactor(composer)`: surface permission mode and reasoning depth in the primary row, consolidate tool surfaces into a “+” dropdown menu, and rework the composer selector while removing home-page virtualization
@@ -1989,6 +2425,7 @@ English:
 - `refactor(i18n)`: split the browserAgent locale into zh.part8
 
 🐛 Fixes
+
 - `fix(build)`: rename the DMG volume to `ccgui` to fix EPERM packaging failures on macOS 26
 - `fix(markdown)`: add the missing HTML serialization dependency declaration
 - `fix(messages)`: refine the Mermaid card action buttons
@@ -2001,14 +2438,17 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.1`，同步前端包配置与 Tauri 打包配置
 
 🔧 Improvements
+
 - `feat(windows)`: 修复 Windows 平台 Claude / Codex 内置技能的 argv 传输边界，消除注入链路历史污染，让内置技能注入与命令包装在 Windows 下更稳定
 - `refactor(codex)`: 将 `resolve_default_codex_home` 收敛到 home 子模块，理清 Codex home 解析路径
 - `fix(codex)`: 收敛磁盘会话失效提示，减少无谓的失效告警
 
 🐛 Fixes
+
 - `fix(claude)`: 修复 Windows 下 stream-json 空 prompt 占位问题，避免空提示导致的流式启动异常
 - `fix(stream)`: 修复 Windows 对话流式输出回归
 - `fix(codex)`: 修复 Windows 内置技能启动回退
@@ -2019,14 +2459,17 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.1` across frontend package metadata and Tauri bundle configuration
 
 🔧 Improvements
+
 - `feat(windows)`: fix the argv transport boundary for Claude / Codex curated skills on Windows, removing injection-chain history pollution so curated-skill injection and command wrapping stay reliable on Windows
 - `refactor(codex)`: move `resolve_default_codex_home` into the home submodule to clarify Codex home resolution
 - `fix(codex)`: converge disk-session invalidation notices to reduce noisy staleness warnings
 
 🐛 Fixes
+
 - `fix(claude)`: fix the stream-json empty-prompt placeholder on Windows so empty prompts no longer break streaming startup
 - `fix(stream)`: fix a Windows conversation streaming-output regression
 - `fix(codex)`: fix Windows curated-skill startup fallback
@@ -2041,9 +2484,11 @@ English:
 中文：
 
 ✨ Features
+
 - 升级应用版本号到 `0.6.0`，同步前端包配置、lockfile 与 Tauri 打包配置
 
 🔧 Improvements
+
 - `fix(messages)`: 稳定长对话 streaming 时间线滚动，保留已水合的 heavy row，并减少虚拟列表与底部跟随滚动之间的拉扯
 - `fix(messages)`: 文件链接右键菜单改为浮到页面顶层渲染，避免被消息容器或 composer 遮挡
 - `fix(messages)`: 优化用户气泡复制入口，避免复制按钮干扰消息阅读节奏
@@ -2052,6 +2497,7 @@ English:
 - `docs(trellis)`: 记录内置技能加载修复会话，补齐本轮修复的工作记录
 
 🐛 Fixes
+
 - `fix(markdown)`: 移除全局行内代码复制入口，修复版本记录等 Markdown 阅读面出现大量复制按钮的 UI 回归
 - `fix(git)`: 非 Git 工作区不再触发 Git Diff 扫描和内部命令失败提示，并将 Git Diff 状态检测统一为 15 秒
 - `fix(git)`: 修复右侧 Git Diff 统计与消息侧统计不一致的问题，并让过万 diff 数字保持可见
@@ -2060,9 +2506,11 @@ English:
 English:
 
 ✨ Features
+
 - Bump the app version to `0.6.0` across frontend package metadata, lockfile, and Tauri bundle configuration
 
 🔧 Improvements
+
 - `fix(messages)`: stabilize long-conversation streaming timeline scrolling by retaining hydrated heavy rows and reducing virtualizer/bottom-follow scroll contention
 - `fix(messages)`: render file-link context menus at the page top layer so they are not clipped by message containers or the composer
 - `fix(messages)`: refine the user-bubble copy entry so copy controls no longer distract from message reading
@@ -2071,6 +2519,7 @@ English:
 - `docs(trellis)`: record the curated-skill loading fix session for traceability
 
 🐛 Fixes
+
 - `fix(markdown)`: remove the global inline-code copy affordance that polluted Markdown reading surfaces such as Release Notes with excessive copy buttons
 - `fix(git)`: stop Git Diff scans and internal command failure notices for non-Git workspaces, and standardize Git Diff status polling at 15 seconds
 - `fix(git)`: fix mismatched right-panel Git Diff stats versus message-side stats, and keep very large diff counts visible
@@ -2083,6 +2532,7 @@ English:
 中文：
 
 ✨ Features
+
 - `feat(realtime)`: 阶段性收口工具调用卡顿治理
 - `feat(curated-skills)`: 完成精选技能收口
 - `feat(layout)`: 外置 active canvas selector 状态
@@ -2091,6 +2541,7 @@ English:
 - 效果: 设置里的内置 `Lazy senior dev` 默认开启，同时保留用户手动关闭语义
 
 🔧 Improvements
+
 - `refactor(composer)`: 提取 `useCallback` 块解析逻辑为可复用函数
 - `refactor(messages)`: 删除用户气泡吸顶条
 - `perf(canvas)`: 隔离实时幕布与交互控制区
@@ -2099,6 +2550,7 @@ English:
 - `docs(openspec)` 与 `chore(openspec)`: 归档若干已验证提案（fast-markdown、codex-provider、opencode gemini cli、Codex disk、fix-history-canvas-lightweight-spacing）
 
 🐛 Fixes
+
 - `fix(settings)`: 补充性能诊断说明文案
 - `fix(codex)`: 恢复命令写文件变更回放
 - `fix(codex)`: 稳定 provider 首发会话初始化
@@ -2125,6 +2577,7 @@ English:
 English:
 
 ✨ Features
+
 - `feat(realtime)`: phase-in containment for tool-call jank
 - `feat(curated-skills)`: close curated-skills workstream
 - `feat(layout)`: externalize active canvas selector state
@@ -2133,6 +2586,7 @@ English:
 - Set built-in `Lazy senior dev` enabled by default in settings while preserving manual opt-out semantics
 
 🔧 Improvements
+
 - `refactor(composer)`: extract reusable `useCallback` block-parsing helper
 - `refactor(messages)`: remove sticky top bubble in message bubbles
 - `perf(canvas)`: isolate realtime canvas from interaction control area
@@ -2141,6 +2595,7 @@ English:
 - `docs/chore(openspec)`: archive several validated OpenSpec proposals (fast-markdown, codex-provider, opencode gemini cli, Codex disk, fix-history-canvas-lightweight-spacing)
 
 🐛 Fixes
+
 - `fix(settings)`: add performance-diagnostic wording
 - `fix(codex)`: restore command-file-change replay
 - `fix(codex)`: stabilize provider first-session initialization
@@ -2171,11 +2626,13 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Mermaid 图表全屏查看能力，支持消息与文件中的 Mermaid 图表在独立查看器中展开
 - 新增图片全屏与消息目录（message outline）能力，优化 Markdown 图片与消息章节的检视体验
 - 升级应用版本号到 `0.5.12`，同步前端包配置与 Tauri 配置
 
 🔧 Improvements
+
 - 收口 Markdown 渲染性能优化提案，补齐 file preview 与消息 markdown 流式渲染性能边界
 - 归档 Mermaid 全屏与图片全屏相关 OpenSpec 变更提案，收束提案与实现交付边界
 - 优化 release CI Rust 编译缓存，降低发布流水线构建成本
@@ -2186,6 +2643,7 @@ English:
 - 修复 Kanban 与 Threads 国际化/元素查找稳定性，提升相关测试可靠性
 
 🐛 Fixes
+
 - 修复 Codex 会话中 `conversation not found` 时未触发恢复问题
 - 修复供应商模型目录与 Codex 刷新断联，提升模型选择与刷新链路稳定性
 - 修复 Composer 与 Codex 恢复绑定细节，降低并行恢复场景中的会话状态漂移
@@ -2194,11 +2652,13 @@ English:
 English:
 
 ✨ Features
+
 - Add Mermaid chart fullscreen viewing so Mermaid diagrams in messages and files can be opened in a dedicated fullscreen viewer
 - Add image fullscreen and message outline support to improve inspection of markdown images and section navigation
 - Bump app version to `0.5.12` across frontend package metadata and Tauri configuration
 
 🔧 Improvements
+
 - Close the markdown rendering performance proposal to document and align file preview and message markdown streaming performance boundaries
 - Archive OpenSpec change proposals for Mermaid and image fullscreen features to tighten proposal-to-delivery traceability
 - Optimize release CI Rust cache to reduce pipeline build overhead
@@ -2209,6 +2669,7 @@ English:
 - Fix Kanban/Threads internationalization and UI element lookup stability to improve test reliability
 
 🐛 Fixes
+
 - Fix session recovery when `conversation not found` occurs in Codex flows
 - Fix provider model-catalog and Codex refresh disconnection to improve model selection refresh reliability
 - Fix provider recovery binding details in Composer/Codex to reduce session drift in recovery flows
@@ -2221,6 +2682,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 v0.5.11 性能证据门禁，覆盖 cold start、Composer、long list、realtime、runtime evidence 与历史基线归档，让发布前性能状态具备可审计的证据闭环
 - 新增 renderer 诊断导出与 turn trace 校准链路，将 renderer 指标、realtime runtime evidence 和 turn trace summary 接入统一性能证据报告
 - 新增 Codex 首响应与首包延迟证据细分，覆盖 turn start ack、首个流式增量、ack 后首包、首文本等待、assistant item 首响应与首文本前运行阶段，帮助定位流式输出慢点
@@ -2229,6 +2691,7 @@ English:
 - 新增 Claude 供应商模型拉取能力，可从当前 API URL 与 API Key 拉取兼容端点模型列表，并作为 Haiku/Sonnet/Opus 映射输入建议
 
 🔧 Improvements
+
 - 升级应用版本号到 `0.5.11`，同步前端包配置与 Tauri 配置
 - 收口 v0.5.10 性能闭环文档，补齐 runtime evidence gates、验证记录与 OpenSpec 任务状态
 - 锁定 `turn completed` 写出 trace summary 的测试覆盖，减少 realtime trace 回归时的证据缺口
@@ -2240,6 +2703,7 @@ English:
 - 提取 Git 行标记重置逻辑并清理未使用依赖，降低 Git 视图状态维护复杂度
 
 🐛 Fixes
+
 - 修复消息流式结束窗口问题，并升级 React 运行时，减少消息结束阶段的状态漂移
 - 修复 Claude thinking 状态上报不稳的问题，让 AppShell 对运行态思考状态的展示更可靠
 - 修复 Codex 默认配置首轮恢复与冷启动首发问题，降低首次启动或默认 provider 场景下的响应丢失风险
@@ -2254,6 +2718,7 @@ English:
 English:
 
 ✨ Features
+
 - Add the v0.5.11 performance evidence gates across cold start, Composer, long lists, realtime, runtime evidence, and historical baseline archiving so release performance has an auditable evidence loop
 - Add renderer diagnostics export and turn-trace calibration, connecting renderer metrics, realtime runtime evidence, and turn trace summaries into the unified performance evidence report
 - Add finer-grained Codex first-response and first-packet latency evidence across turn-start ack, first streaming delta, post-ack first packet, first-text wait, assistant-item first response, and pre-first-text runtime phases to make slow streaming paths easier to locate
@@ -2262,6 +2727,7 @@ English:
 - Add Claude provider model fetching from the current API URL and API key, surfacing compatible endpoint models as suggestions for Haiku/Sonnet/Opus mappings
 
 🔧 Improvements
+
 - Bump app version to `0.5.11` across frontend package metadata and Tauri configuration
 - Close the v0.5.10 performance loop documentation with updated runtime evidence gates, verification records, and OpenSpec task status
 - Lock test coverage for writing `turn completed` trace summaries to reduce evidence gaps during realtime trace regressions
@@ -2273,6 +2739,7 @@ English:
 - Extract Git line-marker reset logic and remove unused dependencies to reduce Git view state-maintenance complexity
 
 🐛 Fixes
+
 - Fix the message streaming completion window and upgrade the React runtime to reduce state drift when streamed messages finish
 - Fix unstable Claude thinking-state reporting so AppShell displays runtime thinking state more reliably
 - Fix Codex default-configuration first-turn recovery and cold-start first dispatch, reducing response-loss risk during first launch or default-provider flows
@@ -2291,11 +2758,13 @@ English:
 中文：
 
 🔧 Improvements
+
 - 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
 - 补齐近期测试稳定性批次，覆盖 Composer rewind 确认、慢 git 标记编辑器挂载、聊天流渲染隔离、WebService token 生成、router lazy act 边界、Suspense host-task teardown 与 flush 等场景，降低测试串扰与误报
 - 补齐近期 OpenSpec 稳定性提案优化与归档，覆盖聊天流渲染隔离、AppShell 运行态稳定性、长运行客户端运行时、稳定性归档文档等条目
 
 🐛 Fixes
+
 - 修复 Composer 文件引用深层路径搜索异常，恢复深层目录文件在 Composer 输入中的可被检索与引用能力
 - 修复文件树首屏滚动容器布局问题，让首屏目录树展示与滚动行为回到稳定状态
 - 修复父组件测试中 Markdown 懒加载隔离问题，降低消息组件 Markdown 懒加载在父级测试上下文中的串扰与不稳定
@@ -2311,11 +2780,13 @@ English:
 English:
 
 🔧 Improvements
+
 - Bump app version to `0.5.10` across frontend package metadata and Tauri configuration
 - Add a recent test-stability batch covering Composer rewind confirmation, slow git marker editor mount, chat-stream render isolation, WebService token generation, router lazy act boundaries, and Suspense host-task teardown and flush to reduce cross-talk and false positives
 - Optimize and archive recent OpenSpec stability proposals covering chat-stream render isolation, AppShell runtime stability, long-running client runtime, and stability archiving documentation
 
 🐛 Fixes
+
 - Fix Composer deep-path file reference search so files inside deeply nested directories can be searched and referenced again from the Composer input
 - Fix file-tree first-paint scroll container layout to restore stable initial render and scrolling of the directory tree
 - Fix Markdown lazy-loading isolation in parent component tests to reduce cross-talk and flakiness between message components and Markdown lazy boundaries
@@ -2331,9 +2802,11 @@ English:
 中文：
 
 🔧 Improvements
+
 - 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复 Composer 文件引用深层路径搜索异常，恢复深层目录文件在 Composer 输入中的可被检索与引用能力
 - 修复文件树首屏滚动容器布局问题，让首屏目录树展示与滚动行为回到稳定状态
 - 修复父组件测试中 Markdown 懒加载隔离问题，降低消息组件 Markdown 懒加载在父级测试上下文中的串扰与不稳定
@@ -2341,9 +2814,11 @@ English:
 English:
 
 🔧 Improvements
+
 - Bump app version to `0.5.10` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix Composer deep-path file reference search so files inside deeply nested directories can be searched and referenced again from the Composer input
 - Fix file-tree first-paint scroll container layout to restore stable initial render and scrolling of the directory tree
 - Fix Markdown lazy-loading isolation in parent component tests to reduce cross-talk and flakiness between message components and Markdown lazy boundaries
@@ -2355,6 +2830,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 v0.5.9 发布级性能优化批次，覆盖 bundle budget、启动编排、CSS 分片加载、Markdown runtime 懒加载、文件预览依赖懒加载、搜索索引与 bounded hydration 等关键路径
 - 新增运行时性能证据门禁与基线归档能力，补齐 cold start、Composer、long list、realtime 和 runtime evidence 的历史记录与聚合报告
 - 新增 realtime trace correlation gate，让 Claude 事件通道、运行时事件和前端状态变化具备可追踪的关联证据
@@ -2363,6 +2839,7 @@ English:
 - 升级应用版本号到 `0.5.9`，同步前端包配置、Tauri 配置与发布说明入口
 
 🔧 Improvements
+
 - 优化客户端启动与 bundle chunking 策略，拆分 lazy views、feature style loaders 和 app shell lazy boundaries，降低首屏加载与无关功能预加载压力
 - 优化文件编辑输入延迟与文件打开渲染调度，补齐 typing diagnostics、外部变更同步测试和文件打开缓存刷新链路
 - 优化 Markdown progressive reveal 与 Full Markdown Runtime 加载边界，减少大型 Markdown、数学公式、代码块和文件链接渲染时的阻塞
@@ -2373,6 +2850,7 @@ English:
 - 优化测试覆盖，补齐 bundle chunking、runtime evidence report、file typing latency、lazy Markdown runtime、message reconnect、message fork 文件保护和 i18n 回归测试
 
 🐛 Fixes
+
 - 修复并行对话运行时残留 P0 问题，减少多会话并行执行后 runtime 状态、事件订阅和前台残留漂移
 - 修复 Claude realtime 事件通道兼容问题，稳定事件解析、重连测试和跨通道运行时状态同步
 - 修复文件打开缓存内容未刷新的问题，避免外部变更或重新打开文件时展示旧内容
@@ -2385,6 +2863,7 @@ English:
 English:
 
 ✨ Features
+
 - Add the v0.5.9 release-grade performance batch across bundle budgets, startup orchestration, CSS chunk loading, lazy Markdown runtime loading, lazy file-preview dependencies, search indexing, and bounded hydration
 - Add runtime performance evidence gates and baseline archiving for cold start, Composer, long lists, realtime flows, and runtime evidence aggregation
 - Add the realtime trace correlation gate so Claude event channels, runtime events, and frontend state changes can be traced with correlated evidence
@@ -2393,6 +2872,7 @@ English:
 - Bump app version to `0.5.9` across frontend package metadata, Tauri configuration, and release-note entrypoints
 
 🔧 Improvements
+
 - Improve client startup and bundle chunking by splitting lazy views, feature style loaders, and app-shell lazy boundaries to reduce first-screen and unrelated feature-loading pressure
 - Improve file-editor typing latency and file-open rendering scheduling with typing diagnostics, external-sync tests, and refreshed file-open cache behavior
 - Improve Markdown progressive reveal and Full Markdown Runtime loading boundaries to reduce blocking during large Markdown, math, code block, and file-link rendering
@@ -2403,6 +2883,7 @@ English:
 - Improve test coverage for bundle chunking, runtime evidence reports, file typing latency, lazy Markdown runtime, message reconnect, message-fork file protection, and i18n regressions
 
 🐛 Fixes
+
 - Fix P0 parallel-conversation runtime residue, reducing runtime-state, event-subscription, and foreground-residue drift after parallel session execution
 - Fix Claude realtime event-channel compatibility, stabilizing event parsing, reconnect coverage, and cross-channel runtime state synchronization
 - Fix stale file-open cache content so external changes and reopened files no longer display outdated content
@@ -2419,6 +2900,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Codex provider 作用域运行时与会话绑定能力，支持按 provider profile 启动、恢复、扫描和归属会话，让多 provider 的 session catalog 与 runtime 状态可以独立管理
 - 新增 Sidebar Codex provider 选择、展示和供应商标签开关，支持在会话列表、Composer 和恢复路径中持续显示当前 provider 上下文
 - 新增 Session Activity 轮次产物语义 diff 与证据审查能力，支持更深入地比较代码变化、归纳意图变化并沉淀到工作区活动视图
@@ -2427,6 +2909,7 @@ English:
 - 新增客户端运行态 P0 收口与任务运行详情视图，让 workflow runtime、Task Center run surface 和消息/首页运行态状态进入统一模型
 
 🔧 Improvements
+
 - 优化 Project Map 文件关系与 API Contract 视图，打磨阅读路径、关系定位、Java 关系精度、API endpoint 分组、证据面板和关系工作区拆分
 - 优化客户端模块边界，拆分 app shell、messages、Project Map、file tree、file view、layout、sidebar 和 session runtime 等大文件，降低后续维护和大文件门禁压力
 - 优化 Codex provider home 会话恢复链路，补齐 provider-scoped session launch、sidebar state parity、workspace catalog projection 和契约文档
@@ -2437,6 +2920,7 @@ English:
 - 升级应用版本号到 `0.5.8`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复 Codex 磁盘会话 stale thread 重试与 provider home 目录扫描恢复问题，降低历史会话恢复失败和归属丢失风险
 - 修复 Sidebar 兼容 Codex 会话归属恢复错误，并稳定子会话移动状态收敛，避免侧栏会话归类和移动状态漂移
 - 修复 Composer 当前 Codex provider 标签展示问题，让用户在输入与恢复上下文中能识别实际 provider
@@ -2448,6 +2932,7 @@ English:
 English:
 
 ✨ Features
+
 - Add provider-scoped Codex runtime and session binding so provider profiles can launch, recover, scan, and own sessions independently across the session catalog and runtime state
 - Add Sidebar Codex provider selection, provider display, and vendor-label controls so session lists, Composer, and recovery flows keep the active provider context visible
 - Add Session Activity semantic diff review for turn artifacts, enabling deeper code-change comparison, intent-change summaries, and auditable workspace activity evidence
@@ -2456,6 +2941,7 @@ English:
 - Add the client runtime P0 closure and task run detail surface, aligning workflow runtime, Task Center run surfaces, and home/message runtime state under one model
 
 🔧 Improvements
+
 - Improve Project Map file-relationship and API Contract views by polishing read paths, relationship positioning, Java relationship precision, endpoint grouping, evidence panels, and workspace decomposition
 - Improve client module boundaries by splitting large app shell, messages, Project Map, file tree, file view, layout, sidebar, and session runtime surfaces to reduce maintenance and large-file gate pressure
 - Improve Codex provider-home session recovery with provider-scoped session launch, sidebar state parity, workspace catalog projection, and contract documentation
@@ -2466,6 +2952,7 @@ English:
 - Bump app version to `0.5.8` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix Codex disk-session stale-thread retry and provider-home directory scan recovery, reducing historical session recovery failures and ownership loss
 - Fix Sidebar compatibility with Codex session ownership recovery and stabilize child-session move-state convergence to avoid session classification and move-state drift
 - Fix Composer's current Codex provider label display so users can identify the active provider in input and recovery contexts
@@ -2481,12 +2968,14 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Project Map 文件关系扫描看板与关系图谱工作台，支持关系扫描、关系聚焦、文件导航、候选治理和图谱化浏览，让项目结构理解从节点清单升级为可审计的关系视图
 - 新增 Project Map API Contract View，支持接口契约发现、API 关系投影和契约视图展示，让前后端接口、调用关系和结构证据可以进入统一图谱上下文
 - 新增 Intent Canvas 与 Project Canvas 代码关系导入链路，支持从文件关系图生成画布节点、审计卡片和 Semantic Context Packet，让上下文整理可以沉淀为可复用的任务画布
 - 新增 Markdown Fast Preview 渲染链路和大文件专用读取路径，通过快速解析、worker 渲染、outline 提取和安全清洗提升大文档预览体验
 
 🔧 Improvements
+
 - 优化 Project Map 文件关系图谱交互，收紧 UNKNOWN 关系节点聚焦、视图收起语义、滚轮缩放、关系扫描和文件导航完整性边界
 - 优化 Markdown 预览渲染架构，补齐 fast renderer 的缓存、profile 解析、heavy blocks、heading id、source line 标记和 worker ready 边界
 - 优化客户端渲染稳定性防线，降低高压场景下 renderer 状态漂移、重复渲染和 selected session hooks 冗余更新带来的交互风险
@@ -2495,6 +2984,7 @@ English:
 - 升级应用版本号到 `0.5.7`，同步前端包配置、Tauri 配置与 Rust Cargo 配置
 
 🐛 Fixes
+
 - 修复 Project Map 文件关系扫描、聚焦视图、UNKNOWN 关系节点、文件导航完整性和视图收起语义问题，减少图谱浏览中的断链、误聚焦和交互漂移
 - 修复 Intent Canvas 代码关系导入与 Excalidraw 选择状态稳定性问题，避免导入画布后选择态异常或关系节点投影不稳
 - 修复客户端 renderer 高压场景稳定性问题，并减少 selected session hooks 的重复 re-render，降低会话切换和长时间运行时的 UI 抖动
@@ -2506,12 +2996,14 @@ English:
 English:
 
 ✨ Features
+
 - Add the Project Map file-relationship scan dashboard and relationship graph workbench with scanning, focus, file navigation, candidate governance, and graph-first browsing for auditable structure discovery
 - Add the Project Map API Contract View with contract discovery, API relationship projection, and contract visualization so frontend/backend interfaces and evidence can share one graph context
 - Add Intent Canvas and Project Canvas code-relationship import flows with canvas nodes, audit cards, and Semantic Context Packets so organized context can become reusable task canvases
 - Add the Markdown Fast Preview rendering path and dedicated large-file reader with fast parsing, worker rendering, outline extraction, and sanitization for large-document previews
 
 🔧 Improvements
+
 - Improve Project Map relationship-graph interactions by tightening UNKNOWN relation focus, collapsed-view semantics, wheel zoom behavior, relation scanning, and file-navigation completeness
 - Improve the Markdown preview architecture with fast-renderer cache handling, profile resolution, heavy-block detection, heading IDs, source-line markers, and worker-ready boundaries
 - Improve client renderer stability under pressure, reducing state drift, redundant renders, and selected-session hook churn during heavy runtime scenarios
@@ -2520,6 +3012,7 @@ English:
 - Bump app version to `0.5.7` across frontend package metadata, Tauri configuration, and Rust Cargo configuration
 
 🐛 Fixes
+
 - Fix Project Map relationship scanning, focus view, UNKNOWN relation nodes, file-navigation completeness, and collapsed-view semantics to reduce broken graph jumps and interaction drift
 - Fix Intent Canvas code-relationship import and Excalidraw selection-state stability so imported canvas relationships remain stable after projection
 - Fix client renderer stability under pressure and reduce redundant selected-session hook re-renders during session switching and long-running UI flows
@@ -2535,12 +3028,14 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Project Map 查询关联工作台，支持统一查询、近期活动、Advisor Hints、关联解释、快速过滤和本地历史，让结构图保持主舞台的同时可以折叠查看证据与活动上下文
 - 新增 Project Map 图上高亮、节点聚焦和证据反查体验，用户可以从查询结果、活动记录或证据 chip 快速回到对应结构节点，减少在图谱、详情和证据面板之间来回定位的成本
 - 新增工作区会话拉取模式切换，支持在默认相关会话模式与当前工作区模式之间选择，让会话列表可以按更窄范围拉取和分页
 - 新增会话归因模式设置项，在 Session Management 中提供单选切换、当前生效模式提示和保存失败反馈，让会话范围配置更清晰可控
 
 🔧 Improvements
+
 - 优化运行时交互性能，收紧会话列表、工作区目录、Composer 适配层和状态面板的数据流，降低长列表、恢复和多会话场景下的卡顿
 - 优化长列表虚拟化与会话恢复路径，减少线程列表、消息时间线和工作区 session catalog 在大量数据下的重复渲染与阻塞式计算
 - 优化 Composer 双视图适配和状态面板数据聚合，让输入区、会话活动和运行时状态在高频更新时保持更稳定的交互响应
@@ -2551,6 +3046,7 @@ English:
 - 升级应用版本号到 `0.5.6`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复 WebView2 下消息时间线图片造成的内存压力问题，通过消息媒体块与时间线虚拟化边界降低大量图片场景的内存占用和滚动风险
 - 修复 rich content 图片消息在长会话中触发过高内存占用的问题，避免大量图片、媒体块和虚拟列表组合时放大 WebView2 渲染压力
 - 修复 Claude 启动时提示词进入命令行参数的问题，改为通过更安全的消息内容链路传递，降低 shell escaping 异常和敏感提示词暴露风险
@@ -2559,12 +3055,14 @@ English:
 English:
 
 ✨ Features
+
 - Add a Project Map query and association workbench with unified search, recent activity, Advisor Hints, association explanations, quick filters, and local history while keeping the structure graph as the main workspace
 - Add Project Map graph highlighting, node focus, and evidence backtracking so users can jump from search results, activity records, or evidence chips back to the matching structure node
 - Add a workspace session attribution mode setting so session lists can switch between the default related-session scope and a narrower current-workspace scope
 - Add Session Management controls for attribution mode selection, active-mode hints, and save-failure feedback so session scope configuration is easier to understand and recover
 
 🔧 Improvements
+
 - Improve runtime interaction performance by tightening data flow across the thread list, workspace catalog, Composer adapter, and status panel, reducing jank in long-list, recovery, and multi-session scenarios
 - Improve long-list virtualization and session recovery paths to reduce repeated rendering and blocking computation across thread lists, message timelines, and workspace session catalogs
 - Improve Composer dual-view adaptation and status-panel aggregation so input, session activity, and runtime status remain responsive during high-frequency updates
@@ -2575,6 +3073,7 @@ English:
 - Bump app version to `0.5.6` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix WebView2 message-timeline image memory pressure by tightening media-block and timeline virtualization boundaries for image-heavy conversations
 - Fix rich-content image messages causing excessive memory pressure in long conversations, especially when many images, media blocks, and virtualized rows are rendered together
 - Fix Claude launch prompts leaking into command-line arguments by routing prompt content through a safer message-content path, reducing shell-escaping failures and sensitive prompt exposure risk
@@ -2587,12 +3086,14 @@ English:
 中文：
 
 ✨ Features
+
 - 新增文件树复制、粘贴与重命名能力，让工作区文件管理可以在应用内完成更多常用操作
 - 新增 Browser Agent 上下文关联与证据桥接链路，将浏览器 dock、页面上下文和任务中心证据串联到同一条可审计路径
 - 新增 Agent Task 任务编排中心运行队列，支持浏览器代理与后续自动化任务进入统一队列管理
 - 重塑 Project Map 图谱优先知识地图体验，让知识地图以图谱浏览、证据核对和候选整理作为主要交互入口
 
 🔧 Improvements
+
 - 优化 Browser Dock Phase 3 OpenSpec 提案文档与中文可读性，明确浏览器上下文、证据桥接和任务编排的后续边界
 - 优化大文件治理基线，清理历史硬债并收紧构建产物、运行态文件和仓库治理噪音的边界
 - 优化 Project Map 面板批量测试隔离和视图交互门禁，降低图谱整理体验在测试与运行时的状态漂移
@@ -2600,6 +3101,7 @@ English:
 - 升级应用版本号到 `0.5.5`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复文件树删除后残留节点未清理的问题，避免已删除文件或目录继续停留在树视图中
 - 修复文件树 ignored 文件夹置灰展示问题，让忽略状态在文件浏览中更准确可见
 - 修复多 WebView 外部拖拽断链和主 WebView 拖拽转发问题，恢复 Composer 与文件入口的拖拽交互
@@ -2612,12 +3114,14 @@ English:
 English:
 
 ✨ Features
+
 - Add file-tree copy, paste, and rename actions so more workspace file-management flows can be completed inside the app
 - Add Browser Agent context linking and evidence bridging so browser dock state, page context, and Task Center evidence share an auditable path
 - Add the Agent Task orchestration queue for managing Browser Agent work and future automation tasks through a unified queue
 - Rework Project Map into a graph-first knowledge-map experience centered on graph browsing, evidence review, and candidate organization
 
 🔧 Improvements
+
 - Improve the Browser Dock Phase 3 OpenSpec proposal and Chinese readability, clarifying follow-up boundaries for browser context, evidence bridging, and task orchestration
 - Improve large-file governance baselines by cleaning up historical debt and tightening boundaries for build artifacts, runtime files, and repository-governance noise
 - Improve Project Map bulk test isolation and view-interaction gates to reduce state drift across graph organization tests and runtime behavior
@@ -2625,6 +3129,7 @@ English:
 - Bump app version to `0.5.5` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix stale file-tree nodes remaining after delete operations so removed files or directories no longer stay visible
 - Fix ignored-folder dimming in the file tree so ignore state is represented more accurately while browsing files
 - Fix external drag-and-drop across multiple WebViews and restore main WebView drag forwarding for Composer and file entrypoints
@@ -2641,6 +3146,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Codex 结构化启动配置预览能力，在 Settings 中集中展示启动命令、sandbox、approval、model、reasoning effort 和环境覆盖信息
 - 新增 Codex doctor / launch profile 后端查询链路，让前端配置面板可以读取实际启动配置而不是依赖静态展示
 - 新增关闭当前会话快捷键，支持通过全局 shortcut 快速关闭当前 workspace session tab
@@ -2654,6 +3160,7 @@ English:
 - 新增原生窗口透明度设置，让自定义外观可以控制 desktop window 的透明呈现
 
 🔧 Improvements
+
 - 优化 Project Map 稳定性，收紧数据集补全、生成 worker、交互布局、节点证据和任务抽屉的状态边界
 - 优化 Project Map 结构化模型输出解析，将通用 normalization 能力抽离为共享服务，降低模型返回形态漂移导致的整理失败
 - 优化 Markdown 预览渲染与交互状态，增强文件刷新、GitHub 风格 Markdown、公式和图表预览的测试覆盖
@@ -2674,6 +3181,7 @@ English:
 - 升级应用版本号到 `0.5.4`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复核心错误日志缺少本地持久化的问题，让 renderer/runtime 异常可以被后续 diagnostics 查询复盘
 - 修复三证结算状态缺少干跑与查询对账入口的问题，降低状态漂移时难以定位的风险
 - 修复用户输入请求跳过后未正确结算的问题，避免已跳过问题继续停留在 pending 状态
@@ -2698,6 +3206,7 @@ English:
 English:
 
 ✨ Features
+
 - Add a structured Codex launch-profile preview in Settings for command, sandbox, approval, model, reasoning effort, and environment overrides
 - Add Codex doctor / launch-profile backend query support so the configuration panel can read effective launch facts instead of showing static metadata
 - Add a close-current-session shortcut for quickly closing the active workspace session tab
@@ -2711,6 +3220,7 @@ English:
 - Add native window transparency settings so custom appearance presets can control desktop window translucency
 
 🔧 Improvements
+
 - Improve Project Map stability by tightening dataset completion, generation worker, interactive layout, node evidence, and task drawer state boundaries
 - Improve Project Map structured model-output parsing by extracting shared normalization support and reducing failures from drifting model response shapes
 - Improve Markdown preview rendering and interaction state with stronger coverage for refresh behavior, GitHub-style Markdown, math, and diagram previews
@@ -2731,6 +3241,7 @@ English:
 - Bump app version to `0.5.4` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix missing local persistence for core error logs so renderer/runtime failures can be reviewed through diagnostics later
 - Fix missing dry-run and query reconciliation entrypoints for three-evidence settlement status, reducing drift that is hard to diagnose
 - Fix skipped user-input requests not settling correctly, preventing skipped questions from remaining pending
@@ -2759,12 +3270,14 @@ English:
 中文：
 
 ✨ Features
+
 - 新增项目知识地图基础能力，支持从工作区结构、文件证据和项目上下文生成可浏览的知识图谱
 - 新增知识地图增量生成与交互图谱能力，支持全局合并、节点级补充、证据链追踪和手动裁剪
 - 新增知识地图自动补充队列，将候选节点、证据文件和生成任务串成可审计的补全流程
 - 新增记忆画布工具折叠态，保留核心生成入口的同时降低知识地图面板的视觉占用
 
 🔧 Improvements
+
 - 优化知识地图生成提示词、结构化输出修复和兼容性边界，降低模型输出异常导致的生成失败
 - 优化知识地图节点选择、视口定位、头部折叠工具栏、证据 chip 和 inspector 交互，让图谱浏览与证据核对更稳定
 - 优化项目地图规范证据，将 Project Knowledge Map 的基础契约、增量生成、候选复核、自动补充和画布控制同步到 OpenSpec 主规范
@@ -2773,6 +3286,7 @@ English:
 - 升级应用版本号到 `0.5.3`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复会话文件夹删除状态同步、空文件夹树删除和删除文件夹后会话归属提升问题
 - 修复 Claude 长流式渲染恢复问题，降低长输出场景下消息区空白或恢复不完整的概率
 - 修复 Codex 后台响应解析与流式空白恢复诊断问题，让异常响应和空白流式状态更容易被识别
@@ -2783,12 +3297,14 @@ English:
 English:
 
 ✨ Features
+
 - Add the Project Knowledge Map foundation for generating a browsable knowledge graph from workspace structure, file evidence, and project context
 - Add incremental Project Map generation and interactive graph support with global merges, node-scoped enrichment, evidence tracing, and manual pruning
 - Add an auto-ingestion queue for Project Map candidate nodes, evidence files, and auditable generation tasks
 - Add collapsed canvas-tool controls for the memory canvas so core generation actions remain available with less panel noise
 
 🔧 Improvements
+
 - Improve Project Map prompts, structured-output repair, and compatibility boundaries to reduce generation failures from malformed model output
 - Improve Project Map node selection, viewport positioning, collapsed header tools, evidence chips, and inspector interactions for steadier graph review
 - Sync Project Knowledge Map contracts into OpenSpec main specs, including base behavior, incremental generation, candidate review, auto ingestion, and canvas controls
@@ -2797,6 +3313,7 @@ English:
 - Bump app version to `0.5.3` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix session-folder delete synchronization, empty folder-tree deletion, and session ownership promotion after folder deletion
 - Fix Claude long-stream rendering recovery to reduce blank or incomplete message restoration in long-output sessions
 - Fix Codex background response parsing and blank streaming recovery diagnostics so abnormal responses are easier to identify
@@ -2811,11 +3328,13 @@ English:
 中文：
 
 ✨ Features
+
 - 统一 Claude 工作区会话目录读取链路，将 Sidebar、Workspace Home 和 Settings 的 session membership 收敛到共享 catalog projection，降低会话列表被吞或漂移的概率
 - 增加运行态证据门禁与稳定性校准链路，按 measured / proxy / unsupported / manual-only 分类性能与稳定性证据，强化 release 前验证闭环
 - 新增 Git diff tree 共享构建逻辑，统一 Git Diff 与 Git History/HUB worktree 的目录压缩、文件选择和路径展示规则
 
 🔧 Improvements
+
 - 收紧会话目录事实边界，明确 source completeness、archive evidence、related sessions、pagination cursor 与 metadata overlay 的职责边界
 - 收紧 active Sidebar 会话水合策略，使用完整 catalog 作为事实源，避免 first-page 快照或手动刷新覆盖完整会话列表
 - 强化 finalized native session isolation，阻止已落盘的 Claude / Gemini / OpenCode session 被 realtime update 或持久 alias 误改绑
@@ -2828,6 +3347,7 @@ English:
 - 升级应用版本号到 `0.5.2`，同步前端包与 Tauri 配置版本
 
 🐛 Fixes
+
 - 修复 Claude 第二轮或后续会话 reopen 后出现空白、无法切回原 session 的回归
 - 修复 catalog `partialSource` 被误当作 load-older cursor 的问题，避免 Sidebar 重复请求第一页或显示错误的“加载更早”入口
 - 修复会话恢复与目录全量水合中的状态漂移，避免 degraded source、scan cap 或 stale refresh 清空健康 engine 的会话快照
@@ -2840,11 +3360,13 @@ English:
 English:
 
 ✨ Features
+
 - Unify the Claude workspace-session catalog read-chain so Sidebar, Workspace Home, and Settings converge on a shared catalog projection for session membership
 - Add runtime evidence gates and stability calibration with measured / proxy / unsupported / manual-only evidence classification before release closure
 - Add shared Git diff-tree construction so Git Diff and Git History/HUB worktree views use the same compact folder, file-selection, and path-display rules
 
 🔧 Improvements
+
 - Tighten session-directory truth boundaries across source completeness, archive evidence, related sessions, pagination cursors, and metadata overlay
 - Tighten active Sidebar hydration so the full catalog becomes the fact source instead of being overwritten by first-page snapshots or manual refreshes
 - Strengthen finalized native session isolation so persisted Claude / Gemini / OpenCode sessions are not rebound by realtime updates or stale aliases
@@ -2857,6 +3379,7 @@ English:
 - Bump app version to `0.5.2` and align frontend/package metadata with Tauri configuration
 
 🐛 Fixes
+
 - Fix Claude second-or-later session reopen regressions where the original session could restore as a blank, non-switchable thread
 - Fix catalog `partialSource` being treated as a load-older cursor, preventing repeated first-page requests and misleading load-older affordances
 - Fix session recovery and full-directory hydration drift so degraded sources, scan caps, or stale refreshes do not clear healthy engine snapshots
@@ -2873,6 +3396,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增邮件驱动会话闭环，支持从 completion email 直接回复并续接原 workspace、thread、session 和 turn，形成可审计的远程继续执行路径
 - 新增可回复 completion email 协议，邮件标题包含 engine、session 和 workspace，正文收敛为本轮请求、修复信息、下一步建议与可校验 Moss context
 - 新增邮箱收信监听与邮件会话管理页，支持查看 Moss 邮件事件、待确认/异常回复、清理已处理记录并跳转回对应会话
@@ -2880,6 +3404,7 @@ English:
 - 新增 Composer 控制面视觉契约，将模型选择、工具 dock、上下文 chip、发送按钮和 active 工具状态收敛到更稳定的布局体系
 
 🔧 Improvements
+
 - 优化邮件回复解析与 inbound intake，支持自然语言回复、`ACTION` 指令、引用正文剥离、去重、过期校验和只读邮箱游标
 - 优化邮件会话列表管理，按 Moss session 聚合展示事件时间线，避免普通无关邮件进入客户端存储或 UI
 - 优化模型选择器，按 Claude Code、Codex、Gemini provider 分组展示，并将模型入口上移到 readiness target
@@ -2889,6 +3414,7 @@ English:
 - 升级应用版本号到 `0.5.1`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复邮箱授权码输入框默认明文展示问题，改为脱敏展示并提供显式显示/隐藏切换
 - 修复邮件续接正文提取与轮询下限问题，避免后续 completion email 复用上一轮正文或因过低轮询间隔造成不稳定
 - 修复 Codex 空草稿首次发送遇到 stale thread 时的恢复路径，只允许 disposable first-turn draft 自动 fresh-create 并 replay 一次
@@ -2899,6 +3425,7 @@ English:
 English:
 
 ✨ Features
+
 - Add an email-driven session continuation loop so replies to completion emails can resume the original workspace, thread, session, and turn through an auditable remote-control path
 - Add an actionable completion-email protocol with engine, session, and workspace in the subject plus compact request, fix summary, next steps, and verifiable Moss context in the body
 - Add inbound mailbox listening and mail-session management surfaces for Moss event timelines, pending/rejected replies, processed-record cleanup, and jump-back actions
@@ -2906,6 +3433,7 @@ English:
 - Add a stabilized Composer control-surface contract covering model selection, tool dock layout, context chips, send controls, and active tool states
 
 🔧 Improvements
+
 - Improve mail reply parsing and inbound intake with natural-language replies, `ACTION` commands, quoted-body stripping, dedupe, expiry checks, and read-only mailbox cursors
 - Improve mail-session list management by grouping Moss events by session while keeping unrelated ordinary mail out of client storage and UI
 - Improve the model selector with Claude Code, Codex, and Gemini provider groups, moving the model entrypoint into the readiness target
@@ -2915,6 +3443,7 @@ English:
 - Bump the app version to `0.5.1` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Mask mailbox app-password inputs by default and add explicit show/hide controls
 - Fix mail continuation body extraction and polling floors so follow-up completion emails do not reuse previous-turn summaries or run with unstable low polling intervals
 - Fix Codex empty-draft first sends when stale thread bindings appear, allowing only disposable first-turn drafts to fresh-create and replay once
@@ -2929,6 +3458,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Markdown 文件预览公式与图表渲染能力，支持更完整的技术文档查看体验
 - 新增残留工具调用 XML 的交互式卡片渲染，让异常或未完整解析的工具调用也能在消息区被识别和核对
 - 新增治理证据只读桥接、capability 感知查询入口和 policy 判决审计面板，让运行时治理状态更可追踪
@@ -2937,6 +3467,7 @@ English:
 - 新增 runtime performance baseline 采集层与 producer scripts，为后续性能回归提供可复用基线
 
 🔧 Improvements
+
 - 优化运行时性能基线、bundle 拆分、面板懒加载与事件监听策略，降低首屏和长会话压力
 - 将 GitDiffPanel、FileViewPanel 和 KaTeX 资源改为按需加载，减少初始 bundle 与 Markdown 预览成本
 - 统一 lucide-react 子路径导入、scroll passive 监听和全局 keydown dispatcher，降低重复事件处理开销
@@ -2947,6 +3478,7 @@ English:
 - 优化会话切换体验，同工作区切换时保留编辑器分栏与上下文连续性
 
 🐛 Fixes
+
 - 修复 Claude 与多引擎会话列表超时兜底，降低侧栏加载失败时的断裂感
 - 修复 Markdown 预览刷新、代码区图片标签误转换和文件变更监控相关问题
 - 修复 Git 变更文件单击打开编辑器、设置页会话窗超时与文件夹统计边界问题
@@ -2959,6 +3491,7 @@ English:
 English:
 
 ✨ Features
+
 - Add Markdown file-preview support for math formulas and diagrams for richer technical-document rendering
 - Render leftover tool-call XML as interactive cards so malformed or partially parsed tool calls remain visible and reviewable
 - Add a read-only governance-evidence bridge, capability-aware queries, and a policy-decision audit panel so runtime governance is easier to trace
@@ -2967,6 +3500,7 @@ English:
 - Add a runtime performance-baseline collection layer and producer scripts for reusable regression baselines
 
 🔧 Improvements
+
 - Improve runtime performance baselines, bundle chunking, panel lazy loading, and event-listener strategy to reduce first-screen and long-session pressure
 - Lazy-load GitDiffPanel, FileViewPanel, and KaTeX assets to reduce initial bundle and Markdown preview cost
 - Unify lucide-react subpath imports, passive scroll listeners, and the global keydown dispatcher to reduce duplicated event overhead
@@ -2977,6 +3511,7 @@ English:
 - Improve session switching so editor split state and context are preserved within the same workspace
 
 🐛 Fixes
+
 - Fix Claude and multi-engine session-list timeout fallbacks to reduce sidebar breakage during slow loads
 - Fix Markdown preview refresh, code-block image-tag conversion, and file-change watcher issues
 - Fix single-click editor opening from Git changed files plus Settings session-window timeout and folder-count boundaries
@@ -2993,11 +3528,13 @@ English:
 中文：
 
 ✨ Features
+
 - 新增项目记忆语义召回骨架，支持本地记忆索引、检索包清洗和上下文注入，为长期项目会话提供更稳定的记忆材料
 - 新增完整对话轮次记忆能力，将多消息 turn 以更完整的语义单元沉淀到项目记忆，减少片段化召回导致的上下文缺口
 - 新增大项目文件树渐进式加载能力，降低大型工作区首次展开和目录浏览时的阻塞感
 
 🔧 Improvements
+
 - 优化项目记忆引用展示与详情弹窗，统一引用入口、召回结果和详情内容的呈现方式，让记忆证据更容易核对
 - 优化记忆工作台弹窗体验，收敛长期记忆入口展示边界，减少侧栏干扰并提升记忆管理的聚焦度
 - 加固 Codex 静默会话存活判定与验证记录，降低后台会话无输出时被误判为失联的概率
@@ -3007,6 +3544,7 @@ English:
 - 升级应用版本号到 `0.4.18`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复记忆引用召回完整性问题，避免项目记忆引用缺失或详情无法完整追溯
 - 修复 Claude 会话创建、侧栏连续性和列表窗口稳定性问题，降低会话恢复与列表刷新时的断裂感
 - 修复 Claude pending 会话收敛问题，避免 pending 状态残留影响后续续聊或恢复入口
@@ -3016,11 +3554,13 @@ English:
 English:
 
 ✨ Features
+
 - Add a project-memory semantic-recall foundation with local memory indexing, retrieval-pack cleanup, and context injection for more stable long-lived project context
 - Add full conversation-turn memory so multi-message turns are stored as more complete semantic units instead of fragmented recall snippets
 - Add progressive loading for large project file trees to reduce blocking during first expansion and directory browsing
 
 🔧 Improvements
+
 - Improve project-memory reference display and detail dialogs by unifying reference entrypoints, recall results, and detail content for easier evidence review
 - Refine the memory-workbench dialog and long-term memory entry visibility so memory management stays focused without sidebar noise
 - Harden Codex silent-session liveness detection and validation records so quiet background sessions are less likely to be treated as disconnected
@@ -3030,6 +3570,7 @@ English:
 - Bump the app version to `0.4.18` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix project-memory reference recall completeness so referenced memories and their details remain traceable
 - Fix Claude session creation, sidebar continuity, and list-window stability to reduce breaks during recovery and list refreshes
 - Fix Claude pending-session convergence so stale pending state no longer destabilizes follow-up or resume entrypoints
@@ -3043,11 +3584,13 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Claude TUI resume 操作，在普通会话、pinned 会话、工作区会话和文件夹树入口中提供恢复到 Claude TUI 的路径，降低从历史会话继续原生 Claude 工作流的操作成本
 - 新增 composer 发送就绪与队列提示栏，显式展示当前输入是否可发送、队列是否合并以及后台运行状态，减少排队发送和状态判断的不确定性
 - 新增 CLI 一键安装实时日志与边界保护，在设置页提供安装过程可视反馈、事件流更新和更明确的前置检查，降低安装失败时的黑盒感
 
 🔧 Improvements
+
 - 迁移动态业务菜单到 renderer 侧上下文菜单，收敛 macOS native menu 的同步调用边界，并新增菜单使用检查脚本，降低菜单打开时主线程假死风险
 - 稳定 Codex 会话生命周期恢复链路，补齐 runtime 会话恢复命令、诊断信息和测试覆盖，让异常退出后的会话状态更容易恢复与定位
 - 优化运行中会话后台调度，引入 runtime session scheduling、后台活跃度投影与诊断标记，降低 realtime 会话在高并发或长时运行下的 CPU 压力
@@ -3059,6 +3602,7 @@ English:
 - 回写 CLI installer、runtime 后台调度与 realtime turn 清算相关 OpenSpec 文档，保持近期行为变更与规范记录对齐
 
 🐛 Fixes
+
 - 修复 Codex `SessionStart` hook 阻塞后的兜底恢复问题，避免 app server wrapper 启动失败后会话无法继续创建或恢复
 - 修复 macOS native 菜单死锁风险，避免动态业务菜单在 native menu 回调中触发阻塞式前端调用
 - 修复模型选择同步循环，避免 app shell 与模型选择状态互相回写导致重复更新
@@ -3082,11 +3626,13 @@ English:
 English:
 
 ✨ Features
+
 - Add Claude TUI resume actions across ordinary sessions, pinned sessions, workspace sessions, and folder-tree entries so historical Claude sessions can continue in the native TUI more directly
 - Add composer send-readiness and queue-status hints, making send availability, queue merging, and background runtime state visible before submission
 - Add realtime logging and stronger guardrails to the one-click CLI installer so installation progress, event streaming, and prerequisite failures are easier to understand from Settings
 
 🔧 Improvements
+
 - Move dynamic business menus to renderer-side context menus and add a native-menu usage checker, reducing macOS main-thread freeze risk from synchronous native menu callbacks
 - Stabilize Codex session lifecycle recovery with runtime recovery commands, diagnostics, and stronger test coverage so interrupted sessions are easier to restore and debug
 - Optimize background scheduling for running sessions with runtime scheduling, background-activity projection, and diagnostics flags to reduce CPU pressure in long-lived realtime flows
@@ -3098,6 +3644,7 @@ English:
 - Write back the recent OpenSpec docs for the CLI installer, runtime background scheduling, and realtime turn settlement so spec records stay aligned with the implementation
 
 🐛 Fixes
+
 - Fix Codex `SessionStart` hook fallback recovery so app-server wrapper startup failures no longer leave sessions unable to create or resume
 - Fix macOS native menu deadlock risk by avoiding blocking frontend calls from native menu callbacks
 - Fix a model-selection synchronization loop between the app shell and selected model state
@@ -3125,6 +3672,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增侧栏会话归档菜单，在普通会话、pinned 会话和工作区会话树中提供归档入口，减少长列表整理历史会话的操作成本
 - 新增 Claude reasoning effort 配置，让 Claude 会话可以直接在输入区选择推理强度，并与模型选择、共享会话输入链路保持一致
 - 新增 Claude 原生 fork session 支持，打通从历史会话直接分叉新分支的能力，减少客户端自行维护上下文映射的复杂度
@@ -3135,12 +3683,14 @@ English:
 - 新增失效输入请求卡片关闭能力，支持用户主动收起已经超时或不再可操作的 RequestUserInput 卡片，减少消息区残留噪音
 
 🔧 Improvements
+
 - 联动 Codex 计划模式入口，让模式选择与工具栏入口状态保持一致，减少计划模式切换时的理解成本
 - 精简状态面板对话标签与时间线头部视觉，去掉冗余排序胶囊并压缩顶部留白，让对话时间线阅读节奏更紧凑
 - 移除文件标注按钮的位移动画，仅保留透明度反馈，减少局部视觉抖动并降低非必要的动效干扰
 - 升级应用版本号到 `0.4.16`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复 Codex 计划模式入口联动问题，避免相关模式切换与展示状态不一致
 - 修复非 Git 仓库工作区仍触发自动 Git 状态轮询的问题，避免普通目录下重复探测仓库状态并产生无意义噪音
 - 修复文件行标注交互闪烁问题，减少 hover 与展开切换时的视觉抖动
@@ -3149,6 +3699,7 @@ English:
 English:
 
 ✨ Features
+
 - Add sidebar archive actions for ordinary, pinned, and workspace-session tree entries so long-running session lists are easier to clean up
 - Add Claude reasoning-effort controls so Claude sessions can choose reasoning intensity directly from the composer and stay aligned with model selection and shared-session input flows
 - Add native Claude fork-session support, allowing new branches to be created directly from historical sessions with less client-side context remapping
@@ -3159,12 +3710,14 @@ English:
 - Add dismiss support for stale RequestUserInput cards so expired or no-longer-actionable prompts can be closed from the message surface
 
 🔧 Improvements
+
 - Align the Codex plan-mode entrypoints so mode selection and toolbar entry state behave consistently
 - Refine the status-panel conversation tabs and timeline header by removing redundant ordering pills and tightening the top spacing for a denser reading rhythm
 - Remove the translate animation from the file-annotation button and keep opacity-only feedback to reduce local motion noise
 - Bump the app version to `0.4.16` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix Codex plan-mode entry synchronization so related mode toggles and visible entry states no longer drift apart
 - Fix automatic Git status polling in non-repository workspaces so ordinary folders no longer trigger unnecessary repository probes
 - Fix flicker in file-line annotation interactions, especially during hover and expansion transitions
@@ -3177,6 +3730,7 @@ English:
 中文：
 
 ✨ Features
+
 - 完善项目会话文件夹管理能力，补齐文件夹内会话归属、移动、删除和历史投影边界，让长期项目的多引擎会话组织更稳定
 - 新增 checkpoint 提交确认交互，将结果面板中的提交动作收口到明确确认流程，降低误提交和状态理解成本
 - 新增侧栏根会话显示数量配置，支持按工作区控制根层级会话可见数量，减少长列表下的侧栏噪音
@@ -3186,6 +3740,7 @@ English:
 - 新增文件行标注上下文能力，支持把具体文件行作为会话上下文材料接入，提升代码定位与讨论精度
 
 🔧 Improvements
+
 - 压缩 Git diff 弹窗头部布局，让审查区、可编辑 diff 面板和会话活动面板在小空间下保留更多有效内容区域
 - 加固会话历史归属与 folder assignment 兼容边界，减少 Codex、Claude Code、Gemini 历史在项目目录和文件夹视图之间的漂移
 - 归一化 checkpoint 提交信息生成入口，让结果面板、提交确认和后续提交文案使用一致的数据来源
@@ -3194,6 +3749,7 @@ English:
 - 升级应用版本号到 `0.4.15`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
+
 - 修复 Linux AppImage 中前端资源定位异常的问题，避免 web service runtime 在打包环境下找不到前端静态资源
 - 修复会话文件夹管理中部分历史归属和删除清理边界，降低 folder tree 与 session catalog 状态不一致的概率
 - 修复子文件夹会话归属异常，避免嵌套文件夹中的会话回流到错误层级或根列表
@@ -3209,6 +3765,7 @@ English:
 English:
 
 ✨ Features
+
 - Improve project session folder management with stronger folder assignment, movement, deletion, and history projection behavior for long-lived multi-engine projects
 - Add a checkpoint commit confirmation flow so commit actions from the result panel go through an explicit confirmation step
 - Add configurable root-session visibility counts in the sidebar so each workspace can reduce root-level session noise
@@ -3218,6 +3775,7 @@ English:
 - Add file-line annotation context so specific source lines can be attached to conversations for more precise code discussion
 
 🔧 Improvements
+
 - Compress Git diff dialog headers so review surfaces, editable diff panels, and session activity panels keep more usable content space in constrained layouts
 - Harden session-history attribution and folder-assignment compatibility so Codex, Claude Code, and Gemini histories drift less between project and folder views
 - Normalize checkpoint commit message generation so result panels, confirmation dialogs, and commit copy use a shared source
@@ -3226,6 +3784,7 @@ English:
 - Bump the app version to `0.4.15` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
+
 - Fix frontend asset resolution for Linux AppImage builds so the web service runtime can locate packaged static resources correctly
 - Fix session folder cleanup and history attribution edges that could leave the folder tree and session catalog out of sync
 - Fix nested-folder session attribution so sessions inside subfolders no longer drift back to the wrong level or root list
@@ -3245,12 +3804,14 @@ English:
 中文：
 
 ✨ Features
+
 - 新增项目会话文件夹能力，支持在左侧工作区会话列表中创建、重命名、删除和嵌套组织文件夹，让长期项目中的 Codex、Claude Code、Gemini 会话更容易按主题归类
 - 新增会话移动到文件夹的非拖拽路径，在普通会话和 pinned 会话右键菜单中提供 Move to folder 操作，并支持一键移回项目根目录
 - 新增三引擎项目历史归属能力，将 Codex、Claude Code 与 Gemini 本地历史接入统一 session catalog，支持按 cwd、git root、worktree family 等证据归属到项目
 - 新增 workspace session folder 的 Tauri 前端桥接契约，补齐 list/create/rename/move/delete/assign 命令 wrapper 与跨层类型定义
 
 🔧 Improvements
+
 - 优化项目会话目录初始加载策略，首屏只加载首批 catalog page，并保留 Load older 续页能力，降低大历史项目打开侧栏时的初始压力
 - 强化 folder projection 边界处理，对孤儿 parent、自引用和循环 parent 做降级保护，避免异常 metadata 导致递归渲染或菜单目标漂移
 - 对齐 session folder assignment 与 archive/delete/unarchive 状态，删除会话时同步清理 folder assignment，归档状态在全局、项目和 folder 视图之间保持一致
@@ -3258,6 +3819,7 @@ English:
 - 同步 OpenSpec 任务状态与 Trellis 会话记录，保持项目会话文件夹实现、验证和规范留痕一致
 
 🐛 Fixes
+
 - 修复普通会话和 pinned 会话右键菜单缺少文件夹移动目标的问题，避免只能在 folder tree 内移动会话
 - 修复 Codex raw session id 与 `codex:` 前缀 session id 的 folder assignment 兼容问题，避免不同入口写入的分组关系互相丢失
 - 修复大历史项目初始刷新可能持续翻页直到耗尽的问题，降低首屏加载卡顿和后台 IO 放大的风险
@@ -3267,12 +3829,14 @@ English:
 English:
 
 ✨ Features
+
 - Add project session folders for organizing Codex, Claude Code, and Gemini sessions inside the left workspace session list with nested folders
 - Add a non-drag move path for sessions, exposing Move to folder actions from ordinary and pinned session context menus, including moving back to the project root
 - Add unified project-history attribution across Codex, Claude Code, and Gemini local history using cwd, git-root, and worktree-family evidence
 - Add Tauri frontend bridge contracts for workspace session folders, including list/create/rename/move/delete/assign wrappers and shared cross-layer types
 
 🔧 Improvements
+
 - Optimize initial project session catalog loading so the first refresh fetches only the first page while preserving Load older pagination for large histories
 - Harden folder projection against orphan parents, self-parenting, and parent cycles so corrupted metadata cannot trigger recursive rendering or drifted menu targets
 - Align folder assignment state with archive/delete/unarchive mutations so global, project, and folder views share a consistent session state model
@@ -3280,6 +3844,7 @@ English:
 - Sync OpenSpec task state and Trellis session records so implementation, validation, and delivery traceability stay aligned
 
 🐛 Fixes
+
 - Fix missing folder move targets in ordinary and pinned session context menus, making menu-based moves available outside the folder tree
 - Fix Codex raw session id versus `codex:`-prefixed session id compatibility for folder assignments so grouping does not disappear across surfaces
 - Fix initial refresh behavior that could page through an entire large catalog before rendering the first batch
@@ -3293,6 +3858,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增低性能兼容模式与诊断导出能力，在设置页提供面向性能敏感场景的兼容开关与诊断信息导出入口，便于在低性能机器上更稳定地使用并快速反馈问题
 - 新增 Context Ledger 分阶段治理与来源联动能力，补齐账本归因、来源追踪与幕布区域显隐管理，让上下文来源在会话中更可见、更易管理
 - 新增 Task Center 基础能力并接入任务运行生命周期，打通运行态投影、恢复收口与状态承接，让任务运行过程可以被持续追踪
@@ -3300,6 +3866,7 @@ English:
 - 完善 Claude 与 Gemini 通用幕布组装，并优化实时对话客户端性能，降低长会话和多事件流场景下的卡顿感
 
 🔧 Improvements
+
 - 重构设置页一级入口与父级 Tab 导航，收口原本分散的设置入口，降低查找不同配置项时的跳转成本
 - 降低核心模块复杂度并同步归档相关 OpenSpec 提案，减少热点模块继续膨胀的风险，为后续功能迭代留出更稳定的演进空间
 - 补齐 Context Ledger 与 Task Center 一阶段提案与执行准备，明确两项后续能力的实施顺序、阶段边界与行为契约
@@ -3308,6 +3875,7 @@ English:
 - 优化状态面板时间线头部结构与零态展示规则，让会话时间线在有内容和空状态之间都保持一致的视觉节奏
 
 🐛 Fixes
+
 - 修复 Windows 外部文件监控噪声问题，减少文件系统监控在 Windows 环境下的误报和无效提示
 - 修复 Codex 压缩状态文案回写问题，让压缩状态在幕布与相关 UI 中保持一致
 - 修复 Codex 压缩历史消息丢失与幕布复用异常，避免压缩后历史上下文缺失或错误复用旧幕布内容
@@ -3325,6 +3893,7 @@ English:
 English:
 
 ✨ Features
+
 - Add a low-performance compatibility mode and diagnostic export entry in Settings, making it easier to stabilize the app on slower machines and share actionable troubleshooting information
 - Add phased Context Ledger governance and source-linking so attribution, source tracing, and curtain-area visibility controls are easier to follow during conversations
 - Add foundational Task Center capabilities with runtime lifecycle integration, including run-state projection, recovery handoff, and status continuity
@@ -3332,6 +3901,7 @@ English:
 - Improve shared curtain assembly for Claude and Gemini while also optimizing realtime conversation performance for longer, event-heavy sessions
 
 🔧 Improvements
+
 - Rework top-level Settings entry points and parent-tab navigation so related configuration surfaces are easier to find without unnecessary jumps
 - Reduce core-module complexity and archive the related OpenSpec proposals, lowering hotspot growth risk and leaving a cleaner base for follow-up iteration
 - Fill in the phase-one proposals and execution prep for Context Ledger and Task Center, clarifying rollout order, stage boundaries, and behavior contracts for the next wave of work
@@ -3340,6 +3910,7 @@ English:
 - Refine timeline header structure and empty-state display rules in the status panel so the conversation timeline keeps a steadier visual rhythm
 
 🐛 Fixes
+
 - Fix noisy Windows external file-monitor behavior so filesystem watching surfaces fewer false alarms and less redundant noise
 - Fix Codex compaction status copy write-back so compression state stays consistent across the curtain and related UI surfaces
 - Fix missing Codex compaction history messages and incorrect curtain reuse, preventing compressed conversations from losing context or reusing stale curtain content
@@ -3361,6 +3932,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Git 历史分支更新能力，支持在不 checkout 当前分支的前提下直接更新本地分支，降低查看历史或维护分支时的切换打断
 - 新增 Git 面板文件预览操作，将文件查看入口显式暴露在 Git 面板中，减少从 diff 到文件内容确认的跳转成本
 - 新增 Spec Hub 独立阅读窗体与需求池优化，让规范阅读、归档变更查看和需求整理可以在独立窗口中持续进行
@@ -3369,6 +3941,7 @@ English:
 - 新增侧栏隐藏已退出会话能力，让长时间使用后的会话列表可以过滤 exited session，降低侧栏噪音
 
 🔧 Improvements
+
 - 同步分支更新提案的 OpenSpec 主规范与任务完成状态，保持 Git 历史交互、行为规范与实际实现对齐
 - 归档已完成提案并补充 Trellis 会话记录，收口这批分支更新与修复交付的规范留痕
 - 统一 Git 提交作用域与历史提交区展示语义，降低提交区在大面板场景下的卡顿与状态漂移风险
@@ -3378,6 +3951,7 @@ English:
 - 补强合并 PR 边界处理与冲突回归哨兵，降低多 PR 合并后功能点被覆盖回退的风险
 
 🐛 Fixes
+
 - 修复 Git 历史分支更新时无上游提示与边界处理不准确的问题，避免无 tracking 信息场景下给出误导反馈
 - 修复 Codex 压缩文案生命周期边界问题，避免压缩提示在错误阶段持续暴露或结算不一致
 - 修复缺失会话删除的静默成功语义，让已不存在 session 的删除请求不会误报失败或阻塞后续状态更新
@@ -3399,6 +3973,7 @@ English:
 English:
 
 ✨ Features
+
 - Add Git history branch updating without requiring a checkout, so local branches can be refreshed directly from the history workflow without interrupting the current branch
 - Add explicit file preview actions in the Git panel, reducing the number of jumps needed to inspect file content from a diff workflow
 - Add a detached Spec Hub reading window and backlog improvements so archived changes, specs, and requirement pools can stay open independently
@@ -3407,6 +3982,7 @@ English:
 - Add a sidebar option to hide exited sessions, reducing noise in long-lived session lists
 
 🔧 Improvements
+
 - Sync the branch-update proposal back into OpenSpec and mark its task flow complete so Git history behavior, specs, and implementation stay aligned
 - Archive the completed proposal and add Trellis session records so the branch-update delivery trail is fully captured
 - Normalize Git commit scope and history commit-area semantics to reduce panel stalls and state drift in large commit surfaces
@@ -3416,6 +3992,7 @@ English:
 - Strengthen merge-boundary handling and regression sentinels so capability paths are less likely to be lost during multi-PR merges
 
 🐛 Fixes
+
 - Fix missing-upstream prompts and edge handling in Git history branch updates so branches without tracking information no longer surface misleading feedback
 - Fix Codex compaction copy lifecycle boundaries so compression notices do not linger or settle in the wrong stage
 - Fix silent-success semantics for deleting missing sessions so already-removed sessions do not surface false failures
@@ -3441,6 +4018,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增邮件发送设置与测试发送能力，在设置页补齐邮箱配置、发送校验、后端邮件发送 command 与 OpenSpec 行为契约，让通知链路具备可配置的发送端
 - 新增客户端界面显示控制，支持按配置隐藏或显示侧栏、状态面板、文件视图、Git 面板、composer 等主要 UI 区域，并补齐布局恢复与 shortcut 边界
 - 新增工作区别名能力，支持在侧边栏展示更友好的 workspace alias，并提供别名编辑入口与持久化映射
@@ -3451,6 +4029,7 @@ English:
 - 新增运行时提示悬浮球显隐管理能力，将浮层显示纳入客户端界面显示控制，减少不需要提示时的界面干扰
 
 🔧 Improvements
+
 - 收口 Windows Codex app-server wrapper 启动参数拼装，把 doctor / probe 与真实 app-server 启动统一到共享 launch options，降低不同启动路径的参数漂移
 - 为 Windows `.cmd` / `.bat` wrapper 增加一次兼容 retry，primary 启动失败时跳过内部 spec priority hint 重新启动，同时保留用户 `codexArgs`
 - 强化 Codex 会话保活恢复，补齐 conversation liveness、stale thread binding recovery、stalled recovery contract 与 runtime stability 的 OpenSpec 说明
@@ -3462,6 +4041,7 @@ English:
 - 收敛 CI 大文件、测试噪音与 Sentry workflow 权限边界，升级 Actions 版本并降低门禁抖动对正常回归的干扰
 
 🐛 Fixes
+
 - 修复 Windows 11 下通过 npm `.cmd` wrapper 启动 Codex app-server 时，`cmd.exe /c` 与内部 quoted config 组合导致初始化前退出的问题
 - 修复 Windows wrapper fallback 成功后仍可能把 primary 的早期 runtime / ended / stderr 事件暴露到前端的问题，避免 UI 误判为启动失败
 - 修复 Codex 停滞会话隔离与历史展示边界，减少 stalled recovery 期间旧线程、后台辅助会话与当前历史视图混入的问题
@@ -3478,6 +4058,7 @@ English:
 English:
 
 ✨ Features
+
 - Add email sender settings and a test-send flow, including settings UI, validation, backend mail commands, and OpenSpec behavior coverage
 - Add client UI visibility controls for hiding or showing major surfaces such as the sidebar, status panel, file view, Git panel, and composer
 - Add workspace sidebar aliases so workspaces can be shown with friendlier names and edited from the sidebar
@@ -3488,6 +4069,7 @@ English:
 - Add runtime prompt floating-ball visibility management as part of client UI visibility controls, reducing unnecessary overlay noise
 
 🔧 Improvements
+
 - Consolidate Windows Codex app-server wrapper launch options so doctor, probe, and real app-server startup share the same argument semantics
 - Add a Windows `.cmd` / `.bat` wrapper retry path that skips the internal spec priority hint after primary launch failure while preserving user `codexArgs`
 - Strengthen Codex conversation liveness, stale-thread binding recovery, stalled recovery, and runtime-stability specifications
@@ -3499,6 +4081,7 @@ English:
 - Tighten CI large-file, test-noise, and Sentry workflow permission boundaries, upgrading Actions versions and reducing gate flake during normal regression runs
 
 🐛 Fixes
+
 - Fix Windows 11 Codex app-server startup failures caused by npm `.cmd` wrappers, `cmd.exe /c`, and quoted internal config arguments
 - Fix false frontend startup failures after a successful Windows wrapper fallback by dropping primary-path early runtime / ended / stderr events
 - Fix Codex stalled-session isolation and history display boundaries so old threads, helper sessions, and current history views do not bleed together
@@ -3519,6 +4102,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Git 按文件范围提交能力，支持在 diff 面板内按文件选择本次 commit 范围，并在批量操作后恢复选择状态，让多文件改动可以更精确地拆分提交
 - 新增 Codex 历史会话加载态，在打开历史线程、恢复侧栏缓存和承接空白历史页时展示明确的 loading 与空态过渡，减少“点击后无反馈”的误判
 - 新增 Codex 生成图片展示与占位链路，支持从实时事件和历史回放中识别生成图片 artifact，并把占位消息、最终图片和所属 turn 稳定关联起来
@@ -3528,6 +4112,7 @@ English:
 - 增强 Computer Use 授权连续性与跨平台 broker 边界，补齐未签名宿主、helper bridge、availability surface 与 status card 的可见诊断链路
 
 🔧 Improvements
+
 - 收口 Claude 会话连续性、并发实时隔离与审批线程作用域，让 approval toast、thread approval、历史加载和侧栏状态更严格绑定当前 thread
 - 统一 Codex 对话幕布归一化与 assembler 链路，拆分 conversation assembly / normalization / realtime-history parity 逻辑，降低实时消息与历史回放的结构漂移
 - 优化 Codex 排队跟进气泡，修复 queued handoff 与历史回放重叠边界，并补齐 queued send、memory race 与 reducer 回归覆盖
@@ -3549,6 +4134,7 @@ English:
 - 追加归档并回写 v0.4.9 后续验证提案，覆盖 Linux Nix flake packaging、Windows Runtime Pool initial load、Claude long-thread render amplification、Claude Windows streaming latency 与 P0/P1 large-file modularization governance，确保行为规范与实际实现继续对齐
 
 🐛 Fixes
+
 - 修复 Codex 历史会话打开后可能出现空白页的问题，并补齐历史消息加载、sidebar cache 与 layout nodes 的过渡状态
 - 修复 Codex 排队用户气泡与历史回放内容重叠的问题，避免 queued follow-up 在恢复或回放时遮挡已有消息
 - 修复 Computer Use 未签名宿主被错误判定为已授权连续的问题，并收紧不同平台下 broker、host contract 与 status card 的边界提示
@@ -3576,6 +4162,7 @@ English:
 English:
 
 ✨ Features
+
 - Add file-scoped Git commits so the diff panel can include or exclude files for a specific commit, while restoring selection state after batch operations for cleaner multi-file commit splitting
 - Add a Codex history-session loading state so opening history threads, restoring sidebar cache, and recovering blank history pages now show explicit loading and empty-state transitions instead of appearing unresponsive
 - Add Codex generated-image rendering and placeholder linkage, allowing realtime events and history replay to identify image artifacts and keep placeholders, final images, and turns connected
@@ -3585,6 +4172,7 @@ English:
 - Strengthen Computer Use authorization continuity and cross-platform broker boundaries with clearer diagnostics for unsigned hosts, helper bridge status, availability surface, and the status card
 
 🔧 Improvements
+
 - Tighten Claude session continuity, concurrent realtime isolation, and approval thread scoping so approval toasts, thread approvals, history loading, and sidebar state bind to the active thread more strictly
 - Unify Codex conversation-curtain normalization and assembler flow by splitting conversation assembly, normalization, and realtime-history parity logic to reduce drift between live messages and history replay
 - Improve Codex queued follow-up bubbles by fixing queued handoff overlap with history replay and adding regression coverage for queued send, memory races, and reducer behavior
@@ -3606,6 +4194,7 @@ English:
 - Archive and sync the follow-up v0.4.9 verified proposals for Linux Nix flake packaging, Windows Runtime Pool initial load, Claude long-thread render amplification, Claude Windows streaming latency, and P0/P1 large-file modularization governance
 
 🐛 Fixes
+
 - Fix blank Codex history sessions by adding clear loading coverage across history message loading, sidebar cache restoration, and layout-node transitions
 - Fix Codex queued user bubbles overlapping history replay content so queued follow-ups no longer cover existing messages during recovery or replay
 - Fix unsigned Computer Use hosts being treated as authorization-continuous, while tightening broker, host-contract, and status-card messaging across platforms
@@ -3637,6 +4226,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 baseline-aware 大文件治理策略，按路径域为热点文件匹配差异化阈值、watchlist 与 fail gate，并把历史技术债基线纳入 CI，对“新增超限”和“旧债继续膨胀”分别做明确拦截
 - 新增 heavy test noise sentry，为重型 Vitest 回归引入独立噪音门禁，自动识别 repo-owned `act(...)` / stdout / stderr 泄漏，并将环境自带 warning 单独归类，减少 CI 误报
 - 推进大文件热点的兼容性拆分治理，围绕 Opencode command、Git branch command、runtime session lifecycle、thread messaging 与 Tauri facade 建立更细粒度模块边界，为后续能力扩展预留更稳的演进基础
@@ -3644,6 +4234,7 @@ English:
 - 增强 Computer Use 宿主契约与插件缓存链路，补齐 broker 运行入口和可用性探测闭环，让 Computer Use 从 CLI、插件到宿主桥接的状态更容易定位
 
 🔧 Improvements
+
 - 拆分 app shell orchestration、thread action / session runtime、assistant 文本归一化与 thread messaging 工具链，降低消息主链路的大文件复杂度与回归面
 - 拆分 settings、composer rewind modal 与 git history branch compare 样式分片，减轻大 CSS 文件维护压力，后续样式调整不再集中挤在单一热点文件
 - 收敛 app shell、threads、git history、file tree、layout、worktree prompt、Search、Project Memory、Spec Hub 与 OpenCode 面板等多处 exhaustive-deps 告警，补齐 dependency array 与 cleanup-safe 模式，减少 stale closure 和重复副作用风险
@@ -3656,6 +4247,7 @@ English:
 - 同步归档 Linux AppImage、Computer Use 与 Claude 流式渲染相关 OpenSpec 变更，并回写验证状态，保持行为说明与当前实现一致
 
 🐛 Fixes
+
 - 修复 TaskCreateModal 在打开和提交阶段的 inline completion 清理与依赖处理，避免创建任务弹窗出现超时、焦点延迟或历史建议残留
 - 修复 git-history 尾部 cleanup timer 的清理方式，避免 create-PR 进度清理依赖陈旧 ref 快照而留下状态尾巴
 - 修复 heavy-test-noise 对环境告警的统计偏差，在外层 npm 输出未被完整捕获时，仍能根据环境变量正确归类 `electron_mirror` 等环境噪音，避免误伤 CI
@@ -3670,6 +4262,7 @@ English:
 English:
 
 ✨ Features
+
 - Add a baseline-aware large-file governance policy that assigns domain-specific thresholds, watchlists, and fail gates by path, while bringing legacy debt baselines into CI so new oversize files and growing legacy debt are blocked differently and explicitly
 - Add a dedicated heavy test noise sentry for heavy Vitest regressions, automatically detecting repo-owned `act(...)`, stdout, and stderr leaks while classifying environment-owned warnings separately to reduce CI false positives
 - Advance compatibility-preserving modularization for the largest hotspots by carving out finer-grained boundaries around the Opencode command surface, Git branch commands, runtime session lifecycle, thread messaging, and the Tauri facade
@@ -3677,6 +4270,7 @@ English:
 - Strengthen the Computer Use host-contract and plugin-cache path so broker entry, plugin availability, and host-bridge state can be traced more clearly end to end
 
 🔧 Improvements
+
 - Split app-shell orchestration, thread action/session runtime handling, assistant text normalization, and thread messaging tooling to reduce large-file complexity and shrink the regression surface along the main conversation path
 - Split settings, composer rewind-modal, and git-history branch-compare style shards so future styling work is no longer concentrated in a few oversized CSS hotspots
 - Remediate exhaustive-deps hotspots across app shell, threads, git history, file tree, layout, worktree prompt, Search, Project Memory, Spec Hub, and OpenCode surfaces by completing dependency arrays and cleanup-safe patterns, reducing stale closures and repeated side effects
@@ -3689,6 +4283,7 @@ English:
 - Archive and sync the related OpenSpec changes for Linux AppImage startup, Computer Use, and Claude streaming stability so behavior documentation stays aligned with the shipped implementation
 
 🐛 Fixes
+
 - Fix inline-completion cleanup and effect dependencies in TaskCreateModal during open and submit flows so the create-task modal no longer drifts into timeout-like delays, focus lag, or stale suggestion state
 - Fix git-history tail cleanup timer handling so create-PR progress cleanup no longer depends on stale ref snapshots that can leave trailing state behind
 - Fix heavy-test-noise environment-warning accounting so `electron_mirror`-style environment noise is still classified correctly even when the outer npm warning output is not fully captured, preventing false CI failures
@@ -3707,11 +4302,13 @@ English:
 中文：
 
 ✨ Features
+
 - 新增全局 runtime notice dock，为 Codex / Claude 会话中的恢复、重试与运行时异常提供统一提示区，减少异常状态分散在局部卡片里的割裂感
 - 增强会话创建失败后的恢复承接动作，在建会话、恢复线程或 runtime 异常时补充 toast 级快速重试入口，帮助用户直接续接当前任务
 - 收口 queued follow-up fusion 的续跑体验，在检查点恢复、排队发送与融合承接之间补齐状态连续性，让长链路任务在 stalled 后更容易从原位置继续推进
 
 🔧 Improvements
+
 - 拆分消息时间线渲染层并瘦身主消息组件，收敛 `Messages` 组件职责，降低消息区持续叠加功能后的维护复杂度和回归面
 - 优化实时吸顶用户问题与历史吸顶标题的对齐关系，统一 live sticky bubble 与历史区域头部的视觉基线，减少长会话中的吸顶错位噪音
 - 补强运行时提示框启动链路与状态语义，补充本地状态迁移、输入历史恢复、界面资源加载与 shell 挂载提示，并在首次 runtime `ready` 时回写状态闭环，让客户端启动阶段更可见
@@ -3720,6 +4317,7 @@ English:
 - 同步归档本轮已完成的 OpenSpec 变更并刷新相关 proposal / spec，使运行时稳定性、融合续跑与消息区行为说明继续与实现保持一致
 
 🐛 Fixes
+
 - 修复展开历史消息后的视口跳动问题，避免查看折叠历史时因列表重算而丢失阅读位置
 - 修复会话恢复提示与重试链路中的边界问题，避免恢复失败后 toast 缺失、动作不可达或提示状态与真实 runtime 状态不一致
 - 修复 checkpoint fusion stalled continuity 问题，避免融合续跑在卡住或恢复后出现后续消息未承接、状态悬空或任务推进中断
@@ -3731,11 +4329,13 @@ English:
 English:
 
 ✨ Features
+
 - Add a global runtime notice dock so Codex and Claude conversations expose recovery, retry, and runtime anomalies through one shared surface instead of scattering critical state across local cards
 - Strengthen recovery handoff after session-creation failures by surfacing toast-level retry actions for session bootstrap, thread recovery, and runtime failures, making it easier to continue the current task directly
 - Tighten queued follow-up fusion continuity across checkpoint recovery, queued sends, and fusion handoff so long-running tasks can resume from stalled states with less drift and fewer broken continuations
 
 🔧 Improvements
+
 - Split the message-timeline rendering layer and slim down the main message component, reducing `Messages` complexity and lowering the regression surface as more message-area capabilities accumulate
 - Align live sticky user-question bubbles with the history sticky header so the visual baseline stays consistent during long conversations and sticky elements compete less for attention
 - Strengthen the runtime notice dock bootstrap flow and status semantics by adding migration, input-history, interface-resource, and shell-mount notices, while writing back the first runtime `ready` state so startup progress reads as a complete lifecycle
@@ -3744,6 +4344,7 @@ English:
 - Sync and archive the completed OpenSpec changes from this release, keeping runtime-stability, fusion-continuity, and message-behavior documentation aligned with the implementation
 
 🐛 Fixes
+
 - Fix viewport jumps after expanding conversation history so users can inspect collapsed history without losing their reading position during list recomputation
 - Fix boundary issues in session-recovery notices and retry flows so failed recovery attempts still expose reachable toast actions with runtime state that matches what actually happened
 - Fix stalled checkpoint fusion continuity so follow-up messages, continuation state, and long-running task progress no longer get stranded after recovery
@@ -3759,16 +4360,19 @@ English:
 中文：
 
 ✨ Features
+
 - 新增历史幕布按分段吸顶用户问题能力，在长会话中持续固定当前讨论语境，帮助用户更稳定地对照上下文推进多阶段任务
 - 增强 Windows 下 Codex runtime 稳定性治理，补齐 stalled user input、runtime idle mismatch 与异常退出后的恢复诊断和自动承接链路
 - 重构并简化 Codex `unified_exec` 官方配置入口，收口启动配置来源、覆盖策略与设置页治理，降低多入口配置漂移和理解成本
 
 🔧 Improvements
+
 - 统一全局 loading 进度处理，收敛工作区操作、线程建链与消息发送过程中的进度展示与状态切换
 - 统一 runtime 实例保留时长的默认值与上限，减少前后端设置理解偏差与长任务运行时配置歧义
 - 拆分消息历史吸顶样式文件并同步归档已验证的 OpenSpec / runtime / unified_exec 规范，提升消息区样式可维护性并保持行为说明与实现一致
 
 🐛 Fixes
+
 - 修复历史吸顶长气泡重叠问题，并固化实时用户问题气泡展示，避免长会话下用户问题定位漂移
 - 修复 Explore 卡片在阶段推进后的自动折叠，减少多阶段思考场景中的信息丢失
 - 修复完成提示音在同一 turn 内可能重复触发以及事件键碰撞问题，降低实时通知噪音
@@ -3778,16 +4382,19 @@ English:
 English:
 
 ✨ Features
+
 - Add segmented sticky user-question pinning in the conversation history so long-running conversations preserve the active context more reliably across multi-stage tasks
 - Strengthen Codex runtime stability on Windows with better diagnostics and automatic recovery handoff for stalled user input, runtime-idle mismatches, and unexpected runtime exits
 - Rework and simplify the official Codex `unified_exec` configuration entry by consolidating launch-profile sources, override strategy, and Settings governance to reduce multi-entry config drift
 
 🔧 Improvements
+
 - Unify global loading-progress handling so workspace actions, thread bootstrapping, and message sending share more consistent progress visibility and state transitions
 - Align the default value and upper bound for runtime instance retention to reduce frontend/backend settings drift and ambiguity in long-running task configuration
 - Split history-sticky message styles into a dedicated stylesheet and sync verified OpenSpec, runtime, and `unified_exec` specifications so implementation and behavior docs stay aligned
 
 🐛 Fixes
+
 - Fix overlapping long sticky bubbles in message history and stabilize live user-question pinning so user prompts stay anchored more reliably in long conversations
 - Fix Explore cards auto-collapsing after stage transitions, reducing information loss during multi-step reasoning flows
 - Fix duplicate completion sounds within the same turn and event-key collisions to reduce noisy real-time notifications
@@ -3801,12 +4408,14 @@ English:
 中文：
 
 ✨ Features
+
 - 新增全局会话归档中心，支持跨项目聚合查看历史会话，并收紧 Codex 配置边界，降低多入口配置漂移风险
 - 新增会话恢复诊断与降级承接链路，在 runtime 断连、线程失效或恢复失败时提供更明确的状态解释与后续操作入口
 - 新增加载进度弹窗，支持工作区打开、添加项目与创建会话等长耗时操作的进度提示、后台运行与多请求可见性管理
 - 增强引擎可用性状态透传，区分检测中、可用、需登录与不可用状态，并同步到侧栏、引擎选择器和输入区 provider selector
 
 🔧 Improvements
+
 - 收敛设置页实验区入口，将续写、融合等能力命名与归属统一到更清晰的配置结构
 - 优化 Codex 实验配置展示与跨平台配置入口，减少不同系统环境下的入口差异与误导
 - 加固 Claude 手动压缩与会话恢复边界，减少 compact、恢复、重发等长链路操作中的状态漂移
@@ -3814,6 +4423,7 @@ English:
 - 优化侧栏线程列表降级恢复入口，将 thread 级降级提示收口到 workspace/worktree 级快速刷新，并支持主工作区联动刷新其 worktree 线程列表
 
 🐛 Fixes
+
 - 修复会话管理边界处理问题，并补齐全量回归夹具，提升归档、聚合与路由场景的稳定性
 - 修复工作树中新建会话入口交互异常，避免用户从侧栏进入新会话时出现状态错位
 - 修复工作区文件树刷新不稳定问题，避免目录节点、独立文件窗口与工作区文件状态在刷新后不同步
@@ -3826,12 +4436,14 @@ English:
 English:
 
 ✨ Features
+
 - Add a global session archive center for cross-project history aggregation, while tightening Codex configuration boundaries to reduce configuration drift across entry points
 - Add session recovery diagnostics and fallback handoff paths so runtime disconnects, stale threads, and failed recovery attempts provide clearer state and next-action guidance
 - Add a loading progress dialog for long-running workspace open, add-project, and session-creation operations, with background-running support and multi-request visibility management
 - Improve engine availability propagation by distinguishing loading, ready, requires-login, and unavailable states across the sidebar, engine selector, and input provider selector
 
 🔧 Improvements
+
 - Consolidate the Settings experimental area and align naming/ownership for continuation and fusion capabilities into a clearer configuration structure
 - Refine Codex experimental settings and cross-platform configuration entry points to reduce platform-specific ambiguity
 - Harden Claude manual compact and session-recovery boundaries to reduce state drift across compact, recovery, and resend flows
@@ -3839,6 +4451,7 @@ English:
 - Improve sidebar degraded-thread recovery by moving thread-level degraded hints to workspace/worktree quick reload actions, with parent workspace refresh cascading to worktrees
 
 🐛 Fixes
+
 - Fix session-management boundary handling and add full regression fixtures to improve stability across archive, aggregation, and routing scenarios
 - Fix the worktree new-session entry interaction so sidebar-launched sessions no longer drift into an incorrect state
 - Fix unstable workspace file-tree refreshes so directory nodes, detached file windows, and workspace file state stay synchronized after refresh
@@ -3855,26 +4468,32 @@ English:
 中文：
 
 ✨ Features
+
 - 新增项目范围会话管理能力，支持按项目聚合会话并进行归属路由，让项目内历史会话更容易集中管理
 
 🔧 Improvements
+
 - 收口启动期图标懒加载链路，减少启动阶段不必要的资源开销，提升首屏进入稳定性
 - 归档项目会话管理范围修正提案，使行为说明与已落地实现保持一致
 
 🐛 Fixes
+
 - 修复空项目会话重复加载问题，避免无会话项目反复触发无效刷新
 - 修复图标懒加载回归，避免启动阶段因资源加载路径变化导致图标展示异常
 
 English:
 
 ✨ Features
+
 - Add project-scoped session management with project-level aggregation and attribution routing, making in-project session history easier to manage
 
 🔧 Improvements
+
 - Tighten the startup icon lazy-loading path to reduce unnecessary startup overhead and improve first-screen stability
 - Archive the project-session-management scope correction proposal so behavior docs stay aligned with the delivered implementation
 
 🐛 Fixes
+
 - Fix repeated loading for projects with no sessions, preventing empty projects from triggering redundant refresh loops
 - Fix an icon lazy-loading regression so startup resource-path changes no longer break icon rendering
 
@@ -3885,17 +4504,20 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Runtime Pool Console 与独立设置面板，可集中查看 Codex runtime 池状态、进程观测信息与预算配置，提升运行时诊断与调优能力
 - 重构回溯模式与文件选择策略：将回溯确认改为三种模式单选（回退消息+相关文件、只回退消息、只回退文件），并仅纳入当前用户回合后的真实 mutation 文件
 - 为消息区新增 runtime 恢复卡片，支持断链诊断、一键重连，以及恢复后直接重发上一条用户提示词
 
 🔧 Improvements
+
 - 增强 Claude plan mode 到执行态的切换体验：保留首张 handoff 卡、记录按钮状态、支持复制计划 markdown，并优化模式切换后的可感知反馈
 - 强化 Claude 默认模式审批桥接与审批卡展示：补齐路径摘要提取、默认隐藏 content/patch/diff 正文，并降低审批噪音
 - 优化 runtime 预算面板与恢复提示文案，补齐 Codex-only 预算边界、异常输入归一化和跨平台提示一致性
 - 提升工作区恢复、会话继续与项目会话批量删除后的刷新收敛速度，减少长链路操作中的等待与状态漂移
 
 🐛 Fixes
+
 - 修复 runtime orchestrator 启动与注册期间的进程回收竞态，避免会话创建、恢复或连接过程中被误判并提前回收
 - 修复会话继续时旧 `threadId` 失效后的恢复失败，并补齐 `thread not found`、`SESSION_NOT_FOUND` 与 stale session 等场景的自动恢复链路
 - 修复运行时断连后的重连卡片误判、重发来源错误、重复用户气泡与无效成功提示等问题
@@ -3905,17 +4527,20 @@ English:
 English:
 
 ✨ Features
+
 - Add a Runtime Pool Console and dedicated settings panel to inspect Codex runtime-pool state, process observability, and budget settings for easier diagnosis and tuning
 - Refactor rewind mode and file selection strategy into three explicit options (rollback message+related files, message-only, files-only), while limiting file rollback targets to real mutations from the current user turn
 - Add a dedicated runtime recovery card in the message area with disconnect diagnosis, one-click reconnect, and resend-last-prompt support after recovery
 
 🔧 Improvements
+
 - Improve the Claude plan-to-execution experience by preserving the first handoff card, keeping button state, supporting plan-markdown copy, and adding clearer post-switch feedback
 - Harden the Claude default-mode approval bridge and approval-card presentation with better path summaries and hidden content/patch/diff bodies to reduce noise
 - Refine runtime budget controls and recovery messaging with tighter Codex-only boundaries, invalid-input normalization, and more consistent cross-platform prompts
 - Improve refresh convergence after workspace restore, conversation resume, and bulk session deletion to reduce waiting time and state drift in long-running flows
 
 🐛 Fixes
+
 - Fix runtime-orchestrator startup and registration races that could misclassify active processes and recycle them too early during session creation, recovery, or connection
 - Fix failed conversation resume when an old `threadId` becomes invalid, and complete automatic recovery for cases such as `thread not found`, `SESSION_NOT_FOUND`, and stale sessions
 - Fix reconnect-card false positives, incorrect resend-source selection, duplicated user bubbles, and ineffective success notices after runtime disconnects
@@ -3929,10 +4554,12 @@ English:
 中文：
 
 ✨ Features
+
 - 渐进开放 Claude Code planning mode 与默认模式，补齐从预览到默认可用的发布链路
 - 完成 Claude 默认模式审批桥与对话连续性改造，提升计划执行切换时的上下文连贯性
 
 🐛 Fixes
+
 - 修复共享会话幕布中 assistant 重复输出与 fallback 误判
 - 提升 Codex/Claude 数学公式渲染与会话去重兼容性
 - 修复旧引擎正则兼容并增强跨平台命令稳定性
@@ -3945,10 +4572,12 @@ English:
 English:
 
 ✨ Features
+
 - Gradually open Claude Code planning mode and default mode, completing the rollout path from preview to default availability
 - Complete the Claude default-mode approval bridge and conversation continuity refactor to improve context continuity during plan-to-execution transitions
 
 🐛 Fixes
+
 - Fix duplicate assistant outputs and fallback misclassification in shared-session curtain rendering
 - Improve Codex/Claude math rendering compatibility and conversation de-duplication behavior
 - Fix legacy engine regex compatibility and harden cross-platform command stability
@@ -3965,15 +4594,18 @@ English:
 中文：
 
 ✨ Features
+
 - 落地共享会话能力并收口至 Claude/Codex 引擎，支持跨引擎会话共享与消息归一化
 - 实现侧栏缓存机制并重构 app-shell，提升工作区切换与侧栏加载性能
 - 支持回溯场景下删除文件的识别与可选工作区文件恢复，增强回溯操作完整性
 
 🔧 Improvements
+
 - 优化工作区首页进入流程，降低首次进入门槛并提升安全性
 - 移除侧栏硬编码颜色，统一使用主题变量，提升多主题一致性
 
 🐛 Fixes
+
 - 修复正文中 LaTeX 与普通文本混排时的渲染异常，提升技术内容阅读体验
 - 修复共享会话在兼容性与消息归一化链路中的边界问题
 - 修复共享会话流程与工作区首页刷新之间的回归冲突
@@ -3981,15 +4613,18 @@ English:
 English:
 
 ✨ Features
+
 - Land shared-session capability scoped to Claude/Codex engines with cross-engine session sharing and message normalization
 - Implement sidebar caching and refactor app-shell to improve workspace switching and sidebar loading performance
 - Support deleted-file detection in rewind scenarios with optional workspace file restoration for stronger rollback completeness
 
 🔧 Improvements
+
 - Make the workspace home entry flow safer and easier to reach, lowering the first-visit barrier
 - Remove hardcoded sidebar colors and unify with theme variables for better multi-theme consistency
 
 🐛 Fixes
+
 - Fix LaTeX mixed-content rendering issues in message bodies to improve technical content readability
 - Fix shared-session compatibility and message normalization edge cases
 - Integrate shared-session flow without regressing workspace-home refresh behavior
@@ -4001,6 +4636,7 @@ English:
 中文：
 
 ✨ Features
+
 - 完成 Claude / Codex 会话回溯链路统一，新增回溯导出、跨引擎线程交互、工作区恢复与更可靠的回退能力
 - 新增顶部会话标签右键菜单与批量关闭能力，提升多会话整理效率
 - 完成文件查看与预览链路，支持目录、表格、文档、PDF 等多类型文件预览，并增强配置文件语法高亮
@@ -4008,6 +4644,7 @@ English:
 - 为右侧状态区新增“最新用户对话”标签，提升长会话定位效率
 
 🔧 Improvements
+
 - 收口主窗口文件渲染契约、主窗口渲染决策链与文件视图状态模块，降低文件模式切换时的状态漂移
 - 优化回溯入口视觉反馈，统一为历史语义图标，并在会话进行中禁用危险回溯操作
 - 加固启动守护链路并补齐大文件治理预警，降低桌面端复杂启动场景下的维护成本
@@ -4016,6 +4653,7 @@ English:
 - 补齐自定义 npm prefix、CLI fallback 与跨平台命令启动的回归测试，增强跨平台可维护性
 
 🐛 Fixes
+
 - 修复 Claude 回溯恢复在 `add / delete / update`、空文件、无行号 hunk、首条消息回退等边界场景下的遗漏与失败问题
 - 修复工作区恢复、文件视图导航竞态、本地会话历史扫描与打开工作区链路中的 Win / mac 路径兼容问题
 - 修复顶部会话标签右键菜单在标题栏区域失效的问题，并增强窗口重载与白屏兜底诊断恢复能力
@@ -4030,6 +4668,7 @@ English:
 English:
 
 ✨ Features
+
 - Unify the Claude / Codex rewind flow with export support, cross-engine thread interaction, workspace restore, and stronger rollback reliability
 - Add a context menu and bulk-close actions for topbar session tabs to improve multi-session management
 - Complete the file preview pipeline for directories, tabular data, documents, and PDFs, with stronger config-file syntax highlighting
@@ -4037,6 +4676,7 @@ English:
 - Add a “latest user conversation” label in the status panel to improve orientation in long-running sessions
 
 🔧 Improvements
+
 - Tighten the main-window file rendering contract, render-decision flow, and file-view state modules to reduce drift when switching file modes
 - Refine rewind entry visuals by switching to a history-oriented icon and disabling risky rewind actions while a session is still running
 - Harden the startup guard path and large-file governance alerts to reduce maintenance overhead in complex desktop bootstrap scenarios
@@ -4045,6 +4685,7 @@ English:
 - Add regression coverage for custom npm prefix discovery, CLI fallback behavior, and cross-platform command launching to improve long-term maintainability
 
 🐛 Fixes
+
 - Fix Claude rewind restore failures across `add / delete / update`, empty-file, no-line-number hunk, and first-message rollback edge cases
 - Fix Win / mac path-compatibility issues across workspace restore, file-view navigation races, local session-history scanning, and workspace opening
 - Fix the topbar session-tab context menu failing inside the titlebar region, and improve white-screen recovery with stronger diagnostics and window reload fallback
@@ -4063,6 +4704,7 @@ English:
 中文：
 
 ✨ Features
+
 - 品牌升级为 `ccgui` 并支持 legacy 数据迁移，降低现有用户升级切换成本
 - 新增幕布宽度配置与左到右视图切换，完善不同布局偏好的使用体验
 - 新增对话/看板快捷键与会话大小展示，提升导航与会话管理效率
@@ -4073,6 +4715,7 @@ English:
 - 为右下角子代理列表补充按引擎分流的跳转行为：Claude Code 可定位到当前幕布中的 agent 卡片，Codex 可跳转到对应 session
 
 🔧 Improvements
+
 - 降低实时会话更新对输入链路的干扰，提升连续输入稳定性
 - 拆分设置页样式模块并通过大文件门禁，降低后续样式迭代耦合
 - 优化 `MCP` 设置页总览卡、引擎选择与详情区的联动语义，减少跨区域状态错位
@@ -4082,6 +4725,7 @@ English:
 - 强化子代理导航目标聚合逻辑，兼容 `taskId` / `task_id` 并优先保留更完整的定位信息
 
 🐛 Fixes
+
 - 修复启动链异常场景下的黑屏问题，增强冷启动兜底能力
 - 修复 Web 端切换 Codex 后无法继续对话与历史丢失问题
 - 修复跨会话绑定边界问题，并增强 Win/mac 命令包装兼容性
@@ -4102,6 +4746,7 @@ English:
 English:
 
 ✨ Features
+
 - Rebrand the app to `ccgui` and support legacy data migration to reduce upgrade friction for existing users
 - Add curtain-width settings and a left-to-right view toggle to better support different layout preferences
 - Add conversation/kanban shortcuts and session-size display to improve navigation and session management
@@ -4112,6 +4757,7 @@ English:
 - Add engine-aware jump behavior from the bottom-right subagent list: Claude Code scrolls to the in-canvas agent card, while Codex opens the corresponding session
 
 🔧 Improvements
+
 - Reduce interference from realtime session updates in the composer input flow for steadier typing
 - Split settings style modules and pass the large-file guard to reduce styling coupling in future iterations
 - Tighten the linkage between the `MCP` overview cards, engine selector, and detail area to prevent cross-section state drift
@@ -4121,6 +4767,7 @@ English:
 - Harden subagent navigation-target aggregation by supporting both `taskId` and `task_id` and preferring richer anchor metadata
 
 🐛 Fixes
+
 - Fix black-screen scenarios during bootstrap failures by adding a safer startup fallback path
 - Fix the inability to continue chatting and the history-loss issue after switching to Codex on Web
 - Fix cross-session binding edge cases and improve Win/mac command-wrapper compatibility
@@ -4145,12 +4792,14 @@ English:
 中文：
 
 ✨ Features
+
 - 新增用户消息 `@路径` 引用提取与独立引用卡片展示，提升上下文可读性
 - 新增 Codex/Claude/Gemini 流式等待与入流特效联动，并增强浅色主题可见性
 - 优化显示设置实时预览与本地字体选择流程，降低个性化配置成本
 - 优化基础设置中的语言切换视觉反馈，提升设置面板状态可辨识性
 
 🔧 Improvements
+
 - 补齐 Claude 幕布隐藏 run command 卡片的测试用例，收紧消息卡片可见性回归风险
 - 压缩左侧工作区项目的纵向占用，提升侧边栏信息密度与浏览效率
 - 调整侧边栏分组与项目列表的视觉层级和间距，提升信息扫读效率
@@ -4158,6 +4807,7 @@ English:
 - 拆分设置页样式大文件，降低样式维护耦合与回归风险
 
 🐛 Fixes
+
 - 修复用户引用卡片视觉层级与紧凑度问题，减少消息区噪音
 - 修复用户输入 `@路径` 在相邻文本场景下的解析错误，避免引用提取遗漏
 - 修复项目设置中默认 workspace 显示问题，并合并未分组侧边栏条目
@@ -4171,12 +4821,14 @@ English:
 English:
 
 ✨ Features
+
 - Add extraction of user-message `@path` references and render them as standalone reference cards for better context readability
 - Add synchronized streaming wait/arrival effects across Codex, Claude, and Gemini, with improved visibility in light themes
 - Improve display-settings live preview and local-font selection flow to reduce customization friction
 - Improve visual feedback for language switching in base settings to increase state clarity
 
 🔧 Improvements
+
 - Add coverage for Claude curtain behavior to hide run-command cards, reducing regression risk in message-card visibility
 - Reduce vertical space usage in the left workspace project list to improve sidebar information density and scan efficiency
 - Refine visual hierarchy and spacing between sidebar groups and project lists to improve scanability
@@ -4184,6 +4836,7 @@ English:
 - Split oversized settings style files to reduce styling coupling and regression risk
 
 🐛 Fixes
+
 - Fix visual hierarchy and density issues in user reference cards to reduce chat-area noise
 - Fix parsing failures for user-input `@path` references when adjacent text is present, preventing missed reference extraction
 - Fix default workspace visibility in project settings and merge ungrouped sidebar entries
@@ -4201,15 +4854,18 @@ English:
 中文：
 
 ✨ Features
+
 - 输入区快捷动作改为独立图标入口，并新增二级菜单，减少常用操作路径
 - 优化提示词选择与设置页交互，提升提示词管理效率
 - Git 提交信息支持按语言生成中英文内容，便于跨语种协作
 - Git 提交信息新增按引擎生成策略并规范化 AI 输出，提升不同模型下提交文案一致性
 
 🔧 Improvements
+
 - 拆分超大文件并收口模块职责，降低维护成本并改善后续迭代稳定性
 
 🐛 Fixes
+
 - 修复快捷动作无障碍属性与“创建提示词”事件链路，避免交互失效
 - 修复 prompt enhancement 在多 workspace 下偶发不生效问题，提升增强链路稳定性
 - 修复本地图像预览回退异常，并收紧本地文件读取边界
@@ -4219,15 +4875,18 @@ English:
 English:
 
 ✨ Features
+
 - Convert composer quick actions into a dedicated icon entry and add a secondary menu to shorten frequent action paths
 - Improve prompt selection and settings interactions for smoother prompt management
 - Support language-aware Git commit message generation in both Chinese and English for cross-language collaboration
 - Add engine-aware Git commit message generation and normalize AI output for more consistent commit text across models
 
 🔧 Improvements
+
 - Split oversized files and tighten module responsibilities to reduce maintenance cost and improve iteration stability
 
 🐛 Fixes
+
 - Fix accessibility attributes and the prompt-creation event chain for composer quick actions to prevent interaction failures
 - Fix occasional prompt-enhancement failures across workspaces to improve enhancement reliability
 - Fix local image preview fallback issues and tighten local file-read boundaries
@@ -4241,14 +4900,17 @@ English:
 中文：
 
 ✨ Features
+
 - 侧边栏新增悬停图钉交互，并支持固定区一键取消固定，提升会话管理效率
 - 优化引擎核心流程，增强多模块协同下的性能与稳定性
 
 🔧 Improvements
+
 - 将 `/review` 命令匹配逻辑升级为命令头严格匹配，并兼容 review-like 自定义命令
 - 加固线程路径匹配的 Win/mac 跨平台兼容性，降低路径判定偏差
 
 🐛 Fixes
+
 - 修复 Gemini `sessionId` 提取过严导致的会话续传失败与消息拆会话问题
 - 修复固定会话后项目列表残留与刷新延迟问题
 - 修复深色主题下最终消息与推理边界不可见问题，并补齐兼容回退
@@ -4259,14 +4921,17 @@ English:
 English:
 
 ✨ Features
+
 - Add hover-to-pin interactions in the sidebar and one-click unpin for the pinned section to improve session management
 - Optimize core engine flow to improve multi-module performance and runtime stability
 
 🔧 Improvements
+
 - Tighten `/review` parsing with strict command-head matching while keeping compatibility with review-like custom commands
 - Harden cross-platform thread-path matching for Win/mac to reduce path-resolution drift
 
 🐛 Fixes
+
 - Fix overly strict Gemini `sessionId` extraction that caused resume failures and message split sessions
 - Fix stale project-list residues and delayed refresh after pinning sessions
 - Fix invisible final/reasoning boundaries in dark theme and add compatibility fallback rendering
@@ -4281,16 +4946,19 @@ English:
 中文：
 
 ✨ Features
+
 - 新增智能体会话隔离机制，并收口首轮会话链路，减少跨会话上下文串扰
 - 完成智能体图标全链路接入（设置、输入区、消息区、线程历史），提升多智能体识别效率
 - 增强 Codex 运行时配置热刷新能力，并支持历史会话输出折叠，降低长会话浏览噪音
 - 统一 assistant final 边界元数据并优化历史恢复链路，提升历史回放一致性
 
 🔧 Improvements
+
 - 拆分 `Messages` 超大组件与对应测试用例，降低单文件复杂度并提升维护效率
 - 系统性收紧 `noUncheckedIndexedAccess` 与线程条目链路类型边界，减少隐式空值与索引越界风险
 
 🐛 Fixes
+
 - 修复消息渲染链路中“注入式智能体提示”泄漏到用户正文的问题，避免内容污染
 - 修复代码复制语义混淆：区分纯文本复制与带 fenced code block 的复制路径
 - 修复线程历史中已选智能体上下文丢失问题，保证回放后会话身份连续
@@ -4301,16 +4969,19 @@ English:
 English:
 
 ✨ Features
+
 - Introduce agent-session isolation and stabilize first-turn routing to reduce cross-session context bleed
 - Complete end-to-end agent icon integration across settings, composer, message rendering, and thread history for faster multi-agent recognition
 - Enhance Codex runtime config hot-refresh and add collapsible history output to reduce noise in long sessions
 - Unify assistant-final boundary metadata and improve history recovery consistency during replay
 
 🔧 Improvements
+
 - Split oversized `Messages` module and related test suites to lower file complexity and improve maintainability
 - Tighten `noUncheckedIndexedAccess` and thread-item type boundaries to reduce implicit-null and index-access risks
 
 🐛 Fixes
+
 - Fix injected agent prompts leaking into user-visible message text
 - Fix code-copy behavior by separating plain-text copy from fenced code copy flows
 - Fix loss of selected-agent context when restoring thread history
@@ -4325,6 +4996,7 @@ English:
 English:
 
 ✨ Features
+
 - Redesign Skills management into a tree-based global browser that unifies multi-source skill directories, and add in-panel editing/saving with structured preview so users can inspect and update skills without leaving Settings
 - Complete missing Web Git RPC coverage in the local daemon and split `daemon_state` into dedicated modules, making Web-mode Git actions more complete while improving daemon lifecycle maintainability
 - Harden multi-engine history-chain recovery in Web mode by reorganizing oversized bridge/runtime paths, reducing replay fragility after interruptions and improving cross-engine continuity
@@ -4338,6 +5010,7 @@ English:
 - Refresh the home-chat welcome area with client iconography and adjusted landing styles for stronger first-screen hierarchy
 
 🔧 Improvements
+
 - Align file-tree Git folder status coloring with actual changed-path semantics, including test and style alignment, so folder-level change scanning is more predictable and visually consistent
 - Migrate message-flow tests into modular suites and harden realtime control-button compatibility to reduce UI regression risk
 - Refactor `threadItems` by extracting exploration summarization and file-change inference into dedicated utility modules, reducing monolith complexity while preserving behavior
@@ -4345,6 +5018,7 @@ English:
 - Keep failed or non-executed patch command entries as regular `commandExecution` items so only real edits are promoted into file-change cards
 
 🐛 Fixes
+
 - Fix local web-service auto-start failures caused by daemon binary discovery issues by adding a more robust binary-location fallback path in bootstrap logic
 - Fix non-default project history fetching getting stuck after a single failed request by correcting error-state reset behavior in the Web loading chain
 - Fix packaged-build white screen issues caused by missing/incorrect Web static resource resolution by repairing runtime static path wiring
@@ -4357,6 +5031,7 @@ English:
 中文：
 
 ✨ Features
+
 - 将 Skills 管理重构为树形全局浏览器，统一聚合多来源技能目录，并补齐面板内编辑/保存与结构化预览能力，减少在设置与文件系统之间来回切换
 - 补齐本地 daemon 在 Web 模式下缺失的 Git RPC 覆盖，并拆分 `daemon_state` 为独立职责模块，在提升 Git 操作完整度的同时改善 daemon 生命周期可维护性
 - 通过重组多引擎桥接与运行时链路、拆分超大 Web 模块，加固 Web 模式历史链路恢复能力，降低跨引擎会话回放在中断后的脆弱性
@@ -4370,6 +5045,7 @@ English:
 - 优化首页欢迎区首屏层次：新增客户端图标并调整欢迎样式编排
 
 🔧 Improvements
+
 - 对齐文件树 Git 文件夹状态着色与实际变更路径语义，并同步测试与样式表现，使目录级变更扫描更可预测、视觉反馈更一致
 - 将消息链路测试迁移为模块化结构，并加固实时控制按钮兼容性，降低后续 UI 演进时的回归风险
 - 重构 `threadItems`：将探索摘要与文件变更推断逻辑拆分为独立工具模块，降低单文件复杂度并保持原有行为一致
@@ -4377,6 +5053,7 @@ English:
 - 对失败执行或仅包含 patch 文本但未真正执行 `apply_patch` 的场景，保持原有 `commandExecution` 展示，避免误判为文件变更
 
 🐛 Fixes
+
 - 修复本地 web-service 自动启动时 daemon 二进制定位失败的问题：在 bootstrap 链路增加更稳健的二进制定位兜底路径
 - 修复非默认项目历史拉取在单次失败后进入“锁死”状态的问题：纠正 Web 侧失败状态复位逻辑，恢复后续请求可继续执行
 - 修复安装包场景下 Web 静态资源解析缺失/错误导致白屏的问题：修正运行时静态资源路径装配链路
@@ -4393,15 +5070,18 @@ English:
 English:
 
 ✨ Features
+
 - Add detached file explorer window for independent file browsing and operations
 - Support cross-window drag-and-drop from detached file tree into main chat composer
 - Align detached file tree interactions with Git semantics for consistent file operations
 - Improve file-view interaction details and external-change awareness signals
 
 🔧 Improvements
+
 - Split Git History panel resize control into a dedicated module to improve maintainability and isolate runtime risks
 
 🐛 Fixes
+
 - Fix Claude model selection regression where 4.6 could fall back to 4.5 unexpectedly
 - Fix Claude session resume path and default-model fallback behavior
 - Deduplicate Codex agent real-time message snapshots to prevent repeated rendering
@@ -4410,15 +5090,18 @@ English:
 中文：
 
 ✨ Features
+
 - 新增独立文件窗口（detached file explorer），支持脱离主界面进行文件浏览与操作
 - 支持 detached 文件树跨窗口拖拽落入主聊天输入框
 - 对齐 detached 文件树交互与 Git 语义，统一文件操作体验
 - 优化文件视图交互细节并增强外部变更感知提示
 
 🔧 Improvements
+
 - 拆分 Git History 面板尺寸控制为独立模块，提升可维护性并隔离运行时风险
 
 🐛 Fixes
+
 - 修复 Claude 模型选择链路回归：4.6 可能被意外回退到 4.5
 - 修复 Claude 会话续传链路与默认模型回退问题
 - 去重 Codex agent 实时消息快照，避免正文重复渲染
@@ -4431,6 +5114,7 @@ English:
 English:
 
 ✨ Features
+
 - Add Gemini CLI vendor configuration and preflight checks
 - Implement Gemini real-time/history session rendering with multi-engine boundary isolation
 - Complete Gemini real-time body streaming and unify file-change activity display
@@ -4442,10 +5126,12 @@ English:
 - Add per-item delete and unread control for Session Activity radar recent-completion entries
 
 🔧 Improvements
+
 - Rebrand codemoss to mossx and localize WeChat QR asset
 - Split oversized files to satisfy large-file governance gate and improve maintainability
 
 🐛 Fixes
+
 - Fix Gemini session loss and auto-recovery after stop
 - Fix image message session isolation and history image path resolution
 - Isolate Gemini image reference handling and history extraction
@@ -4466,6 +5152,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Gemini CLI 供应商配置与预检能力
 - 复刻 Gemini 实时/历史会话并完善多引擎边界隔离
 - 补齐 Gemini 实时正文流并统一文件变更活动展示
@@ -4477,10 +5164,12 @@ English:
 - Session Activity 雷达区最近完成项支持单条删除与未读控制
 
 🔧 Improvements
+
 - 品牌重塑：codemoss → mossx，本地化微信二维码资源
 - 拆分超限大文件并通过 large-file 治理门禁
 
 🐛 Fixes
+
 - 修复 Gemini 停止后会话丢失与自动恢复问题
 - 修复图片消息会话隔离与历史图片路径解析
 - 隔离 Gemini 图片引用处理与历史提取
@@ -4505,16 +5194,20 @@ English:
 English:
 
 ✨ Features
+
 - Add automatic compact-recovery for overlong Claude prompts and map compact events into session activity for better continuity
 - Support per-item delete and unread-state control for Session Activity radar "recent completed" entries
 
 🔧 Improvements
+
 - Split Claude lifecycle, auto-compact retry, and AskUserQuestion/user-input handling into dedicated modules to satisfy large-file governance and improve maintainability
 
 ⚡ Performance
+
 - Reduce CPU peak in multi-session realtime chat and improve stability boundaries
 
 🐛 Fixes
+
 - Fix duplicated real-time body rendering in Claude chat streaming path
 - Fix multiline resume-input handling for AskUserQuestion on Windows/macOS and add snapshot-only regression coverage
 - Harden strict `request_id -> turn_id` routing in AskUserQuestion response flow to reduce cross-session/cross-turn answer leakage risk
@@ -4527,16 +5220,20 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Claude 超长 Prompt 自动 compact 恢复能力，并将 compact 事件映射到会话活动链路，提升长会话连续性
 - Session Activity 雷达最近完成项支持单条删除与未读控制
 
 🔧 Improvements
+
 - 将 Claude 生命周期、自动 compact 重试、AskUserQuestion/用户输入处理拆分为独立模块，满足 large-file 治理门禁并提升可维护性
 
 ⚡ Performance
+
 - 降低多会话实时对话 CPU 峰值，并补齐稳定性边界
 
 🐛 Fixes
+
 - 修复 Claude 聊天流式链路中实时正文重复渲染问题
 - 修复 AskUserQuestion 在 Windows/macOS 下多行 resume 输入处理异常，并补齐 snapshot-only 回归覆盖
 - 加固 AskUserQuestion 响应链路的 `request_id -> turn_id` 严格路由，降低多会话/多轮场景下答案串线风险
@@ -4553,6 +5250,7 @@ English:
 English:
 
 ✨ Features
+
 - Deliver Phase 1 of Kanban scheduling and chained-task governance to improve multi-task flow control
 - Optimize serial scheduling rules and introduce a clearer Kanban label taxonomy
 - Enhance group-level batch operations and task-creation interactions in Kanban workflows
@@ -4564,12 +5262,14 @@ English:
 - Add `/context` command and `<image>` tag parsing/rendering in chat for richer context-injection and multimodal flows
 
 🔧 Improvements
+
 - Add `windows-latest` doctor + integration CI gate for stronger cross-platform release confidence
 - Harden Windows compatibility checks by making lint/runtime contract `no-undef` verification Windows-safe
 - Refine main-header layout composition for session tabs while keeping sidebar topbar compact
 - Split oversized Claude/message modules to satisfy large-file governance gate and improve maintainability
 
 🐛 Fixes
+
 - Fix scheduler lock contention and drag-sort anomalies under filtered Kanban views
 - Fix batch-complete confirmation bypass and outside-click handling in grouped operations
 - Enforce second-step confirmation for batch completion and polish confirm-modal behavior/styles
@@ -4584,6 +5284,7 @@ English:
 中文：
 
 ✨ Features
+
 - 完成 Kanban 调度与串联任务治理第一阶段落地，提升多任务流转可控性
 - 优化串行调度规则并完善看板标签体系，提升任务组织清晰度
 - 增强分组级批量操作与任务创建交互体验
@@ -4595,12 +5296,14 @@ English:
 - 新增 `/context` 命令与 `<image>` 标签解析渲染，增强上下文注入与多模态消息链路
 
 🔧 Improvements
+
 - 新增 `windows-latest` 的 doctor + integration CI 门禁，提升跨平台发布稳定性
 - 调整 lint/运行时契约 `no-undef` 校验为 Windows 兼容实现
 - 优化主标题区布局编排，兼容顶部会话标签并保持侧栏顶部区域紧凑
 - 拆分 Claude/消息相关大文件，满足 large-file 治理门禁并提升可维护性
 
 🐛 Fixes
+
 - 修复过滤视图下调度锁竞争与拖拽排序异常
 - 修复分组批量完成流程中的确认放行与菜单外点击兼容问题
 - 修复批量完成缺少二次确认的问题并优化确认弹窗样式与行为
@@ -4619,6 +5322,7 @@ English:
 English:
 
 ✨ Features
+
 - Add Session Radar history management in Settings > Other, with batch delete support for completed radar entries
 - Persist Session Radar deletion to local client store (`leida`) instead of UI-only removal
 - Enhance Session Radar recent-completion cards with click-to-expand behavior while preserving direct session navigation
@@ -4629,6 +5333,7 @@ English:
 - Improve Session Activity real-time-follow guide overlay and assistant-entry discoverability
 
 🔧 Improvements
+
 - Introduce locked + atomic client-store write path and key-level patch updates to reduce stale overwrite risk across concurrent clients
 - Extract Settings "Other" section into a dedicated module and factor Radar persistence merge/event helpers for better maintainability
 - Improve Session Radar refresh flow through explicit history-updated event propagation after write/delete actions
@@ -4636,6 +5341,7 @@ English:
 - Refine model selector popup width behavior to avoid text overflow
 
 🐛 Fixes
+
 - Fix deleted Session Radar records reappearing after app restart
 - Fix multi-client writeback race that could restore previously deleted radar history
 - Fix large-file governance regression by replacing line-compression workaround with structural module splitting
@@ -4646,6 +5352,7 @@ English:
 中文：
 
 ✨ Features
+
 - 在设置页“其他设置”新增 Session Radar 历史管理，支持对已完成雷达记录进行批量删除
 - 会话雷达删除改为真实落盘到本地客户端存储（`leida`），不再只是界面层移除
 - 优化 Session Radar 最近完成卡片交互：支持点击展开且保留会话跳转能力
@@ -4656,6 +5363,7 @@ English:
 - 优化 Session Activity 实时跟随引导浮层与机器人入口可发现性
 
 🔧 Improvements
+
 - 客户端存储写入链路增加加锁与原子写，并支持按 key 的 patch 更新，降低多客户端并发下旧数据覆盖风险
 - 将设置页“其他设置”区块抽离为独立模块，并提取雷达持久化合并/事件辅助函数，提升可维护性
 - 删除与写入后通过显式历史更新事件驱动刷新，优化 Session Radar 视图同步链路
@@ -4663,6 +5371,7 @@ English:
 - 优化模型选择弹窗宽度自适应策略，避免文案溢出
 
 🐛 Fixes
+
 - 修复删除后的 Session Radar 记录在应用重启后回弹的问题
 - 修复多客户端并发写回导致已删除雷达历史被恢复的问题
 - 修复大文件治理回归，移除“压缩换行”临时方案并改为结构化拆分
@@ -4677,17 +5386,20 @@ English:
 English:
 
 ✨ Features
+
 - Add Session Radar panel in workspace to aggregate session status and improve at-a-glance visibility
 - Persist Session Radar completion records with stronger cross-workspace recovery
 - Add quick engine switching entry via bottom icon controls in composer
 - Support project-root-based custom Spec path resolution with automatic `openspec` discovery
 
 🔧 Improvements
+
 - Refine Session Radar read-state icon behavior and selected-state colors under dark theme
 - Polish selected icon style for panel tabs with cleaner border-only visual feedback
 - Refactor Session Radar persistence helpers to reduce large-file pressure and improve maintainability
 
 🐛 Fixes
+
 - Fix composer input overflow caused by long `MessageQueue` text blocks
 - Fix `MessageQueue` queue type reference mismatch in chat input path
 - Preserve raw user input format and restrict Spec prompt injection to first-turn only
@@ -4700,17 +5412,20 @@ English:
 中文：
 
 ✨ Features
+
 - 新增工作区 Session Radar 雷达面板，聚合会话状态并提升全局可观测性
 - 持久化 Session Radar 完成记录，增强跨工作区恢复能力
 - 在输入框底部 icon 区新增引擎快速切换入口
 - 支持以项目根为语义的自定义 Spec 路径，并自动解析 `openspec`
 
 🔧 Improvements
+
 - 优化 Session Radar 已读状态图标表现与深色主题选中色彩
 - 调整面板 Tab 图标选中态为更简洁的无背景边框风格
 - 抽离 Session Radar 持久化辅助逻辑，降低大文件压力并提升可维护性
 
 🐛 Fixes
+
 - 修复长文本 `MessageQueue` 场景下输入区布局溢出问题
 - 修复聊天输入链路中 `MessageQueue` 队列类型引用错误
 - 修复用户输入原始格式被破坏，并将 Spec 提示词注入限定为仅首轮
@@ -4727,6 +5442,7 @@ English:
 English:
 
 ✨ Features
+
 - Support drag-and-drop file references from file tree and external files directly into chat composer
 - Add workspace open-mode routing with new-window creation capability
 - Highlight running sessions with project/worktree icon cues in sidebar
@@ -4736,10 +5452,12 @@ English:
 - Improve session activity and Spec Hub entry layout with smoother file-tree interaction
 
 ⚡ Performance
+
 - Land Deferred + JIT strategy for large-file governance and reduce heavy-path startup pressure
 - Complete Bridge cleanup and modularization hardening to improve runtime stability
 
 🐛 Fixes
+
 - Fix Win10 CLI detection false positives causing engine switch failures
 - Fix Windows light-theme dropdown readability and workspace path matching compatibility
 - Fix occasional style distortion and tag rendering loss after file-tree drag reference
@@ -4754,6 +5472,7 @@ English:
 中文：
 
 ✨ Features
+
 - 支持将文件树与外部文件直接拖拽引用到对话输入框
 - 新增工作区打开模式分流与新建窗口能力
 - 侧边栏为运行中会话增加项目/工作树图标高亮提示
@@ -4763,10 +5482,12 @@ English:
 - 调整会话活动与 Spec Hub 入口布局并优化文件树交互
 
 ⚡ Performance
+
 - 落地 Deferred + JIT 大文件治理策略，降低重路径启动压力
 - 完成 Bridge 清理与模块化治理收口，提升运行时稳定性
 
 🐛 Fixes
+
 - 修复 Win10 下 CLI 探测误判导致引擎切换失败
 - 修复 Windows 浅色下拉可读性与工作区路径匹配兼容性问题
 - 修复文件树拖拽引用后偶发样式失真与标签渲染丢失
@@ -4785,6 +5506,7 @@ English:
 English:
 
 ✨ Features
+
 - Add workspace Session Activity panel and complete tool-event pipeline integration
 - Recover Codex historical session activity and aggregate reasoning events for playback
 - Optimize Session Activity incremental refresh and timeline scanning behavior
@@ -4795,6 +5517,7 @@ English:
 - Refresh model modal visual style
 
 🐛 Fixes
+
 - Improve compatibility with new reasoning events and repair activity rendering chain
 - Improve compatibility with Claude streaming events in Session Activity
 - Fix activity command summaries and `Read` path compatibility
@@ -4810,6 +5533,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增工作区 Session Activity 会话活动面板并补齐工具事件链路
 - 补齐 Codex 历史会话活动恢复与 reasoning 聚合回放能力
 - 优化 Session Activity 增量刷新与时间线扫描机制
@@ -4820,6 +5544,7 @@ English:
 - 更新模式模型弹窗样式
 
 🐛 Fixes
+
 - 兼容新版 reasoning 事件并修复会话活动渲染链路
 - 兼容 Claude 流式事件并修复会话活动展示问题
 - 修复会话活动命令摘要与 `Read` 路径兼容性
@@ -4839,11 +5564,13 @@ English:
 English:
 
 ✨ Features
+
 - Add global network proxy settings and proxy status exposure
 - Optimize compact summary display in Git Diff and history workspaces
 - Improve file viewer Markdown defaults, theme readability, and wide-content no-wrap rendering consistency
 
 🐛 Fixes
+
 - Fix Codex startup compensation, timeout recovery, and plan presentation regressions
 - Align summary indicator styles across Diff and Git History views
 - Refine diff viewer theme backgrounds for better visual consistency
@@ -4851,11 +5578,13 @@ English:
 中文：
 
 ✨ Features
+
 - 新增全局网络代理设置与代理状态透出
 - 优化 Git Diff 与历史工作区紧凑摘要展示
 - 改进文件查看器 Markdown 默认模式、主题可读性与宽内容 no-wrap 渲染一致性
 
 🐛 Fixes
+
 - 修复 Codex 启动补偿、超时恢复与计划展示回归问题
 - 统一 Diff 与 Git 历史摘要指示器样式对齐
 - 优化 Diff Viewer 主题背景以提升视觉一致性
@@ -4867,11 +5596,13 @@ English:
 English:
 
 ✨ Features
+
 - Add automatic non-UTF-8 text encoding detection using `chardetng` + `encoding_rs` for files like GB18030 Chinese text, applied to workspace file reads, spec file reads, and general text IO (#186 @zhukunpenglinyutong)
 - Redesign workspace worktrees tree layout to IDE Explorer style: section count badges, branch name layered display (prefix/leaf), thread count badges with cursor indicator, stable guide lines, and improved active/hover states (#181 @chenxiangning)
 - Sidebar UI enhancements and visual adjustments (#185 @a653928127-ctrl)
 
 🐛 Fixes
+
 - Fix large project freeze on open after dependency install: add workspace scan budgets (30K entries / 1.2s time), Git diff preview multi-dimensional budgets (200 files / 2MB total / 256KB per file / 2.5K lines per file), frontend auto-preload risk-path filtering with churn thresholds, and thread list fetch timeout with local session fallback (#181 @chenxiangning)
 - Fix Claude streaming text truncation/misplacement: unify delta event extraction across method aliases, add item snapshot-to-delta conversion, isolate message/reasoning reducer merges by `id + kind`, and add per-engine render source routing (#183 @chenxiangning)
 - Fix cross-session thread leaking: tighten pending-to-session resolution anchoring, unify `continue_session` semantics across engine paths, refactor reasoning deduplication to current-turn windowing, and settle plan step status for live and history states (#183 @chenxiangning)
@@ -4881,11 +5612,13 @@ English:
 中文：
 
 ✨ Features
+
 - 新增非 UTF-8 文本编码自动检测：使用 `chardetng` + `encoding_rs` 支持 GB18030 等编码文件的自动解码，应用于工作区文件读取、Spec 文件读取与通用文本 IO (#186 @zhukunpenglinyutong)
 - 重设计工作区 Worktrees 树形布局为 IDE Explorer 风格：分组数量徽标、分支名分层显示（前缀/叶子）、线程数量徽标（支持 cursor 时显示 +）、稳定层级导视线、优化激活/悬停态 (#181 @chenxiangning)
 - 侧边栏 UI 增强与视觉调整 (#185 @a653928127-ctrl)
 
 🐛 Fixes
+
 - 修复安装依赖后打开超大项目卡死：新增工作区扫描预算（3 万条目 / 1.2 秒时间）、Git diff 预览多维预算（200 文件 / 2MB 总量 / 256KB 单文件 / 2500 行单文件）、前端自动预加载风险路径过滤与 churn 阈值、线程列表拉取超时与本地 session 兜底 (#181 @chenxiangning)
 - 修复 Claude 流式正文截断/错位：统一增量事件提取兼容多 method 别名、新增 item 快照转增量、按 `id + kind` 隔离 message/reasoning reducer 合并、新增多引擎渲染数据源路由 (#183 @chenxiangning)
 - 修复跨 session 串线：收紧 pending 线程解析锚点、统一 `continue_session` 语义、重构 reasoning 去重为当前轮窗口、新增计划步骤状态在流式与历史恢复中的一致收敛 (#183 @chenxiangning)
@@ -4899,6 +5632,7 @@ English:
 English:
 
 ✨ Features
+
 - Unify file tree visual semantics across Git Diff / History / Worktree panels: add hierarchical guide lines, directory FileIcon support, and `__repo_root__` display logic
 - Redesign Diff/History panel interaction: collapsible commit section, external control bar via header portal, sticky header with loading states, and mode-switch icons
 - Redesign Pull/Push/Worktree branch selectors: grouped tabs, search filtering, custom dropdown panels with scope buckets, improving multi-branch usability
@@ -4907,6 +5641,7 @@ English:
 - Enhance search block display and link interaction with webSearch data format compatibility
 
 🐛 Fixes
+
 - Fix Codex engine first-session timing causing missing model: add backend model fallback (frontend → workspace config → model/list default)
 - Fix Codex first-session thread creation compatibility: support multiple threadId response formats, add optimistic user message to eliminate send delay
 - Fix Codex first-send approval dialog not appearing timely: unify approval/request event routing and request_id parsing
@@ -4921,6 +5656,7 @@ English:
 中文：
 
 ✨ Features
+
 - 统一 Git Diff / History / Worktree 文件树视觉语义：新增层级竖向引导线、目录 FileIcon 支持与 `__repo_root__` 根目录显示逻辑
 - 重构 Diff/History 面板交互：新增提交区折叠、通过 portal 实现的外置控制栏、sticky header（含加载状态文案）与模式切换图标增强
 - 重构 Pull/Push/Worktree 分支选择器：支持分组 Tab、搜索过滤、自定义下拉面板与 scope 分桶展示，提升多分支场景可用性
@@ -4929,6 +5665,7 @@ English:
 - 优化搜索块展示与链接交互，兼容 webSearch 数据格式
 
 🐛 Fixes
+
 - 修复 Codex 引擎首会话时序导致 model 缺失：增加后端模型兜底解析（优先前端传入 → workspace config → model/list 默认）
 - 修复 Codex 首次会话线程创建兼容性：兼容多种 threadId 返回形态，新增 optimistic user message 消除首次发送延迟
 - 修复 Codex 首发审批弹窗未及时出现：兼容 approval/request 事件路由，统一 request_id 解析
@@ -4947,6 +5684,7 @@ English:
 English:
 
 ✨ Features
+
 - Add Codex context dual-view with automatic compaction flow: backend auto-trigger state machine (92% threshold, 70% target), manual compaction RPC, dual-view usage indicator (input+cached tokens), and full event/error propagation across app layers
 - Add file tree root node with recursive lazy loading for special directories: workspace root node with expand/collapse, sticky toolbar, new file/folder actions, and multi-level lazy loading for `node_modules` and similar directories
 - Add workspace full-text search with case-sensitive, whole-word, and regex options backed by a new Rust search command
@@ -4956,13 +5694,16 @@ English:
 - Restyle file panel action area to icon+text toolbar
 
 ⚡ Performance
+
 - Increase workspace file scan limit from 20,000 to 100,000 in both Tauri and daemon paths
 
 🎨 UI Improvements
+
 - Optimize message list rendering with custom memo comparator; freeze displayed items during active text selection to preserve highlights during streaming
 - Optimize file changes panel display density and hover background behavior
 
 🐛 Fixes
+
 - Fix `@@` manual memory selector scroll not working in composer
 - Fix file changes panel to support click-to-diff and improve display density
 - Fix Codex context compaction state and manual compaction interaction consistency: unify context usage calculation (last snapshot), fix compacting state event chain, prevent double-click on manual compaction button
@@ -4972,6 +5713,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增 Codex 上下文双视图与自动压缩链路：后端自动触发状态机（92% 阈值、70% 目标），手动压缩 RPC，双视图用量指示器（input+cached token），完整事件与错误传播链路
 - 新增文件树根节点与特殊目录递归懒加载：工作区根节点支持展开/收起、Sticky 工具栏、新建文件/文件夹操作，`node_modules` 等特殊目录支持多层级逐级懒加载
 - 新增工作区全文搜索：支持区分大小写、全词匹配和正则表达式，由新增 Rust 搜索命令支撑
@@ -4981,13 +5723,16 @@ English:
 - 文件面板操作区改为图标+文本工具栏样式
 
 ⚡ Performance
+
 - 工作区文件扫描上限从 20,000 提升至 100,000（Tauri 和 daemon 路径同步升级）
 
 🎨 UI Improvements
+
 - 消息列表渲染优化：自定义 memo 比较器，用户选中文本时冻结列表渲染，避免流式更新打断文字选取
 - 优化会话幕布文件变更面板展示密度与悬停背景表现
 
 🐛 Fixes
+
 - 修复 Composer 中 `@@` 手动记忆选择器上下滚动失效
 - 修复会话幕布 File changes 支持点击查看 diff，并优化展示密度
 - 修复 Codex 上下文压缩状态与手动压缩交互一致性：统一上下文占用统计口径（last 快照）、补齐压缩状态事件驱动链路、修复手动压缩按钮防连点
@@ -5001,6 +5746,7 @@ English:
 English:
 
 ✨ Features
+
 - Add runtime log console (Phase 1) with Java toolchain and cross-platform compatibility: backend `runtime_log` module, workspace-level run session state machine, real-time log streaming, `RuntimeConsoleDock`/`RuntimeLogPanel` components, Windows cmd/wrapper support
 - Add multi-stack profile detection and launch for runtime console: `runtime_log_detect_profiles` command supporting Java/Node/Python/Go, dynamic preset rendering, enhanced startup scripts with dependency checks
 - Support empty directory display in file tree with single-child chain collapse (a/b/c → a.b.c), unified Diff/History entry, and Hub shortcut for Git History toggle
@@ -5011,6 +5757,7 @@ English:
 - Add `CurrentClaudeConfigCard` and `vendor_get_current_claude_config` command
 
 ⚡ Performance
+
 - Optimize git status polling with adaptive active/background/paused modes using chained `setTimeout`
 - Skip per-file diff stats when changed files exceed 120 (backend) or 80 (frontend preload)
 - Prevent overlapping git status requests via in-flight tracking
@@ -5018,11 +5765,13 @@ English:
 - Normalize workspace paths for macOS `/private` prefix variants
 
 🎨 UI Improvements
+
 - Unify terminal and runtime log panel width with full-column grid layout
 - Restyle terminal tabs from capsule borders to bottom-line with blue active indicator
 - Hide duplicate runtime log toggle in file tree area, restore Git tab in PanelTabs
 
 🐛 Fixes
+
 - Fix file list display issues
 - Fix terminal panel close path to avoid state desynchronization
 - Fix file tree path separators on Windows to avoid mixed separators
@@ -5031,6 +5780,7 @@ English:
 中文：
 
 ✨ Features
+
 - 新增运行日志控制台（第一阶段）：后端 `runtime_log` 模块、工作区级运行会话状态机、实时日志流、`RuntimeConsoleDock`/`RuntimeLogPanel` 组件、Windows cmd 兼容与 Java 启动器探测
 - 运行控制台支持多技术栈 profile 探测与启动：`runtime_log_detect_profiles` 命令支持 Java/Node/Python/Go、动态预设渲染、增强启动脚本与依赖检测
 - 文件树支持空目录展示与单子目录链折叠显示（a/b/c → a.b.c），统一 Diff/History 入口，新增 Hub 快捷按钮切换 Git History
@@ -5041,6 +5791,7 @@ English:
 - 新增 `CurrentClaudeConfigCard` 与 `vendor_get_current_claude_config` 命令
 
 ⚡ Performance
+
 - Git 状态轮询优化：自适应 active/background/paused 模式，使用链式 `setTimeout` 替代固定 `setInterval`
 - 变更文件超过 120 时跳过逐文件 diff 统计（后端），超过 80 时跳过前端 diff 预加载
 - 通过 in-flight 标记防止 Git 状态请求重叠
@@ -5048,11 +5799,13 @@ English:
 - 规范化工作区路径以处理 macOS `/private` 前缀变体
 
 🎨 UI Improvements
+
 - 统一终端与运行日志面板宽度（全列网格布局）
 - 终端标签页由胶囊边框改为底部蓝色边线样式
 - 隐藏文件树中重复的运行日志入口，恢复 PanelTabs 中的 Git 标签
 
 🐛 Fixes
+
 - 修复文件列表显示问题
 - 修复终端面板关闭路径导致的状态不同步
 - 修复 Windows 上文件树路径分隔符混用问题
@@ -5065,12 +5818,14 @@ English:
 English:
 
 ✨ Features
+
 - Enhance message display and add user bubble color customization
 - Add `@@` manual memory completion in ChatInputBox with dropdown preview panel, title/summary/tags display, and detached draft support for no-active-thread scenarios
 - Add real-time usage entry and plan mode toggle for Codex engine in composer
 - Align Codex plan mode protocol with requestUserInput lifecycle
 
 🐛 Fixes
+
 - Fix Codex engine inconsistency after Plan -> Code mode switch within session
 - Fix file tree `+` button insertion: use native `@absolutePath` mention format instead of icon+path text
 - Fix thread mode sync and stale user input event handling on thread switch
@@ -5079,12 +5834,14 @@ English:
 中文：
 
 ✨ Features
+
 - 增强消息显示效果并新增用户气泡颜色自定义
 - 在 ChatInputBox 中新增 `@@` 手动记忆补全：下拉预览面板（标题/摘要/标签/重要度/更新时间）、无活跃线程时的草稿支持
 - Codex 模式新增实时用量入口与计划模式切换
 - 对齐 Codex 计划模式协议与 requestUserInput 生命周期
 
 🐛 Fixes
+
 - 修复 Codex 引擎在会话内 Plan -> Code 切换后的表现不一致问题
 - 修复文件树 `+` 按钮插入行为：改为原生 `@absolutePath` mention 形式，避免行级点击干扰
 - 修复线程切换时模式同步与过期 user input 事件处理
@@ -5097,25 +5854,31 @@ English:
 English:
 
 ✨ Features
+
 - Optimize Windows frameless window interaction, layout behavior and message code highlighting
 - Refactor settings panel into modular section components for better maintainability
 
 🐛 Fixes
+
 - Correct topbar z-index stacking and sidebar placeholder scope
 
 🔧 Improvements
+
 - Rewrite README with detailed feature overview and development guide
 
 中文：
 
 ✨ Features
+
 - 优化 Windows 无边框窗口交互、布局行为与消息代码高亮
 - 重构设置面板为模块化 Section 组件，提升可维护性
 
 🐛 Fixes
+
 - 修复顶栏 z-index 层叠与侧栏占位区域范围问题
 
 🔧 Improvements
+
 - 重写 README，补充详细的功能概览和开发指南
 
 ---
@@ -5125,6 +5888,7 @@ English:
 English:
 
 ✨ Features
+
 - Enable Auto Mode by default and support paste image direct submission in composer
 - Add Code Intel definition/reference navigation for file view
 - Add new ChatInputBox component system and refactor Composer architecture
@@ -5141,6 +5905,7 @@ English:
 - Complete multi-language rendering coverage for right-side file view
 
 🐛 Fixes
+
 - Fix GitHub Actions build out-of-memory issue
 - Fix test environment async residual errors after teardown
 - Fix GitHistory branch rename test CI timing flake
@@ -5149,6 +5914,7 @@ English:
 - Add global error boundary, optimize panel drag experience and build config
 
 🔧 Improvements
+
 - Refactor ChatInputBox layout and visual style
 - Refactor thinking block component to minimal design with centered message layout
 - Remove WorkspaceHome module and improve thread list tooltip
@@ -5157,6 +5923,7 @@ English:
 中文：
 
 ✨ Features
+
 - 默认启用 Auto Mode 并支持粘贴图片直接提交
 - 接入 Code Intel 定义/引用导航能力
 - 新增 ChatInputBox 输入框组件系统并重构 Composer 架构
@@ -5173,6 +5940,7 @@ English:
 - 补齐右侧文件视图多语言渲染覆盖
 
 🐛 Fixes
+
 - 修复 GitHub Actions 构建内存溢出问题
 - 修复测试环境销毁后的异步残留报错
 - 修复 GitHistory 重命名分支测试的 CI 时序抖动
@@ -5181,6 +5949,7 @@ English:
 - 添加全局错误边界、优化面板拖拽体验和构建配置
 
 🔧 Improvements
+
 - 重构 ChatInputBox 布局与视觉风格
 - 重构思考块组件为极简设计并居中消息布局
 - 移除 WorkspaceHome 模块并改进线程列表提示框
@@ -5193,6 +5962,7 @@ English:
 English:
 
 ✨ Features
+
 - Complete bottom function area and selector style interaction optimization
 - Use official model icons for Claude/Gemini/Codex engines
 - Complete Spec Hub entry and gate alignment capability upgrade
@@ -5205,6 +5975,7 @@ English:
 - Finalize note/conversation flow and context-injection planning
 
 🐛 Fixes
+
 - Restore git diff split alignment, independent horizontal scroll, and readability
 - Keep verify/archive executable when Spec Hub preflight blocks archive
 - Vendor xmlchars to avoid npm registry 403
@@ -5212,6 +5983,7 @@ English:
 - Resolve post-cherry-pick typecheck issues in memory module
 
 🔧 Improvements
+
 - Rename MossX to in build scripts and CI workflow, then rename back to MossX across codebase
 - Stabilize Spec Hub i18n text and language switch validation tests
 - Stabilize SettingsView shortcut teardown tests
@@ -5219,6 +5991,7 @@ English:
 中文：
 
 ✨ Features
+
 - 完成底部功能区与选择器样式交互整体优化
 - 引擎图标使用 Claude/Gemini/Codex 官方模型图标
 - 完成 Spec Hub 入口与门禁对齐能力升级
@@ -5231,6 +6004,7 @@ English:
 - 完成笔记/对话流程与上下文注入规划
 
 🐛 Fixes
+
 - 修复 Git Diff 分栏对齐、独立水平滚动和可读性
 - 修复 Spec Hub 预检阻止归档时验证/归档仍可执行
 - 内置 xmlchars 依赖以避免 npm registry 403 错误
@@ -5238,6 +6012,7 @@ English:
 - 修复记忆模块 cherry-pick 后的类型检查问题
 
 🔧 Improvements
+
 - 统一品牌名称：在构建脚本和 CI 中重命名为 MossX
 - 完善 Spec Hub 文案国际化与语言切换校验测试
 - 稳定 SettingsView 快捷键销毁测试
@@ -5249,6 +6024,7 @@ English:
 English:
 
 ✨ Features
+
 - Enhance Create PR preview and popup interaction experience
 - Implement full Create PR workflow with branch deletion recovery mechanism, refactor PR popup compare interaction and visual
 - Implement worktree publish recovery and git command stability improvements
@@ -5261,6 +6037,7 @@ English:
 - Unify sidebar icon style and fix settings page switch and PR flow layout
 
 🐛 Fixes
+
 - Fix branch rename button unresponsive and unify top action button active state
 - Fix worktree publish failure recovery and enhance Git command stability
 - Remove misleading diff action by removing unused open-file button
@@ -5271,11 +6048,13 @@ English:
 - Clean up codexLeadMarkers regex invalid escapes
 
 🔧 Improvements
+
 - Reduce noise and consolidate Hook dependency warnings (no behavior change)
 
 中文：
 
 ✨ Features
+
 - 增强创建 PR 预览与弹窗交互体验
 - 落地 Create PR 全流程与分支删除恢复机制，重构 PR 弹窗 compare 交互与视觉
 - 落地工作树发布失败恢复与 Git 命令稳定性提升
@@ -5288,6 +6067,7 @@ English:
 - 统一侧栏图标风格并修复设置页切换与 PR 流程布局
 
 🐛 Fixes
+
 - 修复分支重命名按钮无响应并统一顶部操作按钮激活态
 - 修复工作树发布失败可恢复并增强 Git 命令稳定性
 - 移除误导性 diff 操作按钮（未使用的打开文件按钮）
@@ -5298,6 +6078,7 @@ English:
 - 清理 codexLeadMarkers 正则无效转义
 
 🔧 Improvements
+
 - 去噪优化并收敛 Hook 依赖告警（无行为变更）
 
 ---
@@ -5307,6 +6088,7 @@ English:
 English:
 
 ✨ Features
+
 - Complete workspace sidebar visual coordination makeover (t1-4)
 - Implement optimize-codex-chat-canvas proposal core capabilities
 - Unify management UI to reduce clutter and improve scalability
@@ -5321,6 +6103,7 @@ English:
 - Add lock screen overlay and session completion reminder
 
 🐛 Fixes
+
 - Fix session lifecycle: converge delete semantics and align OpenCode entry with canvas consistency
 - Unblock settings and composer regressions
 - Stabilize reasoning stream event handling for Codex
@@ -5334,6 +6117,7 @@ English:
 - Stabilize sidebar thread layout to reduce clipping/jitter
 
 🔧 Improvements
+
 - Drop dim mode to simplify theme support and UX
 - Reduce hidden UI state to keep context always visible
 - Simplify completion alerts to avoid split notification UX
@@ -5341,6 +6125,7 @@ English:
 中文：
 
 ✨ Features
+
 - 完成 t1-4 工作区侧栏视觉协调改造
 - 落地 optimize-codex-chat-canvas 提案核心能力
 - 统一管理 UI，减少界面杂乱并提升可扩展性
@@ -5355,6 +6140,7 @@ English:
 - 新增锁屏遮罩与会话完成提醒
 
 🐛 Fixes
+
 - 修复会话生命周期：收敛删除语义并打通 OpenCode 入口与幕布一致性
 - 修复设置和 Composer 回退问题
 - 稳定 Codex 推理流事件处理
@@ -5368,6 +6154,7 @@ English:
 - 稳定侧栏线程布局以减少裁剪/抖动
 
 🔧 Improvements
+
 - 移除 Dim 模式以简化主题支持和 UX
 - 减少隐藏 UI 状态以保持上下文始终可见
 - 简化完成提醒以避免分裂通知 UX
@@ -5379,20 +6166,24 @@ English:
 English:
 
 ✨ Features
+
 - Add unified search panel with category filtering
 - Optimize kanban strip density and ordering in composer
 
 🐛 Fixes
+
 - Stabilize kanban links across workspace ID changes
 - Stabilize context menus with portal and compact layout in composer
 
 中文：
 
 ✨ Features
+
 - 新增统一搜索面板与分区筛选
 - 优化 Composer 中看板条目密度和排序
 
 🐛 Fixes
+
 - 修复工作区 ID 变更时看板链接稳定性
 - 使用 Portal 和紧凑布局稳定右键菜单
 
@@ -5403,11 +6194,13 @@ English:
 English:
 
 ✨ Features
+
 - Remove Sentry telemetry, add About page and kanban git panel
 
 中文：
 
 ✨ Features
+
 - 移除 Sentry 遥测，新增关于页面和看板 Git 面板
 
 ---
@@ -5417,22 +6210,26 @@ English:
 English:
 
 ✨ Features
+
 - Reduce context switching with in-app long-term memory view
 - Improve UX with thread tooltips, task draft persistence, and interrupt handling
 - Support multi-source skill discovery with priority merge
 
 🐛 Fixes
+
 - Prevent memory navigation hijacks and reduce setup confusion
 - Improve DMG detach reliability in create-dmg script
 
 中文：
 
 ✨ Features
+
 - 新增应用内长期记忆视图，减少上下文切换
 - 改进线程工具提示、任务草稿持久化和中断处理
 - 支持多来源 Skill 发现与优先级合并
 
 🐛 Fixes
+
 - 防止记忆导航劫持并减少设置困惑
 - 提升 create-dmg 脚本中 DMG 弹出可靠性
 
@@ -5443,29 +6240,35 @@ English:
 English:
 
 ✨ Features
+
 - Prefer local discovery for faster offline skill listing
 - Keep CLI settings and model names in sync for Claude
 - Support Claude inherit and composer click-outside close
 - Let users switch AI providers and reliably stop sessions
 
 🐛 Fixes
+
 - Update Haiku model and add Opus 1M variant
 
 🔧 Improvements
+
 - Upgrade release runner to ubuntu-24.04 for newer tooling
 
 中文：
 
 ✨ Features
+
 - 优先本地发现以加速离线 Skill 列表
 - 保持 Claude CLI 设置与模型名称同步
 - 支持 Claude 继承与 Composer 点击外部关闭
 - 支持用户切换 AI 供应商并可靠停止会话
 
 🐛 Fixes
+
 - 更新 Haiku 模型并添加 Opus 1M 变体
 
 🔧 Improvements
+
 - 升级发布 Runner 到 ubuntu-24.04 以使用更新的工具链
 
 ---
@@ -5475,17 +6278,21 @@ English:
 English:
 
 ✨ Features
+
 - Merge skill commons panel and kanban context mode in composer
 
 🐛 Fixes
+
 - Add retry logic for DMG detach in CI environment
 
 中文：
 
 ✨ Features
+
 - 合并 Composer 中的 Skill 公共面板与看板上下文模式
 
 🐛 Fixes
+
 - CI 环境中 DMG 弹出添加重试逻辑
 
 ---
@@ -5495,19 +6302,23 @@ English:
 English:
 
 ✨ Features
+
 - Reduce typing friction and improve task progress cues
 - Improve kanban task discussions with richer markdown
 
 🐛 Fixes
+
 - Prevent macOS DMG builds failing on Finder scripting in CI
 
 中文：
 
 ✨ Features
+
 - 减少输入摩擦并改善任务进度提示
 - 改进看板任务讨论，支持更丰富的 Markdown
 
 🐛 Fixes
+
 - 修复 CI 中 macOS DMG 构建因 Finder 脚本失败的问题
 
 ---
@@ -5517,24 +6328,28 @@ English:
 English:
 
 ✨ Features
+
 - Reduce file-management friction and i18n drift in workspaces
 - Redesign workspace landing with guided starts and conversation entry
 - Polish worktree/session sections and collapse interactions in sidebar
 - Improve kanban linking UX and routed send behavior
 
 🐛 Fixes
+
 - Reduce confusing UI states when tooling context is missing
 - Reduce install friction and UI jank across core workflows
 
 中文：
 
 ✨ Features
+
 - 减少工作区文件管理摩擦和国际化偏差
 - 重新设计工作区着陆页，引导启动和对话入口
 - 优化侧栏工作树/会话区域和折叠交互
 - 改进看板链接 UX 和路由发送行为
 
 🐛 Fixes
+
 - 减少工具上下文缺失时的困惑 UI 状态
 - 减少核心流程中的安装摩擦和 UI 卡顿
 
@@ -5545,11 +6360,13 @@ English:
 English:
 
 ✨ Features
+
 - Improve readability with diagrams, git hints and opaque UI
 
 中文：
 
 ✨ Features
+
 - 通过图表、Git 提示和不透明 UI 改善可读性
 
 ---
@@ -5559,6 +6376,7 @@ English:
 English:
 
 ✨ Features
+
 - Reduce context switching with in-app editing and panelized kanban
 - Reduce context-switch errors and improve task triage in kanban
 - Stabilize UX with file-backed state and richer kanban flows
@@ -5567,6 +6385,7 @@ English:
 中文：
 
 ✨ Features
+
 - 通过应用内编辑和面板化看板减少上下文切换
 - 减少看板上下文切换错误并改进任务分类
 - 通过文件持久化状态和更丰富的看板流程稳定 UX
@@ -5579,30 +6398,36 @@ English:
 English:
 
 ✨ Features
+
 - Make agent activity easier to scan in chat messages
 - Enable archive for Claude Code CLI threads with local data deletion
 
 🐛 Fixes
+
 - Reduce homepage whitespace to improve first-screen clarity
 - Keep recent conversations visible for Claude threads
 - Extract tool action description for inline summary display
 
 🔧 Improvements
+
 - Remove tool-group headers and improve tool summary labels
 - Switch tool rendering from block cards to inline style
 
 中文：
 
 ✨ Features
+
 - 使聊天消息中的 Agent 活动更易浏览
 - 支持 Claude Code CLI 线程归档与本地数据删除
 
 🐛 Fixes
+
 - 减少首页空白以改善首屏清晰度
 - 保持 Claude 线程的最近对话可见
 - 提取工具操作描述用于内联摘要显示
 
 🔧 Improvements
+
 - 移除工具组头部并改进工具摘要标签
 - 将工具渲染从卡片块切换为内联样式
 
@@ -5613,6 +6438,7 @@ English:
 English:
 
 ✨ Features
+
 - Surface task status near composer to reduce context switching
 - Enable localized dictation and empty state text
 - Support localized UX and per-turn engine isolation
@@ -5621,6 +6447,7 @@ English:
 - Support new agent workflow across models and UI
 
 🐛 Fixes
+
 - Prevent dropped tool events and reduce UI friction across locales
 - Refresh pinned thread list on pin state changes
 - Prevent stale tool states and unify CLI-missing errors
@@ -5630,6 +6457,7 @@ English:
 中文：
 
 ✨ Features
+
 - 在 Composer 附近展示任务状态以减少上下文切换
 - 支持本地化语音输入和空状态文案
 - 支持本地化 UX 和每轮引擎隔离
@@ -5638,6 +6466,7 @@ English:
 - 支持跨模型和 UI 的新 Agent 工作流
 
 🐛 Fixes
+
 - 防止工具事件丢失并减少跨语言环境的 UI 摩擦
 - Pin 状态变更时刷新置顶线程列表
 - 防止工具状态过期并统一 CLI 缺失错误
@@ -5651,12 +6480,14 @@ English:
 English:
 
 ✨ Features
+
 - Optimize UI spacing and thread display threshold
 - Change workspace delete dialog wording to "remove" for i18n
 
 中文：
 
 ✨ Features
+
 - 优化 UI 间距和线程显示阈值
 - 国际化：将工作区删除对话框措辞改为"移除"
 
@@ -5667,25 +6498,31 @@ English:
 English:
 
 ✨ Features
+
 - Implement menu localization with i18n support
 - Expose Claude command library for slash command usage
 
 🐛 Fixes
+
 - Align Windows release artifacts with Tauri 2 outputs
 
 🔧 Improvements
+
 - Improve Windows CMake detection and refactor Claude engine
 
 中文：
 
 ✨ Features
+
 - 实现菜单国际化支持
 - 开放 Claude 命令库用于斜杠命令
 
 🐛 Fixes
+
 - 对齐 Windows 发布产物与 Tauri 2 输出
 
 🔧 Improvements
+
 - 改进 Windows CMake 检测并重构 Claude 引擎
 
 ---
@@ -5695,12 +6532,14 @@ English:
 English:
 
 ✨ Features
+
 - Improve tool-call UX and harden signing key handling
 - Prioritize desktop UX and restore auto-updates
 
 中文：
 
 ✨ Features
+
 - 改进工具调用 UX 并加固签名密钥处理
 - 优先桌面 UX 并恢复自动更新
 
@@ -5711,6 +6550,7 @@ English:
 English:
 
 ✨ Features
+
 - Initial release of MossX desktop application
 - Tauri 2 + React 19 + TypeScript architecture
 - Claude Code CLI integration with session management
@@ -5718,6 +6558,7 @@ English:
 中文：
 
 ✨ Features
+
 - MossX 桌面应用初始发布
 - Tauri 2 + React 19 + TypeScript 架构
 - Claude Code CLI 集成与会话管理

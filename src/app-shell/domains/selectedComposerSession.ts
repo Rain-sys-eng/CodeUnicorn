@@ -18,6 +18,16 @@ const CLAUDE_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max
 const GROK_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
 /** DSH host deepseek adapter reasoning efforts (llm.models reasoning.efforts). */
 const DSH_REASONING_EFFORTS = new Set(["off", "low", "high", "max"]);
+/** PI thinking levels — keep aligned with pi CLI; do not reuse for other engines. */
+const PI_REASONING_EFFORTS = new Set([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
 
 export function resolveThreadEngine(
   threadId: string,
@@ -109,7 +119,9 @@ export function normalizeComposerSessionSelectionForThread(
     effort = effort && DSH_REASONING_EFFORTS.has(effort) ? effort : null;
   } else if (engine === "qoder") {
     effort = effort || null;
-  } else if (engine === "gemini" || engine === "kimi" || engine === "opencode" || engine === "pi") {
+  } else if (engine === "pi") {
+    effort = effort && PI_REASONING_EFFORTS.has(effort) ? effort : null;
+  } else if (engine === "gemini" || engine === "kimi" || engine === "opencode") {
     effort = null;
   }
 

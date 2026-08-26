@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import Braces from "lucide-react/dist/esm/icons/braces";
 import Check from "lucide-react/dist/esm/icons/check";
 import Code from "lucide-react/dist/esm/icons/code";
@@ -124,19 +125,17 @@ export function CodeBlockCopyButton({
   }, []);
 
   const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
-    try {
-      const nextValue = copyUseModifier && event.altKey ? fencedValue : value;
-      await navigator.clipboard.writeText(nextValue);
-      setCopied(true);
-      if (copyTimeoutRef.current) {
-        window.clearTimeout(copyTimeoutRef.current);
-      }
-      copyTimeoutRef.current = window.setTimeout(() => {
-        setCopied(false);
-      }, 1200);
-    } catch {
-      // No-op: clipboard errors can occur in restricted contexts.
+    const nextValue = copyUseModifier && event.altKey ? fencedValue : value;
+    if (!(await copyTextToClipboard(nextValue))) {
+      return;
     }
+    setCopied(true);
+    if (copyTimeoutRef.current) {
+      window.clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = window.setTimeout(() => {
+      setCopied(false);
+    }, 1200);
   };
 
   return (

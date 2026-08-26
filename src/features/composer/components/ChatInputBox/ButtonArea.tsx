@@ -556,13 +556,15 @@ export const ButtonArea = ({
         ) : null}
 
         <div className="button-area-inline-controls">
-          <ModeSelect
-            value={permissionMode}
-            onChange={onModeSelect ?? NOOP_MODE}
-            provider={currentProvider}
-            selectedCollaborationModeId={selectedCollaborationModeId}
-            onSelectCollaborationMode={onSelectCollaborationMode}
-          />
+          {currentProvider !== 'pi' ? (
+            <ModeSelect
+              value={permissionMode}
+              onChange={onModeSelect ?? NOOP_MODE}
+              provider={currentProvider}
+              selectedCollaborationModeId={selectedCollaborationModeId}
+              onSelectCollaborationMode={onSelectCollaborationMode}
+            />
+          ) : null}
           {currentProvider === 'dsh' &&
           (onDshAgentPresetSelect || dshAgentPresetLocked) ? (
             <DshAgentPresetSelect
@@ -574,11 +576,11 @@ export const ButtonArea = ({
           {(currentProvider === 'codex' ||
             currentProvider === 'claude' ||
             currentProvider === 'grok' ||
-            // dsh：仅当选中模型在 host catalog 声明了 reasoning efforts
-            // （deepseek 模型 off/low/high/max）时才显示思考强度；
-            // 切到无档位模型时隐藏，保持与官方 DSH 交互一致。
+            // dsh / qoder / pi：仅当选中模型在 catalog 声明了 reasoning efforts
+            // 时才显示思考强度；切到无档位模型时隐藏。
             (currentProvider === 'dsh' && (reasoningOptions?.length ?? 0) > 0) ||
-            (currentProvider === 'qoder' && (reasoningOptions?.length ?? 0) > 0)) && (
+            (currentProvider === 'qoder' && (reasoningOptions?.length ?? 0) > 0) ||
+            (currentProvider === 'pi' && (reasoningOptions?.length ?? 0) > 0)) && (
             <ReasoningSelect
               value={reasoningEffort}
               onChange={onReasoningChange ?? NOOP_REASONING}
@@ -587,14 +589,17 @@ export const ButtonArea = ({
                 currentProvider === 'claude' ||
                 currentProvider === 'grok' ||
                 currentProvider === 'dsh' ||
-                currentProvider === 'qoder'
+                currentProvider === 'qoder' ||
+                currentProvider === 'pi'
               }
               defaultLabel={
                 currentProvider === 'claude'
                   ? t('reasoning.claudeDefault', { defaultValue: 'Default' })
                   : currentProvider === 'grok'
                     ? t('reasoning.grokDefault', { defaultValue: 'Default' })
-                    : currentProvider === 'dsh' || currentProvider === 'qoder'
+                    : currentProvider === 'dsh' ||
+                        currentProvider === 'qoder' ||
+                        currentProvider === 'pi'
                       ? t('reasoning.default', { defaultValue: 'Default' })
                       : undefined
               }
@@ -639,5 +644,3 @@ export const ButtonArea = ({
     </div>
   );
 };
-
-export default ButtonArea;

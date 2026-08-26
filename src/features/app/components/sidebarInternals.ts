@@ -34,6 +34,7 @@ export type WorkspaceGroupSection = {
 
 export type WorkspaceThreadRows = {
   unpinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
+  workspacePinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
   totalRoots: number;
 };
 

@@ -80,6 +80,13 @@ export type GeminiSessionSummary = {
 // Kimi session summaries share the Gemini summary shape (id/message/updatedAt/size).
 export type KimiSessionSummary = GeminiSessionSummary;
 
+// Pi：fork 派生文件带 parentSessionId（源 session id）——侧栏「pi 派生隐藏」
+// 过滤（useThreadRows）依赖它转成 parentThreadId；丢了会让派生分支泄露成
+// 顶层行（session-index 路径有 parent，live disk list 路径不能缺）。
+export type PiSessionSummary = GeminiSessionSummary & {
+  parentSessionId?: string | null;
+};
+
 export type QoderSessionSummary = KimiSessionSummary & {
   providerProfileId: string;
   providerProfileName?: string | null;
@@ -1224,8 +1231,30 @@ export function normalizeKimiSessionSummaries(
 
 export function normalizePiSessionSummaries(
   value: unknown,
-): KimiSessionSummary[] {
-  return normalizeGeminiSessionSummaries(value);
+): PiSessionSummary[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const summaries: PiSessionSummary[] = [];
+  value.forEach((entry) => {
+    const base = normalizeGeminiSessionSummary(entry);
+    if (!base) {
+      return;
+    }
+    // 与 grok 同款：parent 字段必须带回（后端 camelCase 序列化，兼容蛇形）
+    const record =
+      entry && typeof entry === "object"
+        ? (entry as Record<string, unknown>)
+        : null;
+    const parentSessionId = asString(
+      record?.parentSessionId ?? record?.parent_session_id,
+    ).trim();
+    summaries.push({
+      ...base,
+      ...(parentSessionId ? { parentSessionId } : {}),
+    });
+  });
+  return summaries;
 }
 
 export function normalizeQoderSessionSummaries(
@@ -1722,7 +1751,7 @@ export function mergeKimiSessionSummaries(
 
 export function mergePiSessionSummaries(
   baseSummaries: ThreadSummary[],
-  piSessions: KimiSessionSummary[],
+  piSessions: PiSessionSummary[],
   workspaceId: string,
   mappedTitles: Record<string, string>,
   getCustomName: (workspaceId: string, threadId: string) => string | undefined,

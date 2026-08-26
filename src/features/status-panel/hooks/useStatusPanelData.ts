@@ -921,12 +921,14 @@ function seedSubagentsFromChildTree(
     ? Object.entries(parentById)
         .filter(([, parentId]) => parentId === rootId)
         .map(([childId]) => childId.trim())
-        .filter((childId) => childId && childId !== rootId)
+        // pi fork 派生会话不是子代理（分支归会话树控制，pi 单独逻辑）
+        // capability-router-allow-engine-branch: pi 分域，见 enhance-pi-native-rpc-session
+        .filter((childId) => childId && childId !== rootId && !childId.startsWith("pi:"))
     : [];
   // canvas 已过滤的子代理线程（Shared claude:subagent:owner:* 等）
   const fromCanvasChildren = (options.childSubagentThreadIds ?? [])
     .map((id) => id.trim())
-    .filter((id) => id && id !== rootId);
+    .filter((id) => id && id !== rootId && !id.startsWith("pi:"));
   const childIds = uniqueStringList([...fromParentMap, ...fromCanvasChildren]);
   if (childIds.length === 0) {
     return;

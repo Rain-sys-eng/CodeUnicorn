@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { isLinkableFilePath, normalizeBareWindowsFilePathLinks } from "./remarkFileLinks";
+import {
+  decodeFileLink,
+  isLinkableFilePath,
+  normalizeBareWindowsFilePathLinks,
+  recoverLocalFileLinkPath,
+  rewriteWindowsAbsoluteMarkdownLinkDestinations,
+  toFileLink,
+} from "./remarkFileLinks";
 
 describe("isLinkableFilePath", () => {
   it("does not linkify CJK prose that merely contains slashes", () => {
@@ -34,5 +41,65 @@ describe("isLinkableFilePath", () => {
     expect(normalizeBareWindowsFilePathLinks(`PPTX: ${path}`)).toContain(
       `(codex-file:${encodeURIComponent(path)})`,
     );
+  });
+});
+
+describe("recoverLocalFileLinkPath", () => {
+  const windowsPath =
+    "D:/AI/Alchat/突击队/输出/S9_SE_PANEL_V101_0814_逐物料审计版.md";
+
+  it("recovers the reported Explorer error string", () => {
+    expect(
+      recoverLocalFileLinkPath(
+        `/[${windowsPath}] (codex-file:${windowsPath})`,
+      ),
+    ).toBe(windowsPath);
+  });
+
+  it("recovers wrapped markdown without a leading slash or space", () => {
+    expect(
+      recoverLocalFileLinkPath(
+        `[${windowsPath}](codex-file:${encodeURIComponent(windowsPath)})`,
+      ),
+    ).toBe(windowsPath);
+  });
+
+  it("keeps clean Windows, POSIX, and relative paths as identity", () => {
+    expect(recoverLocalFileLinkPath("D:/work/a.md")).toBe("D:/work/a.md");
+    expect(recoverLocalFileLinkPath("/Users/test/a.md")).toBe("/Users/test/a.md");
+    expect(recoverLocalFileLinkPath("src/foo.ts")).toBe("src/foo.ts");
+  });
+
+  it("decodes encoded codex-file payloads without wrapping", () => {
+    expect(decodeFileLink(toFileLink("D:/work/a.md"))).toBe("D:/work/a.md");
+  });
+});
+
+describe("rewriteWindowsAbsoluteMarkdownLinkDestinations", () => {
+  it("rewrites Windows drive destinations and keeps link text", () => {
+    const path =
+      "D:/AI/Alchat/突击队/输出/S9_SE_PANEL_V101_0814_逐物料审计版.md";
+    expect(
+      rewriteWindowsAbsoluteMarkdownLinkDestinations(
+        `[S9_SE_PANEL_V101_0814_逐物料审计版.md](${path})`,
+      ),
+    ).toBe(
+      `[S9_SE_PANEL_V101_0814_逐物料审计版.md](${toFileLink(path)})`,
+    );
+  });
+
+  it("does not rewrite http, existing codex-file, or image destinations", () => {
+    const encoded = toFileLink("D:/work/a.md");
+    expect(
+      rewriteWindowsAbsoluteMarkdownLinkDestinations(
+        "[name](https://example.com/a.md)",
+      ),
+    ).toBe("[name](https://example.com/a.md)");
+    expect(
+      rewriteWindowsAbsoluteMarkdownLinkDestinations(`[name](${encoded})`),
+    ).toBe(`[name](${encoded})`);
+    expect(
+      rewriteWindowsAbsoluteMarkdownLinkDestinations("![img](D:/shots/a.png)"),
+    ).toBe("![img](D:/shots/a.png)");
   });
 });

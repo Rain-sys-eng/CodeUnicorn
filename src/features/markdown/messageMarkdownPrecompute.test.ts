@@ -196,6 +196,28 @@ describe("message markdown precompute", () => {
     expect(result.precomputeResult).toBeNull();
   });
 
+  it("negatively caches worker failures so identical requests skip the worker roundtrip", async () => {
+    const request = createMessageMarkdownPrecomputeRequest({
+      messageId: "assistant-worker-crash",
+      source: "x".repeat(10_000),
+      optionsHash: createMessageMarkdownOptionsHash(rendererOptions),
+    });
+    const compileInWorker = vi
+      .fn()
+      .mockRejectedValue(new Error("fast-markdown-worker crashed"));
+
+    const first = await runMessageMarkdownPrecompute(request, { compileInWorker });
+    expect(first.mode).toBe("fallback");
+    expect(first.fallbackReason).toBe("worker-error");
+
+    const second = await runMessageMarkdownPrecompute(request, { compileInWorker });
+    expect(compileInWorker).toHaveBeenCalledTimes(1);
+    expect(second.mode).toBe("cache-hit");
+    expect(second.cacheState).toBe("hit");
+    expect(second.durationMs).toBe(0);
+    expect(second.fallbackReason).toBe("worker-error");
+  });
+
   it("keeps small final markdown on the main path with explicit diagnostics mode", async () => {
     const request = createMessageMarkdownPrecomputeRequest({
       messageId: "assistant-small",

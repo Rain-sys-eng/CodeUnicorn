@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { TopbarSessionTabItem } from "../../layout/hooks/topbarSessionTabs";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
+import { PiBranchChip } from "../../pi-session/components/PiBranchChip";
 
 type TopbarTabMenuPosition = {
   x: number;
@@ -103,6 +104,9 @@ function TopbarSessionTabsImpl({
             )}
           </span>
           <span className="topbar-session-tab-label">{tab.displayLabel}</span>
+          {tab.engineType === "pi" && tab.isActive ? ( // capability-router-allow-engine-branch: pi-only branch chip, 见 enhance-pi-native-rpc-session
+            <PiBranchChip workspaceId={tab.workspaceId} threadId={tab.threadId} />
+          ) : null}
           <button
             type="button"
             className="topbar-session-tab-close"

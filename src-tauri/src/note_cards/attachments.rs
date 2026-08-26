@@ -196,7 +196,10 @@ pub(crate) fn normalize_attachment_path_key(value: &str) -> String {
     normalized
 }
 
-pub(crate) fn sanitize_attachment_relative_path(value: &str, fallback_file_name: Option<&str>) -> String {
+pub(crate) fn sanitize_attachment_relative_path(
+    value: &str,
+    fallback_file_name: Option<&str>,
+) -> String {
     let normalized = normalize_attachment_path_key(value);
     let candidate = normalized
         .split('/')

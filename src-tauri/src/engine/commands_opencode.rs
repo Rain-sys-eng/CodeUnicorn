@@ -109,7 +109,15 @@ pub async fn opencode_session_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<OpenCodeSessionEntry>, String> {
     ensure_opencode_enabled(&state).await?;
-    opencode_session_list_core(&state.workspaces, &state.engine_manager, &workspace_id).await
+    let mut entries =
+        opencode_session_list_core(&state.workspaces, &state.engine_manager, &workspace_id).await?;
+    // 出口过滤（不动 core：core 还被 index writer 复用）
+    crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open().retain(
+        "opencode",
+        &mut entries,
+        |entry| &entry.session_id,
+    );
+    Ok(entries)
 }
 
 pub(crate) async fn opencode_session_list_core(

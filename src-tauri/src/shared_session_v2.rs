@@ -405,10 +405,9 @@ mod execution_target_contract_tests {
     #[test]
     fn execution_target_validation_rejects_mismatched_catalog_runtime_pair() {
         // 从当前 generatedModelCatalog 动态取条目，避免模型目录漂移使用例失效。
-        let catalog = crate::engine::status::get_local_engine_models_for_validation(
-            EngineType::Codex,
-        )
-        .expect("codex local catalog");
+        let catalog =
+            crate::engine::status::get_local_engine_models_for_validation(EngineType::Codex)
+                .expect("codex local catalog");
         let selected = catalog.first().expect("non-empty codex catalog");
         let expected_runtime_model = if selected.model.trim().is_empty() {
             selected.id.trim().to_string()
@@ -436,7 +435,9 @@ mod execution_target_contract_tests {
         };
         assert!(validate_resolved_execution_target(&poisoned)
             .expect_err("mismatched runtime model must fail before the turn is persisted")
-            .contains(&format!("requires runtime model '{expected_runtime_model}'")));
+            .contains(&format!(
+                "requires runtime model '{expected_runtime_model}'"
+            )));
     }
 
     #[test]
@@ -6043,21 +6044,17 @@ pub(crate) async fn shared_session_v2_probe_binding(
                 Some(session) => {
                     let runtime_session_id = session.get_session_id().await;
                     let expected_session_id = match row.native_session_id.as_deref() {
-                        Some(value) => raw_qoder_session_id(
-                            value,
-                            row.provider_profile_id.as_deref(),
-                        )?,
+                        Some(value) => {
+                            raw_qoder_session_id(value, row.provider_profile_id.as_deref())?
+                        }
                         None => None,
                     };
-                    let awaiting_session = row
-                        .native_session_id
-                        .as_deref()
-                        .is_some_and(|value| {
-                            crate::shared_sessions::is_pending_shared_binding_thread_id(
-                                EngineType::Qoder,
-                                value,
-                            )
-                        });
+                    let awaiting_session = row.native_session_id.as_deref().is_some_and(|value| {
+                        crate::shared_sessions::is_pending_shared_binding_thread_id(
+                            EngineType::Qoder,
+                            value,
+                        )
+                    });
                     json!({
                         "status": if runtime_session_id.as_deref() == expected_session_id.as_deref() {
                             "matched"
@@ -6293,7 +6290,7 @@ mod shared_interrupt_owner_tests {
                 EngineType::OpenCode => "ccgui/opencode-model".to_string(),
                 EngineType::Pi => "auto".to_string(),
                 EngineType::Qoder => "qmodel_38max".to_string(),
-                EngineType::Gemini | EngineType::Dsh => "unsupported".to_string()
+                EngineType::Gemini | EngineType::Dsh => "unsupported".to_string(),
             }),
             reasoning_effort: Some("medium".to_string()),
             provider_profile_name_snapshot: Some(provider.to_string()),

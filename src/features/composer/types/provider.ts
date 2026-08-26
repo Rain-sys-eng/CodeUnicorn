@@ -1,5 +1,8 @@
 /**
- * Provider configuration types (from idea-claude-code-gui)
+ * Provider model-id / custom-model 校验的单一事实源。
+ *
+ * Provider 配置类型（ProviderConfig / CodexProviderConfig / *ProviderPreset 等）
+ * 的单一事实源在 `src/features/vendors/types.ts`，请勿在此重复定义。
  */
 
 export const STORAGE_KEYS = {
@@ -18,49 +21,6 @@ export function isValidModelId(id: string): boolean {
   return MODEL_ID_PATTERN.test(trimmed);
 }
 
-export function isValidCodexCustomModel(model: unknown): model is CodexCustomModel {
-  if (!model || typeof model !== 'object') return false;
-  const obj = model as Record<string, unknown>;
-  if (typeof obj.id !== 'string' || !isValidModelId(obj.id)) return false;
-  if (typeof obj.label !== 'string' || obj.label.trim().length === 0) return false;
-  if (obj.description !== undefined && typeof obj.description !== 'string') return false;
-  if (obj.providerProfileId !== undefined && typeof obj.providerProfileId !== 'string') return false;
-  return true;
-}
-
-export function validateCodexCustomModels(models: unknown): CodexCustomModel[] {
-  if (!Array.isArray(models)) return [];
-  return models.filter(isValidCodexCustomModel);
-}
-
-export interface ProviderConfig {
-  id: string;
-  name: string;
-  remark?: string;
-  websiteUrl?: string;
-  category?: ProviderCategory;
-  createdAt?: number;
-  isActive?: boolean;
-  source?: 'cc-switch' | string;
-  isLocalProvider?: boolean;
-  customModels?: CodexCustomModel[];
-  settingsConfig?: {
-    env?: Record<string, any>;
-    alwaysThinkingEnabled?: boolean;
-    permissions?: {
-      allow?: string[];
-      deny?: string[];
-    };
-  };
-}
-
-export type ProviderCategory =
-  | 'official'
-  | 'cn_official'
-  | 'aggregator'
-  | 'third_party'
-  | 'custom';
-
 export interface CodexCustomModel {
   id: string;
   label: string;
@@ -68,27 +28,38 @@ export interface CodexCustomModel {
   providerProfileId?: string;
 }
 
-export interface CodexProviderConfig {
-  id: string;
-  name: string;
-  remark?: string;
-  createdAt?: number;
-  isActive?: boolean;
-  configToml?: string;
-  authJson?: string;
-  customModels?: CodexCustomModel[];
+/** Shape-only 校验（不校验 model id 字符集；Claude 自定义模型 id 可含空格等 vendor 语法）。 */
+export function isValidShapeOnlyCustomModel(
+  model: unknown,
+): model is CodexCustomModel {
+  if (!model || typeof model !== 'object') return false;
+  const obj = model as Record<string, unknown>;
+  if (typeof obj.id !== 'string' || obj.id.trim().length === 0) return false;
+  if (typeof obj.label !== 'string' || obj.label.trim().length === 0) return false;
+  if (obj.description !== undefined && typeof obj.description !== 'string') {
+    return false;
+  }
+  if (
+    obj.providerProfileId !== undefined &&
+    typeof obj.providerProfileId !== 'string'
+  ) {
+    return false;
+  }
+  return true;
 }
 
-export interface ProviderPreset {
-  id: string;
-  nameKey: string;
-  env: Record<string, string>;
+export function isValidCodexCustomModel(model: unknown): model is CodexCustomModel {
+  if (!isValidShapeOnlyCustomModel(model)) return false;
+  return isValidModelId(model.id);
 }
 
-export const PROVIDER_PRESETS: ProviderPreset[] = [
-  {
-    id: 'custom',
-    nameKey: 'settings.provider.presets.custom',
-    env: {},
-  },
-];
+export function validateCodexCustomModels(models: unknown): CodexCustomModel[] {
+  if (!Array.isArray(models)) return [];
+  return models.filter(isValidCodexCustomModel);
+}
+
+/** Claude custom models: shape-only (ids may include spaces / vendor syntax). */
+export function validateShapeOnlyCustomModels(models: unknown): CodexCustomModel[] {
+  if (!Array.isArray(models)) return [];
+  return models.filter(isValidShapeOnlyCustomModel);
+}

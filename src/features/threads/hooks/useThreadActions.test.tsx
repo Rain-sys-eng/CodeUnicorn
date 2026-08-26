@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { resetUseThreadActionsTestMocks } from "./useThreadActions.test-mocks";
 import {
-  archiveThread,
   connectWorkspace,
   getOpenCodeSessionList,
   listWorkspaceSessions,
@@ -2442,7 +2441,7 @@ describe("useThreadActions", () => {
         scanQuality: "preview",
       },
       cursor: null,
-      limit: 12,
+      limit: 5,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
@@ -2564,7 +2563,7 @@ describe("useThreadActions", () => {
       );
     });
 
-    expect(listClaudeSessions).toHaveBeenCalledWith("/tmp/codex", 12);
+    expect(listClaudeSessions).toHaveBeenCalledWith("/tmp/codex", 200);
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
         id: "claude:claude-visible-200",
@@ -2646,7 +2645,7 @@ describe("useThreadActions", () => {
         scanQuality: "preview",
       },
       cursor: null,
-      limit: 12,
+      limit: 5,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
@@ -3222,26 +3221,6 @@ describe("useThreadActions", () => {
     ]);
   });
 
-  it("archives threads and reports errors", async () => {
-    vi.mocked(archiveThread).mockRejectedValue(new Error("nope"));
-    const onDebug = vi.fn();
-    const { result } = renderActions({ onDebug });
-
-    await expect(
-      act(async () => {
-        await result.current.archiveThread("ws-1", "thread-9");
-      }),
-    ).rejects.toThrow("nope");
-
-    expect(archiveThread).toHaveBeenCalledWith("ws-1", "thread-9");
-    expect(onDebug).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: "error",
-        label: "thread/archive error",
-        payload: "nope",
-      }),
-    );
-  });
 
   it("renames persisted thread-title mapping keys", async () => {
     const onRenameThreadTitleMapping = vi.fn();

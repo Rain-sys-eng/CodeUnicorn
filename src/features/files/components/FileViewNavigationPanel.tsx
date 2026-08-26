@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import type { LspLocationLike } from "../utils/fileViewNavigationUtils";
 import type { CodeNavigationQueryStatus } from "../utils/fileViewNavigationUtils";
 import {
@@ -129,10 +130,9 @@ export function FileViewNavigationPanel({
     if (!installHint || !canCopyInstallCommand) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(installHint.command);
+    if (await copyTextToClipboard(installHint.command)) {
       setCopiedInstallCommand(installHint.command);
-    } catch {
+    } else {
       setCopiedInstallCommand(null);
     }
   };

@@ -5,7 +5,6 @@ import type { WorkspaceInfo } from "../../../types";
 import type { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 import { useThreadRows } from "../../app/hooks/useThreadRows";
 import {
-  archiveThread,
   deleteWorkspaceSessions,
   engineInterruptTurn,
   interruptTurn,
@@ -50,7 +49,6 @@ vi.mock("../../../services/tauri", () => ({
   startThread: vi.fn(),
   listThreads: vi.fn(),
   resumeThread: vi.fn(),
-  archiveThread: vi.fn(),
   deleteOpenCodeSession: vi.fn(),
   deleteWorkspaceSessions: vi.fn(),
   tombstoneSessionIndexRows: vi.fn(),
@@ -467,7 +465,6 @@ describe("useThreads UX integration", () => {
       code: null,
       message: null,
     });
-    expect(archiveThread).not.toHaveBeenCalled();
     expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
       "opencode:ses_opc_1",
     ]);

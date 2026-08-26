@@ -102,6 +102,7 @@ describe("useAppSettings", () => {
       experimentalUnifiedExecEnabled: true,
       codexAutoCompactionEnabled: undefined,
       codexAutoCompactionThresholdPercent: 93,
+      defaultVisibleThreadRootCount: 21,
     } as unknown as AppSettings);
 
     const { result } = renderHook(() => useAppSettings());
@@ -155,6 +156,7 @@ describe("useAppSettings", () => {
       false,
     );
     expect(result.current.settings.showSidebarProviderLabels).toBe(false);
+    expect(result.current.settings.defaultVisibleThreadRootCount).toBe(20);
     expect(result.current.settings.sessionAttributionMode).toBe("related");
     expect(result.current.settings.enabledCuratedSkillIds).toEqual([
       "lazy-senior-dev",

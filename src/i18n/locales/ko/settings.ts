@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "지우기",
     "modelMappingNote": "변경 사항은 모델 선택 드롭다운에 반영됩니다.",
     "notificationSounds": "알림 소리",
+    "minimalTranscript": "미니멀 보기",
+    "minimalTranscriptDesc": "켜면 완료된 답변은 최종 답변만 표시하고, 사고·도구 호출·중간 설명은 펼칠 수 있는 하나의 요약으로 접습니다.",
+    "minimalTranscriptNormal": "일반",
+    "minimalTranscriptMinimal": "미니멀",
+    "topSessionTabsHide": "상단 탭 숨기기",
+    "topSessionTabsShow": "상단 탭 표시",
     "systemNotification": "시스템 알림",
     "systemNotificationDesc": "세션이 완료되면 시스템 수준 알림을 보냅니다.",
     "testSound": "테스트",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "높은 신뢰도",
     "sessionManagementAttributionConfidenceMedium": "중간 신뢰도",
     "sessionManagementThreadVisibilityLabel": "사이드바 기본 세션 개수",
-    "sessionManagementThreadVisibilityHint": "사이드바가 접힌 상태에서 이 워크스페이스가 기본으로 표시하는 루트 세션 수를 조정합니다. 기본값 {{defaultCount}}, 지원 범위 {{min}}-{{max}}; 적용 값 {{count}}.",
+    "sessionManagementThreadVisibilityHint": "사이드바가 접힌 상태에서 이 프로젝트가 표시하는 루트 세션 수를 덮어씁니다. 미설정 시 워크스페이스 설정(현재 {{defaultCount}})을 따릅니다. 범위 {{min}}-{{max}}; 적용 값 {{count}}.",
     "sessionManagementThreadVisibilitySaved": "사이드바 기본 세션 개수를 {{count}}개로 업데이트했습니다.",
     "sessionManagementThreadVisibilitySaving": "저장 중...",
     "sessionManagementLoadMore": "더 불러오기",
@@ -1399,6 +1405,7 @@ const settings = {
         "notConfigured": "구성되지 않음",
         "envActive": "환경 변수 활성",
         "envActiveHint": "mossx가 {{cliName}}를 실행할 때 프로세스 환경이 적용됩니다. 덮어쓰려면 PAT를 설정하세요.",
+        "envIgnoredStoredWins": "프로세스 환경에도 {{envVar}}가 정의되어 있지만 무시되며, 저장된 PAT가 적용됩니다.",
         "setKey": "키 설정",
         "overrideSet": "덮어쓰기",
         "edit": "편집",
@@ -1412,7 +1419,7 @@ const settings = {
         "toggleKeyVisibility": "표시 / 숨기기",
         "saveHint": "{{authFile}}(0600)에 쓰고 {{cliName}} 실행 시 주입합니다",
         "loadFailed": "인증 상태를 읽지 못했습니다",
-        "resolutionOrder": "해석 순서: 프로세스 env → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "해석 순서: {{authFile}} → 프로세스 env → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI 검증",

@@ -1,5 +1,6 @@
 import { type MouseEvent } from "react";
 import type { GitPrWorkflowDefaults } from "../../../../../types";
+import { copyTextToClipboard } from "../../../../../utils/clipboard";
 import {
   getClientStoreSync,
   writeClientStoreValue,
@@ -833,11 +834,10 @@ export function useGitHistoryPanelInteractions(
     if (!url) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyTextToClipboard(url)) {
       setCreatePrCopiedPrUrl(true);
       window.setTimeout(() => setCreatePrCopiedPrUrl(false), 1200);
-    } catch {
+    } else {
       setCreatePrCopiedPrUrl(false);
     }
   }, [createPrResult?.prUrl, setCreatePrCopiedPrUrl]);
@@ -847,11 +847,10 @@ export function useGitHistoryPanelInteractions(
     if (!retryCommand) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(retryCommand);
+    if (await copyTextToClipboard(retryCommand)) {
       setCreatePrCopiedRetryCommand(true);
       window.setTimeout(() => setCreatePrCopiedRetryCommand(false), 1200);
-    } catch {
+    } else {
       setCreatePrCopiedRetryCommand(false);
     }
   }, [createPrResult?.retryCommand, setCreatePrCopiedRetryCommand]);

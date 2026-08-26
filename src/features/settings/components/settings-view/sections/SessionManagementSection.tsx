@@ -41,7 +41,9 @@ import {
   DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
   MAX_VISIBLE_THREAD_ROOT_COUNT,
   MIN_VISIBLE_THREAD_ROOT_COUNT,
+  normalizeGlobalVisibleThreadRootCount,
   normalizeVisibleThreadRootCount,
+  resolveVisibleThreadRootPageSize,
 } from "../../../../app/constants";
 import { EngineIcon } from "../../../../engine/components/EngineIcon";
 import type {
@@ -1347,12 +1349,19 @@ export function SessionManagementSection({
     () => workspaces.find((entry) => entry.id === workspaceId) ?? null,
     [workspaceId, workspaces],
   );
+  const globalVisibleThreadRootCount = normalizeGlobalVisibleThreadRootCount(
+    resolvedAppSettings.defaultVisibleThreadRootCount,
+  );
   const effectiveVisibleThreadRootCount = useMemo(
     () =>
-      normalizeVisibleThreadRootCount(
+      resolveVisibleThreadRootPageSize(
         selectedWorkspace?.settings.visibleThreadRootCount,
+        globalVisibleThreadRootCount,
       ),
-    [selectedWorkspace?.settings.visibleThreadRootCount],
+    [
+      globalVisibleThreadRootCount,
+      selectedWorkspace?.settings.visibleThreadRootCount,
+    ],
   );
   const normalizedVisibleThreadRootCountDraft = useMemo(
     () =>
@@ -1435,11 +1444,16 @@ export function SessionManagementSection({
           }),
         });
       }
-      const shouldReloadPrimary = kind !== "delete" || failed.length > 0;
+      // archive/unarchive v2 全成功：本地 patch 即终态，不再三查齐发；
+      // delete 与失败对账保持原有 reload 行为不变。
+      const shouldReloadPrimary = failed.length > 0;
       const shouldReloadRelated =
-        mode === "project" && (shouldReloadPrimary || hasSelectedRelatedEntry);
+        mode === "project" &&
+        (shouldReloadPrimary || (kind === "delete" && hasSelectedRelatedEntry));
       const shouldReloadProjectionSummary =
-        mode === "project" && Boolean(workspaceId);
+        mode === "project" &&
+        Boolean(workspaceId) &&
+        (kind === "delete" || failed.length > 0);
       if (shouldReloadPrimary || shouldReloadRelated) {
         void Promise.all([
           shouldReloadPrimary ? reloadPrimary() : Promise.resolve(),
@@ -1943,7 +1957,7 @@ export function SessionManagementSection({
                       <div className="settings-project-sessions-advanced-body">
                         <div className="settings-project-sessions-advanced-copy">
                           {t("settings.sessionManagementThreadVisibilityHint", {
-                            defaultCount: DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+                            defaultCount: globalVisibleThreadRootCount,
                             min: MIN_VISIBLE_THREAD_ROOT_COUNT,
                             max: MAX_VISIBLE_THREAD_ROOT_COUNT,
                             count: effectiveVisibleThreadRootCount,

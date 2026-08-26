@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import EyeOff from "lucide-react/dist/esm/icons/eye-off";
 import { fetchOpenCodeProviderModels } from "../../../services/tauri";
+import { createId } from "@/utils/id";
 import type { OpenCodeProviderConfig } from "../types";
 import { OPENCODE_PROVIDER_PRESETS } from "../types";
 
@@ -138,9 +139,7 @@ export function OpenCodeProviderDialog({
     if (!providerName.trim() || !baseUrl.trim()) return;
 
     const providerData: OpenCodeProviderConfig = {
-      id:
-        provider?.id ||
-        (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
+      id: provider?.id || createId(),
       name: providerName.trim(),
       remark: remark.trim() || undefined,
       websiteUrl: provider?.websiteUrl,

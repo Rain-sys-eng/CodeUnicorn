@@ -4,12 +4,12 @@ use super::providers::*;
 use super::snapshot::*;
 use super::types::*;
 
-pub(crate) async fn query_by_base_url_and_key(base_url: &str, api_key: &str) -> CodingPlanQuotaSnapshot {
+pub(crate) async fn query_by_base_url_and_key(
+    base_url: &str,
+    api_key: &str,
+) -> CodingPlanQuotaSnapshot {
     if api_key.trim().is_empty() {
-        return empty_snapshot(
-            "empty_credentials",
-            Some(relay_user_error("empty_key")),
-        );
+        return empty_snapshot("empty_credentials", Some(relay_user_error("empty_key")));
     }
     if let Some(provider) = detect_provider(base_url) {
         return match provider {
@@ -146,10 +146,7 @@ pub(crate) fn parse_new_api_user_self(body: &Value) -> Result<CodingPlanQuotaSna
         }
     }
 
-    let data = body
-        .get("data")
-        .filter(|d| d.is_object())
-        .unwrap_or(body);
+    let data = body.get("data").filter(|d| d.is_object()).unwrap_or(body);
 
     let quota = data
         .get("quota")
@@ -195,8 +192,8 @@ pub(crate) fn parse_new_api_user_self(body: &Value) -> Result<CodingPlanQuotaSna
         total_tokens: None,
         average_duration_ms: None,
     };
-    let has_usage = usage_summary.total_requests.is_some()
-        || usage_summary.total_actual_cost.is_some();
+    let has_usage =
+        usage_summary.total_requests.is_some() || usage_summary.total_actual_cost.is_some();
 
     let group = data
         .get("group")
@@ -221,7 +218,8 @@ pub(crate) fn parse_new_api_user_self(body: &Value) -> Result<CodingPlanQuotaSna
 
 pub(crate) async fn query_new_api(base_url: &str, api_key: &str) -> CodingPlanQuotaSnapshot {
     let origin = relay_origin(base_url).ok();
-    let fail = |kind: &str| empty_snapshot_ex("new_api", Some(relay_user_error(kind)), origin.clone());
+    let fail =
+        |kind: &str| empty_snapshot_ex("new_api", Some(relay_user_error(kind)), origin.clone());
     let self_url = match new_api_user_self_url(base_url) {
         Ok(u) => u,
         Err(_) => return fail("unsupported_format"),
@@ -647,9 +645,8 @@ pub(crate) fn parse_sub2api_usage(body: &Value) -> Result<CodingPlanQuotaSnapsho
 
 pub(crate) async fn query_sub2api(base_url: &str, api_key: &str) -> CodingPlanQuotaSnapshot {
     let origin = relay_origin(base_url).ok();
-    let fail = |kind: &str| {
-        empty_snapshot_ex("sub2api", Some(relay_user_error(kind)), origin.clone())
-    };
+    let fail =
+        |kind: &str| empty_snapshot_ex("sub2api", Some(relay_user_error(kind)), origin.clone());
     let usage_url = match sub2api_usage_url(base_url) {
         Ok(u) => u,
         Err(_) => return fail("unsupported_format"),

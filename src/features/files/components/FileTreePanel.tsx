@@ -49,6 +49,7 @@ import {
   writeWorkspaceFile,
   type WorkspaceDirectoryEntry,
 } from "../../../services/tauri";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import { joinWorkspaceAbsolutePath } from "../../../utils/workspacePaths";
 import { getRevealInOsFileManagerLabelKey } from "../../../utils/rendererPlatform";
 import { appendWorkspaceFileListingBudgetDiagnostic } from "../../../services/rendererDiagnostics";
@@ -1429,11 +1430,7 @@ function FileTreePanelImpl({
 
   const copyPath = useCallback(
     async (relativePath: string) => {
-      try {
-        await navigator.clipboard.writeText(resolvePath(relativePath));
-      } catch {
-        // clipboard write is not critical
-      }
+      await copyTextToClipboard(resolvePath(relativePath));
     },
     [resolvePath],
   );

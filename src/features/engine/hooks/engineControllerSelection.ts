@@ -43,6 +43,7 @@ export function buildCodexSwitchUnavailablePayload(
         : null;
 
   return {
+    reasonCode: "codex-not-installed",
     message: "Engine codex is not installed",
     doctorOk: doctorResult?.ok ?? false,
     doctorError: doctorErrorMessage,

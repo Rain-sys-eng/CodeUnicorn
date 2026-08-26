@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   assignWorkspaceSessionFolders,
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   deleteWorkspaceSessions,
   listGlobalCodexSessions,
   listProjectRelatedSessions,
   listWorkspaceSessions,
-  unarchiveWorkspaceSessions,
+  unarchiveWorkspaceSessionsV2,
   type WorkspaceSessionBatchMutationResponse,
   type WorkspaceSessionCatalogEntry,
   type WorkspaceSessionCatalogPage,
   type WorkspaceSessionCatalogQuery,
 } from "../../../../../services/tauri";
 import type { WorkspaceSessionAttributionMode } from "../../../../../types";
+import {
+  isSessionDeleteSuccessCode,
+  isSessionDeleteV2Enabled,
+  requestSessionDelete,
+} from "../../../../threads/utils/sessionDeleteV2";
 
 export type WorkspaceSessionCatalogStatus = "active" | "archived" | "all";
 export type WorkspaceSessionCatalogMode = "project" | "global";
@@ -433,53 +438,80 @@ export function useWorkspaceSessionCatalog({
               ),
           );
           try {
-            let response: WorkspaceSessionBatchMutationResponse;
-            if (kind === "archive") {
-              response = await archiveWorkspaceSessions(
-                entryWorkspaceId,
-                sessionIds,
-              );
-            } else if (kind === "unarchive") {
-              response = await unarchiveWorkspaceSessions(
-                entryWorkspaceId,
-                sessionIds,
-              );
-            } else if (kind === "delete") {
-              response = await deleteWorkspaceSessions(
-                entryWorkspaceId,
-                sessionIds,
-              );
-            } else {
-              response = await assignWorkspaceSessionFolders(
-                entryWorkspaceId,
-                sessionIds,
-                options?.folderId ?? null,
-              );
-            }
-
             const respondedSessionIds = new Set<string>();
-            response.results.forEach((item) => {
-              respondedSessionIds.add(item.sessionId);
-              const ownerWorkspaceId =
-                item.ownerWorkspaceId ?? entryWorkspaceId;
-              const stableSessionKey = item.stableSessionKey?.trim() || null;
-              mutationResults.push({
-                selectionKey:
-                  selectionKeyBySessionId.get(item.sessionId) ??
-                  (stableSessionKey
-                    ? selectionKeyByStableSessionKey.get(stableSessionKey)
-                    : undefined) ??
-                  `${ownerWorkspaceId}::${stableSessionKey || item.sessionId}`,
-                sessionId: item.sessionId,
-                workspaceId: ownerWorkspaceId,
-                ok: item.ok,
-                archivedAt: item.archivedAt,
-                error: item.error,
-                code: item.code,
-                deletedFromDisk: item.deletedFromDisk,
-                metadataCleaned: item.metadataCleaned,
+            if (kind === "delete" && isSessionDeleteV2Enabled()) {
+              // v2 删除（Index First + marker-first）：批量恒为一次 IPC，
+              // 结果码对齐 SessionDeleteCode（OK / ALREADY_MISSING /
+              // GHOST_CLEANED / MARKED_DELETED 为幂等成功）。
+              const v2Results = await requestSessionDelete(
+                entryWorkspaceId,
+                sessionIds,
+              );
+              v2Results.forEach((item) => {
+                respondedSessionIds.add(item.sessionId);
+                const ok = item.ok || isSessionDeleteSuccessCode(item.code);
+                mutationResults.push({
+                  selectionKey:
+                    selectionKeyBySessionId.get(item.sessionId) ??
+                    `${entryWorkspaceId}::${item.sessionId}`,
+                  sessionId: item.sessionId,
+                  workspaceId: entryWorkspaceId,
+                  ok,
+                  archivedAt: null,
+                  error: item.error ?? null,
+                  code: item.code,
+                  deletedFromDisk: ok ? item.code === "OK" : false,
+                  metadataCleaned: ok,
+                });
               });
-            });
+            } else {
+              let response: WorkspaceSessionBatchMutationResponse;
+              if (kind === "archive" || kind === "unarchive") {
+                // v2：Index First + metadata-only，后端不再全量扫描 catalog。
+                const targets = entryBucket.map((entry) => ({
+                  threadId: entry.sessionId,
+                  engine: entry.engine,
+                }));
+                response =
+                  kind === "archive"
+                    ? await archiveWorkspaceSessionsV2(entryWorkspaceId, targets)
+                    : await unarchiveWorkspaceSessionsV2(entryWorkspaceId, targets);
+              } else if (kind === "delete") {
+                response = await deleteWorkspaceSessions(
+                  entryWorkspaceId,
+                  sessionIds,
+                );
+              } else {
+                response = await assignWorkspaceSessionFolders(
+                  entryWorkspaceId,
+                  sessionIds,
+                  options?.folderId ?? null,
+                );
+              }
+
+              response.results.forEach((item) => {
+                respondedSessionIds.add(item.sessionId);
+                const ownerWorkspaceId =
+                  item.ownerWorkspaceId ?? entryWorkspaceId;
+                const stableSessionKey = item.stableSessionKey?.trim() || null;
+                mutationResults.push({
+                  selectionKey:
+                    selectionKeyBySessionId.get(item.sessionId) ??
+                    (stableSessionKey
+                      ? selectionKeyByStableSessionKey.get(stableSessionKey)
+                      : undefined) ??
+                    `${ownerWorkspaceId}::${stableSessionKey || item.sessionId}`,
+                  sessionId: item.sessionId,
+                  workspaceId: ownerWorkspaceId,
+                  ok: item.ok,
+                  archivedAt: item.archivedAt,
+                  error: item.error,
+                  code: item.code,
+                  deletedFromDisk: item.deletedFromDisk,
+                  metadataCleaned: item.metadataCleaned,
+                });
+              });
+            }
 
             entryBucket.forEach((entry) => {
               if (respondedSessionIds.has(entry.sessionId)) {

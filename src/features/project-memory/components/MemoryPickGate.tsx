@@ -165,7 +165,9 @@ export function MemoryPickGate({ workspaceId, threadId }: MemoryPickGateProps) {
       }
     };
     tick();
-    const id = window.setInterval(tick, 250);
+    // 倒计时基于 deadline 计算（Math.ceil），1s 粒度即可精确显示剩余秒数；
+    // 250ms tick 只是徒增冷启窗内的空转（setState 同值虽 bail-out 仍占调度）。
+    const id = window.setInterval(tick, 1_000);
     return () => {
       window.clearInterval(id);
     };

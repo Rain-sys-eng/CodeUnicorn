@@ -51,5 +51,3 @@ export function SidebarVersionTag({ t, onOpenReleaseNotes }: SidebarVersionTagPr
     </button>
   );
 }
-
-export default SidebarVersionTag;

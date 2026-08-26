@@ -154,5 +154,3 @@ export function PromptDistillDialog({
     </div>
   );
 }
-
-export default PromptDistillDialog;

@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "Borrar",
     "modelMappingNote": "Los cambios se reflejarán en el menú desplegable de selección de modelo.",
     "notificationSounds": "Sonidos de notificación",
+    "minimalTranscript": "Vista mínima",
+    "minimalTranscriptDesc": "Si está activado, las respuestas completadas solo muestran la respuesta final; el razonamiento, las llamadas a herramientas y las notas intermedias se pliegan en un resumen expandible.",
+    "minimalTranscriptNormal": "Normal",
+    "minimalTranscriptMinimal": "Mínimo",
+    "topSessionTabsHide": "Ocultar pestañas superiores",
+    "topSessionTabsShow": "Mostrar pestañas superiores",
     "systemNotification": "Notificaciones del sistema",
     "systemNotificationDesc": "Enviar notificaciones a nivel de sistema cuando finalizan las sesiones.",
     "testSound": "Probar",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Confianza alta",
     "sessionManagementAttributionConfidenceMedium": "Confianza media",
     "sessionManagementThreadVisibilityLabel": "Recuento de sesiones predeterminado de la barra lateral",
-    "sessionManagementThreadVisibilityHint": "Controla cuántas sesiones raíz muestra este espacio de trabajo de forma predeterminada mientras la barra lateral permanece contraída. Predeterminado {{defaultCount}}, rango admitido {{min}}-{{max}}; valor efectivo {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Anula cuántas sesiones raíz muestra este proyecto con la barra lateral contraída. Sin anulación sigue los ajustes del espacio de trabajo (actualmente {{defaultCount}}). Rango {{min}}-{{max}}; valor efectivo {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Se actualizó el recuento de sesiones predeterminado de la barra lateral a {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Guardando...",
     "sessionManagementLoadMore": "Cargar más",
@@ -1399,6 +1405,7 @@ const settings = {
         "notConfigured": "No configurado",
         "envActive": "Variable de entorno activa",
         "envActiveHint": "El entorno del proceso está activo cuando mossx lanza {{cliName}}. Define un PAT para anularlo.",
+        "envIgnoredStoredWins": "El entorno del proceso también define {{envVar}}; se ignora y prevalece el PAT guardado.",
         "setKey": "Establecer clave",
         "overrideSet": "Anular",
         "edit": "Editar",
@@ -1412,7 +1419,7 @@ const settings = {
         "toggleKeyVisibility": "Mostrar / ocultar",
         "saveHint": "Escribe {{authFile}} (0600) y lo inyecta al lanzar {{cliName}}",
         "loadFailed": "No se pudo leer el estado de autenticación",
-        "resolutionOrder": "Orden de resolución: env del proceso → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "Orden de resolución: {{authFile}} → env del proceso → {{cliName}} login"
       }
     },
     "cliValidationTitle": "Validación de CLI",

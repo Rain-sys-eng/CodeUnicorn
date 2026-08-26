@@ -3,13 +3,14 @@
 //! Detects installed CLI tools and their capabilities.
 
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 use tokio::time::timeout;
 
+use super::pi_rpc::PiRpcClient;
 use super::{disabled_engine_status, EngineFeatures, EngineStatus, EngineType, ModelInfo};
 use crate::app_paths;
 use crate::backend::app_server::{build_codex_path_env, find_claude_code_binary, find_cli_binary};
@@ -407,6 +408,24 @@ fn opencode_provider_models_from_config(
     models
 }
 
+/// 按引擎收尾 provider-scoped catalog：Codex 不拼 public generated fallback。
+///
+/// Codex generated fallback 描述的是官方 OpenAI 模型的可用性，属 provider relay
+/// 的事实而非 binding 的事实：拼进三方 scope 会呈现幽灵可选模型（选中即 API
+/// 报错，且假条目带满档 reasoning metadata，与真实三方条目形成误导对比）。
+/// 空 catalog 由前端 configured-default / custom-model guidance 降级链路兜底
+/// （fix-codex-third-party-provider-model-catalog）。Claude / Kimi / Grok 的
+/// public 拼接行为保持不变。
+fn finalize_provider_scoped_catalog(
+    engine_type: EngineType,
+    provider_models: Vec<ModelInfo>,
+) -> Vec<ModelInfo> {
+    if engine_type == EngineType::Codex {
+        return provider_models;
+    }
+    merge_provider_models_with_public(provider_models, public_models_for_engine(engine_type))
+}
+
 pub(crate) fn get_provider_scoped_engine_models(
     engine_type: EngineType,
     provider_profile_id: Option<&str>,
@@ -480,9 +499,9 @@ pub(crate) fn get_provider_scoped_engine_models(
             return Ok(None)
         }
     };
-    Ok(Some(merge_provider_models_with_public(
+    Ok(Some(finalize_provider_scoped_catalog(
+        engine_type,
         provider_models,
-        public_models_for_engine(engine_type),
     )))
 }
 
@@ -748,14 +767,12 @@ async fn detect_opencode_status_with_options(
     // OpenCode CLI in GUI-launched environments can intermittently fail `--version`
     // due to startup env quirks. Use a lightweight second probe to avoid false
     // "not installed" states in engine selector.
-    if !installed {
-        if probe_opencode_cli_help(&bin, path_env.as_ref()).await {
-            installed = true;
-            if version.is_none() {
-                version = Some("unknown".to_string());
-            }
-            error = None;
+    if !installed && probe_opencode_cli_help(&bin, path_env.as_ref()).await {
+        installed = true;
+        if version.is_none() {
+            version = Some("unknown".to_string());
         }
+        error = None;
     }
 
     if !installed {
@@ -890,12 +907,17 @@ pub async fn detect_pi_status(custom_bin: Option<&str>) -> EngineStatus {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| "pi".to_string());
     let path_env = build_codex_path_env(custom_bin);
-    let (installed, version, error) = probe_cli_version(&bin, "pi", path_env.as_ref()).await;
+    // version 与 models 探测无数据依赖：并行发起，最坏路径 30s → 20s
+    // （max(version 10s, RPC 10s + list-models 10s 回退)），与 FE on-demand
+    // timeout 对齐。未安装时 models 探测 spawn 立即失败，结果被丢弃。
+    let version_probe = probe_cli_version(&bin, "pi", path_env.as_ref());
+    let models_probe = get_pi_models(&bin, path_env.as_ref());
+    let ((installed, version, error), (models, config_diagnostic)) =
+        tokio::join!(version_probe, models_probe);
     if !installed {
         return not_installed_status(EngineType::Pi, error);
     }
     let home_dir = get_pi_home_dir();
-    let (models, config_diagnostic) = get_pi_models(&bin, path_env.as_ref()).await;
     let default_model = models.iter().find(|m| m.default).map(|m| m.id.clone());
     EngineStatus {
         engine_type: EngineType::Pi,
@@ -1092,6 +1114,185 @@ pub async fn detect_qoder_distribution_status(
     }
 }
 
+const PI_STANDARD_THINKING_LEVELS: &[&str] =
+    &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// Port of pi `getSupportedThinkingLevels`.
+/// Non-reasoning models return empty so the composer hides the selector.
+pub(crate) fn supported_thinking_levels_for_pi_model(
+    reasoning: bool,
+    thinking_level_map: Option<&Value>,
+) -> Vec<String> {
+    if !reasoning {
+        return Vec::new();
+    }
+    PI_STANDARD_THINKING_LEVELS
+        .iter()
+        .copied()
+        .filter(|level| {
+            let mapped = thinking_level_map.and_then(|map| map.get(*level));
+            if mapped.map(Value::is_null).unwrap_or(false) {
+                return false;
+            }
+            if *level == "xhigh" || *level == "max" {
+                return mapped.is_some();
+            }
+            true
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+fn pi_model_catalog_id(provider: &str, model_id: &str) -> String {
+    if provider.is_empty() {
+        model_id.to_string()
+    } else {
+        format!("{provider}/{model_id}")
+    }
+}
+
+fn apply_pi_thinking_levels(info: ModelInfo, levels: Vec<String>) -> ModelInfo {
+    if levels.is_empty() {
+        info
+    } else {
+        info.with_reasoning(levels, None)
+    }
+}
+
+/// Parse RPC `get_available_models` `data` into catalog rows.
+pub(crate) fn parse_pi_available_models(data: &Value) -> Vec<ModelInfo> {
+    let models = data
+        .get("models")
+        .and_then(Value::as_array)
+        .or_else(|| data.as_array())
+        .into_iter()
+        .flatten();
+    let mut parsed = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for model in models {
+        let provider = model
+            .get("provider")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("");
+        let model_id = model
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("");
+        if model_id.is_empty() {
+            continue;
+        }
+        let id = pi_model_catalog_id(provider, model_id);
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        let name = model
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(model_id);
+        let reasoning = model
+            .get("reasoning")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let levels =
+            supported_thinking_levels_for_pi_model(reasoning, model.get("thinkingLevelMap"));
+        let mut details = Vec::new();
+        if let Some(ctx) = model.get("contextWindow").and_then(Value::as_u64) {
+            details.push(format!("ctx {ctx}"));
+        }
+        if reasoning {
+            details.push("thinking".to_string());
+        }
+        let images = model
+            .get("input")
+            .and_then(Value::as_array)
+            .map(|input| input.iter().any(|value| value.as_str() == Some("image")))
+            .unwrap_or(false);
+        if images {
+            details.push("vision".to_string());
+        }
+        let description = if details.is_empty() {
+            id.clone()
+        } else {
+            details.join(" · ")
+        };
+        let mut info = ModelInfo::new(id.clone(), name.to_string())
+            .with_description(description)
+            .with_protocol("pi")
+            .with_provenance("cli:pi-available-models")
+            .with_source("detected");
+        if !provider.is_empty() {
+            info = info.with_provider(provider.to_string());
+        }
+        parsed.push(apply_pi_thinking_levels(info, levels));
+    }
+    if parsed.is_empty() {
+        parsed.push(
+            ModelInfo::new("auto", "PI Auto")
+                .with_description("Use PI CLI default model")
+                .with_provider("pi")
+                .with_protocol("pi")
+                .with_source("fallback")
+                .as_default(),
+        );
+    } else if let Some(first) = parsed.first_mut() {
+        first.default = true;
+    }
+    parsed
+}
+
+/// PI catalog RPC 探测 spawn 参数：跳过 extension boot。扩展齐全的 pi 冷启动
+/// 实测 ~10s，贴爆/超出预算；跳过后 ~1s 且模型与 thinkingLevelMap 元数据
+/// 完全一致。
+const PI_CATALOG_PROBE_RPC_ARGS: &str = "--no-session --no-extensions";
+
+/// PI catalog 探测预算：比全局 DETECTION_TIMEOUT(10s) 放宽到 15s 兜底。
+/// 跳过 extension boot 后常态 ~1s，15s 纯属慢机/冷 FS 缓存的余量；只圈
+/// catalog 探测（RPC 请求 + `--list-models`），version 探测与其他引擎不动。
+const PI_CATALOG_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+
+async fn fetch_pi_models_via_rpc(
+    bin: &str,
+    home_dir: Option<&str>,
+) -> Result<Vec<ModelInfo>, String> {
+    let cwd = std::env::temp_dir();
+    let client = PiRpcClient::spawn(
+        bin,
+        &cwd,
+        None,
+        None,
+        home_dir,
+        Some(PI_CATALOG_PROBE_RPC_ARGS),
+    )
+    .await?;
+    let data = match timeout(
+        PI_CATALOG_PROBE_TIMEOUT,
+        client.request(json!({"type": "get_available_models"})),
+    )
+    .await
+    {
+        Ok(result) => {
+            client.kill().await;
+            result?
+        }
+        Err(_) => {
+            client.kill().await;
+            return Err("pi get_available_models timed out".to_string());
+        }
+    };
+    let models = parse_pi_available_models(&data);
+    if models.is_empty() || models.iter().all(|model| model.source == "fallback") {
+        Err("pi get_available_models returned no models".to_string())
+    } else {
+        Ok(models)
+    }
+}
+
 /// Parse `pi --list-models` fixed-width table into ModelInfo entries.
 pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
     let mut models = Vec::new();
@@ -1104,7 +1305,7 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
                 if ch == '\u{1b}' {
                     if chars.peek() == Some(&'[') {
                         chars.next();
-                        while let Some(c) = chars.next() {
+                        for c in chars.by_ref() {
                             if c.is_ascii_alphabetic() {
                                 break;
                             }
@@ -1132,9 +1333,10 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
         if provider == "provider" && model == "model" {
             continue;
         }
+        // 跳过表头/分隔线等杂音行,但 provider 允许 Unicode(中文自定义供应商名)。
         if provider
             .chars()
-            .any(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+            .any(|c| !c.is_alphanumeric() && c != '-' && c != '_')
         {
             continue;
         }
@@ -1159,14 +1361,16 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
         } else {
             details.join(" · ")
         };
-        models.push(
-            ModelInfo::new(id.clone(), id.clone())
-                .with_description(description)
-                .with_provider(provider.clone())
-                .with_protocol("pi")
-                .with_provenance("cli:pi-list-models")
-                .with_source("detected"),
-        );
+        let info = ModelInfo::new(id.clone(), id.clone())
+            .with_description(description)
+            .with_provider(provider.clone())
+            .with_protocol("pi")
+            .with_provenance("cli:pi-list-models")
+            .with_source("detected");
+        models.push(apply_pi_thinking_levels(
+            info,
+            supported_thinking_levels_for_pi_model(thinking, None),
+        ));
     }
     if models.is_empty() {
         models.push(
@@ -1183,40 +1387,53 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
     models
 }
 
-async fn get_pi_models(bin: &str, path_env: Option<&String>) -> (Vec<ModelInfo>, Option<String>) {
+async fn run_pi_list_models(
+    bin: &str,
+    path_env: Option<&String>,
+    extra_args: &[&str],
+) -> Result<Vec<ModelInfo>, String> {
     let mut cmd = crate::backend::app_server::build_command_for_binary(bin);
     cmd.arg("--list-models");
+    for arg in extra_args {
+        cmd.arg(arg);
+    }
     if let Some(path) = path_env {
         cmd.env("PATH", path);
     }
-    match timeout(DETECTION_TIMEOUT, cmd.output()).await {
-        Ok(Ok(output)) if output.status.success() => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let models = parse_pi_models_output(&stdout);
-            if models.is_empty() {
-                (
-                    get_generated_fallback_models(EngineType::Pi),
-                    Some("pi --list-models returned no models".to_string()),
-                )
-            } else {
-                (models, None)
-            }
+    let output = timeout(PI_CATALOG_PROBE_TIMEOUT, cmd.output())
+        .await
+        .map_err(|_| "pi --list-models timed out".to_string())?
+        .map_err(|error| format!("failed to run pi --list-models: {error}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("pi --list-models failed: {}", stderr.trim()));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let models = parse_pi_models_output(&stdout);
+    if models.is_empty() {
+        return Err("pi --list-models returned no models".to_string());
+    }
+    Ok(models)
+}
+
+async fn get_pi_models(bin: &str, path_env: Option<&String>) -> (Vec<ModelInfo>, Option<String>) {
+    match fetch_pi_models_via_rpc(bin, None).await {
+        Ok(models) => return (models, None),
+        Err(error) => {
+            log::info!("[pi] catalog rpc unavailable ({error}); falling back to --list-models");
         }
-        Ok(Ok(output)) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            (
-                get_generated_fallback_models(EngineType::Pi),
-                Some(format!("pi --list-models failed: {}", stderr.trim())),
-            )
+    }
+    // 先跳过 extension boot（同 RPC 探测理由，实测 9.3s → 1.0s）；失败再裸
+    // 跑一次兜底不识别 --no-extensions 的旧版 pi，两次皆败才落 generated fallback。
+    match run_pi_list_models(bin, path_env, &["--no-extensions"]).await {
+        Ok(models) => return (models, None),
+        Err(error) => {
+            log::info!("[pi] --list-models with --no-extensions failed ({error}); retrying bare");
         }
-        Ok(Err(error)) => (
-            get_generated_fallback_models(EngineType::Pi),
-            Some(format!("failed to run pi --list-models: {error}")),
-        ),
-        Err(_) => (
-            get_generated_fallback_models(EngineType::Pi),
-            Some("pi --list-models timed out".to_string()),
-        ),
+    }
+    match run_pi_list_models(bin, path_env, &[]).await {
+        Ok(models) => (models, None),
+        Err(error) => (get_generated_fallback_models(EngineType::Pi), Some(error)),
     }
 }
 
@@ -2294,9 +2511,170 @@ anthropic claude-opus    200k   32k    no       yes
         assert_eq!(models[0].id, "openai/gpt-5.2");
         assert!(models[0].default);
         assert_eq!(models[0].description, "ctx 400k · thinking · vision");
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
         assert_eq!(models[1].id, "anthropic/claude-opus");
         assert!(!models[1].default);
         assert_eq!(models[1].description, "ctx 200k · vision");
+        assert!(models[1].supported_reasoning_efforts.is_empty());
+    }
+
+    #[test]
+    fn supported_thinking_levels_follow_pi_map_rules() {
+        assert!(supported_thinking_levels_for_pi_model(false, None).is_empty());
+        assert_eq!(
+            supported_thinking_levels_for_pi_model(true, None),
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
+        let map = json!({
+            "off": null,
+            "minimal": null,
+            "low": null,
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+        });
+        assert_eq!(
+            supported_thinking_levels_for_pi_model(true, Some(&map)),
+            vec!["high", "max"]
+        );
+    }
+
+    /// 探测 spawn 参数必须同时跳过会话恢复与 extension boot：任一缺失都会
+    /// 把探测推回 ~10s 量级（2026-08-26 实证）。预算同时钉在 15s 兜底：
+    /// 改动任一常量都必须是显式决策（同步更新 OpenSpec 提案设计）。
+    #[test]
+    fn pi_catalog_probe_rpc_args_skip_session_and_extension_boot() {
+        let args: Vec<&str> = PI_CATALOG_PROBE_RPC_ARGS.split_whitespace().collect();
+        assert_eq!(args, vec!["--no-session", "--no-extensions"]);
+        assert_eq!(PI_CATALOG_PROBE_TIMEOUT, Duration::from_secs(15));
+    }
+
+    #[test]
+    fn parse_pi_available_models_projects_thinking_levels() {
+        let models = parse_pi_available_models(&json!({
+            "models": [
+                {
+                    "id": "gpt-5.2",
+                    "name": "GPT-5.2",
+                    "provider": "openai",
+                    "reasoning": true,
+                    "input": ["text", "image"],
+                    "contextWindow": 400000,
+                    "thinkingLevelMap": {
+                        "off": null,
+                        "minimal": "low",
+                        "xhigh": "xhigh"
+                    }
+                },
+                {
+                    "id": "gpt-4.1",
+                    "provider": "openai",
+                    "reasoning": false,
+                    "input": ["text"]
+                }
+            ]
+        }));
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "openai/gpt-5.2");
+        assert!(models[0].default);
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["minimal", "low", "medium", "high", "xhigh"]
+        );
+        assert_eq!(models[1].id, "openai/gpt-4.1");
+        assert!(models[1].supported_reasoning_efforts.is_empty());
+    }
+
+    #[test]
+    fn custom_relay_reasoning_model_without_map_uses_pi_default_five_levels() {
+        // models.json: { id, reasoning: true } and no thinkingLevelMap.
+        // Screenshot collision: my-relay/grok-4.6 shows Off/Minimal/Low/Medium/High.
+        let models = parse_pi_available_models(&json!({
+            "models": [{
+                "id": "grok-4.6",
+                "name": "Grok 4.6",
+                "provider": "my-relay",
+                "reasoning": true,
+                "input": ["text", "image"]
+            }]
+        }));
+        assert_eq!(models[0].id, "my-relay/grok-4.6");
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
+        assert_eq!(
+            models[0].provenance.as_deref(),
+            Some("cli:pi-available-models")
+        );
+    }
+
+    #[test]
+    fn official_grok_thinking_map_hides_off_minimal_and_extended_levels() {
+        let map = json!({
+            "off": null,
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": "high"
+        });
+        assert_eq!(
+            supported_thinking_levels_for_pi_model(true, Some(&map)),
+            vec!["low", "medium", "high"]
+        );
+        let models = parse_pi_available_models(&json!({
+            "models": [{
+                "id": "grok-4.5",
+                "provider": "xai",
+                "reasoning": true,
+                "thinkingLevelMap": {
+                    "off": null,
+                    "minimal": null,
+                    "low": "low",
+                    "medium": "medium",
+                    "high": "high"
+                }
+            }]
+        }));
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["low", "medium", "high"]
+        );
+    }
+
+    #[test]
+    fn list_models_thinking_yes_over_approximates_official_grok_allowlist() {
+        let models = parse_pi_models_output(
+            "provider model          ctx  max     thinking images
+xai      grok-4.5        256k   64k    yes      yes
+",
+        );
+        assert_eq!(models[0].id, "xai/grok-4.5");
+        assert_eq!(models[0].provenance.as_deref(), Some("cli:pi-list-models"));
+        assert_eq!(
+            models[0].supported_reasoning_efforts,
+            vec!["off", "minimal", "low", "medium", "high"]
+        );
+    }
+
+    #[test]
+    fn parse_pi_models_output_keeps_cjk_and_mixed_provider_rows() {
+        let models = parse_pi_models_output(
+            "provider  model          ctx   max  thinking images
+智谱      glm-5.2         200k  64k  yes      no
+123nhh-gpt gpt-5.6-sol   256k  64k  no       no
+",
+        );
+        let cjk = models
+            .iter()
+            .find(|m| m.id == "智谱/glm-5.2")
+            .expect("CJK provider row must survive parsing");
+        assert_eq!(cjk.provider.as_deref(), Some("智谱"));
+        assert!(models.iter().any(|m| m.id == "123nhh-gpt/gpt-5.6-sol"));
     }
 
     #[test]
@@ -2553,9 +2931,9 @@ anthropic claude-opus    200k   32k    no       yes
             "ANTHROPIC_MODEL".to_string(),
             "claude-opus-5".to_string(),
         )]);
-        let models = merge_provider_models_with_public(
+        let models = finalize_provider_scoped_catalog(
+            EngineType::Claude,
             claude_provider_models_from_env("provider-a", &env),
-            public_models_for_engine(EngineType::Claude),
         );
 
         // Provider catalog carries the full tier list, all scoped to the profile.
@@ -2577,7 +2955,7 @@ anthropic claude-opus    200k   32k    no       yes
     }
 
     #[test]
-    fn codex_provider_catalog_merges_config_custom_and_public_models() {
+    fn codex_provider_catalog_skips_public_fallback_merge() {
         let provider_models = codex_provider_models_from_config(
             "provider-a",
             "model = \"gpt-5.3-codex\"\nmodel_provider = \"proxy-a\"\n",
@@ -2588,10 +2966,7 @@ anthropic claude-opus    200k   32k    no       yes
             }],
         )
         .expect("parse provider catalog");
-        let models = merge_provider_models_with_public(
-            provider_models,
-            public_models_for_engine(EngineType::Codex),
-        );
+        let models = finalize_provider_scoped_catalog(EngineType::Codex, provider_models);
 
         assert_eq!(
             models
@@ -2604,9 +2979,10 @@ anthropic claude-opus    200k   32k    no       yes
             model.model == "provider-only"
                 && model.provider_profile_id.as_deref() == Some("provider-a")
         }));
+        // Codex managed scope 不得出现幽灵官方 fallback 条目
         assert!(models
             .iter()
-            .any(|model| { model.source == "fallback" && model.provider_profile_id.is_none() }));
+            .all(|model| model.source != "fallback" && model.provider_profile_id.is_some()));
     }
 
     #[test]
@@ -2627,9 +3003,9 @@ anthropic claude-opus    200k   32k    no       yes
             max_context_size: None,
             display_name: Some("Provider Kimi".to_string()),
         };
-        let models = merge_provider_models_with_public(
+        let models = finalize_provider_scoped_catalog(
+            EngineType::Kimi,
             kimi_provider_models_from_config("provider-a", provider),
-            public_models_for_engine(EngineType::Kimi),
         );
 
         assert_eq!(

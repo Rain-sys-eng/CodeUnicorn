@@ -170,6 +170,17 @@ export async function readWorkspaceFile(workspaceId: string, path: string): Prom
   });
 }
 
+/** 2.3 按需日志 tail：读文件末尾 ≤8 KiB（byte budget 对齐 tool-output），首字节不返回。 */
+export async function readWorkspaceFileTail(
+  workspaceId: string,
+  path: string,
+): Promise<{ content: string; truncated: boolean }> {
+  return invoke<{ content: string; truncated: boolean }>("read_workspace_file_tail", {
+    workspaceId,
+    path,
+  });
+}
+
 export async function readWorkspaceFilePreview(workspaceId: string, path: string): Promise<{ content: string; truncated: boolean }> {
   return invoke<{ content: string; truncated: boolean }>("read_workspace_file_preview", {
     workspaceId,

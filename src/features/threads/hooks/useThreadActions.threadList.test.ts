@@ -207,11 +207,11 @@ describe("useThreadActions.threadList", () => {
     ).toBeNull();
   });
 
-  it("first-paint list target defaults to expose=fetch 12 and matches sidebar page size", () => {
-    expect(THREAD_LIST_INITIAL_TARGET_COUNT).toBe(12);
-    expect(THREAD_LIST_INITIAL_PAGE_SIZE).toBe(12);
-    expect(SESSION_CATALOG_INITIAL_PAGE_SIZE).toBe(12);
-    expect(SESSION_INDEX_PAGE_SIZE).toBe(12);
+  it("first-paint list target defaults to expose=fetch 5 and matches sidebar page size", () => {
+    expect(THREAD_LIST_INITIAL_TARGET_COUNT).toBe(5);
+    expect(THREAD_LIST_INITIAL_PAGE_SIZE).toBe(5);
+    expect(SESSION_CATALOG_INITIAL_PAGE_SIZE).toBe(5);
+    expect(SESSION_INDEX_PAGE_SIZE).toBe(5);
     expect(THREAD_LIST_LOAD_OLDER_TARGET_COUNT).toBe(50);
     expect(THREAD_LIST_LOAD_OLDER_PAGE_SIZE).toBe(50);
 
@@ -222,6 +222,16 @@ describe("useThreadActions.threadList", () => {
       connected: true,
       settings: { sidebarCollapsed: false },
     } as WorkspaceInfo;
-    expect(resolveInitialThreadListTargetCount(workspace)).toBe(12);
+    expect(resolveInitialThreadListTargetCount(workspace)).toBe(5);
+    expect(resolveInitialThreadListTargetCount(workspace, 8)).toBe(8);
+    expect(
+      resolveInitialThreadListTargetCount(
+        {
+          ...workspace,
+          settings: { ...workspace.settings, visibleThreadRootCount: 200 },
+        },
+        5,
+      ),
+    ).toBe(200);
   });
 });

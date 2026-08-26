@@ -20,7 +20,7 @@ use super::qoder::QoderSession;
 use super::qoder_provider_profile::{QoderDistributionSettings, QoderProviderLaunchProfile};
 use super::status::{
     detect_all_engines, detect_claude_status, detect_codex_status, detect_grok_status,
-    detect_kimi_status, detect_opencode_status, detect_pi_status,
+    detect_kimi_status, detect_opencode_status,
 };
 use super::{disabled_engine_status, EngineConfig, EngineStatus, EngineType};
 
@@ -358,6 +358,14 @@ impl EngineManager {
     pub async fn get_engine_status(&self, engine_type: EngineType) -> Option<EngineStatus> {
         let statuses = self.engine_statuses.read().await;
         statuses.get(&engine_type).cloned()
+    }
+
+    /// Insert or replace the cached status for an engine.
+    /// Used by cache-first catalog resolution to write back fresh probe
+    /// results, and by tests to seed the cache.
+    pub async fn cache_engine_status(&self, status: EngineStatus) {
+        let mut statuses = self.engine_statuses.write().await;
+        statuses.insert(status.engine_type, status);
     }
 
     /// Get all cached engine statuses
@@ -914,6 +922,13 @@ impl EngineManager {
                 errors.len(),
                 errors.join("; ")
             ))
+        }
+    }
+
+    pub async fn drop_pi_resident_by_session_id(&self, session_id: &str) {
+        let sessions = self.pi_sessions.lock().await;
+        for entry in sessions.values() {
+            entry.session.drop_resident(session_id).await;
         }
     }
 

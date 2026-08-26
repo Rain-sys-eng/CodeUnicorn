@@ -9,6 +9,16 @@ const CLAUDE_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max
 const GROK_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
 /** DSH host deepseek adapter reasoning efforts (llm.models reasoning.efforts). */
 const DSH_REASONING_EFFORTS = new Set(["off", "low", "high", "max"]);
+/** PI thinking levels — keep aligned with pi CLI / `THINKING_LEVELS` in pi.rs. */
+const PI_REASONING_EFFORTS = new Set([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
 
 export function buildLocalizedMemoryScoutPreviewText(brief: MemoryBrief, t: TFunction) {
   if (brief.status === "ok") {
@@ -56,6 +66,9 @@ export function normalizeEngineScopedEffort(
   }
   if (engine === "dsh") {
     return DSH_REASONING_EFFORTS.has(trimmed) ? trimmed : null;
+  }
+  if (engine === "pi") {
+    return PI_REASONING_EFFORTS.has(trimmed) ? trimmed : null;
   }
   return null;
 }

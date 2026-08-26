@@ -6,6 +6,7 @@ import { memo, useMemo, useEffect, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import type { ConversationItem } from "../../../../types";
+import { copyTextToClipboard } from "../../../../utils/clipboard";
 import { highlightLine } from "../../../../utils/syntax";
 import {
   buildCommandSummary,
@@ -158,8 +159,7 @@ export const BashToolBlock = memo(function BashToolBlock({
   const headerTooltip = command || outputPreview || t("tools.terminalCommand");
 
   const copyText = useCallback(async (value: string, kind: "command" | "output") => {
-    try {
-      await navigator.clipboard.writeText(value);
+    if (await copyTextToClipboard(value)) {
       if (kind === "command") {
         setCopiedCommand(true);
         window.setTimeout(() => setCopiedCommand(false), 1200);
@@ -167,7 +167,7 @@ export const BashToolBlock = memo(function BashToolBlock({
         setCopiedOutput(true);
         window.setTimeout(() => setCopiedOutput(false), 1200);
       }
-    } catch {
+    } else {
       if (kind === "command") {
         setCopiedCommand(false);
       } else {
@@ -273,5 +273,3 @@ export const BashToolBlock = memo(function BashToolBlock({
     />
   );
 });
-
-export default BashToolBlock;

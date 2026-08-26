@@ -176,7 +176,7 @@ export function SharedProviderRetryToggle({
                 <input
                   type="number"
                   min={0}
-                  max={10}
+                  max={999}
                   value={settings.maxAttempts}
                   onChange={(event) =>
                     write({ maxAttempts: Number(event.target.value) })

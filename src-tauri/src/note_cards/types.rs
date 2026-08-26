@@ -125,4 +125,3 @@ pub(crate) struct UpdateWorkspaceNoteCardInput {
     pub body_markdown: Option<String>,
     pub attachment_inputs: Option<Vec<String>>,
 }
-

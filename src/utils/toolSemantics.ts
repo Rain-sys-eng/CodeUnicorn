@@ -1,3 +1,5 @@
+import { truncateChars } from "./text";
+
 export const READ_TOOL_NAMES = new Set([
   "read",
   "read_file",
@@ -301,10 +303,7 @@ export function getFileName(path?: string): string {
 }
 
 export function truncateText(text: string, maxLength = 60): string {
-  if (!text || text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, maxLength)}...`;
+  return truncateChars(text, maxLength, "...");
 }
 
 export function parseToolArgs(detail: unknown): Record<string, unknown> | null {

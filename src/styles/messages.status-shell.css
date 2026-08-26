@@ -422,6 +422,118 @@
   padding: 2px 0 6px;
 }
 
+/* ===== PI 后台任务卡（运行中活体态；终态复用上方 fold 行） ===== */
+.background-task-card {
+  width: 100%;
+  margin: 4px 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-card);
+}
+
+.background-task-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+
+.background-task-card-head .message-agent-task-fold-status.is-running::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 5px;
+  animation: background-task-card-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes background-task-card-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+.background-task-card-title {
+  font-size: var(--message-meta-font-size);
+  font-weight: 600;
+  color: var(--text-stronger);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.background-task-card-id {
+  font-family: var(--mono, "SF Mono", Menlo, monospace);
+  font-size: var(--message-caption-font-size);
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.background-task-card-elapsed {
+  margin-left: auto;
+  font-family: var(--mono, "SF Mono", Menlo, monospace);
+  font-size: var(--message-caption-font-size);
+  color: var(--text-faint);
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.background-task-card-command {
+  margin: 0 10px 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-command);
+  color: var(--text-secondary);
+  font-family: var(--mono, "SF Mono", Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.background-task-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 8px;
+  font-size: var(--message-caption-font-size);
+  color: var(--text-faint);
+}
+
+.background-task-card-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.background-task-card-actions button,
+.background-task-card-log-link {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-control, rgba(24, 24, 27, 0.04));
+  color: var(--text-secondary);
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 2px 9px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.background-task-card-actions button:hover,
+.background-task-card-log-link:hover {
+  background: var(--surface-control-hover, rgba(24, 24, 27, 0.07));
+}
+
 .message-agent-task-fold-kv {
   display: grid;
   gap: 6px;

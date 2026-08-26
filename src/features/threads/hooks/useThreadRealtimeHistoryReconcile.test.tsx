@@ -186,4 +186,40 @@ describe("useThreadRealtimeHistoryReconcile", () => {
 
     expect(refreshThread).not.toHaveBeenCalled();
   });
+
+  it("defers Claude reconcile while an optimistic user bubble is pending", async () => {
+    const { result, refreshThread, itemsByThreadRef } = createHarness({
+      itemsByThread: {
+        "claude:session-1": [
+          {
+            id: "optimistic-user-1",
+            kind: "message",
+            role: "user",
+            text: "bubble not on disk yet",
+          },
+        ],
+      },
+    });
+
+    act(() => {
+      result.current.handleTurnCompletedForHistoryReconcile({
+        workspaceId: "ws-1",
+        threadId: "claude:session-1",
+        turnId: "turn-1",
+      });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_300);
+    });
+    expect(refreshThread).not.toHaveBeenCalled();
+
+    // Retry delay fires the reconcile even if the bubble is still pending
+    // (mirror codex path: defer once, then proceed).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_900);
+    });
+    expect(refreshThread).toHaveBeenCalledWith("ws-1", "claude:session-1");
+    expect(itemsByThreadRef.current["claude:session-1"]).toBeDefined();
+  });
 });

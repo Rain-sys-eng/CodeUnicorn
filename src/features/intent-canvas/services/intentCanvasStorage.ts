@@ -24,6 +24,7 @@ import type {
   IntentCanvasWorkspaceRef,
 } from "../types";
 import { asString, asStringArray, isRecord } from "../utils/json";
+import { normalizePathSeparators } from "../../../utils/path";
 import {
   buildIntentCanvasAiContext,
   createInitialIntentCanvasScene,
@@ -152,7 +153,7 @@ function normalizePathValue(value: unknown): string | null {
   if (!path) {
     return null;
   }
-  return path.replace(/\\/g, "/");
+  return normalizePathSeparators(path);
 }
 
 function normalizeCanvasSourceRange(value: unknown): { startLine: number; startColumn?: number | null; endLine?: number | null; endColumn?: number | null } | null {

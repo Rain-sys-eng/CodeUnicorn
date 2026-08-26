@@ -231,5 +231,3 @@ export const FileChangeRow = memo(function FileChangeRow({
     </ToolMarkerShell>
   );
 });
-
-export default FileChangeRow;

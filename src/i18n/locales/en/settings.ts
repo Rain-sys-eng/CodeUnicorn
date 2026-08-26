@@ -516,6 +516,13 @@ const settings = {
     modelMappingNote:
       "Changes will be reflected in the model selector dropdown.",
     notificationSounds: "Notification Sounds",
+    minimalTranscript: "Minimal Transcript",
+    minimalTranscriptDesc:
+      "When on, completed replies show only the final answer — thinking, tool calls, and interim notes fold into a single expandable summary.",
+    minimalTranscriptNormal: "Normal",
+    minimalTranscriptMinimal: "Minimal",
+    topSessionTabsHide: "Hide top tabs",
+    topSessionTabsShow: "Show top tabs",
     systemNotification: "System Notifications",
     systemNotificationDesc:
       "Send system-level notifications when sessions complete.",
@@ -1163,7 +1170,7 @@ const settings = {
     sessionManagementAttributionConfidenceMedium: "Medium confidence",
     sessionManagementThreadVisibilityLabel: "Sidebar default session count",
     sessionManagementThreadVisibilityHint:
-      "Controls how many root sessions this workspace shows by default while the sidebar stays collapsed. Default {{defaultCount}}, supported range {{min}}-{{max}}; effective value {{count}}.",
+      "Overrides how many root sessions this project shows while the sidebar stays collapsed. Without an override it follows Workspace settings (currently {{defaultCount}}). Range {{min}}-{{max}}; effective value {{count}}.",
     sessionManagementThreadVisibilitySaved:
       "Updated the sidebar default session count to {{count}}.",
     sessionManagementThreadVisibilitySaving: "Saving...",
@@ -1771,6 +1778,8 @@ const settings = {
         envActive: "Environment variable active",
         envActiveHint:
           "The process environment is active when mossx launches {{cliName}}. Set a PAT to override it.",
+        envIgnoredStoredWins:
+          "The process environment also defines {{envVar}}; it is ignored and the saved PAT takes effect.",
         setKey: "Set Key",
         overrideSet: "Override",
         edit: "Edit",
@@ -1784,7 +1793,7 @@ const settings = {
         toggleKeyVisibility: "Show / hide",
         saveHint: "Writes {{authFile}} (0600) and injects it when launching {{cliName}}",
         loadFailed: "Failed to read auth status",
-        resolutionOrder: "Resolution order: process env → {{authFile}} → {{cliName}} login",
+        resolutionOrder: "Resolution order: {{authFile}} → process env → {{cliName}} login",
       },
     },
     cliValidationTitle: "CLI Validation",
@@ -1852,6 +1861,19 @@ const settings = {
       configured: "Configured",
       notConfigured: "Not configured",
       envActive: "Env var active",
+      customTitle: "Custom providers",
+      customHint: "Written to ~/.pi/agent/models.json · relays / custom models",
+      editConfig: "Edit config",
+      customEmpty: "No custom providers defined yet",
+      customMissing: "models.json does not exist — click “Edit config” to start from the example template",
+      customParseError: "models.json failed to parse; fix it in the editor below",
+      customModelCount: "{count} models",
+      customHasKey: "Key set",
+      customNoKey: "No key",
+      customEditorLabel: "models.json · full JSON (comments allowed)",
+      customEditorTips:
+        "Loose validation: JSON structure only; unknown fields are preserved. apiKey accepts literal, $ENV_VAR, or !command.",
+      customSaveHint: "Saved to ~/.pi/agent/models.json (0600 permissions)",
     },
     dshDescription:
       "DeepSeek Harness is a local Node host (dsh web). Configure models and API keys in the DSH Web UI, not in mossx.",

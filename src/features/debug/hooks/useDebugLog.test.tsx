@@ -235,6 +235,66 @@ describe("useDebugLog", () => {
     });
   });
 
+  it("caps known-safe model-refresh stderr to the first window plus every 100 raw counts", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 24, 12, 0, 0));
+    const { result } = renderHook(() => useDebugLog());
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "stderr-first",
+        timestamp: Date.now(),
+        source: "stderr",
+        label: "codex/stderr",
+        payload: {
+          reasonCode: "codex-model-refresh-child-exit-timeout",
+          redactedText: true,
+          rawMessageLength: 80,
+        },
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(STDERR_AGGREGATION_WINDOW_MS);
+    });
+    expect(appendClientErrorLog).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "stderr-repeat",
+        timestamp: Date.now(),
+        source: "stderr",
+        label: "codex/stderr",
+        payload: {
+          reasonCode: "codex-model-refresh-child-exit-timeout",
+          redactedText: true,
+          rawMessageLength: 80,
+        },
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(STDERR_AGGREGATION_WINDOW_MS);
+    });
+    expect(appendClientErrorLog).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.addDebugEntry({
+        id: "stderr-unclassified",
+        timestamp: Date.now(),
+        source: "stderr",
+        label: "codex/stderr",
+        payload: {
+          reasonCode: "unclassified-stderr",
+          redactedText: true,
+          rawMessageLength: 40,
+        },
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(STDERR_AGGREGATION_WINDOW_MS);
+    });
+    expect(appendClientErrorLog).toHaveBeenCalledTimes(2);
+  });
+
   it("persists actionable errors immediately while stderr waits for aggregation", () => {
     vi.useFakeTimers();
     const { result } = renderHook(() => useDebugLog());

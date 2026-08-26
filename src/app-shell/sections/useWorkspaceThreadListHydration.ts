@@ -78,6 +78,8 @@ type ListThreadsForWorkspace = (
     preserveState?: boolean;
     includeOpenCodeSessions?: boolean;
     deletedThreadIds?: string[];
+    /** 归档摘行：仅本地移除 deletedThreadIds，零 IPC / 零 catalog 重扫。 */
+    localRemovalOnly?: boolean;
     startupHydrationMode?: "full-catalog" | "first-paint";
     allowRuntimeReconnect?: boolean;
     /**
@@ -88,20 +90,19 @@ type ListThreadsForWorkspace = (
     /** Quiet post-first-paint index re-scan (writers), not cold first paint. */
     forceSessionIndexSync?: boolean;
     includeEngineDiskLists?: boolean;
+    /** 只补 pi 单引擎盘扫（首刷后后台软刷）：独立 pi main 必须可达。 */
+    includePiDiskList?: boolean;
     /** Importer refresh: merge SQLite rows onto the current list. */
     mergeExistingThreads?: boolean;
     /** When true mid-flight, list apply must no-op (workspace cancelled/switched). */
     isStale?: () => boolean;
   },
-) => Promise<
-  | void
-  | {
-      applied?: boolean;
-      stale?: boolean;
-      visibleCount?: number;
-      authoritativeEmpty?: boolean;
-    }
->;
+) => Promise<void | {
+  applied?: boolean;
+  stale?: boolean;
+  visibleCount?: number;
+  authoritativeEmpty?: boolean;
+}>;
 
 type UseWorkspaceThreadListHydrationOptions = {
   activeWorkspaceId: string | null;
@@ -119,6 +120,8 @@ type UseWorkspaceThreadListHydrationResult = {
       preserveState?: boolean;
       force?: boolean;
       deletedThreadIds?: string[];
+      /** 归档摘行：仅本地移除 deletedThreadIds，零 IPC / 零 catalog 重扫。 */
+      localRemovalOnly?: boolean;
       startupHydrationMode?: "full-catalog" | "first-paint";
       mergeExistingThreads?: boolean;
     },
@@ -135,7 +138,8 @@ type ThreadHydrationKind = "full-catalog" | "session-radar" | "first-paint";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const IS_VITEST =
-  typeof import.meta !== "undefined" && (import.meta as any).env?.MODE === "test";
+  typeof import.meta !== "undefined" &&
+  (import.meta as any).env?.MODE === "test";
 
 /**
  * Cold-start / first bind / Cmd+R: do not start first-paint until the user has
@@ -166,9 +170,13 @@ export const WORKSPACE_SWITCH_INPUT_QUIET_MS = IS_VITEST ? 0 : 300;
  * not exhaustive full-catalog. Force refresh still uses full-catalog.
  * @internal exported for tests
  */
-export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MIN_DELAY_MS = IS_VITEST ? 0 : 800;
+export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MIN_DELAY_MS = IS_VITEST
+  ? 0
+  : 800;
 export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_QUIET_MS = IS_VITEST ? 0 : 600;
-export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_WAIT_MS = IS_VITEST ? 0 : 8_000;
+export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_WAIT_MS = IS_VITEST
+  ? 0
+  : 8_000;
 
 /**
  * Pointer soft-cancel keeps clicks ahead of the post-first-paint Index
@@ -181,6 +189,15 @@ export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_WAIT_MS = IS_VITEST ? 0 : 8_
  */
 export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFERS = 3;
 export const POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFER_WINDOW_MS = 8_000;
+
+/**
+ * unconfirmed-empty settle 未证实（失败 / 超时 / 仍非权威空）后，保持 loading
+ * 等 importer 填行（session-index-imported → ensure 会合行并标 hydrated）的
+ * 宽限期；到期仍未见行则兜底标 hydrated 终态——真空 workspace 不永生 loading
+ * （「暂无会话」占位已下线，终态即空白）。
+ * @internal exported for tests
+ */
+export const EMPTY_SETTLE_LOADING_GRACE_MS = IS_VITEST ? 50 : 20_000;
 
 /** @deprecated Prefer COLD_START_IDLE_* / WORKSPACE_SWITCH_INTENT_DELAY_MS */
 export const COLD_START_FIRST_PAINT_DELAY_MS = COLD_START_IDLE_MIN_DELAY_MS;
@@ -348,9 +365,9 @@ export function useWorkspaceThreadListHydration({
     | null
   >(null);
   /** Quiet idle Index soft re-sync after active first-paint (or force-enter re-arm). */
-  const pendingPostFirstPaintIndexSoftResyncCleanupRef = useRef<(() => void) | null>(
-    null,
-  );
+  const pendingPostFirstPaintIndexSoftResyncCleanupRef = useRef<
+    (() => void) | null
+  >(null);
   const postFirstPaintIndexSoftResyncTargetIdRef = useRef<string | null>(null);
   /** Workspaces that already had a post-first-paint Index soft re-sync scheduled. */
   const postFirstPaintIndexSoftResyncArmedIdsRef = useRef(new Set<string>());
@@ -359,7 +376,9 @@ export function useWorkspaceThreadListHydration({
    * listThreadsForWorkspace call (off-orchestrator), so pointer soft-cancel
    * uses the generation guard below instead of cancelWorkspaceTasks.
    */
-  const postFirstPaintIndexSoftResyncInFlightIdRef = useRef<string | null>(null);
+  const postFirstPaintIndexSoftResyncInFlightIdRef = useRef<string | null>(
+    null,
+  );
   /** Bumped by pointer soft-cancel so the orphan's late setThreads no-op via isStale. */
   const postFirstPaintIndexSoftResyncGenerationRef = useRef(0);
   /** Consecutive input-driven deferrals of the post-first-paint Index soft re-sync. */
@@ -374,6 +393,50 @@ export function useWorkspaceThreadListHydration({
     useState<ReadonlySet<string>>(
       () => hydratedThreadListWorkspaceIdsRef.current,
     );
+  // loading 阶段文案由 ThreadLoadingState 本地计时切换，此处不维护 phase 状态。
+  /** settle 未证实后的宽限定时器（兜底终态，防永生 loading）。 */
+  const emptySettleGraceCleanupByWorkspaceIdRef = useRef(
+    new Map<string, () => void>(),
+  );
+
+  const cancelEmptySettleGrace = useCallback((workspaceId: string) => {
+    const cancel =
+      emptySettleGraceCleanupByWorkspaceIdRef.current.get(workspaceId);
+    if (cancel) {
+      cancel();
+      emptySettleGraceCleanupByWorkspaceIdRef.current.delete(workspaceId);
+    }
+  }, []);
+
+  /** hydrated 终态统一出口：标 hydrated + 取消宽限。 */
+  const markWorkspaceThreadListHydrated = useCallback(
+    (workspaceId: string) => {
+      cancelEmptySettleGrace(workspaceId);
+      const nextHydrated = publishHydratedWorkspaceId(
+        hydratedThreadListWorkspaceIdsRef,
+        workspaceId,
+      );
+      publishHydrationUiState(setHydratedThreadListWorkspaceIds, nextHydrated);
+    },
+    [cancelEmptySettleGrace],
+  );
+
+  const armEmptySettleGrace = useCallback(
+    (workspaceId: string) => {
+      cancelEmptySettleGrace(workspaceId);
+      if (hydratedThreadListWorkspaceIdsRef.current.has(workspaceId)) {
+        return;
+      }
+      const timer = setTimeout(() => {
+        emptySettleGraceCleanupByWorkspaceIdRef.current.delete(workspaceId);
+        markWorkspaceThreadListHydrated(workspaceId);
+      }, EMPTY_SETTLE_LOADING_GRACE_MS);
+      emptySettleGraceCleanupByWorkspaceIdRef.current.set(workspaceId, () =>
+        clearTimeout(timer),
+      );
+    },
+    [cancelEmptySettleGrace, markWorkspaceThreadListHydrated],
+  );
   const renderScheduler = useRenderScheduler({
     budgetMs: 0,
     idleTimeoutMs: IDLE_PREWARM_DELAY_MS,
@@ -424,6 +487,10 @@ export function useWorkspaceThreadListHydration({
           startupHydrationMode: "first-paint",
           allowRuntimeReconnect: false,
           forceSessionIndexSync: true,
+          // 首刷后后台补 pi 盘扫：独立 native pi main 在 index 首页 5 槽
+          // 之外也必须可达（fork/Shared 认领行仍按契约隐藏）。单目录
+          // header 读，远轻于 full-catalog 多引擎 fan-out。
+          includePiDiskList: true,
           // Pointer soft-cancel bumps the generation: the orphan IPC still
           // finishes but its late setThreads no-op (soft-ignore semantics).
           isStale: () =>
@@ -438,7 +505,9 @@ export function useWorkspaceThreadListHydration({
           ) {
             postFirstPaintIndexSoftResyncInFlightIdRef.current = null;
           }
-          if (postFirstPaintIndexSoftResyncGenerationRef.current === generation) {
+          if (
+            postFirstPaintIndexSoftResyncGenerationRef.current === generation
+          ) {
             // Settled without a soft-cancel: the deferral cycle is over.
             postFirstPaintIndexSoftResyncDeferCountRef.current = 0;
             postFirstPaintIndexSoftResyncFirstDeferAtRef.current = 0;
@@ -471,18 +540,30 @@ export function useWorkspaceThreadListHydration({
         }),
       )
         .catch(() => undefined)
-        .finally(() => {
-          const nextHydrated = publishHydratedWorkspaceId(
-            hydratedThreadListWorkspaceIdsRef,
-            id,
-          );
-          publishHydrationUiState(
-            setHydratedThreadListWorkspaceIds,
-            nextHydrated,
-          );
+        .then((settleResult) => {
+          // 放行后续（如 session-index-imported 触发的 ensure）再次 settle。
+          unconfirmedEmptySettleArmedIdsRef.current.delete(id);
+          const confirmed =
+            settleResult != null &&
+            settleResult.applied === true &&
+            ((settleResult.visibleCount ?? 0) > 0 ||
+              settleResult.authoritativeEmpty === true);
+          if (confirmed) {
+            markWorkspaceThreadListHydrated(id);
+            return;
+          }
+          // settle 未证实（失败 / 超时 / 仍非权威空）：不标 hydrated、不闪
+          // 空白——保持「深度扫描」loading 等 importer 填行，宽限到期仍未见行
+          // 才兜底终态（armEmptySettleGrace 内部处理）。
+          armEmptySettleGrace(id);
         });
     },
-    [listThreadsForWorkspace, workspacesById],
+    [
+      armEmptySettleGrace,
+      listThreadsForWorkspace,
+      markWorkspaceThreadListHydrated,
+      workspacesById,
+    ],
   );
 
   /**
@@ -570,7 +651,8 @@ export function useWorkspaceThreadListHydration({
       const deferCeilingHit =
         postFirstPaintIndexSoftResyncDeferCountRef.current >=
           POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFERS ||
-        now - firstDeferAt >= POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFER_WINDOW_MS;
+        now - firstDeferAt >=
+          POST_FIRST_PAINT_INDEX_SOFT_RESYNC_MAX_DEFER_WINDOW_MS;
       if (deferCeilingHit) {
         // Defer ceiling: run now even though the user is still clicking — the
         // sidebar must converge. Reset so the next cycle may defer again.
@@ -656,6 +738,13 @@ export function useWorkspaceThreadListHydration({
       // Keep maps aligned for concurrent ensure/skip guards.
       hydrationKindByWorkspaceIdRef.current.set(workspace.id, kind);
       hydrationPhaseByWorkspaceIdRef.current.set(workspace.id, phase);
+      if (
+        kind === "first-paint" &&
+        !hydratedThreadListWorkspaceIdsRef.current.has(workspace.id)
+      ) {
+        // 新一轮 first-paint：取消可能残留的 settle 宽限（新周期接管终态）。
+        cancelEmptySettleGrace(workspace.id);
+      }
 
       let hydrationResult: ThreadListHydrationResult = undefined;
       const finishedKind = kind;
@@ -709,18 +798,11 @@ export function useWorkspaceThreadListHydration({
             visibleCount <= 0 &&
             !authoritativeEmpty;
           if (firstPaintUnconfirmedEmpty) {
-            // Index 空还不是「暂无会话」：importer / 二次 sync 马上会填行。
+            // Index 空还未证实：importer / 二次 sync 马上会填行。
             // 保持 加载中，不要先闪空。
             scheduleUnconfirmedEmptyFirstPaintSettle(workspace.id);
           } else {
-            const nextHydrated = publishHydratedWorkspaceId(
-              hydratedThreadListWorkspaceIdsRef,
-              workspace.id,
-            );
-            publishHydrationUiState(
-              setHydratedThreadListWorkspaceIds,
-              nextHydrated,
-            );
+            markWorkspaceThreadListHydrated(workspace.id);
           }
           if (finishedKind !== "first-paint") {
             // Mark full attempted so sidebar drops loading; cooldown on timeout.
@@ -770,7 +852,9 @@ export function useWorkspaceThreadListHydration({
       }
     },
     [
+      cancelEmptySettleGrace,
       listThreadsForWorkspace,
+      markWorkspaceThreadListHydrated,
       schedulePostFirstPaintIndexSoftResync,
       scheduleUnconfirmedEmptyFirstPaintSettle,
     ],
@@ -783,6 +867,7 @@ export function useWorkspaceThreadListHydration({
         preserveState?: boolean;
         force?: boolean;
         deletedThreadIds?: string[];
+        localRemovalOnly?: boolean;
         startupHydrationMode?: "full-catalog" | "first-paint";
         mergeExistingThreads?: boolean;
       },
@@ -790,6 +875,15 @@ export function useWorkspaceThreadListHydration({
       const workspace = workspacesById.get(workspaceId);
       if (!workspace) {
         return false;
+      }
+      // 归档摘行快路径：绕过 hydration 守卫，只做本地移除，零 IPC。
+      if (options?.localRemovalOnly) {
+        void listThreadsForWorkspaceTracked(workspace, {
+          preserveState: true,
+          deletedThreadIds: options.deletedThreadIds,
+          localRemovalOnly: true,
+        });
+        return true;
       }
       const force = options?.force ?? false;
       const isLoading = threadListLoadingByWorkspace[workspaceId] ?? false;
@@ -804,11 +898,11 @@ export function useWorkspaceThreadListHydration({
         ? "full-catalog"
         : options?.mergeExistingThreads
           ? "first-paint"
-        : options?.startupHydrationMode === "first-paint"
-          ? "first-paint"
-        : options?.startupHydrationMode === "full-catalog"
-          ? "full-catalog"
-        : "first-paint";
+          : options?.startupHydrationMode === "first-paint"
+            ? "first-paint"
+            : options?.startupHydrationMode === "full-catalog"
+              ? "full-catalog"
+              : "first-paint";
       // Cold-start: only active workspace may hydrate until gate-ready.
       // User force refresh may target any workspace after gate; during cold-start
       // force still restricted to active to avoid dual-scan storms.
@@ -846,14 +940,13 @@ export function useWorkspaceThreadListHydration({
       ) {
         return false;
       }
-      const hasHydratedThreadList =
-        options?.mergeExistingThreads
+      const hasHydratedThreadList = options?.mergeExistingThreads
+        ? false
+        : options?.startupHydrationMode === "first-paint"
           ? false
-          : options?.startupHydrationMode === "first-paint"
-            ? false
-            : kind === "first-paint"
-              ? uiHydrated
-              : fullyHydrated;
+          : kind === "first-paint"
+            ? uiHydrated
+            : fullyHydrated;
       const isHydratingThreadList =
         hydratingThreadListWorkspaceIdsRef.current.has(workspaceId);
       if (
@@ -883,7 +976,9 @@ export function useWorkspaceThreadListHydration({
             ? "first-paint"
             : "full-catalog",
         mergeExistingThreads: options?.mergeExistingThreads,
-        includeOpenCodeSessions: options?.mergeExistingThreads ? false : undefined,
+        includeOpenCodeSessions: options?.mergeExistingThreads
+          ? false
+          : undefined,
       });
       return true;
     },
@@ -978,7 +1073,9 @@ export function useWorkspaceThreadListHydration({
       ) {
         cancelPendingPostFirstPaintIndexSoftResync();
       }
-      if (autoHydratedActiveWorkspaceIdRef.current === previousActiveWorkspaceId) {
+      if (
+        autoHydratedActiveWorkspaceIdRef.current === previousActiveWorkspaceId
+      ) {
         autoHydratedActiveWorkspaceIdRef.current = null;
       }
     }
@@ -1183,9 +1280,13 @@ export function useWorkspaceThreadListHydration({
 
   useEffect(() => {
     const cleanupByWorkspaceId = idleHydrationCleanupByWorkspaceIdRef.current;
+    const graceCleanupByWorkspaceId =
+      emptySettleGraceCleanupByWorkspaceIdRef.current;
     return () => {
       cleanupByWorkspaceId.forEach((cleanup) => cleanup());
       cleanupByWorkspaceId.clear();
+      graceCleanupByWorkspaceId.forEach((cleanup) => cleanup());
+      graceCleanupByWorkspaceId.clear();
       cancelPendingPostFirstPaintIndexSoftResync();
     };
   }, [cancelPendingPostFirstPaintIndexSoftResync]);

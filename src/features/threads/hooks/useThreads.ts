@@ -71,6 +71,8 @@ import {
 } from "../policies/threadSelectResumePolicy";
 import { clearLiveAssistantText } from "../utils/liveAssistantTextChannel";
 import { clearLiveItemDelta } from "../utils/liveItemDeltaChannel";
+import { noteEngineEventForThread } from "../utils/orphanTurnWatchdog";
+import type { AppServerEvent } from "../../../types/conversation";
 import {
   resolvePendingThreadIdForSession,
   resolvePendingThreadIdForTurn,
@@ -87,15 +89,20 @@ import {
   type ThreadDeleteErrorCode,
 } from "../utils/threadDelete";
 import {
+  isSessionDeleteSuccessCode,
+  isSessionDeleteV2Enabled,
+} from "../utils/sessionDeleteV2";
+import {
   collectCanonicalActiveThreadRebindings,
   makeCustomNameKey,
+  persistCustomNames,
   saveCustomName,
+  saveCustomNamesBatch,
 } from "../utils/threadStorage";
 import { publishWorkspaceLastThreadMap } from "../utils/workspaceLastThreadMap";
 import {
   isClientStoreReady,
   subscribeClientStoreHydrated,
-  writeClientStoreValue,
 } from "../../../services/clientStorage";
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { isWebServiceRuntime } from "../../../services/tauri/runtimeMode";
@@ -183,6 +190,7 @@ type UseThreadsOptions = {
   useNormalizedRealtimeAdapters?: boolean;
   useUnifiedHistoryLoader?: boolean;
   sessionAttributionMode?: WorkspaceSessionAttributionMode;
+  defaultVisibleThreadRootCount?: number | null;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
   resolveOpenCodeVariant?: (threadId: string | null) => string | null;
   resolveCollaborationUiMode?: (threadId: string) => "plan" | "code" | null;
@@ -233,6 +241,7 @@ export function useThreads({
   useNormalizedRealtimeAdapters = true,
   useUnifiedHistoryLoader = false,
   sessionAttributionMode = "related",
+  defaultVisibleThreadRootCount = null,
   resolveOpenCodeAgent,
   resolveOpenCodeVariant,
   resolveCollaborationUiMode,
@@ -896,8 +905,7 @@ export function useThreads({
       const next = { ...customNamesRef.current };
       delete next[fromKey];
       next[toKey] = value;
-      customNamesRef.current = next;
-      writeClientStoreValue("threads", "customNames", next);
+      customNamesRef.current = persistCustomNames(next);
     },
     [customNamesRef],
   );
@@ -1042,6 +1050,7 @@ export function useThreads({
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
     deleteThreadForWorkspace,
+    deleteThreadForWorkspaceV2,
     renameThreadTitleMapping,
     setThreadHistoryLoading,
     setThreadHistoryLoadingProgress,
@@ -1069,13 +1078,11 @@ export function useThreads({
     clearThreadAlias,
     resolveWorkspacePath,
     onThreadTitleMappingsLoaded: (workspaceId, titles) => {
+      customNamesRef.current = saveCustomNamesBatch(workspaceId, titles);
       Object.entries(titles).forEach(([threadId, title]) => {
         if (!threadId.trim() || !title.trim()) {
           return;
         }
-        saveCustomName(workspaceId, threadId, title);
-        const key = makeCustomNameKey(workspaceId, threadId);
-        customNamesRef.current[key] = title;
         dispatch({ type: "setThreadName", workspaceId, threadId, name: title });
       });
     },
@@ -1084,6 +1091,7 @@ export function useThreads({
     },
     onCodexPendingThreadFinalized: handleCodexPendingThreadFinalized,
     sessionAttributionMode,
+    defaultVisibleThreadRootCount,
     useUnifiedHistoryLoader,
   });
   useEffect(() => {
@@ -2600,11 +2608,157 @@ export function useThreads({
     );
   }, [onDebug, state.itemsByThread, state.threadsByWorkspace]);
 
+  // v2 删除（Index First + marker-first）：乐观摘行 → 单次 IPC → settled 对账
+  // → 失败回滚（行按 updatedAt 归位 + 恢复 pin / loaded 状态）。
+  // 设计：docs/plans/2026-08-24-session-delete-architecture-redesign.md §8
+  const performV2Deletion = useCallback(
+    async (
+      workspaceId: string,
+      threadIds: string[],
+    ): Promise<ThreadDeleteResult[]> => {
+      const settleThreadDeletionLocally = (threadId: string) => {
+        loadedThreadsRef.current[threadId] = false;
+        unpinThread(workspaceId, threadId);
+        if (getThreadKind(workspaceId, threadId) === "shared") {
+          clearSharedSessionBindingsForSharedThread(workspaceId, threadId);
+        }
+        dispatch({
+          type: "clearUserInputRequestsForThread",
+          workspaceId,
+          threadId,
+        });
+        dispatch({ type: "removeThread", workspaceId, threadId });
+      };
+
+      const resultsById = new Map<string, ThreadDeleteResult>();
+      const deletable: string[] = [];
+      for (const threadId of threadIds) {
+        // pending 草稿会话无后端会话：直接本地摘除
+        if (threadId.includes("-pending-")) {
+          settleThreadDeletionLocally(threadId);
+          resultsById.set(threadId, {
+            threadId,
+            success: true,
+            code: null,
+            message: null,
+          });
+          continue;
+        }
+        deletable.push(threadId);
+      }
+
+      if (deletable.length > 0) {
+        // 轻量快照：只存回滚必要字段（summary / pin / loaded）
+        const snapshots = new Map(
+          deletable.map((threadId) => [
+            threadId,
+            {
+              summary:
+                (threadsByWorkspaceRef.current[workspaceId] ?? []).find(
+                  (thread) => thread.id === threadId,
+                ) ?? null,
+              pinned: isThreadPinned(workspaceId, threadId),
+              loaded: loadedThreadsRef.current[threadId] === true,
+            },
+          ]),
+        );
+        const rollbackThreadDeletion = (threadId: string) => {
+          const snapshot = snapshots.get(threadId);
+          if (!snapshot) {
+            return;
+          }
+          if (snapshot.summary) {
+            // 无条件归位：ref 由 useEffect 更新，early-settled 微任务路径下
+            // rollback 可能先于 removeThread 的 render 提交执行，存在性守卫会
+            // 误判「行还在」跳过恢复。dispatch 保序（removeThread 先、
+            // setThreads 后），filter+append 去重后终态必然正确。
+            const current = threadsByWorkspaceRef.current[workspaceId] ?? [];
+            const merged = [
+              ...current.filter((thread) => thread.id !== threadId),
+              snapshot.summary,
+            ].sort(
+              (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0),
+            );
+            dispatch({ type: "setThreads", workspaceId, threads: merged });
+          }
+          if (snapshot.pinned) {
+            pinThread(workspaceId, threadId);
+          }
+          if (snapshot.loaded) {
+            loadedThreadsRef.current[threadId] = true;
+          }
+        };
+
+        // 乐观删除：先摘行，settled 对账
+        deletable.forEach(settleThreadDeletionLocally);
+        try {
+          const v2Results = await deleteThreadForWorkspaceV2(workspaceId, deletable);
+          const v2ById = new Map(v2Results.map((result) => [result.sessionId, result]));
+          for (const threadId of deletable) {
+            const result = v2ById.get(threadId) ?? null;
+            if (result && (result.ok || isSessionDeleteSuccessCode(result.code))) {
+              resultsById.set(threadId, {
+                threadId,
+                success: true,
+                code: null,
+                message: null,
+              });
+              continue;
+            }
+            rollbackThreadDeletion(threadId);
+            const message = result?.error?.trim() || "Failed to delete session";
+            resultsById.set(threadId, {
+              threadId,
+              success: false,
+              code: mapDeleteErrorCode(message),
+              message,
+            });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const code = mapDeleteErrorCode(message);
+          for (const threadId of deletable) {
+            rollbackThreadDeletion(threadId);
+            resultsById.set(threadId, {
+              threadId,
+              success: false,
+              code,
+              message,
+            });
+          }
+        }
+      }
+
+      return threadIds.map(
+        (threadId) =>
+          resultsById.get(threadId) ?? {
+            threadId,
+            success: false,
+            code: null,
+            message: "Missing session delete result",
+          },
+      );
+    },
+    [
+      deleteThreadForWorkspaceV2,
+      dispatch,
+      getThreadKind,
+      isThreadPinned,
+      loadedThreadsRef,
+      pinThread,
+      unpinThread,
+    ],
+  );
+
   const removeThread = useCallback(
     async (
       workspaceId: string,
       threadId: string,
     ): Promise<ThreadDeleteResult> => {
+      if (isSessionDeleteV2Enabled()) {
+        const [result] = await performV2Deletion(workspaceId, [threadId]);
+        return result;
+      }
       const settleThreadDeletionLocally = (
         result: Omit<ThreadDeleteResult, "threadId">,
       ): ThreadDeleteResult => {
@@ -2660,6 +2814,7 @@ export function useThreads({
       dispatch,
       getThreadKind,
       loadedThreadsRef,
+      performV2Deletion,
       unpinThread,
     ],
   );
@@ -2671,6 +2826,11 @@ export function useThreads({
     ): Promise<ThreadDeleteResult[]> => {
       if (!workspaceId || threadIds.length === 0) {
         return [];
+      }
+
+      // v2：批量恒为一次 IPC，无逐条回退路径
+      if (isSessionDeleteV2Enabled()) {
+        return performV2Deletion(workspaceId, threadIds);
       }
 
       const workspaceThreads = state.threadsByWorkspace[workspaceId] ?? [];
@@ -2765,7 +2925,7 @@ export function useThreads({
       }
       return results;
     },
-    [dispatch, removeThread, state.threadsByWorkspace, unpinThread],
+    [dispatch, performV2Deletion, removeThread, state.threadsByWorkspace, unpinThread],
   );
 
   const renameThread = useCallback(
@@ -2994,6 +3154,24 @@ export function useThreads({
   const appServerEventHandlers = useMemo(
     () => ({
       ...handlers,
+      // Orphan turn watchdog（fix-orphan-turn-during-backend-unavailability）：
+      // 任何携带 threadId 的引擎事件都算「首事件」，cancel 该 thread 的看门狗
+      // （fire 时判定读取；这里只登记，不打渲染链）。链式保留原诊断 handler。
+      onAppServerEvent: (event: AppServerEvent) => {
+        const params = (event.message?.params ?? {}) as Record<string, unknown>;
+        const eventThreadId = params.threadId ?? params.thread_id;
+        const threadObject = params.thread as { id?: unknown } | undefined;
+        const threadId =
+          typeof eventThreadId === "string"
+            ? eventThreadId
+            : typeof threadObject?.id === "string"
+              ? threadObject.id
+              : "";
+        if (threadId) {
+          noteEngineEventForThread(threadId);
+        }
+        handlers.onAppServerEvent?.(event);
+      },
       onThreadStarted: (
         workspaceId: string,
         thread: Record<string, unknown>,

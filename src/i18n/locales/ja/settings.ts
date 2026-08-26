@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "クリア",
     "modelMappingNote": "変更はモデルセレクターのドロップダウンに反映されます。",
     "notificationSounds": "通知音",
+    "minimalTranscript": "ミニマル表示",
+    "minimalTranscriptDesc": "有効にすると、完了した返信は最終回答のみ表示し、思考・ツール呼び出し・途中の説明は展開可能な1件のサマリーに折りたたみます。",
+    "minimalTranscriptNormal": "通常",
+    "minimalTranscriptMinimal": "ミニマル",
+    "topSessionTabsHide": "上部タブを隠す",
+    "topSessionTabsShow": "上部タブを表示",
     "systemNotification": "システム通知",
     "systemNotificationDesc": "セッション完了時にシステムレベルの通知を送信します。",
     "testSound": "テスト",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "高い信頼度",
     "sessionManagementAttributionConfidenceMedium": "中程度の信頼度",
     "sessionManagementThreadVisibilityLabel": "サイドバーの既定セッション数",
-    "sessionManagementThreadVisibilityHint": "サイドバーが折りたたまれている間に、このワークスペースが既定で表示するルートセッションの数を制御します。既定は {{defaultCount}}、対応範囲は {{min}}-{{max}}、有効値は {{count}} です。",
+    "sessionManagementThreadVisibilityHint": "サイドバー折りたたみ時にこのプロジェクトが表示するルートセッション数を上書きします。未設定時はワークスペース設定（現在 {{defaultCount}}）に従います。範囲 {{min}}-{{max}}、有効値 {{count}}。",
     "sessionManagementThreadVisibilitySaved": "サイドバーの既定セッション数を {{count}} に更新しました。",
     "sessionManagementThreadVisibilitySaving": "保存中...",
     "sessionManagementLoadMore": "さらに読み込む",
@@ -1399,6 +1405,7 @@ const settings = {
         "notConfigured": "未設定",
         "envActive": "環境変数が有効",
         "envActiveHint": "mossx が {{cliName}} を起動するときプロセス環境が有効です。上書きするには PAT を設定してください。",
+        "envIgnoredStoredWins": "プロセス環境にも {{envVar}} が定義されていますが、無視され、保存済みの PAT が優先されます。",
         "setKey": "キーを設定",
         "overrideSet": "上書き",
         "edit": "編集",
@@ -1412,7 +1419,7 @@ const settings = {
         "toggleKeyVisibility": "表示 / 非表示",
         "saveHint": "{{authFile}}（0600）に書き込み、{{cliName}} 起動時に注入します",
         "loadFailed": "認証状態の読み取りに失敗しました",
-        "resolutionOrder": "解決順: プロセス環境変数 → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "解決順: {{authFile}} → プロセス環境変数 → {{cliName}} login"
       }
     },
     "cliValidationTitle": "CLI 検証",

@@ -127,9 +127,8 @@ async fn list_claude_sessions_opens_only_limit_files_after_mtime_sort() {
     assert_eq!(sessions.len(), 3);
     let ids: Vec<String> = sessions.iter().map(|s| s.session_id.clone()).collect();
     assert!(
-        ids.iter().all(|id| {
-            id.ends_with("-5") || id.ends_with("-6") || id.ends_with("-7")
-        }),
+        ids.iter()
+            .all(|id| { id.ends_with("-5") || id.ends_with("-6") || id.ends_with("-7") }),
         "IO-before-limit must keep the newest files, got {ids:?}"
     );
     assert_eq!(
@@ -147,7 +146,8 @@ async fn list_claude_sessions_opens_only_limit_files_after_mtime_sort() {
 #[tokio::test]
 async fn list_claude_sessions_does_not_inventory_subagent_jsonl() {
     let unique = Uuid::new_v4();
-    let temp_root = std::env::temp_dir().join(format!("ccgui-claude-list-skip-subagent-{}", unique));
+    let temp_root =
+        std::env::temp_dir().join(format!("ccgui-claude-list-skip-subagent-{}", unique));
     let base_dir = temp_root.join("claude-projects");
     let workspace_path = temp_root.join("workspace");
     std::fs::create_dir_all(&workspace_path).expect("create workspace");
@@ -186,16 +186,13 @@ async fn list_claude_sessions_does_not_inventory_subagent_jsonl() {
         "sidebar list must not inventory subagent jsonl"
     );
     let (opened, _) = claude_list_io_stats_for_prefix(&temp_root);
-    assert_eq!(
-        opened, 1,
-        "must not open the 8MiB subagent transcript"
-    );
+    assert_eq!(opened, 1, "must not open the 8MiB subagent transcript");
 
     let _ = std::fs::remove_dir_all(&temp_root);
 }
 
 #[tokio::test]
-async fn load_claude_session_window_returns_tail_and_has_more() {
+async fn load_claude_session_window_whole_file_returns_all_without_cursor() {
     let unique = Uuid::new_v4();
     let temp_root = std::env::temp_dir().join(format!("ccgui-claude-load-window-{unique}"));
     let base_dir = temp_root.join("claude-projects");
@@ -225,11 +222,13 @@ async fn load_claude_session_window_returns_tail_and_has_more() {
     )
     .await
     .expect("window load");
-    assert_eq!(windowed.messages.len(), 3);
-    assert_eq!(windowed.messages[0].text, "prompt 17");
-    assert_eq!(windowed.messages[2].text, "prompt 19");
-    assert_eq!(windowed.has_more, Some(true));
-    assert!(windowed.next_cursor.is_some());
+    // fix-claude-history-window-message-loss：整文件可被 window 覆盖时不再 drain，
+    // 全量返回且不再广告死游标。
+    assert_eq!(windowed.messages.len(), 20);
+    assert_eq!(windowed.messages[0].text, "prompt 0");
+    assert_eq!(windowed.messages[19].text, "prompt 19");
+    assert_eq!(windowed.has_more, Some(false));
+    assert_eq!(windowed.next_cursor, None);
 
     let full = load_claude_session_from_base_dir(&base_dir, &workspace_path, &session_id)
         .await

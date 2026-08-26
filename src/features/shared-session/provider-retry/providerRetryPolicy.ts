@@ -3,6 +3,9 @@ export const SHARED_PROVIDER_RETRY_DEFAULT_RESUME_PROMPT =
 
 export const SHARED_PROVIDER_RETRY_FALLBACK_RESUME_PROMPT = "继续";
 
+/** identical-failure 熔断阈值：同一 series 连续这么多次同签名失败即 exhausted。 */
+export const SHARED_PROVIDER_RETRY_CIRCUIT_LIMIT = 3;
+
 export type SharedProviderRetryBackoff = "exponential" | "fixed";
 
 export type SharedProviderRetrySettings = {
@@ -43,7 +46,7 @@ export function clampSharedProviderRetrySettings(
     typeof patch?.resumePrompt === "string" ? patch.resumePrompt : base.resumePrompt;
   return {
     enabled: typeof patch?.enabled === "boolean" ? patch.enabled : base.enabled,
-    maxAttempts: clampInt(patch?.maxAttempts, 0, 10, base.maxAttempts),
+    maxAttempts: clampInt(patch?.maxAttempts, 0, 999, base.maxAttempts),
     baseDelaySec: clampInt(patch?.baseDelaySec, 1, 1200, base.baseDelaySec),
     maxDelaySec: clampInt(patch?.maxDelaySec, 1, 1200, base.maxDelaySec),
     backoff,

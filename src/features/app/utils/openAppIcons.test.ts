@@ -1,15 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   CHROME_APP_ICON,
   GENERIC_APP_ICON,
-  IDEA_APP_ICON,
   SUBLIME_APP_ICON,
+  ensureKnownOpenAppIconsLoaded,
   getKnownOpenAppIcon,
   getKnownOpenAppIconByRef,
   resolveOpenAppDisplayIcon,
 } from "./openAppIcons";
 
 describe("openAppIcons", () => {
+  // PNG icon URLs live in lazy chunks; hydrate the cache like production
+  // consumers do (via useKnownOpenAppIcons) before asserting on sync getters.
+  beforeAll(async () => {
+    await ensureKnownOpenAppIconsLoaded();
+  });
   it("matches icons by app path / label without double-encoding colors", () => {
     const chrome = getKnownOpenAppIconByRef(
       "/Applications/Google Chrome.app",
@@ -29,9 +34,11 @@ describe("openAppIcons", () => {
   });
 
   it("uses the official IntelliJ product icon instead of the three-bar placeholder", () => {
-    expect(getKnownOpenAppIcon("idea")).toBe(IDEA_APP_ICON);
-    expect(IDEA_APP_ICON).not.toContain("data:image/svg+xml");
-    expect(IDEA_APP_ICON).toMatch(/idea\.png/);
+    const ideaIcon = getKnownOpenAppIcon("idea");
+    expect(ideaIcon).not.toBeNull();
+    expect(getKnownOpenAppIcon("intellij")).toBe(ideaIcon);
+    expect(ideaIcon).not.toContain("data:image/svg+xml");
+    expect(ideaIcon).toMatch(/idea\.png/);
   });
 
   it("prefers OS-extracted icons over built-in fallbacks", () => {

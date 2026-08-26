@@ -18,6 +18,7 @@ const common = {
     edit: "Edit",
     refresh: "Refresh",
     retry: "Retry",
+    loadFailed: "Load failed",
     dismiss: "Dismiss",
     curatedLoading: "Loading curated skills…",
     curatedError: "Couldn't load curated skills.",

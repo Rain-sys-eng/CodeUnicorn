@@ -251,3 +251,10 @@ export function loadCloneModalStyles() {
     () => import("./clone-modal.css"),
   ]);
 }
+
+/** Workspace alias modal. */
+export function loadWorkspaceAliasModalStyles() {
+  return loadStyles([
+    () => import("./workspace-alias-modal.css"),
+  ]);
+}

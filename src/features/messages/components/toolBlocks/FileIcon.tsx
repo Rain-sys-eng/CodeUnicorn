@@ -1,1 +1,1 @@
-export { FileIcon, FileIcon as default } from "../../../../components/FileIcon";
+export { FileIcon } from "../../../../components/FileIcon";

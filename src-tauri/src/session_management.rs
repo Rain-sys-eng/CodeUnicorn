@@ -11,7 +11,6 @@ use tokio::task::JoinHandle;
 use crate::engine;
 use crate::local_usage;
 use crate::remote_backend;
-use crate::shared::codex_core;
 use crate::state::AppState;
 use crate::storage::{read_json_file, with_storage_lock, write_string_atomically};
 use crate::types::{WorkspaceEntry, WorkspaceSessionAttributionMode};
@@ -68,7 +67,7 @@ async fn forward_session_management_remote<T: DeserializeOwned>(
     method: &str,
     params: serde_json::Value,
 ) -> Result<T, String> {
-    let response = remote_backend::call_remote(&*state, app, method, params).await?;
+    let response = remote_backend::call_remote(state, app, method, params).await?;
     serde_json::from_value(response).map_err(|err| err.to_string())
 }
 
@@ -224,39 +223,6 @@ pub(crate) async fn get_workspace_session_projection_summary(
 }
 
 #[tauri::command]
-pub(crate) async fn archive_workspace_sessions(
-    workspace_id: String,
-    session_ids: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    archive_workspace_sessions_core(
-        &state.workspaces,
-        &state.sessions,
-        &state.engine_manager,
-        state.storage_path.as_path(),
-        workspace_id,
-        session_ids,
-    )
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn unarchive_workspace_sessions(
-    workspace_id: String,
-    session_ids: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    unarchive_workspace_sessions_core(
-        &state.workspaces,
-        &state.engine_manager,
-        state.storage_path.as_path(),
-        workspace_id,
-        session_ids,
-    )
-    .await
-}
-
-#[tauri::command]
 pub(crate) async fn delete_workspace_sessions(
     workspace_id: String,
     session_ids: Vec<String>,
@@ -279,7 +245,7 @@ pub(crate) async fn list_workspace_session_folders(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderTree, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -305,7 +271,7 @@ pub(crate) async fn create_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -333,7 +299,7 @@ pub(crate) async fn rename_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -361,7 +327,7 @@ pub(crate) async fn move_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -388,7 +354,7 @@ pub(crate) async fn delete_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote_unit(
             &state,
             app,
@@ -416,7 +382,7 @@ pub(crate) async fn assign_workspace_session_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionAssignmentResponse, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -445,7 +411,7 @@ pub(crate) async fn assign_workspace_session_folders(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    if remote_backend::is_remote_mode(&*state).await {
+    if remote_backend::is_remote_mode(&state).await {
         return forward_session_management_remote(
             &state,
             app,
@@ -466,6 +432,24 @@ pub(crate) async fn assign_workspace_session_folders(
     .await
 }
 
+/// 出口过滤：catalog / projection / global 列表不得返回已 tombstone（用户
+/// 已删除）的会话——物理残留文件 MUST NOT 经磁盘扫描源复活进侧栏。
+/// 放在 core 出口而非 `build_workspace_scope_catalog_data` 内部：v1 删除的
+/// owner 解析复用同一构建路径，tombstoned 行必须保持可解析以供重试。
+pub(crate) fn reject_tombstoned_catalog_entries(entries: &mut Vec<WorkspaceSessionCatalogEntry>) {
+    let filter = crate::session_index::tombstone_filter::TombstoneFilter::load_fail_open();
+    if filter.is_empty() {
+        return;
+    }
+    entries.retain(|entry| {
+        !filter.is_tombstoned(&entry.engine, &entry.session_id)
+            && entry
+                .canonical_session_id
+                .as_deref()
+                .is_none_or(|canonical| !filter.is_tombstoned(&entry.engine, canonical))
+    });
+}
+
 pub(crate) async fn list_workspace_sessions_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     _sessions: &Mutex<HashMap<String, std::sync::Arc<crate::codex::WorkspaceSession>>>,
@@ -480,7 +464,7 @@ pub(crate) async fn list_workspace_sessions_core(
     let normalized_query = query.unwrap_or_default();
     let attribution_mode = WorkspaceSessionAttributionMode::from_query(&normalized_query);
     let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
-    let scope_catalog = build_workspace_scope_catalog_data(
+    let mut scope_catalog = build_workspace_scope_catalog_data(
         workspaces,
         engine_manager,
         storage_path,
@@ -490,6 +474,7 @@ pub(crate) async fn list_workspace_sessions_core(
         normalized_query.scan_quality(),
     )
     .await?;
+    reject_tombstoned_catalog_entries(&mut scope_catalog.entries);
     Ok(build_catalog_page(
         scope_catalog.entries,
         normalized_query,
@@ -516,7 +501,7 @@ pub(crate) async fn get_workspace_session_projection_summary_core(
         None,
         Some(SESSION_CATALOG_MAX_LIMIT as u32),
     );
-    let scope_catalog = build_workspace_scope_catalog_data(
+    let mut scope_catalog = build_workspace_scope_catalog_data(
         workspaces,
         engine_manager,
         storage_path,
@@ -526,6 +511,7 @@ pub(crate) async fn get_workspace_session_projection_summary_core(
         normalized_query.scan_quality(),
     )
     .await?;
+    reject_tombstoned_catalog_entries(&mut scope_catalog.entries);
     let counts = build_catalog_count_summary(&scope_catalog.entries, &normalized_query);
     let filtered_entries = scope_catalog
         .entries
@@ -557,7 +543,7 @@ pub(crate) async fn list_global_codex_sessions_core(
 ) -> Result<WorkspaceSessionCatalogPage, String> {
     let normalized_query = query.unwrap_or_default();
     let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
-    let (entries, partial_sources) = build_global_engine_catalog_entries(
+    let (mut entries, partial_sources) = build_global_engine_catalog_entries(
         engine_manager,
         workspaces,
         storage_path,
@@ -566,6 +552,7 @@ pub(crate) async fn list_global_codex_sessions_core(
         normalized_query.scan_quality(),
     )
     .await?;
+    reject_tombstoned_catalog_entries(&mut entries);
 
     Ok(build_catalog_page(
         entries,
@@ -605,189 +592,6 @@ async fn catalog_workspace_scope(
     });
     scoped.extend(children);
     Ok(scoped)
-}
-
-pub(crate) async fn archive_workspace_sessions_core(
-    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
-    sessions: &Mutex<HashMap<String, std::sync::Arc<crate::codex::WorkspaceSession>>>,
-    engine_manager: &engine::EngineManager,
-    storage_path: &Path,
-    workspace_id: String,
-    session_ids: Vec<String>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    let workspace_id = normalize_workspace_id(&workspace_id)?;
-    let _workspace_path = workspace_path_for_id(workspaces, &workspace_id).await?;
-    let archived_at = now_millis();
-    let mut results = Vec::new();
-    let mut archive_success_targets = Vec::new();
-    let normalized_session_ids = normalize_session_ids(session_ids)?;
-    let scope_catalog = build_workspace_scope_catalog_data(
-        workspaces,
-        engine_manager,
-        storage_path,
-        &workspace_id,
-        SessionCatalogScanMode::Exhaustive,
-        WorkspaceSessionAttributionMode::Related,
-        WorkspaceSessionScanQuality::Full,
-    )
-    .await?;
-    let workspaces_snapshot = workspaces.lock().await.clone();
-
-    for session_id in normalized_session_ids {
-        match parse_catalog_identity(&session_id) {
-            SessionCatalogIdentity::Codex { .. } => {
-                let Some(target) = resolve_session_mutation_target(
-                    &scope_catalog.entries,
-                    &workspaces_snapshot,
-                    &session_id,
-                ) else {
-                    let message =
-                        unresolved_session_mutation_message(&session_id, &scope_catalog.entries);
-                    results.push(batch_error(
-                        session_id,
-                        "OWNER_WORKSPACE_UNRESOLVED",
-                        &message,
-                    ));
-                    continue;
-                };
-                let _ = codex_core::archive_thread_best_effort_core(
-                    sessions,
-                    target.owner_workspace_id.clone(),
-                    target.provider_profile_id.clone(),
-                    target.native_session_id.clone(),
-                    Duration::from_millis(SESSION_CATALOG_ARCHIVE_TIMEOUT_MS),
-                )
-                .await;
-                archive_success_targets.push(target.clone());
-                results.push(batch_success_for_target(&target, Some(archived_at)));
-            }
-            // Shared and other native engines: soft archive via catalog metadata only.
-            _ => {
-                let Some(target) = resolve_session_mutation_target(
-                    &scope_catalog.entries,
-                    &workspaces_snapshot,
-                    &session_id,
-                ) else {
-                    results.push(batch_error(
-                        session_id,
-                        "OWNER_WORKSPACE_UNRESOLVED",
-                        "session does not belong to target workspace",
-                    ));
-                    continue;
-                };
-                archive_success_targets.push(target.clone());
-                results.push(batch_success_for_target(&target, Some(archived_at)));
-            }
-        }
-    }
-
-    if !archive_success_targets.is_empty() {
-        let mut targets_by_owner = HashMap::<String, Vec<WorkspaceSessionMutationTarget>>::new();
-        for target in archive_success_targets {
-            targets_by_owner
-                .entry(target.owner_workspace_id.clone())
-                .or_default()
-                .push(target);
-        }
-        for (owner_workspace_id, targets) in targets_by_owner {
-            if let Err(error) =
-                with_catalog_metadata_mutation(storage_path, &owner_workspace_id, |metadata| {
-                    for target in &targets {
-                        metadata
-                            .archived_at_by_session_id
-                            .insert(target.stable_session_key.clone(), archived_at);
-                    }
-                    Ok(())
-                })
-            {
-                let message = format!("failed to update archive metadata: {error}");
-                replace_batch_results_for_targets(
-                    &mut results,
-                    &targets,
-                    "ARCHIVE_METADATA_WRITE_FAILED",
-                    &message,
-                );
-            }
-        }
-    }
-    Ok(WorkspaceSessionBatchMutationResponse { results })
-}
-
-pub(crate) async fn unarchive_workspace_sessions_core(
-    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
-    engine_manager: &engine::EngineManager,
-    storage_path: &Path,
-    workspace_id: String,
-    session_ids: Vec<String>,
-) -> Result<WorkspaceSessionBatchMutationResponse, String> {
-    let workspace_id = normalize_workspace_id(&workspace_id)?;
-    let _workspace_path = workspace_path_for_id(workspaces, &workspace_id).await?;
-    let normalized_session_ids = normalize_session_ids(session_ids)?;
-    let scope_catalog = build_workspace_scope_catalog_data(
-        workspaces,
-        engine_manager,
-        storage_path,
-        &workspace_id,
-        SessionCatalogScanMode::Exhaustive,
-        WorkspaceSessionAttributionMode::Related,
-        WorkspaceSessionScanQuality::Full,
-    )
-    .await?;
-    let workspaces_snapshot = workspaces.lock().await.clone();
-    let mut targets_by_owner = HashMap::<String, Vec<WorkspaceSessionMutationTarget>>::new();
-    let mut results = Vec::new();
-
-    for session_id in normalized_session_ids {
-        let Some(target) = resolve_session_mutation_target(
-            &scope_catalog.entries,
-            &workspaces_snapshot,
-            &session_id,
-        ) else {
-            let message = unresolved_session_mutation_message(&session_id, &scope_catalog.entries);
-            results.push(batch_error(
-                session_id,
-                "OWNER_WORKSPACE_UNRESOLVED",
-                &message,
-            ));
-            continue;
-        };
-        targets_by_owner
-            .entry(target.owner_workspace_id.clone())
-            .or_default()
-            .push(target);
-    }
-
-    for (owner_workspace_id, targets) in targets_by_owner {
-        match with_catalog_metadata_mutation(storage_path, &owner_workspace_id, |metadata| {
-            let mut owner_results = Vec::new();
-            for target in &targets {
-                let was_archived = target
-                    .metadata_lookup_keys
-                    .iter()
-                    .any(|key| metadata.archived_at_by_session_id.contains_key(key));
-                remove_catalog_metadata_for_target(metadata, target);
-                if was_archived {
-                    owner_results.push(batch_success_for_target(target, None));
-                } else {
-                    owner_results.push(batch_error_for_target(
-                        target,
-                        "NOT_ARCHIVED",
-                        "Session is not archived",
-                    ));
-                }
-            }
-            Ok(owner_results)
-        }) {
-            Ok(owner_results) => results.extend(owner_results),
-            Err(error) => {
-                let message = format!("failed to update unarchive metadata: {error}");
-                results.extend(targets.iter().map(|target| {
-                    batch_error_for_target(target, "UNARCHIVE_METADATA_WRITE_FAILED", &message)
-                }));
-            }
-        }
-    }
-    Ok(WorkspaceSessionBatchMutationResponse { results })
 }
 
 pub(crate) async fn delete_workspace_sessions_core(
@@ -1025,11 +829,12 @@ pub(crate) async fn delete_workspace_sessions_core(
                 let qoder_distribution_settings = qoder_distribution_settings.clone();
                 let raw_id = target.native_session_id.clone();
                 let handle = tokio::spawn(async move {
-                    let launch_profile = engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
-                        &workspace_id,
-                        provider_profile_id.as_deref(),
-                        &qoder_distribution_settings,
-                    )?;
+                    let launch_profile =
+                        engine::qoder_provider_profile::resolve_qoder_provider_launch_profile(
+                            &workspace_id,
+                            provider_profile_id.as_deref(),
+                            &qoder_distribution_settings,
+                        )?;
                     engine::qoder_history::delete_qoder_session_for_launch_profile(
                         &workspace_path,
                         &raw_id,
@@ -1352,7 +1157,7 @@ fn replace_batch_results_for_targets(
     }
 }
 
-fn should_settle_delete_as_success(error: &str) -> bool {
+pub(crate) fn should_settle_delete_as_success(error: &str) -> bool {
     let normalized = error.trim().to_ascii_lowercase();
     if normalized.contains("invalid claude session id")
         || normalized.contains("invalid gemini session id")
@@ -1365,7 +1170,7 @@ fn should_settle_delete_as_success(error: &str) -> bool {
         || normalized.contains("thread not found")
 }
 
-fn normalize_workspace_id(workspace_id: &str) -> Result<String, String> {
+pub(crate) fn normalize_workspace_id(workspace_id: &str) -> Result<String, String> {
     let normalized = workspace_id.trim();
     if normalized.is_empty() {
         return Err("workspace_id is required".to_string());
@@ -1435,17 +1240,6 @@ fn is_invalid_session_path_segment(session_id: &str) -> bool {
         || session_id.contains('/')
         || session_id.contains('\\')
         || session_id.contains("..")
-}
-
-async fn workspace_path_for_id(
-    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
-    workspace_id: &str,
-) -> Result<PathBuf, String> {
-    let workspaces = workspaces.lock().await;
-    workspaces
-        .get(workspace_id)
-        .map(|entry| PathBuf::from(&entry.path))
-        .ok_or_else(|| "workspace not found".to_string())
 }
 
 fn build_catalog_entry_dedupe_key(entry: &WorkspaceSessionCatalogEntry) -> String {
@@ -1658,10 +1452,7 @@ fn catalog_metadata_path(storage_path: &Path, workspace_id: &str) -> Result<Path
         .join(format!("{workspace_id}.json")))
 }
 
-fn qoder_legacy_stable_metadata_raw_id<'a>(
-    workspace_id: &str,
-    key: &'a str,
-) -> Option<&'a str> {
+fn qoder_legacy_stable_metadata_raw_id<'a>(workspace_id: &str, key: &'a str) -> Option<&'a str> {
     if qoder_profile_qualified_metadata_key_parts(key).is_some() {
         return None;
     }
@@ -1680,10 +1471,11 @@ fn qoder_legacy_metadata_profile_by_raw(
         .iter()
         .filter_map(|(key, binding)| {
             let raw_session_id = qoder_legacy_stable_metadata_raw_id(workspace_id, key)?;
-            let provider_profile_id = engine::qoder_provider_profile::qoder_canonical_provider_profile_id(
-                Some(binding.provider_profile_id.as_str()),
-            )
-            .ok();
+            let provider_profile_id =
+                engine::qoder_provider_profile::qoder_canonical_provider_profile_id(Some(
+                    binding.provider_profile_id.as_str(),
+                ))
+                .ok();
             Some((raw_session_id.to_string(), provider_profile_id))
         })
         .collect()
@@ -1711,11 +1503,14 @@ fn normalized_qoder_metadata_key(
         .ok()?;
         return Some(format!(
             "qoder:{}:{}:{}",
-            workspace_id.trim(), identity.provider_profile_id, identity.raw_session_id
+            workspace_id.trim(),
+            identity.provider_profile_id,
+            identity.raw_session_id
         ));
     }
 
-    let identity = engine::qoder_provider_profile::parse_qoder_native_session_identity(key, None).ok()?;
+    let identity =
+        engine::qoder_provider_profile::parse_qoder_native_session_identity(key, None).ok()?;
     if !identity.is_legacy {
         return Some(identity.canonical_id());
     }
@@ -1724,17 +1519,15 @@ fn normalized_qoder_metadata_key(
     if identity.raw_session_id.contains(':') {
         return None;
     }
-    let provider_profile_id = match profile_by_raw_session_id.get(identity.raw_session_id.as_str()) {
+    let provider_profile_id = match profile_by_raw_session_id.get(identity.raw_session_id.as_str())
+    {
         Some(Some(provider_profile_id)) => Some(*provider_profile_id),
         Some(None) => return None,
         None => None,
     };
-    engine::qoder_provider_profile::parse_qoder_native_session_identity(
-        key,
-        provider_profile_id,
-    )
-    .ok()
-    .map(|identity| identity.canonical_id())
+    engine::qoder_provider_profile::parse_qoder_native_session_identity(key, provider_profile_id)
+        .ok()
+        .map(|identity| identity.canonical_id())
 }
 
 fn rekey_legacy_qoder_metadata_map<T>(
@@ -1767,8 +1560,7 @@ fn normalize_legacy_qoder_catalog_metadata(
     metadata: &mut WorkspaceSessionCatalogMetadata,
     workspace_id: &str,
 ) {
-    let profile_by_raw_session_id =
-        qoder_legacy_metadata_profile_by_raw(metadata, workspace_id);
+    let profile_by_raw_session_id = qoder_legacy_metadata_profile_by_raw(metadata, workspace_id);
     rekey_legacy_qoder_metadata_map(
         &mut metadata.archived_at_by_session_id,
         workspace_id,
@@ -1801,7 +1593,8 @@ fn read_catalog_metadata(
     workspace_id: &str,
 ) -> Result<WorkspaceSessionCatalogMetadata, String> {
     let path = catalog_metadata_path(storage_path, workspace_id)?;
-    let mut metadata = read_json_file::<WorkspaceSessionCatalogMetadata>(&path)?.unwrap_or_default();
+    let mut metadata =
+        read_json_file::<WorkspaceSessionCatalogMetadata>(&path)?.unwrap_or_default();
     normalize_legacy_qoder_catalog_metadata(&mut metadata, workspace_id);
     Ok(metadata)
 }
@@ -1852,7 +1645,7 @@ fn read_catalog_metadata_from_path(
     Ok(metadata)
 }
 
-fn with_catalog_metadata_mutation<T>(
+pub(crate) fn with_catalog_metadata_mutation<T>(
     storage_path: &Path,
     workspace_id: &str,
     mutation: impl FnOnce(&mut WorkspaceSessionCatalogMetadata) -> Result<T, String>,
@@ -2092,7 +1885,7 @@ fn engine_provider_binding_stable_key(
     Some(format!("{engine}:{workspace_id}:{canonical_session_id}"))
 }
 
-fn metadata_stable_key_for_session_id(workspace_id: &str, session_id: &str) -> String {
+pub(crate) fn metadata_stable_key_for_session_id(workspace_id: &str, session_id: &str) -> String {
     let workspace_id = workspace_id.trim();
     let session_id = session_id.trim();
     if session_id.starts_with("qoder:") {
@@ -2233,7 +2026,7 @@ fn catalog_metadata_lookup_keys_for_entry(entry: &WorkspaceSessionCatalogEntry) 
     keys
 }
 
-fn catalog_metadata_lookup_keys_for_session(
+pub(crate) fn catalog_metadata_lookup_keys_for_session(
     workspace_id: &str,
     session_id: &str,
     engine: &str,
@@ -2360,22 +2153,28 @@ fn qoder_provider_binding_for_session(
     session_id: &str,
 ) -> Option<EngineProviderBinding> {
     let identity = crate::engine::qoder_provider_profile::parse_qoder_native_session_identity(
-        session_id,
-        None,
+        session_id, None,
     )
     .ok()?;
     let stable_key = engine_provider_binding_stable_key(workspace_id, session_id, "qoder", None)?;
-    if let Some(binding) = metadata.engine_provider_binding_by_session_key.get(&stable_key) {
+    if let Some(binding) = metadata
+        .engine_provider_binding_by_session_key
+        .get(&stable_key)
+    {
         return qoder_provider_binding_matches_profile(binding, identity.provider_profile_id)
             .then(|| binding.clone());
     }
 
     let legacy_key = format!("qoder:{workspace_id}:{}", identity.raw_session_id);
-    if let Some(binding) = metadata.engine_provider_binding_by_session_key.get(&legacy_key) {
-        let binding_provider_profile_id = crate::engine::qoder_provider_profile::qoder_canonical_provider_profile_id(
-            Some(binding.provider_profile_id.as_str()),
-        )
-        .ok()?;
+    if let Some(binding) = metadata
+        .engine_provider_binding_by_session_key
+        .get(&legacy_key)
+    {
+        let binding_provider_profile_id =
+            crate::engine::qoder_provider_profile::qoder_canonical_provider_profile_id(Some(
+                binding.provider_profile_id.as_str(),
+            ))
+            .ok()?;
         return (identity.is_legacy || binding_provider_profile_id == identity.provider_profile_id)
             .then(|| binding.clone());
     }
@@ -2966,7 +2765,7 @@ pub(crate) fn record_engine_provider_binding_at_path(
         if metadata
             .engine_provider_binding_by_session_key
             .get(&stable_key)
-            == Some(&binding)
+            == Some(binding)
         {
             return Ok(false);
         }
@@ -3306,7 +3105,7 @@ fn unresolved_session_mutation_message(
 
     "Codex session target could not be resolved safely for this workspace; provider-home source may be incomplete or the session no longer belongs to this workspace".to_string()
 }
-fn now_millis() -> i64 {
+pub(crate) fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_| Duration::from_millis(0))
@@ -4077,9 +3876,7 @@ fn claude_project_dir_owner_conflicts(
 }
 
 fn normalize_owner_path_for_exact_match(path: &str) -> String {
-    path.trim()
-        .trim_end_matches(|value| value == '/' || value == '\\')
-        .to_string()
+    path.trim().trim_end_matches(['/', '\\']).to_string()
 }
 
 fn paths_are_equivalent_for_owner(left: &str, right: &str) -> bool {
@@ -4161,7 +3958,7 @@ fn infer_related_attribution_for_workspace(
                 .map(|git_root| local_usage::path_matches_workspace(cwd, Path::new(git_root)))
                 .unwrap_or(false)
         })
-        .map(|candidate| workspace_family_key(candidate))
+        .map(workspace_family_key)
         .collect::<HashSet<_>>();
     if matching_git_root_families.len() != 1
         || !matching_git_root_families.contains(&workspace_family_key(selected_workspace))

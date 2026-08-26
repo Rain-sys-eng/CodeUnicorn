@@ -128,6 +128,20 @@ export type EngineEvent =
       error: string | null;
     }
   | {
+      type: "backgroundTaskStarted";
+      workspaceId: string;
+      toolId: string;
+      toolName: string;
+      input: unknown;
+    }
+  | {
+      type: "backgroundTaskUpdated";
+      workspaceId: string;
+      toolId: string | null;
+      task: unknown;
+      source: string;
+    }
+  | {
       type: "approvalRequest";
       workspaceId: string;
       requestId: unknown;

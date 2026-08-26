@@ -3,7 +3,6 @@ import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import {
-  archiveThread,
   deleteCodexSession,
   deleteClaudeSession,
   deleteGeminiSession,
@@ -70,7 +69,6 @@ vi.mock("../../../services/tauri", () => ({
   setThreadTitle: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
-  archiveThread: vi.fn(),
   deleteCodexSession: vi.fn(),
   deleteClaudeSession: vi.fn(),
   deleteGeminiSession: vi.fn(),
@@ -175,7 +173,6 @@ describe("useThreadActions native session bridges", () => {
     vi.mocked(startThread).mockResolvedValue({
       result: { thread: { id: "thread-1" } },
     });
-    vi.mocked(archiveThread).mockResolvedValue({ archivedCount: 1 });
     vi.mocked(trashWorkspaceItem).mockResolvedValue(undefined);
     vi.mocked(writeWorkspaceFile).mockResolvedValue(undefined);
     vi.mocked(loadSidebarSnapshot).mockReturnValue(null);
@@ -269,7 +266,7 @@ describe("useThreadActions native session bridges", () => {
         scanQuality: "preview",
       },
       cursor: null,
-      limit: 12,
+      limit: 5,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
@@ -546,7 +543,6 @@ describe("useThreadActions native session bridges", () => {
       );
     });
 
-    expect(archiveThread).not.toHaveBeenCalled();
     expect(deleteOpenCodeSession).not.toHaveBeenCalled();
     expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
       "opencode:ses_opc_1",
@@ -566,7 +562,6 @@ describe("useThreadActions native session bridges", () => {
       await result.current.deleteThreadForWorkspace("ws-1", "pi:ses_pi_1");
     });
 
-    expect(archiveThread).not.toHaveBeenCalled();
     expect(deleteCodexSession).not.toHaveBeenCalled();
     expect(deletePiSession).not.toHaveBeenCalled();
     expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
@@ -584,7 +579,6 @@ describe("useThreadActions native session bridges", () => {
       );
     });
 
-    expect(archiveThread).not.toHaveBeenCalled();
     expect(deleteCodexSession).not.toHaveBeenCalled();
     expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
       "019d767b-5541-7010-a30d-a454864bccd8",
@@ -866,5 +860,81 @@ describe("useThreadActions native session bridges", () => {
         label: "thread/list session-index early-paint",
       }),
     );
+  });
+
+  it("early-paints Index rows on focus-refresh merge for a cold workspace and skips engine probes", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    } as never);
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(listSessionIndexForWorkspace).mockResolvedValue({
+      data: [
+        {
+          engine: "claude",
+          sessionId: "session-real-1",
+          title: "帮我看一下这段代码",
+          updatedAt: 1_730_000_000_000,
+        },
+      ],
+      source: "session-index",
+      synced: true,
+      engines: ["claude"],
+      visibility: {
+        available: true,
+        freshness: "verified",
+        hiddenNativeIds: [],
+      },
+    });
+    const onDebug = vi.fn();
+    const { dispatch, result } = renderActions({ onDebug });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+        mergeExistingThreads: true,
+        recoverySource: "focus-refresh",
+        includeOpenCodeSessions: false,
+      });
+    });
+
+    // A:冷 workspace(本地无行)的 merge 路径也提前画 index 行
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "thread/list session-index early-paint",
+      }),
+    );
+    expectSetThreadsDispatched(dispatch, workspace.id, [
+      { id: "claude:session-real-1" },
+    ]);
+    // B:focus-refresh merge 不 fan-out 重探测(codex 在线分页 / claude 磁盘
+    // list / 活动 catalog)
+    expect(listThreads).not.toHaveBeenCalled();
+    expect(listClaudeSessions).not.toHaveBeenCalled();
+    expect(listWorkspaceSessions).not.toHaveBeenCalled();
+  });
+
+  it("keeps engine probes on non-focus-refresh merge (explicit reload semantics)", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    } as never);
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    const onDebug = vi.fn();
+    const { result } = renderActions({ onDebug });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+        mergeExistingThreads: true,
+      });
+    });
+
+    // 非 focus-refresh 的 merge(如显式 reload)仍走全量探测
+    expect(listThreads).toHaveBeenCalled();
   });
 });

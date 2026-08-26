@@ -12,6 +12,7 @@ import { FileIcon } from "../../../components/FileIcon";
 import { WorkspaceEditableDiffReviewSurface } from "../../git/components/WorkspaceEditableDiffReviewSurface";
 import type { EditableDiffDraftActions } from "../../git/components/WorkspaceEditableDiffCompare";
 import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import { UnsavedChangesDialog } from "../../../components/ui/UnsavedChangesDialog";
 import type { GitFileStatus } from "../../../types";
@@ -1012,13 +1013,6 @@ function resolveNextActionHintKey(
     return "statusPanel.checkpoint.actions.hint.runMissingValidation";
   }
   return `statusPanel.checkpoint.actions.hint.${verdict}`;
-}
-
-function copyTextToClipboard(value: string) {
-  if (typeof navigator === "undefined" || !navigator.clipboard) {
-    return;
-  }
-  void navigator.clipboard.writeText(value);
 }
 
 function summarizeEvidenceSources(t: TFunction, sources: readonly string[]) {

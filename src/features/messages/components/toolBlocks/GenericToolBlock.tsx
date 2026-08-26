@@ -15,6 +15,7 @@ import {
   isSearchTool,
   isWebTool,
 } from './toolConstants';
+import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { isAskUserQuestionToolName } from '../../../../utils/toolSemantics';
 import { FileIcon } from './FileIcon';
 import { cn } from '@/lib/utils';
@@ -441,11 +442,10 @@ export const GenericToolBlock = memo(function GenericToolBlock({
                 className="bash-command-copy-btn"
                 onClick={async (event) => {
                   event.stopPropagation();
-                  try {
-                    await navigator.clipboard.writeText(item.output ?? "");
+                  if (await copyTextToClipboard(item.output ?? "")) {
                     setCopiedOutput(true);
                     window.setTimeout(() => setCopiedOutput(false), 1200);
-                  } catch {
+                  } else {
                     setCopiedOutput(false);
                   }
                 }}
@@ -493,5 +493,3 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     </div>
   );
 });
-
-export default GenericToolBlock;

@@ -33,6 +33,7 @@ import "./styles/panel-lock.css";
 // .subagent-chat-split layout rules. Deferring this collapses the main chat area
 // to a 1-char-wide strip (vertical "输入" placeholder) — do not move to loaders.
 import "./styles/subagent-ui.css";
+import "./styles/pi-session.css";
 // 统一滚动条兜底清单（须最后加载，覆盖未登记的滚动容器）
 import "./styles/scrollbars.css";
 // Wallpaper translucency must win over later shell / messages / composer fills.

@@ -3,6 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ThreadSummary } from "../../../types";
+import { markPiDerivedThread, reconcilePiDerivedHideWithAuthoritativeRows } from "../../pi-session/store/piSessionStore";
 import {
   rememberVerifiedSharedHide,
   resetSharedNativeVisibilityMemory,
@@ -43,6 +44,104 @@ describe("useThreadRows", () => {
     expect(rows.unpinnedRows.map((row) => [row.thread.id, row.depth])).toEqual([
       ["parent-session", 0],
       ["child-session", 1],
+    ]);
+  });
+
+  it("hides live-window pi fork branch rows via derived mark (parentThreadId 未就位)", () => {
+    // live 窗口：fork 跳转 / thread/started 新建的分支行还没有 parentThreadId，
+    // list 刷新可能整局不跑——fork 成功时的派生登记必须立刻隐藏它。
+    const main: ThreadSummary = {
+      id: "pi:main-livewindow",
+      name: "99+22",
+      updatedAt: 100,
+      engineSource: "pi",
+    };
+    const branch: ThreadSummary = {
+      id: "pi:branch-livewindow",
+      name: "99+22",
+      updatedAt: 200,
+      engineSource: "pi",
+    };
+    markPiDerivedThread("pi:branch-livewindow");
+
+    const { result } = renderHook(() => useThreadRows({}));
+    const rows = result.current.getThreadRows(
+      [main, branch],
+      false,
+      "ws-1",
+      getPinTimestamp,
+    );
+
+    expect(rows.unpinnedRows.map((row) => row.thread.id)).toEqual([
+      "pi:main-livewindow",
+    ]);
+  });
+
+  it("keeps pi main visible while hiding parented pi branch (权威 parent 路径)", () => {
+    const main: ThreadSummary = {
+      id: "pi:main-parented",
+      name: "1+1",
+      updatedAt: 100,
+      engineSource: "pi",
+    };
+    const branch: ThreadSummary = {
+      id: "pi:branch-parented",
+      name: "1+1",
+      parentThreadId: "pi:main-parented",
+      updatedAt: 200,
+      engineSource: "pi",
+    };
+
+    const { result } = renderHook(() => useThreadRows({}));
+    const rows = result.current.getThreadRows(
+      [main, branch],
+      false,
+      "ws-1",
+      getPinTimestamp,
+    );
+
+    expect(rows.unpinnedRows.map((row) => row.thread.id)).toEqual([
+      "pi:main-parented",
+    ]);
+  });
+
+  it("reconcile 放归被误登记的主线（权威行无 parentSession），保留真派生隐藏", () => {
+    // fork 静默 no-op 会把源主线 id 误登记进内存派生集合，整局隐藏；
+    // index/磁盘 list 的权威行（无 parentSessionId）必须立即放归它。
+    const main: ThreadSummary = {
+      id: "pi:main-mismarked",
+      name: "帮我执行打包",
+      updatedAt: 100,
+      engineSource: "pi",
+    };
+    const branch: ThreadSummary = {
+      id: "pi:branch-real",
+      name: "分支",
+      updatedAt: 200,
+      engineSource: "pi",
+    };
+    markPiDerivedThread("pi:main-mismarked"); // 模拟误登记
+    markPiDerivedThread("pi:branch-real"); // 真派生
+
+    reconcilePiDerivedHideWithAuthoritativeRows([
+      // 权威证明 main-mismarked 是主线（无 parent）→ 放归
+      { engine: "pi", sessionId: "main-mismarked", parentSessionId: null },
+      // 权威证明 branch-real 是真派生 → 保持隐藏
+      { engine: "pi", sessionId: "branch-real", parentSessionId: "main-mismarked" },
+      // 非 pi 引擎行不得触碰集合
+      { engine: "codex", sessionId: "main-mismarked", parentSessionId: null },
+    ]);
+
+    const { result } = renderHook(() => useThreadRows({}));
+    const rows = result.current.getThreadRows(
+      [main, branch],
+      false,
+      "ws-1",
+      getPinTimestamp,
+    );
+
+    expect(rows.unpinnedRows.map((row) => row.thread.id)).toEqual([
+      "pi:main-mismarked",
     ]);
   });
 

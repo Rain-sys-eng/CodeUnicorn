@@ -18,6 +18,7 @@ const common = {
     edit: "编辑",
     refresh: "刷新",
     retry: "重试",
+    loadFailed: "加载失败",
     dismiss: "忽略",
     later: "稍后",
     yes: "是",

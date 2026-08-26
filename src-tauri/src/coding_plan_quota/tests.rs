@@ -221,11 +221,14 @@ async fn qoder_engine_quota_is_unsupported_without_scraping_tui() {
 fn kimi_engine_route_is_not_confused_with_claude_http_kimi() {
     // Claude + Kimi HTTP base 仍应走 CodingPlanApi（不进 engine=kimi CLI 短路）
     let route = resolve_quota_route(
-        "claude",
-        None, // profile missing → may be None or official; just ensure no panic
+        "claude", None, // profile missing → may be None or official; just ensure no panic
     );
     // 无 profile 时官方 anthropic → none
-    assert!(matches!(route, QuotaRoute::None { .. }) || matches!(route, QuotaRoute::CodingPlanApi { .. }) || matches!(route, QuotaRoute::OfficialRuntime { .. }));
+    assert!(
+        matches!(route, QuotaRoute::None { .. })
+            || matches!(route, QuotaRoute::CodingPlanApi { .. })
+            || matches!(route, QuotaRoute::OfficialRuntime { .. })
+    );
 }
 
 #[test]
@@ -359,7 +362,10 @@ fn parse_sub2api_wallet_hajimi_shape() {
         }
     });
     let snap = parse_sub2api_usage(&body).expect("parse");
-    assert_eq!(snap.balance.as_ref().unwrap().items[0].total_balance, "2.59");
+    assert_eq!(
+        snap.balance.as_ref().unwrap().items[0].total_balance,
+        "2.59"
+    );
     assert_eq!(snap.plan_label.as_deref(), Some("钱包余额"));
     let usage = snap.usage_summary.expect("usage");
     assert_eq!(usage.total_requests, Some(149));
@@ -437,7 +443,10 @@ fn new_api_zero_balance_still_available() {
     let snap = parse_new_api_user_self(&body).expect("parse");
     assert!(snap.success);
     assert!(snap.balance.as_ref().unwrap().is_available);
-    assert_eq!(snap.balance.as_ref().unwrap().items[0].total_balance, "0.00");
+    assert_eq!(
+        snap.balance.as_ref().unwrap().items[0].total_balance,
+        "0.00"
+    );
 }
 
 #[test]
@@ -454,7 +463,11 @@ fn pick_better_relay_error_prefers_actionable() {
     );
     let picked = pick_better_relay_error(sub2, new_api);
     assert_eq!(picked.source, "new_api");
-    assert!(picked.error.as_deref().unwrap_or("").contains("系统访问令牌"));
+    assert!(picked
+        .error
+        .as_deref()
+        .unwrap_or("")
+        .contains("系统访问令牌"));
 }
 
 #[test]
@@ -480,7 +493,10 @@ fn parse_new_api_user_self_quota() {
     let snap = parse_new_api_user_self(&body).expect("parse");
     assert!(snap.success);
     assert_eq!(snap.source, "new_api");
-    assert_eq!(snap.balance.as_ref().unwrap().items[0].total_balance, "2.00");
+    assert_eq!(
+        snap.balance.as_ref().unwrap().items[0].total_balance,
+        "2.00"
+    );
     assert_eq!(snap.plan_label.as_deref(), Some("default"));
     let usage = snap.usage_summary.expect("usage");
     assert_eq!(usage.total_requests, Some(42));
@@ -541,10 +557,7 @@ fn pick_base_url_accepts_snake_case() {
 }
 
 fn write_temp_dir(prefix: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "mossx-{prefix}-{}",
-        uuid::Uuid::new_v4()
-    ));
+    let dir = std::env::temp_dir().join(format!("mossx-{prefix}-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     dir
 }
@@ -592,21 +605,15 @@ agent-default-model:
     )
     .unwrap();
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("deepseek-official"),
-        &empty_env,
-    )
-    .expect("official deepseek");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("deepseek-official"), &empty_env)
+            .expect("official deepseek");
     assert_eq!(base, "https://api.deepseek.com");
     assert_eq!(key, "sk-dsh-official");
 
-    let err = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("__dsh_host_catalog__"),
-        &empty_env,
-    )
-    .expect_err("sentinel must not fall back to ggggg");
+    let err =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("__dsh_host_catalog__"), &empty_env)
+            .expect_err("sentinel must not fall back to ggggg");
     assert!(err.contains("missing"), "{err}");
 
     let _ = std::fs::remove_dir_all(&home);
@@ -632,18 +639,14 @@ llm-pi-ai:
     )
     .unwrap();
 
-    let (base, key) =
-        resolve_dsh_base_url_and_key_from_home(&home, Some("ggggg"), &empty_env)
-            .expect("custom vendor");
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(&home, Some("ggggg"), &empty_env)
+        .expect("custom vendor");
     assert_eq!(base, "https://fufei.mossx.ai/v1");
     assert_eq!(key, "sk-relay-ggggg");
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("deepseek-official"),
-        &empty_env,
-    )
-    .expect("official without key still has host");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("deepseek-official"), &empty_env)
+            .expect("official without key still has host");
     assert_eq!(base, "https://api.deepseek.com");
     assert!(key.is_empty());
 
@@ -678,27 +681,20 @@ llm-pi-ai:
     )
     .unwrap();
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("minimax-cn/MiniMax-M2.7"),
-        &empty_env,
-    )
-    .expect("official minimax");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("minimax-cn/MiniMax-M2.7"), &empty_env)
+            .expect("official minimax");
     assert_eq!(base, "https://api.minimaxi.com");
     assert_eq!(key, "sk-minimax");
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("kimi-coding/k3"),
-        &empty_env,
-    )
-    .expect("official kimi");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("kimi-coding/k3"), &empty_env)
+            .expect("official kimi");
     assert_eq!(base, "https://api.kimi.com/coding");
     assert_eq!(key, "sk-kimi");
 
-    let (base, key) =
-        resolve_dsh_base_url_and_key_from_home(&home, Some("gork-zhu"), &empty_env)
-            .expect("custom vendor still uses its own base");
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(&home, Some("gork-zhu"), &empty_env)
+        .expect("custom vendor still uses its own base");
     assert_eq!(base, "https://fufei.mossx.ai/v1");
     assert_eq!(key, "sk-custom");
 
@@ -718,7 +714,11 @@ llm-pi-ai:
 "#,
     )
     .unwrap();
-    std::fs::write(home.join(".credentials.yaml"), "OPENAI_API_KEY: sk-openai\n").unwrap();
+    std::fs::write(
+        home.join(".credentials.yaml"),
+        "OPENAI_API_KEY: sk-openai\n",
+    )
+    .unwrap();
 
     let (base, key) =
         resolve_dsh_base_url_and_key_from_home(&home, Some("openai/gpt-5"), &empty_env)
@@ -748,12 +748,9 @@ llm-pi-ai:
     )
     .unwrap();
 
-    let err = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("future-official/model-x"),
-        &empty_env,
-    )
-    .expect_err("unknown host must not be invented");
+    let err =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("future-official/model-x"), &empty_env)
+            .expect_err("unknown host must not be invented");
     assert!(err.contains("future-official"), "{err}");
     assert!(err.contains("missing"), "{err}");
 
@@ -812,36 +809,26 @@ refs:
     )
     .unwrap();
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("deepseek-official"),
-        &empty_env,
-    )
-    .expect("v1 official deepseek");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("deepseek-official"), &empty_env)
+            .expect("v1 official deepseek");
     assert_eq!(base, "https://api.deepseek.com");
     assert_eq!(key, "sk-dsh-official");
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("kimi-coding/k3"),
-        &empty_env,
-    )
-    .expect("v1 kimi");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("kimi-coding/k3"), &empty_env)
+            .expect("v1 kimi");
     assert_eq!(base, "https://api.kimi.com/coding");
     assert_eq!(key, "sk-kimi");
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("minimax-cn/MiniMax-M2.7"),
-        &empty_env,
-    )
-    .expect("v1 minimax");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("minimax-cn/MiniMax-M2.7"), &empty_env)
+            .expect("v1 minimax");
     assert_eq!(base, "https://api.minimaxi.com");
     assert_eq!(key, "sk-minimax");
 
-    let (base, key) =
-        resolve_dsh_base_url_and_key_from_home(&home, Some("gork-zhu"), &empty_env)
-            .expect("v1 custom vendor");
+    let (base, key) = resolve_dsh_base_url_and_key_from_home(&home, Some("gork-zhu"), &empty_env)
+        .expect("v1 custom vendor");
     assert_eq!(base, "https://fufei.mossx.ai/v1");
     assert_eq!(key, "sk-custom");
 
@@ -862,12 +849,9 @@ refs:
     )
     .unwrap();
 
-    let (base, key) = resolve_dsh_base_url_and_key_from_home(
-        &home,
-        Some("deepseek-official"),
-        &empty_env,
-    )
-    .expect("refs beat leftover top-level");
+    let (base, key) =
+        resolve_dsh_base_url_and_key_from_home(&home, Some("deepseek-official"), &empty_env)
+            .expect("refs beat leftover top-level");
     assert_eq!(base, "https://api.deepseek.com");
     assert_eq!(key, "sk-refs");
 
@@ -875,9 +859,8 @@ refs:
         "DEEPSEEK_API_KEY" => Some("sk-env".to_string()),
         _ => None,
     };
-    let (_, key) =
-        resolve_dsh_base_url_and_key_from_home(&home, Some("deepseek-official"), &env)
-            .expect("env beats refs");
+    let (_, key) = resolve_dsh_base_url_and_key_from_home(&home, Some("deepseek-official"), &env)
+        .expect("env beats refs");
     assert_eq!(key, "sk-env");
 
     let _ = std::fs::remove_dir_all(&home);
@@ -936,30 +919,23 @@ fn pi_vendor_reads_models_store_and_auth_json() {
     )
     .unwrap();
 
-    let (base, key) =
-        resolve_pi_base_url_and_key_from_home(&home, Some("deepseek"), &empty_env)
-            .expect("pi deepseek");
+    let (base, key) = resolve_pi_base_url_and_key_from_home(&home, Some("deepseek"), &empty_env)
+        .expect("pi deepseek");
     assert_eq!(base, "https://api.deepseek.com");
     assert_eq!(key, "sk-pi-deepseek");
 
-    let (base, key) =
-        resolve_pi_base_url_and_key_from_home(&home, Some("openai"), &empty_env)
-            .expect("official openai host");
+    let (base, key) = resolve_pi_base_url_and_key_from_home(&home, Some("openai"), &empty_env)
+        .expect("official openai host");
     assert_eq!(base, "https://api.openai.com/v1");
     assert!(key.is_empty());
 
-    let (base, key) =
-        resolve_pi_base_url_and_key_from_home(&home, Some("kimi-coding"), &empty_env)
-            .expect("command key must not execute");
+    let (base, key) = resolve_pi_base_url_and_key_from_home(&home, Some("kimi-coding"), &empty_env)
+        .expect("command key must not execute");
     assert_eq!(base, "https://api.kimi.com/coding");
     assert!(key.is_empty());
 
-    let err = resolve_pi_base_url_and_key_from_home(
-        &home,
-        Some("__local_pi__"),
-        &empty_env,
-    )
-    .expect_err("sentinel has no vendor");
+    let err = resolve_pi_base_url_and_key_from_home(&home, Some("__local_pi__"), &empty_env)
+        .expect_err("sentinel has no vendor");
     assert!(err.contains("missing"), "{err}");
 
     let _ = std::fs::remove_dir_all(&home);
@@ -978,8 +954,7 @@ fn pi_env_ref_key_resolves_without_executing_commands() {
         _ => None,
     };
     let (base, key) =
-        resolve_pi_base_url_and_key_from_home(&home, Some("deepseek"), &env)
-            .expect("env ref");
+        resolve_pi_base_url_and_key_from_home(&home, Some("deepseek"), &env).expect("env ref");
     assert_eq!(base, "https://api.deepseek.com");
     assert_eq!(key, "sk-from-env");
     let _ = std::fs::remove_dir_all(&home);

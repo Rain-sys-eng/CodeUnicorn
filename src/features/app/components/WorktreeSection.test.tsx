@@ -29,7 +29,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: "cursor" }}
@@ -38,6 +37,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -63,12 +63,10 @@ describe("WorktreeSection", () => {
     expect(
       screen.queryByRole("button", { name: "Search older..." }),
     ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Load older..." }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Load older..." })).toBeNull();
   });
 
-  it("shows an empty session message instead of a loading skeleton for empty worktrees", () => {
+  it("shows neither an empty session message nor a loading skeleton for empty worktrees", () => {
     render(
       <WorktreeSection
         parentWorkspaceId="workspace-1"
@@ -78,7 +76,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set([worktree.id])}
         threadListLoadingByWorkspace={{ [worktree.id]: true }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -87,6 +84,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -109,13 +107,16 @@ describe("WorktreeSection", () => {
       />,
     );
 
+    // 「暂无会话」占位已下线：空 worktree 不再渲染任何占位文案。
     expect(
-      screen.getByText(/No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i),
-    ).toBeTruthy();
+      screen.queryByText(
+        /No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i,
+      ),
+    ).toBeNull();
     expect(screen.queryByLabelText("Loading agents")).toBeNull();
   });
 
-  it("does not show the empty session message before worktree sessions hydrate", () => {
+  it("renders no placeholder before worktree sessions hydrate", () => {
     render(
       <WorktreeSection
         parentWorkspaceId="workspace-1"
@@ -125,7 +126,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: true }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -134,6 +134,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -157,7 +158,9 @@ describe("WorktreeSection", () => {
     );
 
     expect(
-      screen.queryByText(/No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i),
+      screen.queryByText(
+        /No sessions yet\.|暂无会话|sidebar\.emptyWorkspaceSessions/i,
+      ),
     ).toBeNull();
   });
 
@@ -173,7 +176,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -182,6 +184,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -204,7 +207,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    const header = container.querySelector(".worktree-header") as HTMLButtonElement | null;
+    const header = container.querySelector(
+      ".worktree-header",
+    ) as HTMLButtonElement | null;
     expect(header).toBeTruthy();
     if (!header) {
       throw new Error("Expected worktree header");
@@ -228,7 +233,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -237,6 +241,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -259,7 +264,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    const worktreeRow = container.querySelector(".worktree-row") as HTMLElement | null;
+    const worktreeRow = container.querySelector(
+      ".worktree-row",
+    ) as HTMLElement | null;
     expect(worktreeRow).toBeTruthy();
     if (!worktreeRow) {
       throw new Error("Expected worktree row");
@@ -282,7 +289,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -291,6 +297,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -325,8 +332,12 @@ describe("WorktreeSection", () => {
 
   it("passes worktree-scoped folder move targets to thread menus", () => {
     const onShowThreadMenu = vi.fn();
-    const parentMoveTargets = [{ folderId: "parent-folder", label: "Parent Folder" }];
-    const worktreeMoveTargets = [{ folderId: "worktree-folder", label: "Worktree Folder" }];
+    const parentMoveTargets = [
+      { folderId: "parent-folder", label: "Parent Folder" },
+    ];
+    const worktreeMoveTargets = [
+      { folderId: "worktree-folder", label: "Worktree Folder" },
+    ];
     const thread = {
       id: "claude:thread-1",
       name: "Worktree Session",
@@ -343,7 +354,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [thread] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set([worktree.id])}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -356,6 +366,7 @@ describe("WorktreeSection", () => {
         }}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [{ thread, depth: 0 }],
           totalRoots: 1,
           hasMoreRoots: false,
@@ -378,7 +389,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    const threadRow = screen.getByText("Worktree Session").closest(".thread-row");
+    const threadRow = screen
+      .getByText("Worktree Session")
+      .closest(".thread-row");
     expect(threadRow).toBeTruthy();
     if (!threadRow) {
       throw new Error("Expected worktree thread row");
@@ -405,7 +418,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [worktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [worktree.id]: false }}
         threadListPagingByWorkspace={{ [worktree.id]: false }}
         threadListCursorByWorkspace={{ [worktree.id]: null }}
@@ -414,6 +426,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -461,11 +474,15 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{
           [degradedWorktree.id]: [
-            { id: "thread-1", name: "Alpha", updatedAt: 1000, isDegraded: true },
+            {
+              id: "thread-1",
+              name: "Alpha",
+              updatedAt: 1000,
+              isDegraded: true,
+            },
           ],
         }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListPagingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListCursorByWorkspace={{ [degradedWorktree.id]: null }}
@@ -474,6 +491,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 1,
           hasMoreRoots: false,
@@ -496,7 +514,9 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: /Refresh incomplete thread list/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Refresh incomplete thread list/i }),
+    ).toBeNull();
 
     rerender(
       <WorktreeSection
@@ -507,11 +527,15 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{
           [degradedWorktree.id]: [
-            { id: "thread-1", name: "Alpha", updatedAt: 1000, isDegraded: true },
+            {
+              id: "thread-1",
+              name: "Alpha",
+              updatedAt: 1000,
+              isDegraded: true,
+            },
           ],
         }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListPagingByWorkspace={{ [degradedWorktree.id]: false }}
         threadListCursorByWorkspace={{ [degradedWorktree.id]: null }}
@@ -520,6 +544,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 1,
           hasMoreRoots: false,
@@ -565,7 +590,6 @@ describe("WorktreeSection", () => {
         deletingWorktreeIds={new Set()}
         threadsByWorkspace={{ [windowsWorktree.id]: [] }}
         threadStatusById={{}}
-        hydratedThreadListWorkspaceIds={new Set()}
         threadListLoadingByWorkspace={{ [windowsWorktree.id]: false }}
         threadListPagingByWorkspace={{ [windowsWorktree.id]: false }}
         threadListCursorByWorkspace={{ [windowsWorktree.id]: null }}
@@ -574,6 +598,7 @@ describe("WorktreeSection", () => {
         activeThreadId={null}
         getThreadRows={() => ({
           pinnedRows: [],
+          workspacePinnedRows: [],
           unpinnedRows: [],
           totalRoots: 0,
           hasMoreRoots: false,
@@ -596,7 +621,11 @@ describe("WorktreeSection", () => {
       />,
     );
 
-    expect(container.querySelector(".worktree-label-prefix")?.textContent).toBe("feature");
-    expect(container.querySelector(".worktree-label")?.textContent).toBe("windows");
+    expect(container.querySelector(".worktree-label-prefix")?.textContent).toBe(
+      "feature",
+    );
+    expect(container.querySelector(".worktree-label")?.textContent).toBe(
+      "windows",
+    );
   });
 });

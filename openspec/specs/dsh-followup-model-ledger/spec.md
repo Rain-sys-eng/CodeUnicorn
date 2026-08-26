@@ -8,11 +8,7 @@ DSH follow-up send 的 model 账本必须留在 DSH catalog 命名空间。mossx
 
 ### Requirement: DSH send rejects mossx managed provider namespace
 
-When mossx sends a turn on a DSH thread, the catalog id passed to
-`session.selectModel` MUST be a `{provider}/{model}` pair whose provider is
-not the mossx managed namespace `ccgui` (case-insensitive). mossx MUST NOT
-forward Grok / Kimi / OpenCode managed catalog ids such as `ccgui/grok-4.5`
-to the DSH host.
+When mossx sends a turn on a DSH thread, the catalog id passed to `session.selectModel` MUST be a `{provider}/{model}` pair whose provider is not the mossx managed namespace `ccgui` (case-insensitive). mossx MUST NOT forward Grok / Kimi / OpenCode managed catalog ids such as `ccgui/grok-4.5` to the DSH host.
 
 If no trusted DSH catalog id is available, mossx MUST omit the model and
 MUST NOT call `session.selectModel` for that turn, so the existing session
@@ -51,13 +47,7 @@ engine-global pref.
 
 ### Requirement: DSH thread ledger stays on DSH catalog ids
 
-When the user is on a `dsh:` or `dsh-pending-` thread and
-`handleSelectModel` matches a foreign engine catalog by exact id, mossx
-MUST persist that id under the owning engine pref only. mossx MUST NOT
-write that foreign catalog id onto the current DSH thread composer
-selection or the in-flight resolver used by DSH send. The skip axis is
-thread ownership (`threadEngine === "dsh" && targetEngine !== "dsh"`),
-not whether `activeEngine` currently matches the pick.
+When the user is on a `dsh:` or `dsh-pending-` thread and `handleSelectModel` matches a foreign engine catalog by exact id, mossx MUST persist that id under the owning engine pref only. mossx MUST NOT write that foreign catalog id onto the current DSH thread composer selection or the in-flight resolver used by DSH send. The skip axis is thread ownership (`threadEngine === "dsh" && targetEngine !== "dsh"`), not whether `activeEngine` currently matches the pick.
 
 Same-catalog DSH picks and explicit engine-group switches keep existing
 behavior.

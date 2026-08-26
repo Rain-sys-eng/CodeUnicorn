@@ -44,6 +44,7 @@ function snapshot(state: QoderAuthStatus["state"]): QoderAuthStatus {
     state,
     envVar: "QODER_PERSONAL_ACCESS_TOKEN",
     maskedKey: state === "configured" ? "qoder_········0xyz" : undefined,
+    envPresent: false,
   };
 }
 
@@ -142,7 +143,7 @@ describe("QoderAuthSection", () => {
       });
       expect(
         screen.getByText(
-          "解析顺序：进程环境变量 → qoder-cn-auth.json → qoderclicn login",
+          "解析顺序：qoder-cn-auth.json → 进程环境变量 → qoderclicn login",
         ),
       ).toBeTruthy();
     } finally {
@@ -206,5 +207,20 @@ describe("QoderAuthSection", () => {
     fireEvent.click(screen.getByText("删除"));
     fireEvent.click(screen.getByText("settings.vendor.deleteConfirm.confirm"));
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
+  });
+
+  it("hides env-ignored hint when configured without process env", async () => {
+    mockStatus.mockResolvedValue(snapshot("configured"));
+    await renderSection();
+    expect(await screen.findByText("qoder_········0xyz")).toBeTruthy();
+    expect(screen.queryByText(/进程环境变量中同时存在.*已被忽略/)).toBeNull();
+  });
+
+  it("shows env-ignored hint when stored PAT coexists with process env", async () => {
+    mockStatus.mockResolvedValue({ ...snapshot("configured"), envPresent: true });
+    await renderSection();
+    expect(
+      await screen.findByText(/进程环境变量中同时存在.*已被忽略/),
+    ).toBeTruthy();
   });
 });

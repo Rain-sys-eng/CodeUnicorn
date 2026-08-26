@@ -182,13 +182,6 @@ export async function resumeThread(workspaceId: string, threadId: string) {
   });
 }
 
-export async function archiveThread(workspaceId: string, threadId: string) {
-  return invoke<Record<string, unknown> | null>("archive_thread", {
-    workspaceId,
-    threadId,
-  });
-}
-
 export async function deleteCodexSession(workspaceId: string, sessionId: string) {
   return invoke<{
     deleted: boolean;

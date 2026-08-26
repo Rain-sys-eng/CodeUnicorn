@@ -5,6 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import { WorkspaceAliasPrompt } from "./WorkspaceAliasPrompt";
 
 vi.mock("react-i18next", () => ({
+  Trans: ({ values }: { values?: Record<string, string> }) => (
+    <span>{`Original project name: ${values?.name ?? ""}`}</span>
+  ),
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {

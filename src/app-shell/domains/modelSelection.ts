@@ -1,5 +1,10 @@
 import type { ComposerSessionSelection } from "./selectedComposerSession";
 import type { EngineType, ModelOption } from "../../types";
+import {
+  CUSTOM_MODEL_DEFAULT_REASONING_EFFORT,
+  CUSTOM_MODEL_SUPPORTED_REASONING_OPTIONS,
+  isUserManagedCustomModelSource,
+} from "../../features/models/customModelReasoning";
 
 type GetEffectiveSelectedModelIdOptions = {
   activeEngine: EngineType;
@@ -32,7 +37,13 @@ type GetEffectiveSelectedEffortOptions = {
   reasoningOptions: string[];
 };
 
-export const CLAUDE_REASONING_OPTIONS = ["low", "medium", "high", "xhigh", "max"];
+export const CLAUDE_REASONING_OPTIONS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 
 /** Grok CLI composer allowlist — keep aligned with `GROK_REASONING_EFFORTS` in grok.rs. */
 export const GROK_REASONING_OPTIONS = ["low", "medium", "high"];
@@ -45,6 +56,73 @@ export function findModelById(models: ModelOption[], id: string | null) {
     models.find((model) => model.id === id) ??
     models.find((model) => model.model === id) ??
     null
+  );
+}
+
+/**
+ * catalog 降级为全静态兜底（如 PI 探测失败只剩合成的 auto，全部 source=fallback）
+ * 时，把会话账本里的 modelId 合成一个临时选项追加进列表：切历史会话不再被
+ * 静默修成兜底默认（auto），chip 显示真实模型 id；catalog 痊愈后账本 id 正常
+ * 命中，该合成选项自动消失。非降级场景返回原数组引用，保证 memo 稳定。
+ */
+export function preserveLedgerModelOnFallbackCatalog(
+  engineModelsAsOptions: ModelOption[],
+  threadLedgerModelId: string | null,
+): ModelOption[] {
+  const ledgerId = threadLedgerModelId?.trim() ?? "";
+  if (
+    !ledgerId ||
+    engineModelsAsOptions.length === 0 ||
+    !engineModelsAsOptions.every(
+      (model) => (model.source ?? "") === "fallback",
+    ) ||
+    findModelById(engineModelsAsOptions, ledgerId)
+  ) {
+    return engineModelsAsOptions;
+  }
+  const ledgerOption: ModelOption = {
+    id: ledgerId,
+    model: ledgerId,
+    displayName: ledgerId,
+    description: "",
+    source: "ledger",
+    provider: null,
+    protocol: null,
+    provenance: null,
+    observedAt: null,
+    lastVerifiedAt: null,
+    lifecycle: null,
+    providerProfileId: null,
+    supportedReasoningEfforts: [],
+    defaultReasoningEffort: null,
+    isDefault: false,
+  };
+  return [...engineModelsAsOptions, ledgerOption];
+}
+
+/**
+ * 合成账本选项的引擎圈定：仅 PI 适用（PI 的 parse 层在探测失败时合成
+ * source=fallback 兜底条目，「非空」对 PI 失去健康意义）。Gemini 的
+ * generated fallbacks 天生 source=fallback、其他引擎也没有合成兜底语义，
+ * 一律返回原数组引用，保证其他引擎 catalog 行为零变化。
+ */
+export function resolveLedgerAwareEngineModels({
+  activeEngine,
+  hasActiveThread,
+  engineModelsAsOptions,
+  threadLedgerModelId,
+}: {
+  activeEngine: EngineType;
+  hasActiveThread: boolean;
+  engineModelsAsOptions: ModelOption[];
+  threadLedgerModelId: string | null;
+}): ModelOption[] {
+  if (activeEngine !== "pi" || !hasActiveThread) {
+    return engineModelsAsOptions;
+  }
+  return preserveLedgerModelOnFallbackCatalog(
+    engineModelsAsOptions,
+    threadLedgerModelId,
   );
 }
 
@@ -86,7 +164,7 @@ export function enrichScopedCodexReasoningMetadata(
       getModelRuntimeIdentity(scopedModel),
     );
     if (!authoritativeModel) {
-      return scopedModel;
+      return withUserManagedReasoningDefaults(scopedModel);
     }
     const supportedReasoningEfforts =
       scopedModel.supportedReasoningEfforts.length > 0
@@ -99,14 +177,38 @@ export function enrichScopedCodexReasoningMetadata(
       supportedReasoningEfforts === scopedModel.supportedReasoningEfforts &&
       defaultReasoningEffort === scopedModel.defaultReasoningEffort
     ) {
-      return scopedModel;
+      return withUserManagedReasoningDefaults(scopedModel);
     }
-    return {
+    return withUserManagedReasoningDefaults({
       ...scopedModel,
       supportedReasoningEfforts,
       defaultReasoningEffort,
-    };
+    });
   });
+}
+
+/**
+ * provider-owned 用户管理来源（provider-custom / provider-config）在
+ * authoritative identity 填充后仍缺 reasoning metadata 时，回落公共默认档
+ * （low/medium/high/xhigh，默认 medium），使 scoped Codex 会话的思考强度
+ * 选择器可用。CLI runtime 发现的 unknown model（source 非 user-managed）
+ * 保持 capability-neutral，不发明档位（fix-codex-third-party-provider-model-catalog）。
+ */
+function withUserManagedReasoningDefaults(model: ModelOption): ModelOption {
+  if (
+    !isUserManagedCustomModelSource(model.source) ||
+    model.supportedReasoningEfforts.length > 0
+  ) {
+    return model;
+  }
+  return {
+    ...model,
+    supportedReasoningEfforts: CUSTOM_MODEL_SUPPORTED_REASONING_OPTIONS.map(
+      (entry) => ({ ...entry }),
+    ),
+    defaultReasoningEffort:
+      model.defaultReasoningEffort ?? CUSTOM_MODEL_DEFAULT_REASONING_EFFORT,
+  };
 }
 
 export function isReasoningEffortSupportedForEngine(
@@ -116,8 +218,13 @@ export function isReasoningEffortSupportedForEngine(
   if (activeEngine === "claude" || activeEngine === "grok") {
     return true;
   }
-  if (activeEngine === "codex" || activeEngine === "dsh" || activeEngine === "qoder") {
-    // dsh / qoder：只有选中模型在 host/ACP catalog 声明了 reasoning efforts 才支持
+  if (
+    activeEngine === "codex" ||
+    activeEngine === "dsh" ||
+    activeEngine === "qoder" ||
+    activeEngine === "pi"
+  ) {
+    // dsh / qoder / pi：只有选中模型在 catalog 声明了 reasoning efforts 才支持
     return getNormalizedReasoningOptions(reasoningOptions).length > 0;
   }
   return false;
@@ -181,7 +288,8 @@ export function getEffectiveSelectedModelId({
     return unrestrictedThreadModelId;
   }
   if (activeEngine === "codex") {
-    const selectedCodexModelId = findModelById(codexModels, selectedModelId)?.id ?? null;
+    const selectedCodexModelId =
+      findModelById(codexModels, selectedModelId)?.id ?? null;
     const threadCodexModelId =
       findModelById(codexModels, activeThreadSelectedModelId)?.id ?? null;
     const defaultCodexModelId = getDefaultModelId(codexModels);
@@ -216,8 +324,12 @@ export function getEffectiveSelectedEffort({
   activeThreadSelection,
   reasoningOptions,
 }: GetEffectiveSelectedEffortOptions) {
-  const normalizedReasoningOptions = getNormalizedReasoningOptions(reasoningOptions);
-  const normalizeEffort = (value: string | null, options?: { fallbackToFirst: boolean }) => {
+  const normalizedReasoningOptions =
+    getNormalizedReasoningOptions(reasoningOptions);
+  const normalizeEffort = (
+    value: string | null,
+    options?: { fallbackToFirst: boolean },
+  ) => {
     if (typeof value !== "string") {
       return null;
     }
@@ -229,11 +341,18 @@ export function getEffectiveSelectedEffort({
       normalizedReasoningOptions.length > 0 &&
       !normalizedReasoningOptions.includes(trimmed)
     ) {
-      return options?.fallbackToFirst ? normalizedReasoningOptions[0] ?? null : null;
+      return options?.fallbackToFirst
+        ? (normalizedReasoningOptions[0] ?? null)
+        : null;
     }
     return trimmed;
   };
-  if (!isReasoningEffortSupportedForEngine(activeEngine, normalizedReasoningOptions)) {
+  if (
+    !isReasoningEffortSupportedForEngine(
+      activeEngine,
+      normalizedReasoningOptions,
+    )
+  ) {
     return null;
   }
   // Claude / Grok: fixed CLI allowlist; only surface thread/draft selection (no silent default).
@@ -242,7 +361,13 @@ export function getEffectiveSelectedEffort({
       fallbackToFirst: false,
     });
   }
-  if ((activeEngine !== "codex" && activeEngine !== "dsh" && activeEngine !== "qoder") || !hasActiveThread) {
+  if (
+    (activeEngine !== "codex" &&
+      activeEngine !== "dsh" &&
+      activeEngine !== "qoder" &&
+      activeEngine !== "pi") ||
+    !hasActiveThread
+  ) {
     return normalizeEffort(selectedEffort, { fallbackToFirst: true });
   }
   if (!activeThreadSelection) {
@@ -254,8 +379,12 @@ export function getEffectiveSelectedEffort({
   );
 }
 
-export function getReasoningOptionsForModel(model: ModelOption | null): string[] {
-  const supported = model?.supportedReasoningEfforts.map((effort) => effort.reasoningEffort) ?? [];
+export function getReasoningOptionsForModel(
+  model: ModelOption | null,
+): string[] {
+  const supported =
+    model?.supportedReasoningEfforts.map((effort) => effort.reasoningEffort) ??
+    [];
   if (supported.length > 0) {
     return supported;
   }
@@ -270,7 +399,9 @@ export function getEffectiveReasoningSupported(
   return (
     activeEngine === "claude" ||
     activeEngine === "grok" ||
-    ((activeEngine === "codex" || activeEngine === "dsh") &&
+    ((activeEngine === "codex" ||
+      activeEngine === "dsh" ||
+      activeEngine === "pi") &&
       codexReasoningSupported)
   );
 }
@@ -285,6 +416,6 @@ export function getEffectiveReasoningOptions(
   if (activeEngine === "grok") {
     return GROK_REASONING_OPTIONS;
   }
-  // codex / dsh 都跟随选中模型的 catalog 档位
+  // codex / dsh / qoder / pi 都跟随选中模型的 catalog 档位
   return modelReasoningOptions;
 }

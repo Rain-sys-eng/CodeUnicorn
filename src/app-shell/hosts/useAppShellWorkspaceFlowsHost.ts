@@ -101,7 +101,6 @@ const RUNTIME_FIELDS = [
   "lastAgentMessageByThread",
   "listThreadsForWorkspace",
   "refreshThread",
-  "removeThread",
   "resetWorkspaceThreads",
   "setActiveThreadId",
   "startThreadForWorkspace",
@@ -204,7 +203,6 @@ export function useAppShellWorkspaceFlowsHost() {
   const lastAgentMessageByThread = pick(runtime, "lastAgentMessageByThread");
   const listThreadsForWorkspace = pick(runtime, "listThreadsForWorkspace");
   const refreshThread = pick(runtime, "refreshThread");
-  const removeThread = pick(runtime, "removeThread");
   const resetWorkspaceThreads = pick(runtime, "resetWorkspaceThreads");
   const setActiveThreadId = pick(runtime, "setActiveThreadId");
   const startThreadForWorkspace = pick(runtime, "startThreadForWorkspace");
@@ -385,7 +383,7 @@ export function useAppShellWorkspaceFlowsHost() {
       }),
     refreshThread,
     removeImagesForThread,
-    removeThread,
+    ensureWorkspaceThreadListLoaded,
     renameWorktree,
     renameWorktreeUpstream,
     resetWorkspaceThreads,

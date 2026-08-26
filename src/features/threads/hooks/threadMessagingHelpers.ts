@@ -3,9 +3,12 @@ import type { AccessMode, EngineType, ReviewTarget } from "../../../types";
 import { primeThreadStreamLatencyContext } from "../utils/streamLatencyDiagnostics";
 import {
   classifyNetworkError,
+  classifyTurnStartReasonCode,
   parseFirstPacketTimeoutSeconds,
   stripBackendErrorPrefix,
 } from "../utils/networkErrors";
+
+export { classifyTurnStartReasonCode };
 import { classifyStaleThreadRecovery } from "../utils/stabilityDiagnostics";
 
 export function normalizeCollaborationModeId(

@@ -13,6 +13,10 @@ const reasoning = {
       "label": "Выкл. (Off)",
       "description": "Рассуждение отключено"
     },
+    "minimal": {
+      "label": "Минимальный",
+      "description": "Самое лёгкое рассуждение"
+    },
     "low": {
       "label": "Низкая",
       "description": "Быстрые ответы с базовыми рассуждениями"

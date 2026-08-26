@@ -80,7 +80,7 @@ describe("useGitStatus", () => {
     expect(result.current.status.totalAdditions).toBe(2);
 
     await act(async () => {
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(30000);
     });
     await act(async () => {
       await Promise.resolve();
@@ -111,7 +111,7 @@ describe("useGitStatus", () => {
     const initialStatus = result.current.status;
 
     await act(async () => {
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(30000);
       await Promise.resolve();
     });
 
@@ -144,7 +144,7 @@ describe("useGitStatus", () => {
     const initialStatus = result.current.status;
 
     await act(async () => {
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(30000);
       await Promise.resolve();
     });
 
@@ -172,7 +172,7 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(14999);
+      vi.advanceTimersByTime(44999);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(1);
@@ -202,7 +202,7 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
 
     await act(async () => {
-      vi.advanceTimersByTime(14999);
+      vi.advanceTimersByTime(59999);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
@@ -232,7 +232,7 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
 
     await act(async () => {
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(90000);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
@@ -264,7 +264,7 @@ describe("useGitStatus", () => {
     expect(result.current.status.error).toBe("not a git repository");
 
     await act(async () => {
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(90000);
       await Promise.resolve();
     });
 
@@ -333,7 +333,7 @@ describe("useGitStatus", () => {
     });
 
     await act(async () => {
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(30000);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(2);

@@ -555,6 +555,29 @@
   gap: 2px;
 }
 
+/* 大结果集虚拟化：绝对定位行，容器 gap 不再参与布局。 */
+.workspace-search-results.is-virtualized {
+  gap: 0;
+  contain: layout style;
+}
+
+.workspace-search-virtual-spacer {
+  position: relative;
+  min-height: 100%;
+}
+
+.workspace-search-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding-bottom: 2px;
+}
+
+.workspace-search-virtual-row.is-match {
+  padding-left: 18px;
+}
+
 .workspace-search-result-file,
 .workspace-search-result-match {
   width: 100%;

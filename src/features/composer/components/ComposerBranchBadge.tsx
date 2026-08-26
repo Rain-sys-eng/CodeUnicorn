@@ -815,5 +815,3 @@ function ComposerBranchBadgeComponent({
 }
 
 export const ComposerBranchBadge = memo(ComposerBranchBadgeComponent);
-
-export default ComposerBranchBadge;

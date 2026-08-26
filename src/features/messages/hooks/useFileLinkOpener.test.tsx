@@ -409,4 +409,44 @@ describe("useFileLinkOpener", () => {
       message: "files.openInBrowserNoWorkspace",
     });
   });
+
+  it("recovers markdown-wrapped Windows hrefs before revealing in Explorer", async () => {
+    openerMocks.revealInFileManager.mockResolvedValue(undefined);
+    const windowsPath =
+      "D:/AI/Alchat/突击队/输出/S9_SE_PANEL_V101_0814_逐物料审计版.md";
+    const { result } = renderHook(() =>
+      useFileLinkOpener(
+        "D:/AI/Alchat/突击队",
+        [makeOpenTarget("vscode", "Visual Studio Code")],
+        "vscode",
+        null,
+      ),
+    );
+
+    const event = {
+      clientX: 12,
+      clientY: 24,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    };
+
+    act(() => {
+      result.current.showFileLinkMenu(
+        event as unknown as MouseEvent,
+        `/[${windowsPath}] (codex-file:${windowsPath})`,
+      );
+    });
+
+    const reveal = result.current.fileLinkMenu?.items.find(
+      (item) => item.type === "item" && item.id === "reveal",
+    );
+    expect(reveal?.type).toBe("item");
+    if (reveal?.type === "item") {
+      await act(async () => {
+        await reveal.onSelect();
+      });
+    }
+
+    expect(openerMocks.revealInFileManager).toHaveBeenCalledWith(windowsPath);
+  });
 });

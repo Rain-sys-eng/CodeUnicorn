@@ -10,6 +10,7 @@ export type SharedProviderRetryKind =
   | "soft-cancel"
   | "config"
   | "overflow"
+  | "quota"
   | "permission"
   | "user-stop"
   | "recovery"
@@ -30,6 +31,7 @@ export type SharedProviderRetryReason =
   | "暂时中断"
   | "配置错误"
   | "上下文过长"
+  | "配额不足"
   | "权限拒绝"
   | "已停止";
 
@@ -57,6 +59,14 @@ function normalizeMessage(value: string | null | undefined): string {
 }
 
 function classifyPermanent(text: string): SharedProviderRetryClassification | null {
+  // 配额 / 余额不足必须先于 pool 的 401/403 规则判定：同 key 重试治不好余额不足。
+  if (
+    /预扣费|余额不足|剩余额度不足|insufficient[_ -]?(?:balance|credit|quota)|quota(?:\s+is)?\s+exceeded|balance\s+insufficient/.test(
+      text,
+    )
+  ) {
+    return { disposition: "permanent", kind: "quota", reason: "配额不足" };
+  }
   if (
     /invalid_request_error/.test(text) &&
     /required reasoning item/.test(text)
@@ -72,6 +82,14 @@ function classifyPermanent(text: string): SharedProviderRetryClassification | nu
     return { disposition: "permanent", kind: "config", reason: "配置错误" };
   }
   if (/prompt too long|context overflow|context[_ ]length|maximum context/.test(text)) {
+    return { disposition: "permanent", kind: "overflow", reason: "上下文过长" };
+  }
+  // 413/414/431：payload / URI / header 过大，同目标重试确定性无效，直接 permanent。
+  if (
+    hasStatusOrCode(text, 413) ||
+    hasStatusOrCode(text, 414) ||
+    hasStatusOrCode(text, 431)
+  ) {
     return { disposition: "permanent", kind: "overflow", reason: "上下文过长" };
   }
   if (
@@ -126,6 +144,11 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
   if (hasStatusOrCode(text, 405) || hasStatusOrCode(text, 424)) {
     return { disposition: "retryable", kind: "pool", reason: "号池" };
   }
+  // relay/网关语义：402（付费/余额态）与 404（通道或模型缺失）在号池轮换下可愈；
+  // 带配额 / unknown-model 关键词的确定性失败已由 classifyPermanent 先行拦截。
+  if (hasStatusOrCode(text, 402) || hasStatusOrCode(text, 404)) {
+    return { disposition: "retryable", kind: "pool", reason: "号池" };
+  }
   if (
     hasStatusOrCode(text, 429) ||
     /too many requests/.test(text) ||
@@ -134,6 +157,7 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
     return { disposition: "retryable", kind: "rate", reason: "请求过多" };
   }
   if (
+    hasStatusOrCode(text, 408) ||
     classifyNetworkError(text) === "timeout" ||
     /first_packet_timeout:/.test(text) ||
     /deadline exceeded/.test(text) ||
@@ -153,8 +177,25 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
   ) {
     return { disposition: "retryable", kind: "overload", reason: "过载" };
   }
+  // 请求时序/冲突类瞬断（400/409/421/423/425）：下一枪同目标大概率领通；
+  // 确定性 400（context length / reasoning item / unknown model）已被 permanent 拦截。
+  if (
+    hasStatusOrCode(text, 400) ||
+    hasStatusOrCode(text, 409) ||
+    hasStatusOrCode(text, 421) ||
+    hasStatusOrCode(text, 423) ||
+    hasStatusOrCode(text, 425)
+  ) {
+    return { disposition: "retryable", kind: "soft-cancel", reason: "暂时中断" };
+  }
   if (
     hasStatusOrCode(text, 502) ||
+    // Cloudflare 524（Proxy Read Timeout / 源站超时）：上游 transient，
+    // 显式白名单，避免依赖 JSON body 里碰巧出现的 timeout/error 关键词。
+    hasStatusOrCode(text, 524) ||
+    // 纯 JSON body 的 5xx（{"code":503} / {"status":500}）：无 prose 关键词也判服务错误。
+    // 只认 JSON 字段形式，裸 \b5\d\d\b 会误伤 job-503.log 这类文件名，刻意不做。
+    /["'](?:code|status|error_code)["']\s*[:=]\s*["']?5\d\d\b/.test(text) ||
     /(?:\bhttp(?:\s*status)?(?:\s*code)?[:\s-]*)\b5\d\d\b/.test(text) ||
     (/\b5\d\d\b/.test(text) &&
       /(?:error|status|upstream|gateway|unavailable|bad gateway)/.test(text))
@@ -175,6 +216,14 @@ function classifyRetryable(text: string): SharedProviderRetryClassification | nu
     return { disposition: "retryable", kind: "soft-cancel", reason: "暂时中断" };
   }
   return null;
+}
+
+/** identical-failure 熔断签名：kind + normalized message 前缀。 */
+export function sharedProviderRetryFailureSignature(
+  kind: SharedProviderRetryKind,
+  message: string | null | undefined,
+): string {
+  return `${kind}:${normalizeMessage(message).slice(0, 120)}`;
 }
 
 export function classifySharedProviderRetryError(

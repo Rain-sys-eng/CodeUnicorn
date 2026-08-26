@@ -14,6 +14,8 @@ export interface QoderAuthStatus {
   state: QoderAuthState;
   maskedKey?: string;
   envVar: string;
+  /** 进程环境变量中同时存在该 distribution 的 PAT 变量时为 true；stored PAT 优先，env 被忽略。 */
+  envPresent: boolean;
 }
 
 export async function qoderAuthStatus(

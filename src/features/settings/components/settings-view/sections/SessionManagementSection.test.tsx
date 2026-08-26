@@ -14,7 +14,7 @@ import {
 } from "./SessionManagementSection";
 import type { AppSettings, WorkspaceInfo } from "../../../../../types";
 import {
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   deleteWorkspaceSessions,
   loadCodexSession,
   getWorkspaceSessionProjectionSummary,
@@ -33,8 +33,8 @@ vi.mock("../../../../../services/tauri", () => ({
   listGlobalCodexSessions: vi.fn(),
   listProjectRelatedSessions: vi.fn(),
   listWorkspaceSessions: vi.fn(),
-  archiveWorkspaceSessions: vi.fn(),
-  unarchiveWorkspaceSessions: vi.fn(),
+  archiveWorkspaceSessionsV2: vi.fn(),
+  unarchiveWorkspaceSessionsV2: vi.fn(),
   deleteWorkspaceSessions: vi.fn(),
   loadClaudeSession: vi.fn(),
   loadCodexSession: vi.fn(),
@@ -1559,7 +1559,7 @@ describe("SessionManagementSection", () => {
         nextCursor: null,
         partialSource: null,
       });
-    vi.mocked(archiveWorkspaceSessions).mockResolvedValue({
+    vi.mocked(archiveWorkspaceSessionsV2).mockResolvedValue({
       results: [
         { sessionId: "codex:ok", ok: true, archivedAt: 1710000000999 },
         {
@@ -1592,9 +1592,9 @@ describe("SessionManagementSection", () => {
     );
 
     await waitFor(() => {
-      expect(archiveWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
-        "codex:ok",
-        "codex:failed",
+      expect(archiveWorkspaceSessionsV2).toHaveBeenCalledWith("ws-1", [
+        { threadId: "codex:ok", engine: "codex" },
+        { threadId: "codex:failed", engine: "codex" },
       ]);
     });
 

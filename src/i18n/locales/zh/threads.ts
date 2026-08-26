@@ -9,10 +9,13 @@ const threads = {
     runtimeCompleted: "已完成",
     archive: "归档",
     delete: "删除",
+    openSessionManagement: "在会话管理中批量删除…",
     deleteThreadTitle: "删除会话",
     deleteThreadMessage: "确定要删除“{{name}}”吗？",
     deleteThreadHint: "删除后将无法恢复，该会话的本地记录也会一并移除。",
     pin: "固定",
+    pinToGlobal: "置顶到全局",
+    pinToProject: "置顶到项目内",
     unpin: "取消固定",
     sync: "同步",
     reload: "重新加载",
@@ -116,6 +119,8 @@ const threads = {
     sessionStoppedForFusion: "正在切换到融合回复，等待新的接续事件…",
     turnFailed: "会话失败。",
     turnFailedWithMessage: "会话失败：{{message}}",
+    turnOrphanedRetryable:
+      "引擎在本轮未回传任何响应事件（后端重启或引擎不可用）。本轮已中止，请重新发送。",
     claudeMcpRouteMapped:
       "MCP 路由提示：检测到 `playwright-mcp`，当前会话已自动映射为 `chrome-devtools`。",
     claudeMcpRouteUnavailable:

@@ -1,4 +1,7 @@
-import { isLinkableFilePath } from "../../utils/remarkFileLinks";
+import {
+  isLinkableFilePath,
+  recoverLocalFileLinkPath,
+} from "../../utils/remarkFileLinks";
 
 const MARKDOWN_IMAGE_FILE_EXTENSION_REGEX =
   /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#].*)?$/i;
@@ -13,7 +16,8 @@ function escapeHtmlAttribute(value: string) {
 
 function parseImageAttributes(raw: string) {
   const attributes: Record<string, string> = {};
-  const pattern = /([a-zA-Z_:][-\w.:]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
+  const pattern =
+    /([a-zA-Z_:][-\w.:]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
   let match: RegExpExecArray | null = null;
   while ((match = pattern.exec(raw)) !== null) {
     const key = match[1]?.toLowerCase();
@@ -42,10 +46,11 @@ function decodeUrlValueSafe(value: string) {
 
 function looksLikeResourceReference(value: string) {
   const compact = value.replace(/\s+/g, "");
-  return Boolean(compact) && (
-    /(https?:\/\/|file:\/\/|\/Users\/|data:image\/)/i.test(compact) ||
-    /^[A-Za-z]:[\\/]/.test(compact) ||
-    MARKDOWN_IMAGE_FILE_EXTENSION_REGEX.test(compact)
+  return (
+    Boolean(compact) &&
+    (/(https?:\/\/|file:\/\/|\/Users\/|data:image\/)/i.test(compact) ||
+      /^[A-Za-z]:[\\/]/.test(compact) ||
+      MARKDOWN_IMAGE_FILE_EXTENSION_REGEX.test(compact))
   );
 }
 
@@ -74,10 +79,14 @@ export function normalizeImageLocalPath(src: string) {
     return withoutHost.startsWith("/") ? withoutHost : `/${withoutHost}`;
   }
   if (
-    decoded.startsWith("/") || decoded.startsWith("./") ||
-    decoded.startsWith("../") || decoded.startsWith("~/") ||
-    /^[A-Za-z]:[\\/]/.test(decoded) || /^\\\\[^\\]/.test(decoded)
-  ) return decoded;
+    decoded.startsWith("/") ||
+    decoded.startsWith("./") ||
+    decoded.startsWith("../") ||
+    decoded.startsWith("~/") ||
+    /^[A-Za-z]:[\\/]/.test(decoded) ||
+    /^\\\\[^\\]/.test(decoded)
+  )
+    return decoded;
   return null;
 }
 
@@ -97,36 +106,44 @@ export function normalizeImageTags(value: string) {
   let changed = false;
   const localImages = normalizeMarkdownLocalImageSyntax(value);
   changed ||= localImages !== value;
-  const blockTags = localImages.replace(/<image>\s*([\s\S]*?)\s*<\/image>/gi, (match, body: string) => {
-    const next = toHtmlImageTag(body.trim());
-    if (!next) return match;
-    changed = true;
-    return next;
-  });
-  const selfClosing = blockTags.replace(/<image\b([^>]*)\/?>/gi, (match, rawAttrs: string) => {
-    const attrs = parseImageAttributes(rawAttrs ?? "");
-    const src = attrs.src?.trim();
-    if (!src) return match;
-    const next = toHtmlImageTag(src, attrs.alt, attrs.title);
-    if (!next) return match;
-    changed = true;
-    return next;
-  });
+  const blockTags = localImages.replace(
+    /<image>\s*([\s\S]*?)\s*<\/image>/gi,
+    (match, body: string) => {
+      const next = toHtmlImageTag(body.trim());
+      if (!next) return match;
+      changed = true;
+      return next;
+    },
+  );
+  const selfClosing = blockTags.replace(
+    /<image\b([^>]*)\/?>/gi,
+    (match, rawAttrs: string) => {
+      const attrs = parseImageAttributes(rawAttrs ?? "");
+      const src = attrs.src?.trim();
+      if (!src) return match;
+      const next = toHtmlImageTag(src, attrs.alt, attrs.title);
+      if (!next) return match;
+      changed = true;
+      return next;
+    },
+  );
   return changed ? selfClosing : value;
 }
 
 export function resolveLocalFileHref(url: string) {
   const trimmed = url.trim();
   if (!trimmed || trimmed.startsWith("#")) return null;
-  const decoded = decodeUrlValueSafe(trimmed);
+  const decoded = recoverLocalFileLinkPath(decodeUrlValueSafe(trimmed));
   const withoutScheme = decoded.startsWith("file://")
-    ? normalizeImageLocalPath(decoded) ?? decoded
+    ? (normalizeImageLocalPath(decoded) ?? decoded)
     : decoded;
   const normalized = repairFragmentedResourceToken(withoutScheme);
   const pathWithoutFragment = normalized.split("#", 1)[0] ?? normalized;
   if (
-    normalized.startsWith("/") || normalized.startsWith("./") ||
-    normalized.startsWith("../") || normalized.startsWith("~/") ||
+    normalized.startsWith("/") ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("~/") ||
     /^[A-Za-z]:[\\/]/.test(normalized)
   ) {
     if (normalized.startsWith("/")) {
@@ -139,12 +156,17 @@ export function resolveLocalFileHref(url: string) {
 }
 
 export function normalizeFragmentedResourceReferences(value: string) {
-  const withTargets = value.replace(/(!?\[[^\]]*]\()([\s\S]*?)(\))/g, (match, prefix: string, target: string, suffix: string) => {
-    const repaired = repairFragmentedResourceToken(target);
-    return repaired && repaired !== target && looksLikeResourceReference(repaired)
-      ? `${prefix}${repaired}${suffix}`
-      : match;
-  });
+  const withTargets = value.replace(
+    /(!?\[[^\]]*]\()([\s\S]*?)(\))/g,
+    (match, prefix: string, target: string, suffix: string) => {
+      const repaired = repairFragmentedResourceToken(target);
+      return repaired &&
+        repaired !== target &&
+        looksLikeResourceReference(repaired)
+        ? `${prefix}${repaired}${suffix}`
+        : match;
+    },
+  );
   let changed = false;
   const lines = withTargets.split(/\r?\n/).map((line) => {
     if (!looksLikeResourceReference(line)) return line;
@@ -160,12 +182,17 @@ export function normalizeMarkdownImageSrc(
   convertLocalFileSrc: (path: string) => string,
 ) {
   const cleaned = repairFragmentedResourceToken(
-    src.trim().replace(/^<(.+)>$/, "$1").replace(/^['"](.+)['"]$/, "$1").trim(),
+    src
+      .trim()
+      .replace(/^<(.+)>$/, "$1")
+      .replace(/^['"](.+)['"]$/, "$1")
+      .trim(),
   );
   if (!cleaned) return "";
   if (/^(?:data:|https?:\/\/|asset:\/\/)/.test(cleaned)) return cleaned;
   const localPath = normalizeImageLocalPath(cleaned);
-  if (!localPath && !MARKDOWN_IMAGE_FILE_EXTENSION_REGEX.test(cleaned)) return "";
+  if (!localPath && !MARKDOWN_IMAGE_FILE_EXTENSION_REGEX.test(cleaned))
+    return "";
   try {
     return convertLocalFileSrc(localPath ?? cleaned);
   } catch {

@@ -15,7 +15,10 @@ import {
   getStartupTraceSnapshot,
   subscribeStartupTrace,
 } from "../../startup-orchestration/utils/startupTrace";
-import { isStartupForceEntered } from "../../startup-orchestration/utils/startupForceEnter";
+import {
+  isStartupForceEntered,
+  subscribeStartupForceEnter,
+} from "../../startup-orchestration/utils/startupForceEnter";
 import {
   dispatchSharedSendEvent,
   getSharedSendActiveAttemptId,
@@ -720,16 +723,25 @@ export function useQueuedSend({
     const unsubTrace = subscribeStartupTrace(() => {
       void tryRelease();
     });
-    // 门未开时也轮询 force-enter / 晚到的 quiet
-    const pollTimer = window.setInterval(() => {
+    // force-enter 会 stampStartupGateReady → recordStartupMilestone → 通知
+    // trace 订阅者，上面的 unsubTrace 已能覆盖；这里再直订 force-enter 双保险。
+    // 原 250ms 兜底轮询已删：冷启脆弱窗内不再有亚秒级空转
+    // （windows-cold-start-click-freeze gate；quiet 迟到场景由 tryRelease
+    // 内部的 200ms quietTimer 自递归覆盖，有界）。
+    const unsubForceEnter = subscribeStartupForceEnter(() => {
       void tryRelease();
-    }, 250);
+    });
+    // 单发兜底（非周期轮询）：事件链异常缺失时 30s 后强制补一次。
+    const fallbackTimer = window.setTimeout(() => {
+      void tryRelease();
+    }, 30_000);
 
     return () => {
       cancelled = true;
       clearQuietTimer();
       unsubTrace();
-      window.clearInterval(pollTimer);
+      unsubForceEnter();
+      window.clearTimeout(fallbackTimer);
     };
   }, [isVitest, queueDrainReleased]);
 
@@ -839,9 +851,14 @@ export function useQueuedSend({
       sessionId: activeThreadId,
       activeRunId: activeTurnId,
     });
+    // capability 即准入：input.mid-turn=supported 的引擎（pi RPC steer、
+    // dsh）原生支持 same-run steer，不要求 experimental steer 总开关；
+    // compat-input 引擎（claude/codex cutover）仍走既有 steerEnabled 门。
+    const steerAllowed =
+      steerEnabled || decision.evidence.midTurnCapability === "supported";
     return {
       sameRun:
-        steerEnabled &&
+        steerAllowed &&
         decision.status !== "rejected" &&
         decision.route === "steer",
       cutover:
@@ -1838,8 +1855,10 @@ export function useQueuedSend({
           steeringDecision,
         ),
       );
+      // 同 activeFusionCapability：capability supported 即放行 same-run steer。
       const useSameRunContinuation =
-        steerEnabled &&
+        (steerEnabled ||
+          steeringDecision.evidence.midTurnCapability === "supported") &&
         steeringDecision.status !== "rejected" &&
         steeringDecision.route === "steer";
       const useSafeCutover =

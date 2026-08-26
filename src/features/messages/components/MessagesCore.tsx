@@ -24,6 +24,7 @@ import {
   MESSAGES_FORCE_PIN_BOTTOM_EVENT,
   MESSAGES_LIVE_AUTO_FOLLOW_FLAG_KEY,
   MESSAGES_LIVE_CONTROLS_UPDATED_EVENT,
+  MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY,
   readLocalBooleanFlag,
   writeLocalBooleanFlag,
 } from "../../../live-canvas/liveCanvasControls";
@@ -34,6 +35,7 @@ import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics"
 import { MessagesTimeline } from "./MessagesTimeline";
 import { MemoryPickGateHost } from "../../project-memory/components/MemoryPickGateHost";
 import { MessagesAnchorRail } from "./conversation/MessagesAnchorRail";
+import { resolveAnchorSchedulePlan } from "./conversation/messagesAnchorSchedule";
 import { ScrollControl, type ConversationScrollEdge } from "./conversation/ScrollControl";
 import {
   MessagesInlineApproval,
@@ -346,6 +348,11 @@ export const MessagesCore = memo(function MessagesCore({
   );
   const liveAutoFollowEnabledRef = useRef(liveAutoFollowEnabled);
   liveAutoFollowEnabledRef.current = liveAutoFollowEnabled;
+  const [minimalTranscriptEnabled, setMinimalTranscriptEnabled] = useState(() =>
+    readLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, false),
+  );
+  const minimalTranscriptEnabledRef = useRef(minimalTranscriptEnabled);
+  minimalTranscriptEnabledRef.current = minimalTranscriptEnabled;
   const legacyClaudeReasoningDockEnabled =
     activeEngine === "claude" &&
     typeof claudeThinkingVisible !== "boolean" &&
@@ -813,6 +820,7 @@ export const MessagesCore = memo(function MessagesCore({
     ) => {
       const customEvent = event as CustomEvent<{
         liveAutoFollowEnabled?: boolean;
+        minimalTranscriptEnabled?: boolean;
       }>;
       const detail = customEvent.detail;
       if (!detail) {
@@ -831,6 +839,13 @@ export const MessagesCore = memo(function MessagesCore({
         // 重新打开焦点跟随：仅 false→true 边沿 re-arm（流式/闲时均可一键归位）。
         if (!wasLiveAutoFollowEnabled && nextLiveAutoFollowEnabled) {
           resumeFollowAndPin();
+        }
+      }
+      if (typeof detail.minimalTranscriptEnabled === "boolean") {
+        const nextMinimalTranscriptEnabled = detail.minimalTranscriptEnabled;
+        if (minimalTranscriptEnabledRef.current !== nextMinimalTranscriptEnabled) {
+          minimalTranscriptEnabledRef.current = nextMinimalTranscriptEnabled;
+          setMinimalTranscriptEnabled(nextMinimalTranscriptEnabled);
         }
       }
     };
@@ -853,6 +868,16 @@ export const MessagesCore = memo(function MessagesCore({
         } else if (!wasLiveAutoFollowEnabled && nextLiveAutoFollowEnabled) {
           // 与 CustomEvent 一致：只在边沿 re-arm，避免跨 tab 重复 setItem 拽回底部。
           resumeFollowAndPin();
+        }
+      }
+      if (event.key === MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY) {
+        const nextMinimalTranscriptEnabled = readLocalBooleanFlag(
+          MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY,
+          false,
+        );
+        if (minimalTranscriptEnabledRef.current !== nextMinimalTranscriptEnabled) {
+          minimalTranscriptEnabledRef.current = nextMinimalTranscriptEnabled;
+          setMinimalTranscriptEnabled(nextMinimalTranscriptEnabled);
         }
       }
     };
@@ -1101,9 +1126,17 @@ export const MessagesCore = memo(function MessagesCore({
       resolveCollapsedTimelineItems({
         activeEngine,
         expandedPhaseKeys: expandedProcessPhaseKeys,
+        isThinking,
+        minimalTranscriptEnabled,
         timelineSourceItems,
       }),
-    [activeEngine, expandedProcessPhaseKeys, timelineSourceItems],
+    [
+      activeEngine,
+      expandedProcessPhaseKeys,
+      isThinking,
+      minimalTranscriptEnabled,
+      timelineSourceItems,
+    ],
   );
   const processPhaseChips = useMemo(
     () =>
@@ -1379,6 +1412,26 @@ export const MessagesCore = memo(function MessagesCore({
       if (!hasAnchorRail) {
         return;
       }
+      // W1（2026-08-25）：钉底时 active anchor 恒为 latest。已是 latest 的触发
+      // 直接跳过（并取消排队中的 rAF），否则流式追底每帧 scroll/sync 都会空转
+      // 一次 rAF + DOM 解析，overlay-loop-guard 只能拦 setState。
+      // 真正要改 active 时仍走 rAF：与既有测试/跟随时序对齐，避免在 effect 里同步 setState。
+      const container = containerRef.current;
+      const latestAnchorId = messageAnchors[messageAnchors.length - 1]?.id ?? null;
+      if (
+        container &&
+        resolveAnchorSchedulePlan({
+          isNearBottom: isCanvasNearBottom(container),
+          latestAnchorId,
+          activeAnchorId: activeAnchorIdRef.current,
+        }).action === "skip"
+      ) {
+        if (anchorUpdateRafRef.current !== null) {
+          window.cancelAnimationFrame(anchorUpdateRafRef.current);
+          anchorUpdateRafRef.current = null;
+        }
+        return;
+      }
       if (anchorUpdateRafRef.current !== null) {
         return;
       }
@@ -1386,12 +1439,22 @@ export const MessagesCore = memo(function MessagesCore({
         anchorUpdateRafRef.current = null;
         const anchorStartedAt =
           typeof performance === "undefined" ? 0 : performance.now();
-        const container = containerRef.current;
-        const latestAnchorId = messageAnchors[messageAnchors.length - 1]?.id ?? null;
+        const containerNow = containerRef.current;
+        const latestNow = messageAnchors[messageAnchors.length - 1]?.id ?? null;
+        const plan = resolveAnchorSchedulePlan({
+          isNearBottom: Boolean(
+            containerNow && isCanvasNearBottom(containerNow),
+          ),
+          latestAnchorId: latestNow,
+          activeAnchorId: activeAnchorIdRef.current,
+        });
+        if (plan.action === "skip") {
+          return;
+        }
         const nextActiveAnchor =
-          container && isCanvasNearBottom(container)
-            ? latestAnchorId
-            : computeActiveAnchor() ?? latestAnchorId;
+          plan.action === "commit"
+            ? plan.nextActiveAnchor
+            : computeActiveAnchor() ?? latestNow;
         const elapsedMs =
           typeof performance === "undefined"
             ? 0

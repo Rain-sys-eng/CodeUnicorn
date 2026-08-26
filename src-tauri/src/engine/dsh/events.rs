@@ -2,9 +2,7 @@
 
 use super::host::DshHostClient;
 use super::session::thread_id_for_session;
-use crate::engine::events::{
-    engine_event_to_app_server_event_with_turn_context, EngineEvent,
-};
+use crate::engine::events::{engine_event_to_app_server_event_with_turn_context, EngineEvent};
 use crate::engine::EngineType;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
@@ -267,12 +265,7 @@ pub async fn session_ids_for_workspace(workspace_id: &str) -> Vec<String> {
 }
 
 pub async fn pending_questions(rpc_id: &str) -> Option<Value> {
-    mux()
-        .lock()
-        .await
-        .pending_questions
-        .get(rpc_id)
-        .cloned()
+    mux().lock().await.pending_questions.get(rpc_id).cloned()
 }
 
 pub async fn forget_pending_questions(rpc_id: &str) {
@@ -433,7 +426,10 @@ async fn run_mux_loop(url: String, mut stop: tokio::sync::oneshot::Receiver<()>)
 
 fn peek_mux_session_id(raw: &Value) -> Option<String> {
     raw.get("sessionId")
-        .or_else(|| raw.get("payload").and_then(|payload| payload.get("sessionId")))
+        .or_else(|| {
+            raw.get("payload")
+                .and_then(|payload| payload.get("sessionId"))
+        })
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
@@ -549,11 +545,13 @@ fn dsh_user_message_text(data: &Value) -> String {
     data.get("text")
         .and_then(Value::as_str)
         .or_else(|| {
-            data.get("content").and_then(Value::as_array).and_then(|blocks| {
-                blocks
-                    .iter()
-                    .find_map(|block| block.get("text").and_then(Value::as_str))
-            })
+            data.get("content")
+                .and_then(Value::as_array)
+                .and_then(|blocks| {
+                    blocks
+                        .iter()
+                        .find_map(|block| block.get("text").and_then(Value::as_str))
+                })
         })
         .unwrap_or("")
         .to_string()
@@ -608,10 +606,7 @@ fn emit_dsh_engine_event(
     }
 }
 
-fn take_pending_delta_for_session(
-    hub: &mut MuxHub,
-    session_id: &str,
-) -> Option<DshEmitReady> {
+fn take_pending_delta_for_session(hub: &mut MuxHub, session_id: &str) -> Option<DshEmitReady> {
     let matches = hub
         .pending_deltas
         .pending
@@ -670,18 +665,12 @@ async fn dispatch_mux_text(text: &str) {
         if frame_type == "question/requested" {
             if let Some(rpc_id) = rpc_id.as_deref() {
                 if let Some(questions) = extract_question_array(&frame) {
-                    hub.pending_questions
-                        .insert(rpc_id.to_string(), questions);
+                    hub.pending_questions.insert(rpc_id.to_string(), questions);
                 }
             }
         }
-        let projected = project_mux_frame(
-            frame_type,
-            &frame,
-            &binding,
-            &session_id,
-            rpc_id.as_deref(),
-        );
+        let projected =
+            project_mux_frame(frame_type, &frame, &binding, &session_id, rpc_id.as_deref());
         if projected
             .iter()
             .any(|event| matches!(event, EngineEvent::TurnStarted { .. }))
@@ -691,8 +680,8 @@ async fn dispatch_mux_text(text: &str) {
         if let Some(kind) = projected.iter().find_map(turn_end_kind) {
             notify_turn_end(&session_id, kind, &mut hub);
         }
-        let (event_type, event_data) = session_event_parts(frame_type, &frame)
-            .unwrap_or(("", &Value::Null));
+        let (event_type, event_data) =
+            session_event_parts(frame_type, &frame).unwrap_or(("", &Value::Null));
         let goal_state = hub.goal_states.entry(session_id.clone()).or_default();
         let (events, should_unbind) = apply_dsh_goal_settlement(
             goal_state,
@@ -724,11 +713,7 @@ async fn dispatch_mux_text(text: &str) {
     }
 }
 
-fn item_id_for_event(
-    event: &EngineEvent,
-    binding: &DshSessionBinding,
-    session_id: &str,
-) -> String {
+fn item_id_for_event(event: &EngineEvent, binding: &DshSessionBinding, session_id: &str) -> String {
     match event {
         EngineEvent::ReasoningDelta { .. } => format!(
             "dsh-reasoning-{}",
@@ -825,8 +810,7 @@ pub fn project_mux_frame(
             let Some(rpc_id) = rpc_id.filter(|value| !value.is_empty()) else {
                 return Vec::new();
             };
-            let questions =
-                extract_question_array(frame).unwrap_or_else(|| Value::Array(vec![]));
+            let questions = extract_question_array(frame).unwrap_or_else(|| Value::Array(vec![]));
             vec![EngineEvent::RequestUserInput {
                 workspace_id: binding.workspace_id.clone(),
                 request_id: super::encode_question_request_id(rpc_id, session_id),
@@ -841,10 +825,7 @@ pub fn project_mux_frame(
     }
 }
 
-fn project_session_projection(
-    frame: &Value,
-    binding: &DshSessionBinding,
-) -> Vec<EngineEvent> {
+fn project_session_projection(frame: &Value, binding: &DshSessionBinding) -> Vec<EngineEvent> {
     let key = frame.get("key").and_then(Value::as_str).unwrap_or("");
     let value = frame.get("value").cloned().unwrap_or(Value::Null);
     match key {
@@ -969,7 +950,10 @@ pub fn project_session_event(
                 workspace_id,
                 tool_id,
                 tool_name,
-                input: data.get("arguments").cloned().or_else(|| data.get("args").cloned()),
+                input: data
+                    .get("arguments")
+                    .cloned()
+                    .or_else(|| data.get("args").cloned()),
             }]
         }
         "tool/result" => {
@@ -1008,30 +992,25 @@ pub fn project_session_event(
                         })
                 })
                 .or_else(|| {
-                    data.pointer("/message/content/0")
-                        .and_then(|block| {
-                            if block.get("isError").and_then(Value::as_bool) == Some(true) {
-                                extract_dsh_content_text(block)
-                            } else {
-                                None
-                            }
-                        })
+                    data.pointer("/message/content/0").and_then(|block| {
+                        if block.get("isError").and_then(Value::as_bool) == Some(true) {
+                            extract_dsh_content_text(block)
+                        } else {
+                            None
+                        }
+                    })
                 });
             vec![EngineEvent::ToolCompleted {
                 workspace_id,
                 tool_id,
-                tool_name: data
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
+                tool_name: data.get("name").and_then(Value::as_str).map(str::to_string),
                 output,
                 error,
             }]
         }
         "user/message" => project_dsh_goal_injection(&workspace_id, &binding.thread_id, &data),
-        "step/start" | "step/end" | "goal/change" | "llm/retry"
-        | "command/run" | "command/done" | "permission/preset" | "sandbox/mode"
-        | "approval/policy" => Vec::new(),
+        "step/start" | "step/end" | "goal/change" | "llm/retry" | "command/run"
+        | "command/done" | "permission/preset" | "sandbox/mode" | "approval/policy" => Vec::new(),
         _ => Vec::new(),
     }
 }
@@ -1135,7 +1114,8 @@ fn turn_end_failure(data: &Value, kind: &str) -> (String, Option<String>) {
 }
 
 fn int_field(value: &Value, keys: &[&str]) -> Option<i64> {
-    keys.iter().find_map(|key| value.get(*key).and_then(Value::as_i64))
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_i64))
 }
 
 /// Pull model-facing text out of DSH `tool/result` message content blocks.
@@ -1234,7 +1214,10 @@ mod tests {
             "data": { "reason": { "kind": "completed" } }
         });
         let events = project_session_event(&event, &binding(), "session-1");
-        assert!(matches!(events.first(), Some(EngineEvent::TurnCompleted { .. })));
+        assert!(matches!(
+            events.first(),
+            Some(EngineEvent::TurnCompleted { .. })
+        ));
     }
 
     #[test]
@@ -1382,10 +1365,7 @@ mod tests {
                     Some("example_type")
                 );
                 match super::super::parse_control_request(request_id) {
-                    Some(super::super::DshControlKind::Question {
-                        rpc_id,
-                        session_id,
-                    }) => {
+                    Some(super::super::DshControlKind::Question { rpc_id, session_id }) => {
                         assert_eq!(rpc_id, "rpc-question-1");
                         assert_eq!(session_id, "session-1");
                     }
@@ -1465,10 +1445,7 @@ mod tests {
             }) => {
                 assert_eq!(tool_id, "call-read-1");
                 assert!(error.is_none());
-                assert_eq!(
-                    output.as_ref().and_then(Value::as_str),
-                    Some("1\tline")
-                );
+                assert_eq!(output.as_ref().and_then(Value::as_str), Some("1\tline"));
             }
             other => panic!("expected ToolCompleted, got {other:?}"),
         }
@@ -1498,7 +1475,10 @@ mod tests {
                 assert_eq!(tool_id, "call-read-2");
                 assert_eq!(tool_name.as_deref(), Some("read"));
                 assert_eq!(
-                    input.as_ref().and_then(|value| value.get("file_path")).and_then(Value::as_str),
+                    input
+                        .as_ref()
+                        .and_then(|value| value.get("file_path"))
+                        .and_then(Value::as_str),
                     Some("a.ts")
                 );
             }
@@ -1561,7 +1541,10 @@ mod tests {
             "ws-1",
         );
         assert!(!unbind);
-        assert!(matches!(events.first(), Some(EngineEvent::TurnCompleted { .. })));
+        assert!(matches!(
+            events.first(),
+            Some(EngineEvent::TurnCompleted { .. })
+        ));
         assert!(!state.awaiting_session_idle);
     }
 
@@ -1601,7 +1584,10 @@ mod tests {
             "ws-1",
         );
         assert!(!unbind);
-        assert!(matches!(events.first(), Some(EngineEvent::TurnCompleted { .. })));
+        assert!(matches!(
+            events.first(),
+            Some(EngineEvent::TurnCompleted { .. })
+        ));
         assert_eq!(state.phase, Some(DshGoalPhase::Complete));
         assert!(!state.awaiting_session_idle);
     }
@@ -1620,7 +1606,10 @@ mod tests {
             "ws-1",
         );
         assert!(!unbind);
-        assert!(matches!(events.first(), Some(EngineEvent::TurnCompleted { .. })));
+        assert!(matches!(
+            events.first(),
+            Some(EngineEvent::TurnCompleted { .. })
+        ));
         assert_eq!(state.phase, Some(DshGoalPhase::Blocked));
     }
 
@@ -1659,8 +1648,14 @@ mod tests {
         match events.first() {
             Some(EngineEvent::Raw { engine, data, .. }) => {
                 assert_eq!(*engine, EngineType::Dsh);
-                assert_eq!(data.get("kind").and_then(Value::as_str), Some("dsh-goal-injection"));
-                assert_eq!(data.get("threadId").and_then(Value::as_str), Some("dsh:session-1"));
+                assert_eq!(
+                    data.get("kind").and_then(Value::as_str),
+                    Some("dsh-goal-injection")
+                );
+                assert_eq!(
+                    data.get("threadId").and_then(Value::as_str),
+                    Some("dsh:session-1")
+                );
                 assert_eq!(
                     data.get("text").and_then(Value::as_str),
                     Some("<goal_round>\ncontinue\n</goal_round>")
@@ -1895,7 +1890,10 @@ mod tests {
             now,
         );
         assert!(ready.is_empty(), "same-window text deltas stay buffered");
-        assert_eq!(buffer.pending.as_ref().map(|pending| pending.text.as_str()), Some("Hello"));
+        assert_eq!(
+            buffer.pending.as_ref().map(|pending| pending.text.as_str()),
+            Some("Hello")
+        );
 
         let ready = take_expired_dsh_delta(&mut buffer, now + DSH_DELTA_COALESCE_WINDOW);
         match ready.as_ref() {
@@ -1927,7 +1925,10 @@ mod tests {
             Some("think hard")
         );
         assert_eq!(
-            buffer.pending.as_ref().map(|pending| pending.item_id.as_str()),
+            buffer
+                .pending
+                .as_ref()
+                .map(|pending| pending.item_id.as_str()),
             Some("dsh-reasoning-turn-1")
         );
     }
@@ -1948,7 +1949,9 @@ mod tests {
             &ready[0],
             (EngineEvent::TextDelta { text, .. }, _, _, _) if text == "Hi"
         ));
-        assert!(matches!(&ready[1], (EngineEvent::ToolStarted { tool_id, .. }, _, item_id, _) if tool_id == "call-1" && item_id == "call-1"));
+        assert!(
+            matches!(&ready[1], (EngineEvent::ToolStarted { tool_id, .. }, _, item_id, _) if tool_id == "call-1" && item_id == "call-1")
+        );
         assert!(buffer.pending.is_none());
     }
 

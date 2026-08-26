@@ -1,13 +1,13 @@
 # OpenSpec Main Specs 索引
 
-`openspec/specs/*/spec.md` 是已经同步进入 mainline 的 capability behavior truth。当前索引覆盖 **493** 个 capability，并按 capability id 首字母分组。
+`openspec/specs/*/spec.md` 是已经同步进入 mainline 的 capability behavior truth。当前索引覆盖 **539** 个 capability，并按 capability id 首字母分组。
 
 ## 使用边界
 
 - 查当前已生效的行为契约：从本索引进入对应 `spec.md`。
 - 查尚未归档、可能仍含未同步 delta 的提案：查看 [Active Changes](../changes/README.md)。
 - 查历史决策与归档证据：查看 [Archived Changes](../changes/archive/README.md)。
-- Updated At: `2026-08-03`（第三波 bulk archive 后重建）。
+- Updated At: `2026-08-24`（bulk archive 后重建，含此前漏登记 4 项）
 
 ## A
 
@@ -26,12 +26,14 @@
 - [architecture-ci-governance](./architecture-ci-governance/spec.md)
 - [architecture-cross-platform-compatibility](./architecture-cross-platform-compatibility/spec.md)
 - [assemble-shared-canonical-facts](./assemble-shared-canonical-facts/spec.md)
+- [assistant-duplicate-render-convergence](./assistant-duplicate-render-convergence/spec.md)
 - [auto-session-visibility-classification](./auto-session-visibility-classification/spec.md)
 
 ## B
 
 - [backend-file-io-isolation](./backend-file-io-isolation/spec.md)
 - [backend-scan-cache](./backend-scan-cache/spec.md)
+- [background-task-notification-fold](./background-task-notification-fold/spec.md)
 - [bridge-cleanup-hardening](./bridge-cleanup-hardening/spec.md)
 - [browser-agent-page-understanding](./browser-agent-page-understanding/spec.md)
 - [bundle-chunking-performance](./bundle-chunking-performance/spec.md)
@@ -65,6 +67,7 @@
 - [claude-runtime-termination-hardening](./claude-runtime-termination-hardening/spec.md)
 - [claude-session-sidebar-state-parity](./claude-session-sidebar-state-parity/spec.md)
 - [claude-streaming-lightweight-render](./claude-streaming-lightweight-render/spec.md)
+- [claude-subagent-canvas-surface](./claude-subagent-canvas-surface/spec.md)
 - [claude-thread-session-continuity](./claude-thread-session-continuity/spec.md)
 - [claude-tui-resume-affordance](./claude-tui-resume-affordance/spec.md)
 - [claude-turn-settlement-stream-lifecycle](./claude-turn-settlement-stream-lifecycle/spec.md)
@@ -128,6 +131,7 @@
 - [codex-stalled-recovery-contract](./codex-stalled-recovery-contract/spec.md)
 - [codex-tui-compatible-user-agent](./codex-tui-compatible-user-agent/spec.md)
 - [codex-unified-exec-override-governance](./codex-unified-exec-override-governance/spec.md)
+- [collab-first-stage-main-canvas-context](./collab-first-stage-main-canvas-context/spec.md)
 - [composer-active-file-reference](./composer-active-file-reference/spec.md)
 - [composer-autocomplete](./composer-autocomplete/spec.md)
 - [composer-command-completion](./composer-command-completion/spec.md)
@@ -148,12 +152,14 @@
 - [composer-model-selector-config-actions](./composer-model-selector-config-actions/spec.md)
 - [composer-note-card-reference](./composer-note-card-reference/spec.md)
 - [composer-persistent-input-with-filetree](./composer-persistent-input-with-filetree/spec.md)
+- [composer-prompt-completion](./composer-prompt-completion/spec.md)
 - [composer-prompt-enhancer](./composer-prompt-enhancer/spec.md)
 - [composer-queue-input-state](./composer-queue-input-state/spec.md)
 - [composer-queued-followup-fusion](./composer-queued-followup-fusion/spec.md)
 - [composer-rewind-modal-style-compatibility](./composer-rewind-modal-style-compatibility/spec.md)
 - [composer-selector-home-chat-simplification](./composer-selector-home-chat-simplification/spec.md)
 - [composer-send-readiness-ux](./composer-send-readiness-ux/spec.md)
+- [composer-session-control-hud](./composer-session-control-hud/spec.md)
 - [composer-shortcut-actions-menu](./composer-shortcut-actions-menu/spec.md)
 - [composer-skill-invocation-contract](./composer-skill-invocation-contract/spec.md)
 - [composer-tool-menu-primary-controls](./composer-tool-menu-primary-controls/spec.md)
@@ -200,6 +206,7 @@
 - [conversation-template-maintenance](./conversation-template-maintenance/spec.md)
 - [conversation-tool-card-persistence](./conversation-tool-card-persistence/spec.md)
 - [conversation-user-path-reference-cards](./conversation-user-path-reference-cards/spec.md)
+- [conversation-working-indicator-live-tokens](./conversation-working-indicator-live-tokens/spec.md)
 - [core-complexity-governance](./core-complexity-governance/spec.md)
 - [cross-workspace-cost-admin-view](./cross-workspace-cost-admin-view/spec.md)
 - [curated-agent-catalog](./curated-agent-catalog/spec.md)
@@ -214,7 +221,15 @@
 - [detached-file-explorer](./detached-file-explorer/spec.md)
 - [detached-spec-hub-window](./detached-spec-hub-window/spec.md)
 - [diagnostics-storage-agent-config](./diagnostics-storage-agent-config/spec.md)
+- [documentation-governance](./documentation-governance/spec.md)
+- [dsh-agent-preset-picker](./dsh-agent-preset-picker/spec.md)
+- [dsh-auto-mode-permission](./dsh-auto-mode-permission/spec.md)
+- [dsh-cli-lifecycle](./dsh-cli-lifecycle/spec.md)
+- [dsh-engine-runtime](./dsh-engine-runtime/spec.md)
 - [dsh-followup-model-ledger](./dsh-followup-model-ledger/spec.md)
+- [dsh-goal-continuation](./dsh-goal-continuation/spec.md)
+- [dsh-session-history](./dsh-session-history/spec.md)
+- [dsh-session-stats](./dsh-session-stats/spec.md)
 - [dual-surface-file-explorer](./dual-surface-file-explorer/spec.md)
 - [dynamic-project-governance-evidence](./dynamic-project-governance-evidence/spec.md)
 
@@ -262,6 +277,7 @@
 - [file-view-markdown-github-preview](./file-view-markdown-github-preview/spec.md)
 - [file-view-rendering-runtime-stability](./file-view-rendering-runtime-stability/spec.md)
 - [filetree-multitab-open](./filetree-multitab-open/spec.md)
+- [first-run-setup](./first-run-setup/spec.md)
 - [frame-drop-attribution-diagnostics](./frame-drop-attribution-diagnostics/spec.md)
 - [frontend-error-feedback](./frontend-error-feedback/spec.md)
 - [frontend-prop-chain-stability](./frontend-prop-chain-stability/spec.md)
@@ -323,6 +339,7 @@
 - [language-select-webview-zoom-compatibility](./language-select-webview-zoom-compatibility/spec.md)
 - [large-file-modularization-governance](./large-file-modularization-governance/spec.md)
 - [large-file-split-wave3](./large-file-split-wave3/spec.md)
+- [large-transcript-first-paint](./large-transcript-first-paint/spec.md)
 - [linux-appimage-startup-compatibility](./linux-appimage-startup-compatibility/spec.md)
 - [linux-native-baidu-analytics-stability](./linux-native-baidu-analytics-stability/spec.md)
 - [live-assistant-shadow-transcript](./live-assistant-shadow-transcript/spec.md)
@@ -363,6 +380,7 @@
 - [messages-timeline-ownership](./messages-timeline-ownership/spec.md)
 - [model-provider-catalog-runtime](./model-provider-catalog-runtime/spec.md)
 - [model-structured-output-normalization](./model-structured-output-normalization/spec.md)
+- [multi-agent-inspector-inject-context](./multi-agent-inspector-inject-context/spec.md)
 - [multi-agent-orchestration](./multi-agent-orchestration/spec.md)
 - [multi-repository-file-tree-decorations](./multi-repository-file-tree-decorations/spec.md)
 - [multi-repository-git-command-center](./multi-repository-git-command-center/spec.md)
@@ -370,12 +388,14 @@
 
 ## N
 
+- [native-followup-engine-collision](./native-followup-engine-collision/spec.md)
 - [native-history-reader](./native-history-reader/spec.md)
 - [native-provider-continuation](./native-provider-continuation/spec.md)
 - [nix-flake-build-reproducibility](./nix-flake-build-reproducibility/spec.md)
 
 ## O
 
+- [open-with-targets-ux](./open-with-targets-ux/spec.md)
 - [opencode-chat-layout](./opencode-chat-layout/spec.md)
 - [opencode-cli-lifecycle](./opencode-cli-lifecycle/spec.md)
 - [opencode-engine](./opencode-engine/spec.md)
@@ -395,6 +415,8 @@
 - [parallel-conversation-runtime-residuals](./parallel-conversation-runtime-residuals/spec.md)
 - [performance-compatibility-diagnostics](./performance-compatibility-diagnostics/spec.md)
 - [persistent-state-governance](./persistent-state-governance/spec.md)
+- [pi-rpc-session-runtime](./pi-rpc-session-runtime/spec.md)
+- [pi-session-fork-tree](./pi-session-fork-tree/spec.md)
 - [policy-decision-audit-surface](./policy-decision-audit-surface/spec.md)
 - [pr-ai-content-generation](./pr-ai-content-generation/spec.md)
 - [project-canvas-code-graph-import](./project-canvas-code-graph-import/spec.md)
@@ -404,6 +426,7 @@
 - [project-map-incremental-generation](./project-map-incremental-generation/spec.md)
 - [project-map-relations-scan-loading](./project-map-relations-scan-loading/spec.md)
 - [project-map-relationship-graph-view](./project-map-relationship-graph-view/spec.md)
+- [project-map-relationship-io](./project-map-relationship-io/spec.md)
 - [project-map-relationship-read-path-view](./project-map-relationship-read-path-view/spec.md)
 - [project-map-relationship-storage](./project-map-relationship-storage/spec.md)
 - [project-memory-auto-capture](./project-memory-auto-capture/spec.md)
@@ -417,10 +440,13 @@
 - [project-memory-ui](./project-memory-ui/spec.md)
 - [project-runtime-log-viewer](./project-runtime-log-viewer/spec.md)
 - [project-xray-panel](./project-xray-panel/spec.md)
+- [provider-balance-quota](./provider-balance-quota/spec.md)
 - [provider-model-catalog-refresh](./provider-model-catalog-refresh/spec.md)
 
 ## Q
 
+- [qoder-dual-distribution](./qoder-dual-distribution/spec.md)
+- [queue-background-auto-drain](./queue-background-auto-drain/spec.md)
 - [quick-context-switcher](./quick-context-switcher/spec.md)
 
 ## R
@@ -451,6 +477,7 @@
 - [semantic-code-navigation-provider](./semantic-code-navigation-provider/spec.md)
 - [session-activity-external-file-open](./session-activity-external-file-open/spec.md)
 - [session-activity-file-open-affordances](./session-activity-file-open-affordances/spec.md)
+- [session-directory-grant](./session-directory-grant/spec.md)
 - [session-foundation-contracts](./session-foundation-contracts/spec.md)
 - [session-history-display-fidelity](./session-history-display-fidelity/spec.md)
 - [session-history-project-attribution](./session-history-project-attribution/spec.md)
@@ -466,22 +493,31 @@
 - [shared-context-compiler](./shared-context-compiler/spec.md)
 - [shared-context-delivery](./shared-context-delivery/spec.md)
 - [shared-context-package](./shared-context-package/spec.md)
+- [shared-context-resume-integrity](./shared-context-resume-integrity/spec.md)
 - [shared-event-storage](./shared-event-storage/spec.md)
 - [shared-execution-target](./shared-execution-target/spec.md)
+- [shared-hide-list-prefilter](./shared-hide-list-prefilter/spec.md)
 - [shared-markdown-renderer](./shared-markdown-renderer/spec.md)
 - [shared-message-domain-helpers](./shared-message-domain-helpers/spec.md)
+- [shared-provider-retry](./shared-provider-retry/spec.md)
+- [shared-recovery-bar-ux](./shared-recovery-bar-ux/spec.md)
 - [shared-send-pipeline](./shared-send-pipeline/spec.md)
 - [shared-session-curtain-parity](./shared-session-curtain-parity/spec.md)
 - [shared-session-engine-selection](./shared-session-engine-selection/spec.md)
 - [shared-session-identity](./shared-session-identity/spec.md)
 - [shared-session-merge-guard](./shared-session-merge-guard/spec.md)
+- [shared-session-project-memory](./shared-session-project-memory/spec.md)
+- [shared-session-recovery-exit](./shared-session-recovery-exit/spec.md)
 - [shared-session-target-optimistic](./shared-session-target-optimistic/spec.md)
 - [shared-session-thread](./shared-session-thread/spec.md)
 - [shared-spawn-sidebar-ownership](./shared-spawn-sidebar-ownership/spec.md)
+- [shared-squad-control-plane](./shared-squad-control-plane/spec.md)
 - [shared-state-lock-governance](./shared-state-lock-governance/spec.md)
+- [shared-user-image-canvas-projection](./shared-user-image-canvas-projection/spec.md)
 - [shell-first-lazy-runtime-isolation](./shell-first-lazy-runtime-isolation/spec.md)
 - [shell-orchestration-hardening](./shell-orchestration-hardening/spec.md)
 - [sidebar-list-timeout-fallback](./sidebar-list-timeout-fallback/spec.md)
+- [sidebar-pinned-calendar-fold](./sidebar-pinned-calendar-fold/spec.md)
 - [sidebar-scroll-area-react19-stability](./sidebar-scroll-area-react19-stability/spec.md)
 - [sidebar-thread-row-provider-startup-stability](./sidebar-thread-row-provider-startup-stability/spec.md)
 - [sidebar-workspace-menu-group-collapse](./sidebar-workspace-menu-group-collapse/spec.md)
@@ -539,13 +575,16 @@
 
 ## V
 
+- [vendor-custom-model-provider-binding](./vendor-custom-model-provider-binding/spec.md)
 - [vendor-gemini-settings](./vendor-gemini-settings/spec.md)
 - [vibecoding-browser-agent](./vibecoding-browser-agent/spec.md)
 
 ## W
 
+- [windows-main-window-close-confirm](./windows-main-window-close-confirm/spec.md)
 - [windows-offline-installer](./windows-offline-installer/spec.md)
 - [windows-runtime-churn-diagnostics](./windows-runtime-churn-diagnostics/spec.md)
+- [windows-sidebar-chrome-parity](./windows-sidebar-chrome-parity/spec.md)
 - [windows-titlebar-control-safe-zone](./windows-titlebar-control-safe-zone/spec.md)
 - [workspace-file-compare-tool](./workspace-file-compare-tool/spec.md)
 - [workspace-file-listing-budget](./workspace-file-listing-budget/spec.md)
@@ -568,7 +607,9 @@
 - [workspace-session-radar-overview](./workspace-session-radar-overview/spec.md)
 - [workspace-session-source-fact-cache](./workspace-session-source-fact-cache/spec.md)
 - [workspace-sidebar-session-loading](./workspace-sidebar-session-loading/spec.md)
+- [workspace-sidebar-settings](./workspace-sidebar-settings/spec.md)
 - [workspace-sidebar-visual-harmony](./workspace-sidebar-visual-harmony/spec.md)
 - [workspace-topbar-session-tabs](./workspace-topbar-session-tabs/spec.md)
+- [workspace-wallpaper](./workspace-wallpaper/spec.md)
 - [workspaces-corruption-recovery](./workspaces-corruption-recovery/spec.md)
 

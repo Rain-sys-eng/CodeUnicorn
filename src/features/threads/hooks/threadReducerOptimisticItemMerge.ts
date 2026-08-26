@@ -14,6 +14,7 @@ import {
   isUnmatchedExploreOrInProgressCommand,
 } from "./insertUnmatchedIncomingByNeighbor";
 import {
+  applyOptimisticVisibleTextToReplacements,
   buildOptimisticUserReplacementMap,
   insertGeneratedImagesAfterAnchors,
   retargetGeneratedImageAnchor,
@@ -209,6 +210,11 @@ export function mergeThreadItemsPreservingOptimisticUsers(
     localItems,
     incomingWithImageEnrichment,
   );
+  const incomingAlignedToOptimistic = applyOptimisticVisibleTextToReplacements(
+    incomingWithImageEnrichment,
+    localItems,
+    optimisticUserReplacementById,
+  );
   const localUserMessageMetadataBuckets = new Map<
     string,
     Array<Pick<UserMessageItem, "selectedAgentName" | "selectedAgentIcon">>
@@ -226,7 +232,7 @@ export function mergeThreadItemsPreservingOptimisticUsers(
     localUserMessageMetadataBuckets.set(key, bucket);
   }
 
-  let mergedItems = incomingWithImageEnrichment.map((item) => {
+  let mergedItems = incomingAlignedToOptimistic.map((item) => {
     if (!isUserMessageItem(item)) {
       return item;
     }
@@ -294,7 +300,9 @@ export function mergeThreadItemsPreservingOptimisticUsers(
       )
       .map((entry) => entry.item);
     const preservedOptimisticUsers = optimisticCandidates.filter(
-      (item) => !findMatchingRealUserMessage(mergedItems, item),
+      (item) =>
+        !optimisticUserReplacementById.has(item.id) &&
+        !findMatchingRealUserMessage(mergedItems, item),
     );
     const preservedLocalOnlyItemIds = new Set(
       preservedOptimisticUsers.map((item) => item.id),

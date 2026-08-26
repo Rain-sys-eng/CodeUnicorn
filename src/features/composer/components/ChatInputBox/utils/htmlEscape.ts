@@ -1,13 +1,2 @@
-/**
- * Escape HTML attribute values
- * Ensures special characters (quotes, <, >, &, etc.) are properly escaped.
- * Note: Backslashes don't need escaping as they are valid in HTML attributes.
- */
-export function escapeHtmlAttr(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+// 单一事实源在 src/utils/html.ts；此处 re-export 保持既有导入路径不变。
+export { escapeHtmlAttr } from "@/utils/html";

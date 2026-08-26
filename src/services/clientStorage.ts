@@ -273,15 +273,19 @@ function flushStoreWrite(store: ClientStoreName): void {
     const syncStartedAt =
       typeof performance !== "undefined" ? performance.now() : Date.now();
     let pendingInvoke: Promise<unknown>;
+    // 载荷必须以单一 pre-stringified JSON string 过桥：WKWebView 桥按对象数同步
+    // 转换嵌套对象图（实测 274KB patch 同步段 3338ms），字符串成本 O(len)。
     if (shouldFullReplace && fullDataSnapshot) {
       pendingInvoke = invoke("client_store_write", {
         store,
-        data: serializeClientStoreSnapshot(fullDataSnapshot),
+        payloadJson: JSON.stringify(
+          serializeClientStoreSnapshot(fullDataSnapshot),
+        ),
       });
     } else {
       pendingInvoke = invoke("client_store_patch", {
         store,
-        patch: serializeClientStoreSnapshot(valueSnapshot),
+        payloadJson: JSON.stringify(serializeClientStoreSnapshot(valueSnapshot)),
       });
     }
     recordHotspotSample(

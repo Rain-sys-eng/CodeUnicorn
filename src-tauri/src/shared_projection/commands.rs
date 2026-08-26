@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use tauri::State;
 
 use crate::engine::EngineType;
-use crate::shared_sessions::{
-    ensure_supported_shared_session_engine, shared_session_projection_source,
-};
+use crate::shared_sessions::{ensure_supported_shared_session_engine, shared_session_projection_source};
 use crate::state::AppState;
 
 use super::{

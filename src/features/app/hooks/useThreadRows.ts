@@ -7,8 +7,11 @@ import {
   buildSharedSidebarHiddenParentKeys,
   isSharedSidebarHiddenPup,
 } from "../../shared-session/runtime/sharedSessionSummaries";
+import { isPiDerivedThreadHidden } from "../../pi-session/store/piSessionStore";
+import { debugPiSidebarDrop } from "../../pi-session/store/piSidebarDropDiagnostics";
 import { lastVerifiedSharedHide } from "../../threads/hooks/sharedNativeVisibility";
 import { compareThreadSummariesByCreatedAtDesc } from "../../threads/utils/threadSummarySort";
+import type { ThreadPinScope } from "../../threads/utils/threadStorage";
 
 type ThreadRow = {
   thread: ThreadSummary;
@@ -18,6 +21,7 @@ type ThreadRow = {
 
 type ThreadRowResult = {
   pinnedRows: ThreadRow[];
+  workspacePinnedRows: ThreadRow[];
   unpinnedRows: ThreadRow[];
   totalRoots: number;
   hasMoreRoots: boolean;
@@ -72,7 +76,11 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       threads: ThreadSummary[],
       isExpanded: boolean,
       workspaceId: string,
-      getPinTimestamp: (workspaceId: string, threadId: string) => number | null,
+      getPinTimestamp: (
+        workspaceId: string,
+        threadId: string,
+        scope?: ThreadPinScope,
+      ) => number | null,
       visibleThreadRootCount = DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
     ): ThreadRowResult => {
       const byIdentity = new Map<string, string>();
@@ -90,6 +98,25 @@ export function useThreadRows(threadParentById: Record<string, string>) {
         const parentId = thread.parentThreadId ?? threadParentById[thread.id];
         // Shared 下崽：侧栏精准隐藏（不扩散到 setThreads / 幕布数据源）
         if (isSharedSidebarHiddenPup(thread, parentId, sharedHiddenParentKeys)) {
+          return;
+        }
+        // pi fork 派生会话：不占侧栏（顶层或嵌套都不渲染）——分支线路由
+        // 右侧面板「会话树」统一控制；thread 本体仍在 store，树内跳转经
+        // onSelectThread 直达（与 Shared pup 同款的侧栏级隐藏，不污染数据）。
+        // isPiDerivedThreadHidden 补助：live 窗口内（fork 跳转 / thread/started
+        // 新建的分支行）parentThreadId 尚未就位时，靠 fork/树投影登记的派生
+        // 集合即时隐藏，不等 list 刷新（否则泄漏到重启才消失）。
+        if (
+          (thread.engineSource === "pi" || thread.id.startsWith("pi:")) &&
+          (parentId || isPiDerivedThreadHidden(thread.id))
+        ) {
+          // 诊断：渲染层隐藏的每条 pi 行必须能说出原因（parent 通道还是
+          // 内存派生集合）——多轮「main 丢失」取证的可观测性沉淀。
+          debugPiSidebarDrop(
+            "render-filter",
+            thread.id,
+            parentId ? `parent:${parentId}` : "derived-set",
+          );
           return;
         }
         const visibleParentId = resolveVisibleParentThreadId(
@@ -116,12 +143,22 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       roots.sort(compareThreadSummariesByCreatedAtDesc);
 
       const pinnedRoots: ThreadSummary[] = [];
+      const workspacePinnedRoots: ThreadSummary[] = [];
       const unpinnedRoots: ThreadSummary[] = [];
 
       roots.forEach((thread) => {
         const pinTime = getPinTimestamp(workspaceId, thread.id);
         if (pinTime !== null) {
           pinnedRoots.push(thread);
+          return;
+        }
+        const workspacePinTime = getPinTimestamp(
+          workspaceId,
+          thread.id,
+          "workspace",
+        );
+        if (workspacePinTime !== null) {
+          workspacePinnedRoots.push(thread);
         } else {
           unpinnedRoots.push(thread);
         }
@@ -130,6 +167,15 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       pinnedRoots.sort((a, b) => {
         const aTime = getPinTimestamp(workspaceId, a.id) ?? 0;
         const bTime = getPinTimestamp(workspaceId, b.id) ?? 0;
+        if (aTime !== bTime) {
+          return aTime - bTime;
+        }
+        return compareThreadSummariesByCreatedAtDesc(a, b);
+      });
+
+      workspacePinnedRoots.sort((a, b) => {
+        const aTime = getPinTimestamp(workspaceId, a.id, "workspace") ?? 0;
+        const bTime = getPinTimestamp(workspaceId, b.id, "workspace") ?? 0;
         if (aTime !== bTime) {
           return aTime - bTime;
         }
@@ -154,11 +200,17 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       const pinnedRows: ThreadRow[] = [];
       pinnedRoots.forEach((thread) => appendThread(thread, 0, pinnedRows));
 
+      const workspacePinnedRows: ThreadRow[] = [];
+      workspacePinnedRoots.forEach((thread) =>
+        appendThread(thread, 0, workspacePinnedRows),
+      );
+
       const unpinnedRows: ThreadRow[] = [];
       visibleRoots.forEach((thread) => appendThread(thread, 0, unpinnedRows));
 
       return {
         pinnedRows,
+        workspacePinnedRows,
         unpinnedRows,
         totalRoots: unpinnedRoots.length,
         hasMoreRoots: unpinnedRoots.length > visibleRootCount,

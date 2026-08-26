@@ -1153,6 +1153,39 @@ printf '%s\n' '{"type":"result","status":"success","text":"terminal ok"}'
 
 #[cfg(unix)]
 #[tokio::test]
+async fn success_result_settles_even_when_process_exits_non_zero() {
+    let (directory, script_path) = write_unix_test_script(
+        "moss-x-gemini-exit-nonzero-after-result",
+        r#"
+printf '%s\n' '{"type":"result","status":"success","text":"terminal ok despite exit code"}'
+exit 1
+"#,
+    );
+    let session = GeminiSession::new_process_test(
+        "workspace-exit-nonzero-after-result".to_string(),
+        directory.clone(),
+        Some(EngineConfig {
+            bin_path: Some(script_path.to_string_lossy().to_string()),
+            ..Default::default()
+        }),
+    );
+    let params = SendMessageParams {
+        text: "hello".to_string(),
+        ..Default::default()
+    };
+
+    let response = session
+        .send_message(params, "turn-exit-nonzero-after-result")
+        .await
+        .expect("in-stream TurnCompleted must outrank non-zero exit code");
+
+    assert_eq!(response, "terminal ok despite exit code");
+    assert!(session.active_process_ids().await.is_empty());
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn large_stdin_and_early_stdout_do_not_pipe_deadlock() {
     let (directory, script_path) = write_unix_test_script(
         "moss-x-gemini-concurrent-pipes",

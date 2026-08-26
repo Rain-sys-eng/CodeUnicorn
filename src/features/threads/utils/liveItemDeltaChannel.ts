@@ -13,9 +13,12 @@
 //   reducer 对 reasoning item id 的 -seg-N 改写由消费侧匹配器容忍。
 // - 首条 delta 全量记录（text 从首段起累计），渲染侧直接用条目全文，无需与壳
 //   文本拼接；drain 只返回「尚未落 reducer 的尾段」（全长减建壳首段）。
+// - 终端命令（toolOutput + commandExecution）写入前套 boundToolOutput；
+//   published 快照只发最后 200 行。fileChange / 思考 lane 不走这顶帽。
 // 方案文档：docs/perf/a4-live-text-externalization-plan.md（§2.3 预留的二期）
 
 import { doesLiveAssistantTextMatchItem } from "./liveAssistantTextChannel";
+import { boundToolOutput, COMMAND_EXECUTION_OUTPUT_HEAD } from "./boundToolOutput";
 
 export type LiveItemDeltaLane =
   | "reasoningContent"
@@ -29,7 +32,65 @@ export type LiveItemDeltaEntry = {
   version: number;
   /** 首条 delta（已随建壳 dispatch 落入 reducer）的长度，供 settle 时 drain 尾段。 */
   shellTextLength: number;
+  /** toolOutput 才有：用来把 256KiB 帽只套在终端命令，不误伤 fileChange。 */
+  toolType?: string;
 };
+
+/** 与 BashToolBlock 显示帽对齐：流式快照只发这个行数。 */
+export const LIVE_TOOL_OUTPUT_DISPLAY_LINES = 200;
+
+export function takeLastLines(text: string, maxLines: number): string {
+  if (maxLines <= 0 || text.length === 0) {
+    return text;
+  }
+  let newlineCount = 0;
+  for (let i = text.length - 1; i >= 0; i -= 1) {
+    if (text[i] !== "\n") {
+      continue;
+    }
+    newlineCount += 1;
+    if (newlineCount === maxLines) {
+      return text.slice(i + 1);
+    }
+  }
+  return text;
+}
+
+function takeLiveToolOutputSnapshot(text: string): string {
+  const tailed = takeLastLines(text, LIVE_TOOL_OUTPUT_DISPLAY_LINES);
+  if (tailed.length <= COMMAND_EXECUTION_OUTPUT_HEAD) {
+    return tailed;
+  }
+  return tailed.slice(tailed.length - COMMAND_EXECUTION_OUTPUT_HEAD);
+}
+
+function resolveToolOutputType(
+  existingType: string | undefined,
+  incomingType: string | undefined,
+): string {
+  return incomingType ?? existingType ?? "commandExecution";
+}
+
+function boundLiveLaneText(
+  lane: LiveItemDeltaLane,
+  text: string,
+  toolType: string | undefined,
+): string {
+  if (lane !== "toolOutput" || toolType !== "commandExecution") {
+    return text;
+  }
+  return boundToolOutput(text, "commandExecution");
+}
+
+function snapshotTextForEntry(entry: LiveItemDeltaEntry): string {
+  if (
+    entry.lane === "toolOutput" &&
+    (entry.toolType ?? "commandExecution") === "commandExecution"
+  ) {
+    return takeLiveToolOutputSnapshot(entry.text);
+  }
+  return entry.text;
+}
 
 export const LIVE_ITEM_DELTA_PUBLISH_INTERVAL_MS = 48;
 
@@ -76,7 +137,7 @@ function publishThreadEntries(threadId: string): void {
   const nextPublished = new Map<string, string>();
   if (entries) {
     for (const [key, entry] of entries) {
-      nextPublished.set(key, entry.text);
+      nextPublished.set(key, snapshotTextForEntry(entry));
     }
   }
   publishedEntriesByThread.set(threadId, nextPublished);
@@ -109,14 +170,17 @@ function scheduleThreadPublish(threadId: string): void {
  * 累计一条 reasoning/toolOutput delta。
  * - 该 `${itemId}:${lane}` 无条目（新回合/新 item/新 lane）→ 建条目并返回
  *   isFirst=true，调用方应照旧 dispatch 该条 delta 以便 reducer 建壳。
- * - 否则无损追加文本并按 publish cadence 通知订阅者，返回 isFirst=false，
+ * - 否则追加文本并按 publish cadence 通知订阅者，返回 isFirst=false，
  *   调用方跳过 dispatch。
+ * - toolOutput + commandExecution：写入前套 boundToolOutput（256KiB 头+尾）。
+ *   fileChange / 其它 toolType 不走 256KiB 帽。
  */
 export function appendLiveItemDelta(
   threadId: string,
   itemId: string,
   lane: LiveItemDeltaLane,
   delta: string,
+  toolType?: string,
 ): { isFirst: boolean } {
   let entries = entriesByThread.get(threadId);
   if (!entries) {
@@ -125,20 +189,27 @@ export function appendLiveItemDelta(
   }
   const key = laneKey(itemId, lane);
   const existing = entries.get(key);
+  const resolvedToolType =
+    lane === "toolOutput"
+      ? resolveToolOutputType(existing?.toolType, toolType)
+      : undefined;
   if (!existing) {
+    const text = boundLiveLaneText(lane, delta, resolvedToolType);
     entries.set(key, {
       itemId,
       lane,
-      text: delta,
+      text,
       version: 1,
-      shellTextLength: delta.length,
+      shellTextLength: text.length,
+      toolType: resolvedToolType,
     });
     publishThreadEntries(threadId);
     return { isFirst: true };
   }
   entries.set(key, {
     ...existing,
-    text: existing.text + delta,
+    toolType: resolvedToolType,
+    text: boundLiveLaneText(lane, `${existing.text}${delta}`, resolvedToolType),
     version: existing.version + 1,
   });
   scheduleThreadPublish(threadId);
@@ -237,7 +308,8 @@ export function clearLiveItemDeltaForItem(
 }
 
 /**
- * React 可观察快照：key = `${itemId}:${lane}`，value = 已发布全文。
+ * React 可观察快照：key = `${itemId}:${lane}`，value = 已发布文本。
+ * 终端命令只发显示尾（最后 200 行 / 64KiB）；权威全文仍在 peek。
  * 无条目线程返回共享空 Map（引用稳定）。
  */
 export function getLiveItemDeltaSnapshot(

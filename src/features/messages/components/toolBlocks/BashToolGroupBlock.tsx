@@ -7,6 +7,7 @@ import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Terminal from 'lucide-react/dist/esm/icons/terminal';
 import type { ConversationItem } from '../../../../types';
+import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { highlightLine } from '../../../../utils/syntax';
 import {
   buildCommandSummary,
@@ -251,8 +252,7 @@ export const BashToolGroupBlock = memo(function BashToolGroupBlock({
                               className="bash-command-copy-btn"
                               onClick={async (event) => {
                                 event.stopPropagation();
-                                try {
-                                  await navigator.clipboard.writeText(entry.output ?? "");
+                                if (await copyTextToClipboard(entry.output ?? "")) {
                                   setCopiedOutputId(entry.id);
                                   window.setTimeout(
                                     () =>
@@ -261,7 +261,7 @@ export const BashToolGroupBlock = memo(function BashToolGroupBlock({
                                       ),
                                     1200,
                                   );
-                                } catch {
+                                } else {
                                   setCopiedOutputId(null);
                                 }
                               }}
@@ -312,5 +312,3 @@ export const BashToolGroupBlock = memo(function BashToolGroupBlock({
     </ToolMarkerShell>
   );
 });
-
-export default BashToolGroupBlock;

@@ -36,9 +36,16 @@ import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
 import type { LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
+  MESSAGES_LIVE_CONTROLS_UPDATED_EVENT,
+  MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY,
+  readLocalBooleanFlag,
+  writeLocalBooleanFlag,
+} from "@/live-canvas/liveCanvasControls";
+import {
   DEFAULT_OPEN_APP_ID,
   DEFAULT_OPEN_APP_TARGETS,
 } from "@/features/app/constants";
+import { useKnownOpenAppIcons } from "@/features/app/hooks/useKnownOpenAppIcons";
 import {
   GENERIC_APP_ICON,
   getKnownOpenAppIcon,
@@ -62,6 +69,7 @@ import {
   DEFAULT_UI_FONT_FAMILY,
   listCodeFontSizeSelectOptions,
 } from "../../../../../utils/fonts";
+import { useDockIconSrc } from "../../../../theme/hooks/useDockIconSrc";
 import {
   DOCK_ICON_OPTIONS,
   sanitizeDockIconId,
@@ -221,6 +229,15 @@ function WallpaperPreviewThumb({
 const DOCK_ICON_SCROLL_STEP_PX = 160;
 const WALLPAPER_SLIDER_PREVIEW_DEBOUNCE_MS = 1000;
 
+/** Dock PNGs live in lazy chunks; render nothing for the brief load window. */
+function DockIconOptionImage({ iconId }: { iconId: DockIconId }) {
+  const src = useDockIconSrc(iconId);
+  if (!src) {
+    return null;
+  }
+  return <img src={src} alt="" draggable={false} />;
+}
+
 type DockIconPickerProps = {
   selectedDockIconId: DockIconId;
   onSelect: (iconId: DockIconId) => void;
@@ -322,7 +339,7 @@ function DockIconPicker({
               className={`settings-dock-icon-option${isActive ? " is-active" : ""}`}
               onClick={() => onSelect(option.id)}
             >
-              <img src={option.src} alt="" draggable={false} />
+              <DockIconOptionImage iconId={option.id} />
             </button>
           );
         })}
@@ -382,7 +399,25 @@ export function BasicAppearanceSection({
 }: BasicAppearanceSectionProps) {
   const { t } = useTranslation();
   const clientUiVisibility = useClientUiVisibility();
-  const selectedOpenAppIconSrc = resolveSelectedOpenAppIconSrc(appSettings);
+  const [minimalTranscriptEnabled, setMinimalTranscriptEnabled] = useState(() =>
+    readLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, true),
+  );
+  const handleToggleMinimalTranscript = useCallback((checked: boolean) => {
+    writeLocalBooleanFlag(MESSAGES_MINIMAL_TRANSCRIPT_FLAG_KEY, checked);
+    setMinimalTranscriptEnabled(checked);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(MESSAGES_LIVE_CONTROLS_UPDATED_EVENT, {
+          detail: { minimalTranscriptEnabled: checked },
+        }),
+      );
+    }
+  }, []);
+  // Built-in open-app PNGs load lazily; show the generic glyph until cached.
+  const knownOpenAppIconsLoaded = useKnownOpenAppIcons();
+  const selectedOpenAppIconSrc = knownOpenAppIconsLoaded
+    ? resolveSelectedOpenAppIconSrc(appSettings)
+    : GENERIC_APP_ICON;
   const selectedDockIconId = sanitizeDockIconId(appSettings.dockIconId);
   const wallpaper = sanitizeWorkspaceWallpaper(appSettings.workspaceWallpaper);
   const selectedLibraryItem = resolveWorkspaceWallpaperLibraryItem(wallpaper);
@@ -1097,6 +1132,46 @@ export function BasicAppearanceSection({
           </div>
         </div>
 
+        {/* 幕布展示模式：常规 / 极简 */}
+        <div className="settings-pref-row">
+          <div className="settings-pref-meta">
+            <div className="settings-pref-title">
+              {t("settings.minimalTranscript")}
+            </div>
+            <div className="settings-pref-desc">
+              {t("settings.minimalTranscriptDesc")}
+            </div>
+          </div>
+          <div
+            className="settings-pref-control settings-pref-segmented settings-pref-segmented--pair"
+            role="radiogroup"
+            aria-label={t("settings.minimalTranscript")}
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!minimalTranscriptEnabled}
+              className={`settings-pref-segment ${
+                !minimalTranscriptEnabled ? "is-active" : ""
+              }`}
+              onClick={() => handleToggleMinimalTranscript(false)}
+            >
+              <span>{t("settings.minimalTranscriptNormal")}</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={minimalTranscriptEnabled}
+              className={`settings-pref-segment ${
+                minimalTranscriptEnabled ? "is-active" : ""
+              }`}
+              onClick={() => handleToggleMinimalTranscript(true)}
+            >
+              <span>{t("settings.minimalTranscriptMinimal")}</span>
+            </button>
+          </div>
+        </div>
+
         <div
           className="settings-pref-row"
           data-testid="settings-top-session-tabs"
@@ -1109,14 +1184,41 @@ export function BasicAppearanceSection({
               {t("settings.clientUiVisibility.panelDescriptions.topSessionTabs")}
             </div>
           </div>
-          <div className="settings-pref-control">
-            <Switch
-              checked={clientUiVisibility.isPanelVisible("topSessionTabs")}
-              aria-label={t("settings.clientUiVisibility.panels.topSessionTabs")}
-              onCheckedChange={(checked) =>
-                clientUiVisibility.setPanelVisible("topSessionTabs", checked)
+          <div
+            className="settings-pref-control settings-pref-segmented settings-pref-segmented--pair"
+            role="radiogroup"
+            aria-label={t("settings.clientUiVisibility.panels.topSessionTabs")}
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!clientUiVisibility.isPanelVisible("topSessionTabs")}
+              className={`settings-pref-segment ${
+                !clientUiVisibility.isPanelVisible("topSessionTabs")
+                  ? "is-active"
+                  : ""
+              }`}
+              onClick={() =>
+                clientUiVisibility.setPanelVisible("topSessionTabs", false)
               }
-            />
+            >
+              <span>{t("settings.topSessionTabsHide")}</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={clientUiVisibility.isPanelVisible("topSessionTabs")}
+              className={`settings-pref-segment ${
+                clientUiVisibility.isPanelVisible("topSessionTabs")
+                  ? "is-active"
+                  : ""
+              }`}
+              onClick={() =>
+                clientUiVisibility.setPanelVisible("topSessionTabs", true)
+              }
+            >
+              <span>{t("settings.topSessionTabsShow")}</span>
+            </button>
           </div>
         </div>
 

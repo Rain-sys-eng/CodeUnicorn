@@ -36,6 +36,9 @@ const EARLY_RENDERER_DIAGNOSTICS_STORAGE_KEY =
 const DEFAULT_BLANK_WATCHDOG_INTERVAL_MS = 5_000;
 const DEFAULT_BLANK_WATCHDOG_MIN_CONSECUTIVE_SAMPLES = 2;
 const DEFAULT_BLANK_WATCHDOG_MAX_REPORTS = 6;
+// 连续健康采样达到该数后停表（默认 6 次 × 5s ≈ 冷启后 30s 健康窗口），
+// 避免整个会话周期都在每 5s 强制一次同步 layout。
+const DEFAULT_BLANK_WATCHDOG_MAX_HEALTHY_SAMPLES = 6;
 const DEFAULT_RENDERER_HEARTBEAT_INTERVAL_MS = 15_000;
 const MAX_HEARTBEAT_FAILURE_REPORTS = 3;
 const MAX_PERSISTED_RENDERER_DIAGNOSTICS_BYTES = 256 * 1024;
@@ -97,6 +100,13 @@ type BlankScreenWatchdogOptions = {
   maxReports?: number;
   /** Skip checks for this initial duration (ms) — avoids forced layout during cold-start gate. */
   startDelayMs?: number;
+  /**
+   * Stop the watchdog after this many consecutive healthy samples. Blank-screen
+   * detection is a cold-start diagnostic; once the window has provably painted
+   * for a while there is no value in forcing a synchronous layout
+   * (getBoundingClientRect + getComputedStyle) every tick forever.
+   */
+  maxHealthySamples?: number;
 };
 
 type RendererHeartbeatOptions = {
@@ -347,7 +357,7 @@ function isSensitiveDiagnosticField(
     return false;
   }
   if (
-    /(?:^|_)(?:id|code|state|kind|category|mode|source|label|profile|engine|status|type|name)(?:_|$)/.test(
+    /(?:^|_)(?:id|code|state|kind|category|mode|source|label|profile|engine|status|type|name|class)(?:_|$)/.test(
       normalized,
     ) &&
     isSafeDiagnosticToken(value)
@@ -1424,10 +1434,25 @@ export function appendMediaOwnerDiagnostic(input: MediaOwnerDiagnosticInput) {
   });
 }
 
+export const MARKDOWN_PRECOMPUTE_DIAGNOSTIC_MIN_DURATION_MS = 8;
+
+export function shouldAppendMarkdownPrecomputeDiagnostic(input: {
+  durationMs: number;
+  evidenceClass: ClientInteractionPerfEvidenceKind;
+}): boolean {
+  if (input.evidenceClass !== "unsupported") {
+    return true;
+  }
+  return input.durationMs >= MARKDOWN_PRECOMPUTE_DIAGNOSTIC_MIN_DURATION_MS;
+}
+
 export function appendMarkdownPrecomputeDiagnostic(
   input: MarkdownPrecomputeDiagnosticInput,
 ) {
   if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  if (!shouldAppendMarkdownPrecomputeDiagnostic(input)) {
     return;
   }
   appendRendererDiagnostic("perf.messages.markdown.precompute", {
@@ -1561,8 +1586,13 @@ export function startRendererBlankScreenWatchdog(
     1,
     options.maxReports ?? DEFAULT_BLANK_WATCHDOG_MAX_REPORTS,
   );
+  const maxHealthySamples = Math.max(
+    1,
+    options.maxHealthySamples ?? DEFAULT_BLANK_WATCHDOG_MAX_HEALTHY_SAMPLES,
+  );
   blankWatchdogConsecutiveSamples = 0;
   blankWatchdogReports = 0;
+  let healthySamples = 0;
 
   const startDelayMs = Math.max(0, options.startDelayMs ?? 0);
   const startedAt = Date.now();
@@ -1593,8 +1623,16 @@ export function startRendererBlankScreenWatchdog(
     const snapshot = collectRendererBlankScreenSnapshot(rootId);
     if (!isBlankRendererSnapshot(snapshot)) {
       blankWatchdogConsecutiveSamples = 0;
+      healthySamples += 1;
+      // 连续健康采样达标：窗口已确证正常渲染，停表；这是冷启诊断，
+      // 不该让整个会话每 tick 都付一次强制同步 layout。
+      if (healthySamples >= maxHealthySamples && blankWatchdogTimer !== null) {
+        window.clearInterval(blankWatchdogTimer);
+        blankWatchdogTimer = null;
+      }
       return;
     }
+    healthySamples = 0;
     blankWatchdogConsecutiveSamples += 1;
     if (blankWatchdogConsecutiveSamples < minConsecutiveSamples) {
       return;

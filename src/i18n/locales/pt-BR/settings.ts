@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "Limpar",
     "modelMappingNote": "As alterações serão refletidas no menu suspenso de seleção de modelo.",
     "notificationSounds": "Sons de Notificação",
+    "minimalTranscript": "Exibição mínima",
+    "minimalTranscriptDesc": "Quando ativado, respostas concluídas mostram apenas a resposta final; pensamentos, chamadas de ferramentas e notas intermediárias recolhem em um único resumo expansível.",
+    "minimalTranscriptNormal": "Normal",
+    "minimalTranscriptMinimal": "Mínimo",
+    "topSessionTabsHide": "Ocultar abas superiores",
+    "topSessionTabsShow": "Mostrar abas superiores",
     "systemNotification": "Notificações do Sistema",
     "systemNotificationDesc": "Envia notificações no nível do sistema quando as sessões forem concluídas.",
     "testSound": "Testar",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Alta confiança",
     "sessionManagementAttributionConfidenceMedium": "Confiança média",
     "sessionManagementThreadVisibilityLabel": "Contagem padrão de sessões na barra lateral",
-    "sessionManagementThreadVisibilityHint": "Controla quantas sessões raiz este workspace mostra por padrão enquanto a barra lateral permanece recolhida. Padrão {{defaultCount}}, faixa suportada {{min}}-{{max}}; valor efetivo {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Substitui quantas sessões raiz este projeto mostra com a barra lateral recolhida. Sem substituição, segue as configurações do workspace (atualmente {{defaultCount}}). Faixa {{min}}-{{max}}; valor efetivo {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Contagem padrão de sessões da barra lateral atualizada para {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Salvando...",
     "sessionManagementLoadMore": "Carregar mais",
@@ -1399,6 +1405,7 @@ const settings = {
         "notConfigured": "Não configurado",
         "envActive": "Variável de ambiente ativa",
         "envActiveHint": "O ambiente do processo está ativo quando o mossx inicia o {{cliName}}. Defina um PAT para substituí-lo.",
+        "envIgnoredStoredWins": "O ambiente do processo também define {{envVar}}; ele é ignorado e o PAT salvo prevalece.",
         "setKey": "Definir chave",
         "overrideSet": "Substituir",
         "edit": "Editar",
@@ -1412,7 +1419,7 @@ const settings = {
         "toggleKeyVisibility": "Mostrar / ocultar",
         "saveHint": "Grava {{authFile}} (0600) e injeta ao iniciar o {{cliName}}",
         "loadFailed": "Falha ao ler o status de autenticação",
-        "resolutionOrder": "Ordem de resolução: env do processo → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "Ordem de resolução: {{authFile}} → env do processo → {{cliName}} login"
       }
     },
     "cliValidationTitle": "Validação de CLI",

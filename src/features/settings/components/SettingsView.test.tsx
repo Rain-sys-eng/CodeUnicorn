@@ -16,7 +16,7 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import {
-  archiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
   deleteWorkspaceSessions,
   exportDiagnosticsBundle,
   getDaemonStatus,
@@ -28,7 +28,7 @@ import {
   listWorkspaceSessions,
   readWorkspaceWallpaperPreview,
   searchWorkspaceWallpaperMarket,
-  unarchiveWorkspaceSessions,
+  unarchiveWorkspaceSessionsV2,
 } from "../../../services/tauri";
 import {
   resetClientStorageForTests,
@@ -107,8 +107,8 @@ vi.mock("../../../services/tauri", async () => {
     getWorkspaceSessionProjectionSummary: vi.fn(),
     listWorkspaceSessionFolders: vi.fn(),
     listWorkspaceSessions: vi.fn(),
-    archiveWorkspaceSessions: vi.fn(),
-    unarchiveWorkspaceSessions: vi.fn(),
+    archiveWorkspaceSessionsV2: vi.fn(),
+    unarchiveWorkspaceSessionsV2: vi.fn(),
     deleteWorkspaceSessions: vi.fn(),
     exportDiagnosticsBundle: vi.fn(),
     getWebServerStatus: vi.fn(),
@@ -177,8 +177,8 @@ beforeEach(() => {
     unassignedFolderCount: 0,
     partialSources: [],
   });
-  vi.mocked(archiveWorkspaceSessions).mockResolvedValue({ results: [] });
-  vi.mocked(unarchiveWorkspaceSessions).mockResolvedValue({ results: [] });
+  vi.mocked(archiveWorkspaceSessionsV2).mockResolvedValue({ results: [] });
+  vi.mocked(unarchiveWorkspaceSessionsV2).mockResolvedValue({ results: [] });
   vi.mocked(deleteWorkspaceSessions).mockResolvedValue({ results: [] });
   vi.mocked(exportDiagnosticsBundle).mockResolvedValue({
     filePath: "/tmp/diagnostics.json",
@@ -319,6 +319,7 @@ const baseSettings: AppSettings = {
   usageShowRemaining: false,
   showMessageAnchors: true,
   showSidebarProviderLabels: false,
+  defaultVisibleThreadRootCount: 5,
   performanceCompatibilityModeEnabled: false,
   uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   codeFontFamily: 'Monaco, "SF Mono", "SFMono-Regular", Menlo, monospace',
@@ -936,7 +937,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Run doctor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run doctor" }));
 
     await waitFor(() => {
       expect(onRunDoctor).toHaveBeenCalled();
@@ -996,7 +997,7 @@ describe("SettingsView Display", () => {
 
     // Radix Tabs uses focus-based automatic activation; jsdom fireEvent.click
     // does not focus the trigger, so focus it to actually switch panels.
-    fireEvent.focus(screen.getByRole("tab", { name: "Claude Code" }));
+    fireEvent.focus(await screen.findByRole("tab", { name: "Claude Code" }));
     fireEvent.click(screen.getByRole("tab", { name: "Claude Code" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Claude Doctor" }));
 
@@ -1045,7 +1046,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Run doctor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run doctor" }));
 
     await waitFor(() => {
       expect(onRunDoctor).toHaveBeenCalled();
@@ -1092,7 +1093,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    expect(screen.getByText("Execution backend")).toBeTruthy();
+    expect(await screen.findByText("Execution backend")).toBeTruthy();
     expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Claude Code" }));
@@ -1110,7 +1111,7 @@ describe("SettingsView Display", () => {
     });
   });
 
-  it("hides the deprecated Gemini entry inside CLI validation tabs", () => {
+  it("hides the deprecated Gemini entry inside CLI validation tabs", async () => {
     cleanup();
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     render(
@@ -1145,7 +1146,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "Codex" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Claude Code" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "OpenCode CLI" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "PI CLI" })).toBeTruthy();
@@ -1194,7 +1195,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    fireEvent.focus(screen.getByRole("tab", { name: "PI CLI" }));
+    fireEvent.focus(await screen.findByRole("tab", { name: "PI CLI" }));
     fireEvent.click(screen.getByRole("tab", { name: "PI CLI" }));
     fireEvent.click(screen.getByRole("button", { name: "Run PI Doctor" }));
 
@@ -1207,7 +1208,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -1391,7 +1392,7 @@ describe("SettingsView Display", () => {
       },
     });
 
-    fireEvent.change(screen.getByLabelText("Theme Palette"), {
+    fireEvent.change(await screen.findByLabelText("Theme Palette"), {
       target: { value: "vscode-dark-plus" },
     });
 
@@ -1416,7 +1417,7 @@ describe("SettingsView Display", () => {
       },
     });
 
-    fireEvent.change(screen.getByLabelText("Theme Palette"), {
+    fireEvent.change(await screen.findByLabelText("Theme Palette"), {
       target: { value: "vscode-light-plus" },
     });
 
@@ -1445,7 +1446,7 @@ describe("SettingsView Display", () => {
       },
     });
 
-    const select = screen.getByLabelText("Theme Palette");
+    const select = await screen.findByLabelText("Theme Palette");
     const options = within(select).getAllByRole("option");
 
     expect(options.map((option) => option.getAttribute("value"))).toEqual([
@@ -1478,7 +1479,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Wide canvas" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Wide canvas" }));
     });
 
     await waitFor(() => {
@@ -1496,7 +1497,7 @@ describe("SettingsView Display", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Narrow canvas" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Narrow canvas" }));
     });
 
     await waitFor(() => {
@@ -1511,7 +1512,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Left on right" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Left on right" }));
     });
 
     await waitFor(() => {
@@ -1529,7 +1530,7 @@ describe("SettingsView Display", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("radio", { name: "Default layout" }));
+      fireEvent.click(await screen.findByRole("radio", { name: "Default layout" }));
     });
 
     await waitFor(() => {
@@ -1558,10 +1559,14 @@ describe("SettingsView Display", () => {
     resetClientStorageForTests();
     renderDisplaySection();
 
-    const toggle = screen.getByRole("switch", { name: "Top session tabs" });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    // 默认开启（"开启顶部tab" radio active）
+    const showRadio = screen.getByRole("radio", { name: "Show top tabs" });
+    const hideRadio = screen.getByRole("radio", { name: "Hide top tabs" });
+    expect(showRadio.getAttribute("aria-checked")).toBe("true");
+    expect(hideRadio.getAttribute("aria-checked")).toBe("false");
 
-    fireEvent.click(toggle);
+    // 切到关闭
+    fireEvent.click(hideRadio);
 
     await waitFor(() => {
       expect(writeClientStoreValue).toHaveBeenCalledWith(
@@ -1573,9 +1578,11 @@ describe("SettingsView Display", () => {
         { immediate: true },
       );
     });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(hideRadio.getAttribute("aria-checked")).toBe("true");
+    expect(showRadio.getAttribute("aria-checked")).toBe("false");
 
-    fireEvent.click(toggle);
+    // 切回开启
+    fireEvent.click(showRadio);
 
     await waitFor(() => {
       expect(writeClientStoreValue).toHaveBeenCalledWith(
@@ -1587,7 +1594,8 @@ describe("SettingsView Display", () => {
         { immediate: true },
       );
     });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(showRadio.getAttribute("aria-checked")).toBe("true");
+    expect(hideRadio.getAttribute("aria-checked")).toBe("false");
   });
 
   it("updates user message color using reference-compatible format", async () => {
@@ -2094,6 +2102,42 @@ describe("SettingsView Display", () => {
     });
   });
 
+  it("toggles minimal transcript display", async () => {
+    window.localStorage.removeItem("ccgui.messages.minimalTranscript");
+    renderDisplaySection();
+
+    // 外观页：开关位于「顶部会话页签」行正上方（即布局切换之下）。
+    const topTabsRow = screen.getByTestId("settings-top-session-tabs");
+    const minimalRadio = screen.getByRole("radio", { name: "Minimal" });
+    const normalRadio = screen.getByRole("radio", { name: "Normal" });
+    const toggleRow = minimalRadio.closest(".settings-pref-row") as HTMLElement | null;
+    if (!toggleRow) {
+      throw new Error("Expected minimal transcript row");
+    }
+    expect(toggleRow.nextElementSibling).toBe(topTabsRow);
+    // 默认值为极简模式（true），极简 radio active
+    expect(minimalRadio.getAttribute("aria-checked")).toBe("true");
+    expect(normalRadio.getAttribute("aria-checked")).toBe("false");
+
+    const events: Array<boolean | undefined> = [];
+    const listener = (event: Event) => {
+      events.push(
+        (event as CustomEvent<{ minimalTranscriptEnabled?: boolean }>).detail
+          ?.minimalTranscriptEnabled,
+      );
+    };
+    window.addEventListener("ccgui:messages-live-controls-updated", listener);
+    // 切到常规模式
+    fireEvent.click(normalRadio);
+    window.removeEventListener("ccgui:messages-live-controls-updated", listener);
+
+    expect(window.localStorage.getItem("ccgui.messages.minimalTranscript")).toBe(
+      "0",
+    );
+    expect(events).toEqual([false]);
+    window.localStorage.removeItem("ccgui.messages.minimalTranscript");
+  });
+
   it("updates selected notification sound option", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({
@@ -2585,16 +2629,16 @@ describe("SettingsView Shortcuts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Web Service" }));
     await flushSettingsViewEffects();
-    expect(screen.getAllByText("Web Service").length).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByText("Web Service")).length).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getByLabelText("settings.webServicePortAriaLabel"),
+      await screen.findByLabelText("settings.webServicePortAriaLabel"),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Email" }));
     await flushSettingsViewEffects();
     expect(screen.getAllByText("Email").length).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getByRole("switch", { name: "settings.emailEnableTitle" }),
+      await screen.findByRole("switch", { name: "settings.emailEnableTitle" }),
     ).toBeTruthy();
   });
 

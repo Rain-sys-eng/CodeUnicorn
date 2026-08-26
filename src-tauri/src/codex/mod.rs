@@ -15,6 +15,7 @@ mod commit_message;
 pub(crate) mod config;
 mod doctor;
 pub(crate) mod home;
+pub(crate) mod provider_env;
 mod installer;
 pub(crate) mod launch_profile;
 mod mcp_config;
@@ -59,9 +60,7 @@ pub(crate) async fn resolve_codex_native_history_path(
 }
 use self::provider_profile::{resolve_codex_provider_profile, CODEX_DISK_PROVIDER_PROFILE_ID};
 use self::run_metadata::{extract_json_value, sanitize_run_worktree_name};
-use self::thread_listing::{
-    build_unified_codex_thread_page, resolve_provider_scoped_fallback_model,
-};
+use self::thread_listing::{build_unified_codex_thread_page, resolve_provider_scoped_fallback_model};
 use crate::backend::app_server::{
     spawn_workspace_session_inner_with_settings, CodexAppServerLaunchOptions,
 };
@@ -1123,35 +1122,6 @@ pub(crate) async fn list_mcp_server_status(
 
     codex_core::list_mcp_server_status_core(&state.sessions, workspace_id, None, cursor, limit)
         .await
-}
-
-#[tauri::command]
-pub(crate) async fn archive_thread(
-    workspace_id: String,
-    thread_id: String,
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<Value, String> {
-    if remote_backend::is_remote_mode(&*state).await {
-        return remote_backend::call_remote(
-            &*state,
-            app,
-            "archive_thread",
-            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
-        )
-        .await;
-    }
-
-    let provider_profile_id =
-        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
-    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
-    codex_core::archive_thread_core(
-        &state.sessions,
-        workspace_id,
-        Some(provider_profile_id),
-        thread_id,
-    )
-    .await
 }
 
 #[tauri::command]

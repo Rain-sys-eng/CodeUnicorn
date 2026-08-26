@@ -139,6 +139,61 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(screen.getByTestId("reasoning-default").textContent).toBe("Default");
   });
 
+  it("renders the PI thinking-strength selector only when the model exposes reasoning efforts", () => {
+    const { rerender } = render(
+      <ButtonArea
+        currentProvider="pi"
+        models={[]}
+        selectedModel=""
+        reasoningEffort="high"
+        reasoningOptions={["off", "minimal", "low", "medium", "high"]}
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
+    expect(screen.getByTestId("reasoning-value").textContent).toBe("high");
+    expect(screen.getByTestId("reasoning-options").textContent).toBe(
+      "off,minimal,low,medium,high",
+    );
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("Default");
+
+    rerender(
+      <ButtonArea
+        currentProvider="pi"
+        models={[]}
+        selectedModel=""
+        reasoningEffort={null}
+        reasoningOptions={[]}
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+    expect(screen.queryByTestId("reasoning-select")).toBeNull();
+  });
+
+  it("does not render permission ModeSelect for PI", () => {
+    render(
+      <ButtonArea
+        currentProvider="pi"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    openToolDock();
+
+    expect(screen.queryByTestId("mode-select")).toBeNull();
+  });
+
   it("does not render reasoning selector for Gemini", () => {
     render(
       <ButtonArea

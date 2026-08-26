@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import type {
   CliInstallAction,
   CliInstallEngine,
@@ -148,7 +148,10 @@ export function useCliInstallLifecycle(
       return;
     }
     const interval = window.setInterval(() => {
-      setInstallerNowMs(Date.now());
+      // 安装计时器秒针走 transition，避免安装期间每秒重渲染阻塞设置页交互。
+      startTransition(() => {
+        setInstallerNowMs(Date.now());
+      });
     }, 1_000);
     return () => {
       window.clearInterval(interval);

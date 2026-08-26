@@ -70,7 +70,7 @@ pub(super) fn terminate_pid_tree(pid: u32) -> Result<bool, String> {
                 return Err(error.to_string());
             }
         }
-        return Ok(true);
+        Ok(true)
     }
 }
 

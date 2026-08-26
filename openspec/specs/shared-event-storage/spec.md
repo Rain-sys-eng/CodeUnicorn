@@ -5,7 +5,6 @@
 定义 Shared Session V2 的 SQLite WAL Canonical Event Storage：六表 schema 与
 migration 保留项、单写者 Actor、事务内 sequence 分配、幂等、Provider Usage
 Ledger、integrity recovery 与 crash all-or-nothing contract。
-
 ## Requirements
 ### Requirement: Event Storage MUST Use SQLite WAL With Single-Writer Transaction Semantics
 
@@ -118,3 +117,19 @@ Schema versioning MUST use `PRAGMA user_version` with monotonic migration steps 
 - **WHEN** the store is opened repeatedly
 - **THEN** migrations MUST run at most once per version
 - **AND** the six required tables MUST exist: `shared_sessions_v2`, `shared_event_log`, `shared_binding_state`, `shared_projection_checkpoint`, `shared_legacy_import`, `provider_usage_aggregate_log`
+
+### Requirement: Squad Canonical Facts MUST Preserve Single-Writer Event Semantics
+The event store MUST append versioned Squad Canonical Facts through the existing `SharedEventWriter` and MUST preserve atomic sequence allocation, deterministic checksum, idempotency conflict detection, and monotonic migrations.
+
+#### Scenario: squad append uses the existing writer
+- **WHEN** a run, plan, node, lease, cancellation, or settlement fact is committed
+- **THEN** sequence allocation and event insertion occur through `SharedEventWriter` with no second event sink or direct SQLite writer
+
+#### Scenario: same identity with conflicting squad payload
+- **WHEN** a caller reuses a Squad fact idempotency identity with different canonical content
+- **THEN** the writer returns an idempotency conflict and stores neither a replacement nor an additional event
+
+#### Scenario: old database opens after additive migration
+- **WHEN** a database created before Squad support is opened repeatedly
+- **THEN** additive schema migration is idempotent and existing Shared facts remain readable
+

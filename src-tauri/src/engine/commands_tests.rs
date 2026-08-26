@@ -139,7 +139,10 @@ fn provider_engine_dispatch_receipt_normalizes_qoder_local_sentinel() {
     assert_eq!(receipt["engine"], "qoder");
     assert_eq!(receipt["providerProfileId"], "__qoder_global__");
     assert_eq!(receipt["providerProfileSource"], "managed");
-    assert_eq!(receipt["providerRuntimeKey"], "workspace-local::qoder::global");
+    assert_eq!(
+        receipt["providerRuntimeKey"],
+        "workspace-local::qoder::global"
+    );
     assert_eq!(receipt["model"], "qoder/auto");
     assert!(receipt["reasoningEffort"].is_null());
 }
@@ -1623,4 +1626,416 @@ fn send_message_params_default_keeps_claude_thinking_enabled() {
     let params = SendMessageParams::default();
 
     assert!(!params.disable_thinking);
+}
+
+#[test]
+fn flatten_pi_tree_for_ipc_strips_images_truncates_text_and_preserves_order() {
+    use crate::engine::pi_rpc::flatten_pi_tree_for_ipc;
+    let long_text = "a".repeat(2000);
+    let nodes = vec![json!({
+        "entry": {
+            "id": "root",
+            "parentId": null,
+            "type": "message",
+            "timestamp": "2026-08-24T00:00:00Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": long_text},
+                    {"type": "image", "source": {"type": "base64", "data": "QUJD".repeat(1000)}},
+                ],
+            },
+        },
+        "label": "书签A",
+        "children": [
+            { "entry": { "id": "c1", "parentId": "root", "message": { "role": "assistant", "content": "first" } }, "label": null, "children": [] },
+            { "entry": { "id": "c2", "parentId": "root", "message": { "role": "user", "content": "second" } }, "label": null, "children": [] },
+        ],
+    })];
+    let flat = flatten_pi_tree_for_ipc(&nodes);
+    assert_eq!(flat.len(), 3);
+    // DFS 保序：root → c1 → c2；parentId 表达结构；label 保留
+    assert_eq!(flat[0]["entry"]["id"], "root");
+    assert_eq!(flat[0]["label"], "书签A");
+    assert_eq!(flat[1]["entry"]["id"], "c1");
+    assert_eq!(flat[1]["entry"]["parentId"], "root");
+    assert_eq!(flat[2]["entry"]["id"], "c2");
+    // 长文本截断（char 安全）+ 图片载荷剥除
+    let content = flat[0]["entry"]["message"]["content"].as_array().unwrap();
+    assert_eq!(content[0]["text"].as_str().unwrap().chars().count(), 500);
+    assert_eq!(content[1]["type"], "image");
+    assert!(content[1]["source"].get("data").is_none());
+    // 短文本不动
+    assert_eq!(flat[1]["entry"]["message"]["content"], "first");
+    // 输出是浅层（无 children 嵌套）——深会话不再撞 serde_json 递归限制
+    assert!(flat.iter().all(|item| item.get("children").is_none()));
+}
+
+#[test]
+fn pi_forked_session_id_noop_guard() {
+    use super::resolve_pi_forked_session_id;
+    // 正常 fork：文件切换到新文件 → 放行新会话 id
+    let state = json!({"sessionId": "new-branch", "sessionFile": "/tmp/sessions/2026-08-24_new-branch.jsonl"});
+    assert_eq!(
+        resolve_pi_forked_session_id(Some("/tmp/sessions/2026-08-22_main.jsonl"), Some(&state),),
+        Some("new-branch".to_string()),
+    );
+    // 静默 no-op：文件未切换 → None（前端不得登记/跳转，主线保持可见）
+    let noop = json!({"sessionId": "main", "sessionFile": "/tmp/sessions/2026-08-22_main.jsonl"});
+    assert_eq!(
+        resolve_pi_forked_session_id(Some("/tmp/sessions/2026-08-22_main.jsonl"), Some(&noop),),
+        None,
+    );
+    // 拿不到 fork 后文件信息：保持旧行为放行（不挡正常 fork）
+    let no_file = json!({"sessionId": "new-branch"});
+    assert_eq!(
+        resolve_pi_forked_session_id(Some("/tmp/sessions/2026-08-22_main.jsonl"), Some(&no_file),),
+        Some("new-branch".to_string()),
+    );
+    // 状态缺失 / 空 id → None
+    assert_eq!(
+        resolve_pi_forked_session_id(Some("/tmp/a.jsonl"), None),
+        None
+    );
+    let empty = json!({"sessionId": "  "});
+    assert_eq!(
+        resolve_pi_forked_session_id(Some("/tmp/a.jsonl"), Some(&empty)),
+        None
+    );
+}
+
+// ===== cache-first engine model catalog (OpenSpec: cache-first-engine-model-catalog) =====
+
+fn catalog_test_status(
+    engine_type: crate::engine::EngineType,
+    model_ids: &[&str],
+) -> crate::engine::EngineStatus {
+    let mut status = crate::engine::disabled_engine_status(engine_type);
+    status.installed = true;
+    status.error = None;
+    status.models = model_ids
+        .iter()
+        .map(|id| crate::engine::ModelInfo::new(*id, *id))
+        .collect();
+    status
+}
+
+fn catalog_model_ids(models: &[crate::engine::ModelInfo]) -> Vec<String> {
+    models.iter().map(|model| model.id.clone()).collect()
+}
+
+/// 模拟 PI 探测失败时合成的全静态兜底 catalog（`auto` 条目，source=fallback）。
+fn catalog_fallback_test_status(
+    engine_type: crate::engine::EngineType,
+) -> crate::engine::EngineStatus {
+    let mut status = crate::engine::disabled_engine_status(engine_type);
+    status.installed = true;
+    status.error = None;
+    status.models = vec![crate::engine::ModelInfo::new("auto", "PI Auto")
+        .with_source("fallback")
+        .as_default()];
+    status
+}
+
+#[tokio::test]
+async fn cache_first_fallback_only_cached_does_not_short_circuit() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_fallback_test_status(EngineType::Pi))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Pi, &["pi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(
+        refresh_calls.load(Ordering::SeqCst),
+        1,
+        "fallback-only cache must not be treated as a healthy hit"
+    );
+    assert_eq!(catalog_model_ids(&models), vec!["pi/fresh".to_string()]);
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("fresh real catalog must replace the fallback poison");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/fresh".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_fallback_only_fresh_does_not_evict_last_good() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/last-good"]))
+        .await;
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, true, || async {
+            catalog_fallback_test_status(EngineType::Pi)
+        })
+        .await;
+
+    assert_eq!(
+        catalog_model_ids(&models),
+        vec!["pi/last-good".to_string()],
+        "transient fallback-only probe must not evict the last-good catalog"
+    );
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("last-good cache must survive a fallback-only refresh");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/last-good".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_fallback_only_fresh_without_cache_is_not_written_back() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, false, || async {
+            catalog_fallback_test_status(EngineType::Pi)
+        })
+        .await;
+
+    assert_eq!(
+        catalog_model_ids(&models),
+        vec!["auto".to_string()],
+        "fallback-only fresh still reaches the UI as a degrade path"
+    );
+    assert!(
+        manager.get_engine_status(EngineType::Pi).await.is_none(),
+        "fallback-only fresh must not be written back, so the next call re-probes"
+    );
+}
+
+#[tokio::test]
+async fn cache_first_fallback_guard_does_not_touch_other_engines() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // 防中毒仅圈 PI：Kimi 等共用函数的引擎即使 cached 全 fallback，
+    // cached 命中行为也必须与原语义一致（不触发刷新）。
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_fallback_test_status(EngineType::Kimi))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Kimi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Kimi, &["kimi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(
+        refresh_calls.load(Ordering::SeqCst),
+        0,
+        "non-PI engines must keep the original cache-hit semantics"
+    );
+    assert_eq!(catalog_model_ids(&models), vec!["auto".to_string()]);
+}
+
+#[tokio::test]
+async fn cache_first_returns_cached_models_without_invoking_refresh() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/cached"]))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Pi, &["pi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(
+        refresh_calls.load(Ordering::SeqCst),
+        0,
+        "cache hit must not spawn any CLI probe"
+    );
+    assert_eq!(catalog_model_ids(&models), vec!["pi/cached".to_string()]);
+}
+
+#[tokio::test]
+async fn cache_first_forced_refresh_bypasses_cache_and_writes_back() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/stale"]))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, true, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Pi, &["pi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(refresh_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(catalog_model_ids(&models), vec!["pi/fresh".to_string()]);
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("fresh status must be written back to cache");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/fresh".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_forced_refresh_with_empty_result_preserves_last_good() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/last-good"]))
+        .await;
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, true, || async {
+            catalog_test_status(EngineType::Pi, &[])
+        })
+        .await;
+
+    assert_eq!(
+        catalog_model_ids(&models),
+        vec!["pi/last-good".to_string()],
+        "empty fresh result must fall back to last-good cache"
+    );
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("last-good cache must survive a failed refresh");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/last-good".to_string()],
+        "empty fresh result must not evict the cache"
+    );
+}
+
+#[tokio::test]
+async fn cache_first_empty_cache_probes_fresh_and_writes_back() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Kimi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Kimi, &["kimi/k2"]) }
+        })
+        .await;
+
+    assert_eq!(refresh_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(catalog_model_ids(&models), vec!["kimi/k2".to_string()]);
+    let cached = manager
+        .get_engine_status(EngineType::Kimi)
+        .await
+        .expect("fresh status must populate the empty cache");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["kimi/k2".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_empty_cache_and_empty_probe_returns_empty() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Grok, false, || async {
+            catalog_test_status(EngineType::Grok, &[])
+        })
+        .await;
+
+    assert!(models.is_empty());
+}
+
+// OpenSpec change：fix-orphan-turn-during-backend-unavailability（F3）。
+mod orphan_turn_send_guard {
+    use super::super::drive_detached_pi_send;
+    use std::sync::{Arc, Mutex};
+
+    #[tokio::test]
+    async fn pi_detached_send_panic_emits_turn_error() {
+        let emitted = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let sink = emitted.clone();
+        drive_detached_pi_send(
+            "turn-1",
+            move |turn_id, error| sink.lock().unwrap().push((turn_id.to_string(), error)),
+            async { panic!("boom") },
+        )
+        .await;
+        let emitted = emitted.lock().unwrap();
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].0, "turn-1");
+        assert!(
+            emitted[0].1.contains("pi send task panicked"),
+            "panic must surface as TurnError text: {}",
+            emitted[0].1
+        );
+        assert!(emitted[0].1.contains("boom"));
+    }
+
+    #[tokio::test]
+    async fn pi_detached_send_error_only_logs_without_duplicate_event() {
+        let emitted = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let sink = emitted.clone();
+        drive_detached_pi_send(
+            "turn-2",
+            move |turn_id, error| sink.lock().unwrap().push((turn_id.to_string(), error)),
+            async { Err("engine exploded".to_string()) },
+        )
+        .await;
+        // pi.rs send_message 内部失败路径已 emit_error；这里仅记日志，不重复发事件。
+        assert!(emitted.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn pi_detached_send_success_is_noop() {
+        let emitted = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let sink = emitted.clone();
+        drive_detached_pi_send(
+            "turn-3",
+            move |turn_id, error| sink.lock().unwrap().push((turn_id.to_string(), error)),
+            async { Ok("done".to_string()) },
+        )
+        .await;
+        assert!(emitted.lock().unwrap().is_empty());
+    }
 }

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { ThreadSummary } from "../../../types";
+import { isSessionDeleteV2Enabled } from "../utils/sessionDeleteV2";
 
 type DeletePromptState = {
   workspaceId: string;
@@ -48,6 +49,20 @@ export function useDeleteThreadPrompt({
 
   const handleDeletePromptConfirm = useCallback(async () => {
     if (!deletePrompt || isDeleting) {
+      return;
+    }
+    // v2 乐观删除：确认即关框（行已由 removeThread 乐观摘除），
+    // 结果在后台对账，失败由 onDeleteError 提示 + 行回滚。
+    if (isSessionDeleteV2Enabled()) {
+      const { workspaceId, threadId } = deletePrompt;
+      setDeletePrompt(null);
+      void removeThread(workspaceId, threadId).then((result) => {
+        if (!result.success) {
+          onDeleteError?.(result.message);
+          return;
+        }
+        onDeleteSuccess?.(threadId);
+      });
       return;
     }
     setIsDeleting(true);

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Check from "lucide-react/dist/esm/icons/check";
 
 const MEMORY_URL = "http://localhost:37777/";
-const HEALTH_CHECK_INTERVAL = 10_000;
+// 离线时 10s 快速探测（用户按提示启动服务后尽快感知）；在线后 30s 慢速确认。
+const OFFLINE_HEALTH_CHECK_INTERVAL = 10_000;
+const ONLINE_HEALTH_CHECK_INTERVAL = 30_000;
 
 type Status = "checking" | "online" | "offline";
 
@@ -13,13 +16,11 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard may be restricted
+    if (!(await copyTextToClipboard(text))) {
+      return;
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   }, [text]);
 
   return (
@@ -58,14 +59,22 @@ export function MemoryPanel() {
       }
     };
 
-    check();
-    const timer = setInterval(check, HEALTH_CHECK_INTERVAL);
+    void check();
+    const intervalMs =
+      status === "online"
+        ? ONLINE_HEALTH_CHECK_INTERVAL
+        : OFFLINE_HEALTH_CHECK_INTERVAL;
+    const timer = setInterval(() => {
+      // 后台窗口无人看状态，跳过探测。
+      if (document.visibilityState === "hidden") return;
+      void check();
+    }, intervalMs);
 
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [status]);
 
   if (status === "checking") {
     return (

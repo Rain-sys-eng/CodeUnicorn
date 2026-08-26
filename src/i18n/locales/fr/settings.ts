@@ -444,6 +444,12 @@ const settings = {
     "modelMappingClear": "Effacer",
     "modelMappingNote": "Les modifications seront reflétées dans le menu déroulant de sélection du modèle.",
     "notificationSounds": "Sons de notification",
+    "minimalTranscript": "Affichage minimal",
+    "minimalTranscriptDesc": "Si activé, les réponses terminées n'affichent que la réponse finale ; la réflexion, les appels d'outils et les notes intermédiaires se replient en un résumé extensible.",
+    "minimalTranscriptNormal": "Normal",
+    "minimalTranscriptMinimal": "Minimal",
+    "topSessionTabsHide": "Masquer les onglets supérieurs",
+    "topSessionTabsShow": "Afficher les onglets supérieurs",
     "systemNotification": "Notifications système",
     "systemNotificationDesc": "Envoyer des notifications au niveau du système lorsque les sessions se terminent.",
     "testSound": "Tester",
@@ -941,7 +947,7 @@ const settings = {
     "sessionManagementAttributionConfidenceHigh": "Confiance élevée",
     "sessionManagementAttributionConfidenceMedium": "Confiance moyenne",
     "sessionManagementThreadVisibilityLabel": "Nombre de sessions affichées par défaut dans la barre latérale",
-    "sessionManagementThreadVisibilityHint": "Contrôle combien de sessions racines cet espace de travail affiche par défaut lorsque la barre latérale reste réduite. Par défaut {{defaultCount}}, plage prise en charge {{min}}-{{max}} ; valeur effective {{count}}.",
+    "sessionManagementThreadVisibilityHint": "Remplace le nombre de sessions racines affichées pour ce projet lorsque la barre latérale est repliée. Sans remplacement, suit les paramètres de l'espace de travail (actuellement {{defaultCount}}). Plage {{min}}-{{max}} ; valeur effective {{count}}.",
     "sessionManagementThreadVisibilitySaved": "Nombre de sessions affichées par défaut dans la barre latérale mis à jour à {{count}}.",
     "sessionManagementThreadVisibilitySaving": "Enregistrement...",
     "sessionManagementLoadMore": "Charger plus",
@@ -1399,6 +1405,7 @@ const settings = {
         "notConfigured": "Non configuré",
         "envActive": "Variable d'environnement active",
         "envActiveHint": "L'environnement du processus est actif lorsque mossx lance {{cliName}}. Définissez un PAT pour le remplacer.",
+        "envIgnoredStoredWins": "L'environnement du processus définit aussi {{envVar}} ; il est ignoré au profit du PAT enregistré.",
         "setKey": "Définir la clé",
         "overrideSet": "Remplacer",
         "edit": "Modifier",
@@ -1412,7 +1419,7 @@ const settings = {
         "toggleKeyVisibility": "Afficher / masquer",
         "saveHint": "Écrit {{authFile}} (0600) et l'injecte au lancement de {{cliName}}",
         "loadFailed": "Impossible de lire l'état d'authentification",
-        "resolutionOrder": "Ordre de résolution : env processus → {{authFile}} → {{cliName}} login"
+        "resolutionOrder": "Ordre de résolution : {{authFile}} → env processus → {{cliName}} login"
       }
     },
     "cliValidationTitle": "Validation de la CLI",

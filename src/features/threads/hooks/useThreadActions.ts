@@ -24,6 +24,8 @@ import {
   projectNativeIndexRowsToSummaries,
   shouldRememberHideUnreadiness,
 } from "./useThreadActions.nativeIndexProjection";
+import { reconcilePiDerivedHideWithAuthoritativeRows } from "../../pi-session/store/piSessionStore";
+import { debugPiSummaryLayerDrops } from "../../pi-session/store/piSidebarDropDiagnostics";
 import {
   expandVisibilityHideSet,
   isFullyVerifiedSharedNativeVisibility,
@@ -54,6 +56,11 @@ import { resolveMergedThreadCreatedAt } from "../utils/threadSummarySort";
 import { clearLiveAssistantText } from "../utils/liveAssistantTextChannel";
 import { clearLiveItemDelta } from "../utils/liveItemDeltaChannel";
 import { resolveCodexSubagentIdentity } from "../utils/codexSubagentIdentity";
+import {
+  isSessionDeleteSuccessCode,
+  requestSessionDelete,
+} from "../utils/sessionDeleteV2";
+import type { SessionDeleteV2Result } from "../../../services/tauri/sessionManagement";
 import { saveThreadActivity } from "../utils/threadStorage";
 import {
   collectKnownCodexThreadIds,
@@ -64,8 +71,6 @@ import {
   type AutomaticRuntimeRecoverySource,
 } from "./useAutomaticRuntimeRecovery";
 import {
-  createArchiveClaudeThreadAction,
-  createArchiveThreadAction,
   createDeleteThreadForWorkspaceAction,
   createRenameThreadTitleMappingAction,
 } from "./useThreadActions.sessionActions";
@@ -112,6 +117,7 @@ import {
   type GeminiSessionSummary,
   type GrokSessionSummary,
   type KimiSessionSummary,
+  type PiSessionSummary,
   type QoderSessionSummary,
   type DshSessionSummary,
 } from "./useThreadActions.helpers";
@@ -197,6 +203,7 @@ export function useThreadActions({
   resolveWorkspacePath,
   useUnifiedHistoryLoader = false,
   sessionAttributionMode = "related",
+  defaultVisibleThreadRootCount = null,
 }: UseThreadActionsOptions) {
   const {
     historyLoadingByThreadId,
@@ -216,7 +223,7 @@ export function useThreadActions({
   >({});
   const kimiRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const piSessionCacheRef = useRef<
-    Record<string, { fetchedAt: number; sessions: KimiSessionSummary[] }>
+    Record<string, { fetchedAt: number; sessions: PiSessionSummary[] }>
   >({});
   const piRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const qoderSessionCacheRef = useRef<
@@ -261,6 +268,7 @@ export function useThreadActions({
       canListWorkspaceSessions,
       listWorkspaceSessionsService,
       listWorkspaceSessionArchiveEvidenceService,
+      defaultVisibleThreadRootCount,
     });
   const {
     beginAutomaticRuntimeRecovery,
@@ -353,7 +361,11 @@ export function useThreadActions({
         return null;
       }
       replaceOnResumeRef.current[threadId] = true;
-      return resumeThreadForWorkspace(workspaceId, threadId, true, true);
+      // fix-claude-history-window-message-loss：post-turn reconcile 走
+      // preserve-prefix merge，保住 hydrated window 之外的已展示旧消息。
+      return resumeThreadForWorkspace(workspaceId, threadId, true, true, {
+        mergeHydratedPrefix: true,
+      });
     },
     [replaceOnResumeRef, resumeThreadForWorkspace],
   );
@@ -385,7 +397,21 @@ export function useThreadActions({
          * Default false: sidebar hydrate uses Session Index.
          */
         includeEngineDiskLists?: boolean;
+        /**
+         * 只补 pi 单引擎盘扫（首刷后后台软刷用）：独立 native pi main 在
+         * index 首页 5 槽之外也必须可达（2026-08-24 用户验收——首页 per-engine
+         * 预算 + 「更多」先扩内存页导致 position 6+ 的 pi main 永远到不了）。
+         * pi 盘扫是单目录 header 读，远比 opencode/claude 全量清单便宜；
+         * 其它引擎仍只在 full-catalog 才扫。
+         */
+        includePiDiskList?: boolean;
         deletedThreadIds?: string[];
+        /**
+         * 仅做本地摘行（归档/软隐藏路径）：执行 deletedThreadIds 的本地清理后
+         * 立即返回，不 dispatch loading、不发起任何 IPC/catalog 扫描。
+         * OpenSpec change：redesign-session-archive-fast-path。
+         */
+        localRemovalOnly?: boolean;
         recoverySource?: AutomaticRuntimeRecoverySource;
         allowRuntimeReconnect?: boolean;
         startupHydrationMode?: StartupThreadHydrationMode;
@@ -416,6 +442,14 @@ export function useThreadActions({
       const preserveState = options?.preserveState ?? false;
       const isFirstPaintHydration =
         options?.startupHydrationMode === "first-paint";
+      // focus-refresh merge 不 fan-out 重探测(codex 在线分页 / claude 磁盘
+      // list / 活动 catalog):Session Index(自带指纹门控 sync)+ titles +
+      // shared 已足够刷新列表,新会话由 index 指纹 sync / importer 捕获。
+      // 显式 reload 与 Session Management 仍走全量。显隐逻辑不变:hideSet、
+      // 占位草稿过滤、tombstone、last-good floor 全部照旧。
+      const isFocusRefreshMerge =
+        options?.recoverySource === "focus-refresh" &&
+        options?.mergeExistingThreads === true;
       // First-paint never fans out OpenCode/native multi-engine lists.
       const includeOpenCodeSessions =
         !isFirstPaintHydration && (options?.includeOpenCodeSessions ?? true);
@@ -423,6 +457,9 @@ export function useThreadActions({
       // management may still pass includeEngineDiskLists: true.
       const includeEngineDiskLists =
         !isFirstPaintHydration && options?.includeEngineDiskLists === true;
+      // pi 盘扫可被独立允许（后台软刷补全独立 main），不等 full-catalog。
+      const includePiDiskList =
+        includeEngineDiskLists || options?.includePiDiskList === true;
       const deletedThreadIds = [
         ...new Set(
           (options?.deletedThreadIds ?? [])
@@ -468,6 +505,10 @@ export function useThreadActions({
         clearLiveItemDelta(threadId);
         dispatch({ type: "removeThread", workspaceId: workspace.id, threadId });
       });
+      if (options?.localRemovalOnly) {
+        // 归档摘行：本地状态已清，直接返回（零 IPC、零 catalog 重扫）。
+        return null;
+      }
       if (!preserveState) {
         dispatch({
           type: "setThreadListLoading",
@@ -519,7 +560,10 @@ export function useThreadActions({
         // stuck on stale sidebarSnapshot for seconds (user: old list → late correct).
         // One display page (20) per engine feeds the mixed top-20 view; older
         // rows arrive via keyset paging (sidebar 更多).
-        const sessionIndexLimit = resolveInitialThreadListTargetCount(workspace);
+        const sessionIndexLimit = resolveInitialThreadListTargetCount(
+          workspace,
+          defaultVisibleThreadRootCount,
+        );
         // Only explicit soft re-sync forces writers; cold first-paint must hit
         // warm SQLite (ms) so stale sidebarSnapshot is replaced immediately.
         const forceIndexSync = Boolean(options?.forceSessionIndexSync);
@@ -588,16 +632,28 @@ export function useThreadActions({
           indexVisibility,
           earlyPaintHideSet,
         );
+        // merge(focus-refresh/restore) 路径在「本地还没有任何行」时同样
+        // 提前画 index 行:否则冷 workspace 要等整条 merge 管线(引擎探测 +
+        // orchestrator 串行)跑完才结束 loading。显隐逻辑与 first-paint 完全
+        // 一致(同一 hideSet + hideReady defer + 同一投影函数),只是时机提前;
+        // 已有行的 merge 不提前画,避免热路径双重 dispatch churn。
+        const mergeColdEarlyPaint =
+          !isFirstPaintHydration &&
+          options?.mergeExistingThreads === true &&
+          (threadsByWorkspace[workspace.id] ?? []).length === 0;
         if (
-          isFirstPaintHydration &&
-          !options?.mergeExistingThreads &&
           sessionIndexPage &&
           Array.isArray(sessionIndexPage.data) &&
-          sessionIndexPage.data.length > 0
+          sessionIndexPage.data.length > 0 &&
+          ((isFirstPaintHydration && !options?.mergeExistingThreads) ||
+            mergeColdEarlyPaint)
         ) {
           if (shouldRememberHideUnreadiness(canProjectIndexNatives)) {
             rememberPartialSource("shared-visibility-unavailable");
           }
+          // 自愈：index 权威行证明无 parent 的 pi 主线，立即从内存派生
+          // 隐藏集合放归（堵住 fork 静默 no-op 误登记的整局隐藏）。
+          reconcilePiDerivedHideWithAuthoritativeRows(sessionIndexPage.data);
           const earlyIndexSummaries = buildNativeIndexEarlyPaintSummaries({
             rows: sessionIndexPage.data,
             workspaceId: workspace.id,
@@ -607,6 +663,17 @@ export function useThreadActions({
             lastGood: getLastGoodThreadSummariesWithoutDeleted(),
             hideReady: canProjectIndexNatives,
           });
+          debugPiSummaryLayerDrops(
+            "index-early-paint",
+            sessionIndexPage.data,
+            new Set(earlyIndexSummaries.map((summary) => summary.id)),
+            (threadId) =>
+              canProjectIndexNatives
+                ? threadIdInHiddenSharedBindingSet(threadId, earlyPaintHideSet)
+                  ? "shared/collab-hide-set"
+                  : "title-gate"
+                : "hide-not-ready-deferral",
+          );
           if (earlyIndexSummaries.length > 0) {
             // Urgent early paint still yields one macrotask when a click is
             // pending — WebView2 hit-test starvation freezes harder than a
@@ -810,7 +877,10 @@ export function useThreadActions({
         const hasKnownActivity = Object.keys(knownActivityByThread).length > 0;
         const matchingThreads: Record<string, unknown>[] = [];
         // First paint: only the visible root budget (default 5). More via Load older.
-        const targetCount = resolveInitialThreadListTargetCount(workspace);
+        const targetCount = resolveInitialThreadListTargetCount(
+          workspace,
+          defaultVisibleThreadRootCount,
+        );
         const pageSize = Math.max(THREAD_LIST_PAGE_SIZE, targetCount);
         const maxPagesWithoutMatch = hasKnownActivity
           ? THREAD_LIST_MAX_EMPTY_PAGES_WITH_ACTIVITY
@@ -819,6 +889,12 @@ export function useThreadActions({
         const fetchStartedAt = Date.now();
         let cursor: string | null = null;
         do {
+          // focus-refresh merge:跳过 codex 在线分页(运行时连接 + 逐页 IPC
+          // 是 merge 管线主成本),matchingThreads 留空,列表成员由 Session
+          // Index + 现有行兜底;cursor 为 null 时「更多」回落 index keyset。
+          if (isFocusRefreshMerge) {
+            break;
+          }
           {
             const abandoned = abandonIfStale();
             if (abandoned) {
@@ -924,6 +1000,7 @@ export function useThreadActions({
                   workspaceId: workspace.id,
                   cursor,
                   timeoutMs: THREAD_LIST_LIVE_REQUEST_TIMEOUT_MS,
+                  reasonCode: "thread-list-live-timeout",
                 },
               });
               break;
@@ -1123,7 +1200,10 @@ export function useThreadActions({
         const lastGoodThreadSummaries = getLastGoodThreadSummaries(
           workspace.id,
         );
-        const nativeSessionListLimit = resolveNativeSessionListLimit(workspace);
+        const nativeSessionListLimit = resolveNativeSessionListLimit(
+          workspace,
+          defaultVisibleThreadRootCount,
+        );
 
         // Merge Session Index into live codex page (titles now available).
         // Early paint already showed index; this enrich names + keep live identity.
@@ -1146,6 +1226,9 @@ export function useThreadActions({
               }
             });
           }
+          reconcilePiDerivedHideWithAuthoritativeRows(
+            sessionIndexPage.data ?? [],
+          );
           const indexSummaries = projectNativeIndexRowsToSummaries(
             sessionIndexPage.data ?? [],
             {
@@ -1154,6 +1237,15 @@ export function useThreadActions({
               getCustomName,
               hiddenSharedBindingIds,
             },
+          );
+          debugPiSummaryLayerDrops(
+            "index-merge",
+            sessionIndexPage.data ?? [],
+            new Set(indexSummaries.map((summary) => summary.id)),
+            (threadId) =>
+              threadIdInHiddenSharedBindingSet(threadId, hiddenSharedBindingIds)
+                ? "shared/collab-hide-set"
+                : "title-gate-or-deferral",
           );
           // Index is list authority for first-paint multi-engine membership:
           // seed missing engines and prefer newer timestamps.
@@ -1225,13 +1317,16 @@ export function useThreadActions({
         // disk seed. Session Index already seeded Claude/Codex/Kimi above.
         // Full catalog remains for Session Management / explicit force refresh.
         const projectCatalogSessionsPromise =
-          !isFirstPaintHydration && canListWorkspaceSessions
+          !isFirstPaintHydration &&
+          !isFocusRefreshMerge &&
+          canListWorkspaceSessions
             ? loadActiveProjectCatalogSessions(
                 workspace.id,
                 sessionAttributionMode,
               )
             : Promise.resolve(null);
-        const claudeSessionsPromise = isFirstPaintHydration
+        const claudeSessionsPromise =
+          isFirstPaintHydration || isFocusRefreshMerge
           ? Promise.resolve(
               null as Awaited<
                 ReturnType<typeof listClaudeSessionsForFallbackSeedService>
@@ -1729,7 +1824,8 @@ export function useThreadActions({
           );
         }
         if (hasFreshPiCache && cachedPi.sessions.length > 0) {
-          allSummaries = mergePiSessionSummaries(
+          reconcilePiDerivedHideWithAuthoritativeRows(cachedPi.sessions);
+          const mergedFromCache = mergePiSessionSummaries(
             allSummaries,
             cachedPi.sessions.filter(
               (session) =>
@@ -1743,6 +1839,12 @@ export function useThreadActions({
             getCustomName,
             hiddenSharedBindingIds,
           );
+          debugPiSummaryLayerDrops(
+            "pi-disk-cache-merge",
+            cachedPi.sessions,
+            new Set(mergedFromCache.map((summary) => summary.id)),
+          );
+          allSummaries = mergedFromCache;
         }
         if (hasFreshQoderCache && cachedQoder.sessions.length > 0) {
           allSummaries = mergeQoderSessionSummaries(
@@ -2506,7 +2608,7 @@ export function useThreadActions({
         // Same as DSH: first-paint never probes PI disk. Index is the read layer.
         const shouldRefreshPiSessions =
           isLatestThreadListRequest() &&
-          includeEngineDiskLists &&
+          includePiDiskList &&
           (hasPiSignal || !!cachedPi || !hasAttemptedPiRefresh);
         if (shouldRefreshPiSessions) {
           void (async () => {
@@ -2532,6 +2634,8 @@ export function useThreadActions({
               return;
             }
             const normalizedPiSessions = normalizePiSessionSummaries(piResult);
+            // 自愈：磁盘 list 是 pi 血缘权威——无 parentSession 的主线立即放归。
+            reconcilePiDerivedHideWithAuthoritativeRows(normalizedPiSessions);
             piSessionCacheRef.current[workspace.id] = {
               fetchedAt: Date.now(),
               sessions: normalizedPiSessions,
@@ -2569,6 +2673,11 @@ export function useThreadActions({
               mappedTitles,
               getCustomName,
               freshHiddenSharedBindingIds,
+            );
+            debugPiSummaryLayerDrops(
+              "pi-disk-list-merge",
+              normalizedPiSessions,
+              new Set(nextSummaries.map((summary) => summary.id)),
             );
             const visibleNextSummaries = applySessionArchiveState(
               stripHiddenSharedBindingSummaries(
@@ -2806,6 +2915,7 @@ export function useThreadActions({
       rememberLastGoodThreadSummariesByEngine,
       removeThreadFromCachedSummaries,
       sessionAttributionMode,
+      defaultVisibleThreadRootCount,
       activeThreadIdByWorkspace,
       threadActivityRef,
       threadsByWorkspace,
@@ -2816,6 +2926,7 @@ export function useThreadActions({
     activeThreadIdByWorkspace,
     applySessionArchiveState,
     canListWorkspaceSessions,
+    defaultVisibleThreadRootCount,
     dispatch,
     getCustomName,
     latestThreadsByWorkspaceRef,
@@ -2828,16 +2939,6 @@ export function useThreadActions({
     threadsByWorkspace,
     workspacePathsByIdRef,
   });
-
-  const archiveThread = useMemo(
-    () => createArchiveThreadAction({ onDebug }),
-    [onDebug],
-  );
-
-  const archiveClaudeThread = useMemo(
-    () => createArchiveClaudeThreadAction({ onDebug, workspacePathsByIdRef }),
-    [onDebug, workspacePathsByIdRef],
-  );
 
   const deleteThreadForWorkspace = useMemo(() => {
     const deleteThread = createDeleteThreadForWorkspaceAction({
@@ -2852,6 +2953,23 @@ export function useThreadActions({
     threadsByWorkspace,
   ]);
 
+  // v2 删除（Index First + marker-first）：批量恒为一次 IPC，
+  // 成功项同步清理 lastGood 缓存快照。乐观摘行与失败回滚在 useThreads 层。
+  const deleteThreadForWorkspaceV2 = useMemo(() => {
+    return async (
+      workspaceId: string,
+      threadIds: string[],
+    ): Promise<SessionDeleteV2Result[]> => {
+      const results = await requestSessionDelete(workspaceId, threadIds);
+      for (const result of results) {
+        if (result.ok || isSessionDeleteSuccessCode(result.code)) {
+          removeThreadFromCachedSummaries(workspaceId, result.sessionId);
+        }
+      }
+      return results;
+    };
+  }, [removeThreadFromCachedSummaries]);
+
   return {
     startThreadForWorkspace,
     finalizeCodexPendingThread,
@@ -2864,9 +2982,8 @@ export function useThreadActions({
     resetWorkspaceThreads,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
-    archiveThread,
-    archiveClaudeThread,
     deleteThreadForWorkspace,
+    deleteThreadForWorkspaceV2,
     renameThreadTitleMapping,
     setThreadHistoryLoading,
     setThreadHistoryLoadingProgress,

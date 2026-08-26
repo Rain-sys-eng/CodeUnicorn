@@ -13,6 +13,10 @@ const reasoning = {
       "label": "關閉 (Off)",
       "description": "關閉思考，快速回應"
     },
+    "minimal": {
+      "label": "最低 (Minimal)",
+      "description": "最低思考強度"
+    },
     "low": {
       "label": "低 (Low)",
       "description": "以基本推理快速回應"

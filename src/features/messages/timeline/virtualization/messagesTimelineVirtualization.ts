@@ -3,7 +3,6 @@ import type { TimelineProjectionRow } from "../projection/messagesTimelineProjec
 
 /** 历史门槛常量（虚拟化已移除；仅诊断/测试引用）。 */
 export const TIMELINE_VIRTUALIZATION_MIN_ROWS = 48;
-export const TIMELINE_VIRTUALIZATION_STREAMING_MIN_ROWS = 16;
 export const TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT = 96;
 export const TIMELINE_VIRTUALIZATION_HEAVY_ROW_WEIGHT = 16;
 export const TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY =
@@ -39,9 +38,6 @@ export type TimelineRenderWeightSummary = {
   heavyRowCount: number;
   categoryCounts: TimelineRenderWeightCategoryCounts;
 };
-
-/** @deprecated 时间线虚拟化已移除；恒为 false。 */
-export const TIMELINE_VIRTUALIZATION_DURING_STREAMING_ENABLED = false;
 
 function canReadBaselineFlag() {
   if (typeof globalThis === "undefined") {

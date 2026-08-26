@@ -3,7 +3,6 @@
 ## Purpose
 
 Defines the composer-queued-followup-fusion behavior contract, covering Queued Follow-up Surface SHALL Match Composer Container Semantics.
-
 ## Requirements
 ### Requirement: Queued Follow-up Surface SHALL Match Composer Container Semantics
 
@@ -35,30 +34,29 @@ Defines the composer-queued-followup-fusion behavior contract, covering Queued F
 
 ### Requirement: Queued Follow-up Fusion SHALL Prefer Existing In-Run Follow-up Semantics
 
-系统 MUST 在 queue fusion 真正收到 continuation 证据前，将该动作视为“待确认接续”，而不是直接向用户宣称回复已经继续生成。只有 runtime-probed `input.mid-turn=supported` 才能使用 same-run steer；`compat-input` MUST 使用 explicit cutover，`unsupported` MUST 保留为普通 follow-up。
+PI 引擎在本 change 后 `input.mid-turn = supported`（RPC `steer` 实证），融合按钮 MUST 对 pi 走 same-run steer 路径；pi 的默认排队行为 MUST 保持与当前客户端一致（queuedByThread 排队 + drain），不引入第二套 pi 原生队列 UI。
 
-#### Scenario: same-run fusion remains pending until new continuation evidence arrives
+#### Scenario: pi 排队默认行为不变
 
-- **GIVEN** 当前线程正在运行
-- **AND** 当前引擎报告 `input.mid-turn=supported`
-- **WHEN** 用户点击某条排队消息的 `融合`
-- **THEN** 系统 MAY 先进入待确认接续状态并使用 native steer
-- **AND** 在收到新的 `turn/started`、stream delta、execution item 或等效 continuation 证据前 MUST NOT 直接宣称“内容正在继续生成”
+- **WHEN** pi thread 处理中用户直接发送新消息
+- **THEN** 消息 MUST 进入既有 mossx 队列（queuedByThread）
+- **AND** 队列 UI MUST 与现状一致（composer 上方排队区域）
+- **AND** MUST NOT 渲染 pi RPC 原生 `queue_update` 驱动的第二套队列
 
-#### Scenario: compat-input fusion waits for safe successor
+#### Scenario: pi 融合按钮 = same-run steer
 
-- **GIVEN** 当前线程正在运行
-- **AND** 当前引擎报告 `input.mid-turn=compat-input`
-- **WHEN** 用户点击某条排队消息的 `融合`
-- **THEN** 系统 MUST interrupt exact predecessor owner 并等待其 terminal settlement
-- **AND** 系统 MUST 使用原 queue payload 与 frozen Target 创建 successor
-- **AND** successor run 未真实启动前 MUST NOT 把 cutover 视为成功继续
+- **WHEN** pi thread 存在排队消息且 fusion 条件满足
+- **THEN** 融合按钮 MUST 可用
+- **AND** 点击后 MUST 经 delivery decision 路由为 same-run steer（RPC `steer` 命令）
+- **AND** steered user message MUST 由前端乐观气泡上幕布（既有链路），后端不重复投影
+- **AND** 融合完成判定 MUST 等待新 continuation 证据（既有 pending 纪律不变）
+- **AND** RPC 回退 print-json 时后端 MUST 拒绝并发发送（防双进程交叉写 session 文件）
 
-#### Scenario: unsupported input remains follow-up
+#### Scenario: pi 融合条件不满足时降级
 
-- **WHEN** 当前引擎报告 `input.mid-turn=unsupported`
-- **THEN** 系统 MUST NOT 调用 native steer 或伪造 cutover capability
-- **AND** queue item MUST 保持普通 follow-up 并等待 predecessor settlement
+- **WHEN** RPC 会话不可用或已回退 print-json 路径
+- **THEN** 融合按钮 MUST 以禁用态表达（fuseDisabledReasonKey 既有链路）
+- **AND** MUST NOT 展示「可点击且会成功」的假融合交互
 
 ### Requirement: Queued Follow-up Fusion SHALL Preserve Queue Order Integrity
 
@@ -103,3 +101,4 @@ Shared queue drain MUST keep an item recoverable until the V2 send path returns 
 - **WHEN** queue drain receives matching `status=accepted` and `v2.committed=true`
 - **THEN** the item MAY be removed exactly once
 - **AND** duplicate settlement or React effect execution MUST NOT dispatch it again
+

@@ -31,9 +31,10 @@ import Search from "lucide-react/dist/esm/icons/search";
 import Upload from "lucide-react/dist/esm/icons/upload";
 import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 import { matchesShortcutForPlatform } from "../../../utils/shortcuts";
 import { formatRelativeTime } from "../../../utils/time";
-import FileIcon from "../../../components/FileIcon";
+import { FileIcon } from "../../../components/FileIcon";
 import { FloatingTooltipButton } from "@/components/ui/floating-tooltip-button";
 import { UnsavedChangesDialog } from "../../../components/ui/UnsavedChangesDialog";
 import {
@@ -1753,7 +1754,7 @@ function GitDiffPanelImpl({
           id: "copy-sha",
           label: "Copy SHA",
           onSelect: async () => {
-            await navigator.clipboard.writeText(entry.sha);
+            await copyTextToClipboard(entry.sha);
           },
         },
       ];

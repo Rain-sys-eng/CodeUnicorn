@@ -305,5 +305,3 @@ export const PromptEnhancerDialog = ({
     </div>
   );
 };
-
-export default PromptEnhancerDialog;

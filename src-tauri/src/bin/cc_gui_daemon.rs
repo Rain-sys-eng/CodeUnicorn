@@ -23,6 +23,8 @@ mod codex_home;
 mod codex_installer;
 #[path = "../codex/launch_profile.rs"]
 mod codex_launch_profile;
+#[path = "../codex/provider_env.rs"]
+mod codex_provider_env;
 #[path = "../codex/rewind.rs"]
 mod codex_rewind;
 #[path = "../codex/thread_mode_state.rs"]
@@ -163,8 +165,67 @@ mod session_index {
             pub provider_profile_id: Option<String>,
             pub provider_profile_name: Option<String>,
         }
+
+        pub(crate) const INDEX_LIST_ENGINES: &[&str] = &[
+            "claude", "codex", "gemini", "grok", "kimi", "opencode", "pi", "dsh", "qoder",
+        ];
+
+        #[derive(Debug, Clone)]
+        pub(crate) struct SessionIndexDeleteLookup {
+            pub(crate) row: SessionIndexRow,
+            pub(crate) tombstoned_at: Option<i64>,
+        }
+
+        /// daemon 无本地 SQLite index：open 恒失败，archive v2 resolve 走
+        /// engine 前缀定向 + 请求 workspace 回退（与桌面端 index miss 同语义）。
+        pub(crate) struct DaemonUnavailableConnection;
+
+        pub(crate) fn open_connection() -> Result<DaemonUnavailableConnection, String> {
+            Err("daemon has no local session index".to_string())
+        }
+
+        pub(crate) fn lookup_rows_for_delete(
+            _connection: &DaemonUnavailableConnection,
+            _full_id: &str,
+        ) -> Result<Vec<SessionIndexDeleteLookup>, String> {
+            Ok(Vec::new())
+        }
+    }
+
+    // tombstone_filter no-op：daemon 无本地 index，过滤器恒空（与桌面端
+    // fail-open 语义一致，共享的 session_management 出口过滤编译可用）。
+    pub(crate) mod tombstone_filter {
+        #[derive(Debug, Default)]
+        pub(crate) struct TombstoneFilter;
+
+        impl TombstoneFilter {
+            pub(crate) fn load_fail_open() -> Self {
+                Self
+            }
+
+            pub(crate) fn is_empty(&self) -> bool {
+                true
+            }
+
+            pub(crate) fn is_tombstoned(&self, _engine: &str, _session_id: &str) -> bool {
+                false
+            }
+
+            #[allow(dead_code)]
+            pub(crate) fn retain<T>(
+                &self,
+                _engine: &str,
+                _sessions: &mut Vec<T>,
+                _id_of: impl Fn(&T) -> &str,
+            ) {
+            }
+        }
     }
 }
+
+#[allow(dead_code)]
+#[path = "../session_archive_v2.rs"]
+mod session_archive_v2;
 // session_management now catalogs/deletes shared sessions via crate::shared_sessions.
 // The desktop app gets the full module from lib.rs; the daemon keeps a small local
 // adapter and only uses the shared read-only V2 binding projection. It never pulls
@@ -444,6 +505,9 @@ mod codex {
     pub(crate) mod launch_profile {
         pub(crate) use crate::codex_launch_profile::*;
     }
+    pub(crate) mod provider_env {
+        pub(crate) use crate::codex_provider_env::*;
+    }
     pub(crate) mod provider_profile {
         use crate::session_management::CodexProviderBinding;
         use crate::types::CodexCustomModel;
@@ -578,7 +642,6 @@ use rpc_params::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::process::Command;
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 
 use backend::app_server::{spawn_workspace_session, RuntimeShutdownSource, WorkspaceSession};
@@ -616,18 +679,15 @@ struct OpenCodeSessionEntry {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 enum GeminiRenderLane {
     Text,
     Reasoning,
     Tool,
+    #[default]
     Other,
 }
 
-impl Default for GeminiRenderLane {
-    fn default() -> Self {
-        Self::Other
-    }
-}
 
 #[derive(Default)]
 struct GeminiRenderRoutingState {
@@ -2358,22 +2418,6 @@ async fn handle_rpc_request(
                 .await?;
             serde_json::to_value(summary).map_err(|err| err.to_string())
         }
-        "archive_workspace_sessions" => {
-            let workspace_id = parse_string(&params, "workspaceId")?;
-            let session_ids = parse_string_array(&params, "sessionIds")?;
-            let response = state
-                .archive_workspace_sessions(workspace_id, session_ids)
-                .await?;
-            serde_json::to_value(response).map_err(|err| err.to_string())
-        }
-        "unarchive_workspace_sessions" => {
-            let workspace_id = parse_string(&params, "workspaceId")?;
-            let session_ids = parse_string_array(&params, "sessionIds")?;
-            let response = state
-                .unarchive_workspace_sessions(workspace_id, session_ids)
-                .await?;
-            serde_json::to_value(response).map_err(|err| err.to_string())
-        }
         "delete_workspace_sessions" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let session_ids = parse_string_array(&params, "sessionIds")?;
@@ -2556,11 +2600,6 @@ async fn handle_rpc_request(
                 .list_mcp_server_status(workspace_id, cursor, limit)
                 .await
         }
-        "archive_thread" => {
-            let workspace_id = parse_string(&params, "workspaceId")?;
-            let thread_id = parse_string(&params, "threadId")?;
-            state.archive_thread(workspace_id, thread_id).await
-        }
         "delete_codex_session" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let session_id = parse_string(&params, "sessionId")?;
@@ -2712,6 +2751,53 @@ async fn handle_rpc_request(
             let workspace_id = parse_string(&params, "workspaceId")?;
             let command = parse_string_array(&params, "command")?;
             state.remember_approval_rule(workspace_id, command).await
+        }
+        "pi_get_session_stats" => {
+            state
+                .pi_get_session_stats(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_compact" => {
+            state
+                .pi_compact(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "customInstructions"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_fork" => {
+            state
+                .pi_fork(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_string(&params, "entryId")?,
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_get_session_tree" => {
+            state
+                .pi_get_session_tree(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
+        }
+        "pi_get_fork_messages" => {
+            state
+                .pi_get_fork_messages(
+                    parse_string(&params, "workspaceId")?,
+                    parse_optional_string(&params, "sessionId"),
+                    parse_optional_string(&params, "providerProfileId"),
+                )
+                .await
         }
         _ => Err(format!("unknown method: {method}")),
     }

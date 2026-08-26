@@ -27,10 +27,7 @@ fn normalize_profile_id(profile_id: Option<&str>) -> &str {
 /// Runtime Key（Ownership 归属）：
 /// - local（`__local_pi__` / 空）：= workspace_id（与 Native Pi 默认归属一致）
 /// - named profile：`{workspace}::pi::{profile}`（与 kimi/grok named 形态对齐）
-pub(crate) fn pi_runtime_key(
-    workspace_id: &str,
-    provider_profile_id: Option<&str>,
-) -> String {
+pub(crate) fn pi_runtime_key(workspace_id: &str, provider_profile_id: Option<&str>) -> String {
     let profile_id = normalize_profile_id(provider_profile_id);
     if profile_id == PI_LOCAL_PROVIDER_PROFILE_ID {
         workspace_id.to_string()

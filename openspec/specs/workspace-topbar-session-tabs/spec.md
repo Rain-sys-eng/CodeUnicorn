@@ -184,11 +184,23 @@ Defines the workspace-topbar-session-tabs behavior contract, covering Workspace 
 - **THEN** 系统 MUST 优先选择关闭前位置右侧最近的剩余 tab
 - **AND** 若右侧不存在，则 MUST 选择左侧最近的剩余 tab
 
-#### Scenario: closing active tab with no remaining tabs clears topbar highlight only
+#### Scenario: closing active tab with no remaining tabs routes the canvas to workspace home
 
-- **WHEN** 当前 active tab 被关闭后 topbar 窗口已无剩余 tab
-- **THEN** 系统 MUST 清空 topbar 当前高亮
-- **AND** MUST NOT 因此删除 thread 或终止会话运行
+- **WHEN** 当前 active tab 被关闭后 topbar 窗口已无剩余 tab（单个关闭 / 关闭全部 / close-current-session 快捷键任一入口）
+- **THEN** 系统 MUST 清空该 workspace 的 active thread 选择（`activeThreadId = null`）
+- **AND** 画布 MUST 渲染该 workspace 的 workspace home 首页（`HomeChat`：hero 标题 + 居中 composer + workspace chip），MUST NOT 继续渲染刚被关闭会话的内容，也 MUST NOT 只渲染裸空画布
+- **AND** 系统 MUST NOT 经 workspace 导航路径恢复该 workspace 的 last selected thread
+- **AND** 被关闭的 tab MUST NOT 因本次清空操作重新出现在 topbar 窗口
+- **AND** 系统 MUST NOT 因此删除 thread、归档 thread 或终止会话运行
+- **AND** 清空路径 MUST 仅执行 identity + chrome 状态更新，MUST NOT 触发 `refreshEngineModels` / `get_engine_models` / `vendor_switch_*` 等 IPC
+
+#### Scenario: activating a thread from workspace home returns to the conversation canvas
+
+- **GIVEN** 用户关闭最后一个 topbar tab 后画布位于 workspace home
+- **WHEN** 用户从侧栏会话列表、workspace home 发起会话或任意既有入口激活某 thread
+- **THEN** 系统 MUST 正常切换到该 thread 的消息画布
+- **AND** workspace home 状态 MUST 被复位（`workspaceHomeWorkspaceId = null`、`homeOpen = false`）
+- **AND** 被重新激活的 thread MUST 重新进入 topbar 轮转窗口
 
 ### Requirement: Topbar Session Tabs SHALL Expose Batch Close Context Menu
 

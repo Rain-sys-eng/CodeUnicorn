@@ -13,6 +13,10 @@ const reasoning = {
       "label": "Desativado",
       "description": "Raciocínio desativado"
     },
+    "minimal": {
+      "label": "Mínimo",
+      "description": "Raciocínio mais leve"
+    },
     "low": {
       "label": "Baixo",
       "description": "Respostas rápidas com raciocínio básico"

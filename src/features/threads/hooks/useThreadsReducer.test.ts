@@ -9,6 +9,7 @@ import {
   __resetPrepareThreadItemsCallCountForTests,
 } from "../../../utils/threadItems";
 import { withoutMessagePresentationMetadata } from "./threadReducerTestProjection";
+import { COMMAND_EXECUTION_OUTPUT_BUDGET } from "../utils/boundToolOutput";
 import { initialState, threadReducer } from "./useThreadsReducer";
 import type { ThreadState } from "./useThreadsReducer";
 
@@ -2760,6 +2761,74 @@ describe("threadReducer", () => {
 
     expect(__getPrepareThreadItemsCallCountForTests()).toBe(1);
     expect(next.itemsByThread["thread-1"]?.[0]?.kind).toBe("tool");
+  });
+
+  it("bounds oversized commandExecution output on appendToolOutput", () => {
+    const baseTool: ConversationItem = {
+      id: "cmd-1",
+      kind: "tool",
+      toolType: "commandExecution",
+      title: "Command",
+      detail: "",
+      status: "running",
+      output: "hello",
+    };
+    const next = threadReducer(
+      {
+        ...initialState,
+        itemsByThread: {
+          "thread-1": [baseTool],
+        },
+      },
+      {
+        type: "appendToolOutput",
+        threadId: "thread-1",
+        itemId: "cmd-1",
+        delta: "x".repeat(300 * 1024),
+      },
+    );
+    const item = next.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("tool");
+    if (item?.kind === "tool") {
+      expect(item.output?.length ?? 0).toBeLessThanOrEqual(
+        COMMAND_EXECUTION_OUTPUT_BUDGET,
+      );
+      expect(item.output).toMatch(/omitted \d+ chars/);
+      expect(item.output?.startsWith("hello")).toBe(true);
+    }
+  });
+
+  it("does not apply the commandExecution 256KiB cap to fileChange output", () => {
+    const diff = "d".repeat(300 * 1024);
+    const next = threadReducer(
+      {
+        ...initialState,
+        itemsByThread: {
+          "thread-1": [
+            {
+              id: "diff-1",
+              kind: "tool",
+              toolType: "fileChange",
+              title: "Edit",
+              detail: "",
+              status: "running",
+              output: "",
+            },
+          ],
+        },
+      },
+      {
+        type: "appendToolOutput",
+        threadId: "thread-1",
+        itemId: "diff-1",
+        delta: diff,
+      },
+    );
+    const item = next.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("tool");
+    if (item?.kind === "tool") {
+      expect(item.output).toBe(diff);
+    }
   });
 
   it("tracks request user input queue", () => {

@@ -107,8 +107,8 @@ import {
   assignWorkspaceSessionFolder,
   assignWorkspaceSessionFolders,
   recordAutoSessionMetadata,
-  archiveWorkspaceSessions,
-  unarchiveWorkspaceSessions,
+  archiveWorkspaceSessionsV2,
+  unarchiveWorkspaceSessionsV2,
   deleteWorkspaceSessions,
   previewCodexLaunchProfile,
   runCodexDoctor,
@@ -1196,23 +1196,30 @@ describe("tauri invoke wrappers", () => {
       ],
     });
 
-    await archiveWorkspaceSessions("ws-2", ["claude:1", "codex-1"]);
+    await archiveWorkspaceSessionsV2("ws-2", [
+      { threadId: "claude:1" },
+      { threadId: "codex-1" },
+    ]);
     expect(invokeMock).toHaveBeenNthCalledWith(
       1,
-      "archive_workspace_sessions",
+      "archive_workspace_sessions_v2",
       {
-        workspaceId: "ws-2",
-        sessionIds: ["claude:1", "codex-1"],
+        request: {
+          workspaceId: "ws-2",
+          targets: [{ threadId: "claude:1" }, { threadId: "codex-1" }],
+        },
       },
     );
 
-    await unarchiveWorkspaceSessions("ws-2", ["claude:1"]);
+    await unarchiveWorkspaceSessionsV2("ws-2", [{ threadId: "claude:1" }]);
     expect(invokeMock).toHaveBeenNthCalledWith(
       2,
-      "unarchive_workspace_sessions",
+      "unarchive_workspace_sessions_v2",
       {
-        workspaceId: "ws-2",
-        sessionIds: ["claude:1"],
+        request: {
+          workspaceId: "ws-2",
+          targets: [{ threadId: "claude:1" }],
+        },
       },
     );
 

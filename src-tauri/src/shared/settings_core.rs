@@ -44,7 +44,7 @@ const DARK_THEME_PRESET_TOKYO_NIGHT: &str = "vscode-tokyo-night";
 const DARK_THEME_PRESET_ROSE_PINE: &str = "vscode-rose-pine";
 
 fn sanitize_ui_scale(scale: f64) -> f64 {
-    if !scale.is_finite() || scale < UI_SCALE_MIN || scale > UI_SCALE_MAX {
+    if !scale.is_finite() || !(UI_SCALE_MIN..=UI_SCALE_MAX).contains(&scale) {
         return UI_SCALE_DEFAULT;
     }
     (scale * 100.0).round() / 100.0
@@ -213,7 +213,7 @@ fn validate_ui_scale(scale: f64) -> Result<(), String> {
     if !scale.is_finite() {
         return Err("uiScale must be a finite number".to_string());
     }
-    if scale < UI_SCALE_MIN || scale > UI_SCALE_MAX {
+    if !(UI_SCALE_MIN..=UI_SCALE_MAX).contains(&scale) {
         return Err(format!(
             "uiScale must be within [{UI_SCALE_MIN}, {UI_SCALE_MAX}]"
         ));
@@ -338,13 +338,15 @@ where
     >,
 {
     // Box 到堆，避免 restart→spawn/terminate 深链内联出超大栈帧。
-    Box::pin(crate::shared::workspaces_core::restart_all_connected_sessions_core(
-        workspaces,
-        sessions,
-        app_settings,
-        runtime_manager,
-        spawn_session,
-    ))
+    Box::pin(
+        crate::shared::workspaces_core::restart_all_connected_sessions_core(
+            workspaces,
+            sessions,
+            app_settings,
+            runtime_manager,
+            spawn_session,
+        ),
+    )
     .await
 }
 

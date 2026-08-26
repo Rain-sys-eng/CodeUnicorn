@@ -16,6 +16,17 @@ describe("engine message delivery contract", () => {
     ).toMatchObject({ status: "accepted", route: "dispatch" });
   });
 
+  it("routes Pi steering to same-run steer (RPC resident, input.mid-turn=supported)", () => {
+    expect(
+      decideEngineMessageDelivery({
+        intent: "steer",
+        engine: "pi",
+        sessionId: "session-1",
+        activeRunId: "run-1",
+      }),
+    ).toMatchObject({ status: "accepted", route: "steer" });
+  });
+
   it("rejects Kimi steering instead of reporting a fake send", () => {
     expect(
       decideEngineMessageDelivery({

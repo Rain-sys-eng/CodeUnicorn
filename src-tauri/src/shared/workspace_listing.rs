@@ -293,6 +293,13 @@ pub(crate) fn normalize_workspace_relative_file_path(path: &str) -> Result<Strin
     normalize_workspace_relative_path(path, "File path cannot be empty.", "Invalid file path.")
 }
 
+/// Canonicalize a path, falling back to the original when the OS cannot
+/// resolve a final path. Windows network mounts (RaiDrive/SSHFS) can fail
+/// `GetFinalPathNameByHandleW` even though the handle opens.
+pub(crate) fn canonicalize_or_original(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
 pub(crate) fn sort_and_dedup_workspace_lists(
     files: &mut Vec<String>,
     directories: &mut Vec<String>,
@@ -591,7 +598,7 @@ pub(crate) fn list_workspace_files_inner_with_refresh(
     max_files: usize,
     force_refresh: bool,
 ) -> WorkspaceFilesResponse {
-    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+    let canonical_root = canonicalize_or_original(root);
     let mode = WorkspaceListingCacheMode::Initial;
     let cache_key = workspace_listing_cache_key(&canonical_root, mode.clone(), None, max_files);
     if force_refresh {
@@ -860,13 +867,9 @@ pub(crate) fn list_workspace_directory_children_inner_with_refresh(
     force_refresh: bool,
 ) -> Result<WorkspaceFilesResponse, String> {
     let normalized_path = normalize_workspace_relative_directory_path(directory_path)?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical_root = canonicalize_or_original(root);
     let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve directory path: {err}"))?;
+    let canonical_path = canonicalize_or_original(&candidate);
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Invalid directory path.".to_string());
     }
@@ -1071,5 +1074,31 @@ mod junk_dir_tests {
         assert!(is_special_directory_path("pkg/.tmp"));
         assert!(is_special_directory_path("target"));
         assert!(is_special_directory_path("apps/web/node_modules"));
+    }
+}
+
+#[cfg(test)]
+mod canonicalize_or_original_tests {
+    use super::canonicalize_or_original;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn falls_back_to_original_when_path_cannot_be_resolved() {
+        let missing = std::env::temp_dir().join(format!(
+            "mossx-missing-canonicalize-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        assert!(!missing.exists());
+        assert_eq!(canonicalize_or_original(&missing), missing);
+    }
+
+    #[test]
+    fn returns_canonical_path_when_path_exists() {
+        let temp = std::env::temp_dir();
+        let canonical = temp.canonicalize().expect("temp dir should canonicalize");
+        assert_eq!(canonicalize_or_original(&temp), canonical);
     }
 }

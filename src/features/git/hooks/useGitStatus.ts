@@ -24,11 +24,13 @@ const emptyStatus: GitStatusState = {
   error: null,
 };
 
-const REFRESH_INTERVAL_MS = 15000;
+// 渲染红线（AGENTS.md Render Perf Baseline）：常驻兜底轮询 ≥30s。
+// 长间隔的陈旧感由「窗口回到可见时立即补一拍」补偿（见下方 visibilitychange）。
+const REFRESH_INTERVAL_MS = 30_000;
 const HEAVY_CHANGESET_FILE_THRESHOLD = 120;
-const HEAVY_CHANGESET_REFRESH_INTERVAL_MS = 15000;
-const BACKGROUND_REFRESH_INTERVAL_MS = 15000;
-const HEAVY_CHANGESET_BACKGROUND_REFRESH_INTERVAL_MS = 15000;
+const HEAVY_CHANGESET_REFRESH_INTERVAL_MS = 45_000;
+const BACKGROUND_REFRESH_INTERVAL_MS = 60_000;
+const HEAVY_CHANGESET_BACKGROUND_REFRESH_INTERVAL_MS = 90_000;
 
 export type GitStatusPollingMode = "active" | "background" | "paused";
 
@@ -255,8 +257,25 @@ export function useGitStatus(
       runAndSchedule();
     }
 
+    // 回到前台立即补一拍（仅 active 面板）：兜底间隔拉长到 30-45s 后，
+    // 用户切回窗口不该看到陈旧的 git 状态。refresh 自带 in-flight 去重
+    // 与 identity 缓存，未变化时不会触发下游重渲。
+    const handleVisibilityChange = () => {
+      if (
+        cancelled ||
+        pollingMode !== "active" ||
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+      window.clearTimeout(timeoutId);
+      runAndSchedule();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearTimeout(timeoutId);
     };
   }, [autoPollingAllowed, pollingMode, refresh, resolveNextRefreshInterval, workspaceId]);

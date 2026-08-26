@@ -345,5 +345,3 @@ export function useCompletionDropdown<T>({
     replaceText,
   };
 }
-
-export default useCompletionDropdown;

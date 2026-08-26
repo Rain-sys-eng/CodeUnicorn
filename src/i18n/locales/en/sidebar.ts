@@ -45,6 +45,12 @@ const sidebar = {
     cliComingSoon: "Coming Soon",
     cliNotInstalled: "Not Installed",
     addWorkspace: "Add Project",
+    workspaceSettings: "Workspace settings",
+    workspaceSettingsTitle: "Workspace settings",
+    workspaceSettingsDescription: "These preferences apply to every project.",
+    workspaceSettingsVisibleCountLabel: "Default visible sessions",
+    workspaceSettingsVisibleCountHint:
+      "How many root sessions the collapsed sidebar shows by default. Factory {{defaultCount}}, range {{min}}-{{max}}. A project can still override this in Session Management.",
     openHome: "Open home",
     toggleSearch: "Toggle search",
     searchProjects: "Search projects",
@@ -91,7 +97,7 @@ const sidebar = {
     workspaceAliasPrompt:
       "Enter the alias shown for this workspace in the sidebar. Leave empty to use the original project name.",
     workspaceAliasDialogTitle: "Set workspace alias",
-    workspaceAliasDialogSubtitle: "Original project name: {{name}}",
+    workspaceAliasDialogSubtitle: "Original project name: <code>{{name}}</code>",
     workspaceAliasLabel: "Sidebar display name",
     workspaceAliasPlaceholder: "Example: Billing backend",
     workspaceAliasEmptyHint:
@@ -100,6 +106,8 @@ const sidebar = {
     workspaceAliasBadgeTitle: "Workspace alias. Original name: {{name}}",
     emptyWorkspaceSessions: "No sessions yet.",
     loadingWorkspaceSessions: "Loading…",
+    loadingWorkspaceSessionsIndex: "Reading session index…",
+    loadingWorkspaceSessionsDeep: "Deep-scanning local sessions…",
     newSessionFolder: "New folder",
     newSessionFolderIn: "New folder in {{name}}",
     renameSessionFolder: "Rename {{name}}",

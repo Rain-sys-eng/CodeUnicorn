@@ -185,11 +185,29 @@ describe("selectedComposerSession", () => {
     });
     expect(
       normalizeComposerSessionSelectionForThread("pi:session-1", {
-        modelId: "composer-2",
+        modelId: "kimi-coding/k3",
         effort: "high",
       }),
     ).toEqual({
-      modelId: "composer-2",
+      modelId: "kimi-coding/k3",
+      effort: "high",
+    });
+    expect(
+      normalizeComposerSessionSelectionForThread("pi:session-1", {
+        modelId: "kimi-coding/k3",
+        effort: "low",
+      }),
+    ).toEqual({
+      modelId: "kimi-coding/k3",
+      effort: "low",
+    });
+    expect(
+      normalizeComposerSessionSelectionForThread("pi:session-1", {
+        modelId: "kimi-coding/k3",
+        effort: "ultra",
+      }),
+    ).toEqual({
+      modelId: "kimi-coding/k3",
       effort: null,
     });
     expect(

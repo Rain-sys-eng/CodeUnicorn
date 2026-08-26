@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
+import {
+  getClientStoreSync,
+  writeClientStoreValue,
+} from "../../../services/clientStorage";
 import { useEventCallback } from "../../../utils/useEventCallback";
 import type { QoderSettingsHighlightTarget } from "../../../features/app/hooks/useSettingsModalState";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -48,7 +51,7 @@ import {
   type QuickSwitcherNavigationState,
 } from "../quickSwitcherNavigationState";
 import { getEngineModels } from "../../../services/tauri/appServer";
-import { archiveWorkspaceSessions } from "../../../services/tauri/sessionManagement";
+import { archiveWorkspaceSessionsV2 } from "../../../services/tauri/sessionManagement";
 import { markExplicitComposerEngineSwitch } from "../../../features/composer/hooks/explicitComposerEngineSwitch";
 import {
   clearDetachedExternalChangeMonitor,
@@ -102,6 +105,18 @@ const APP_SHELL_LAYOUT_NODES_GIT_DOMAIN_NAMES =
 
 // Stable empty-array sentinel so optional `string[]` fallbacks keep a constant
 // reference across renders (avoids defeating downstream React.memo shields).
+/**
+ * 用户显式「重新加载」会话列表 = 强制发现意图：first-paint 默认温读
+ * （syncIfNeeded:false / forceSync:false）只翻 SQLite 快照，新会话进索引靠
+ * 后端 importer 90s 轮询——窗口内（或被 omit/导入失败时）点多少次重载都
+ * 刷不出来（0.9.3 测试版用户反馈）。强制写者 rescan 但保持 first-paint
+ * kind，不升级 full-catalog 多引擎扇出。
+ * OpenSpec change：fix-sidebar-reload-force-index-sync。
+ */
+const USER_RELOAD_THREAD_LIST_OPTIONS = {
+  forceSessionIndexSync: true,
+} as const;
+
 function reportMainFileExternalChangeMonitorCleanupError(error: unknown) {
   console.warn(
     "[files] Failed to clear main file external change monitor",
@@ -173,8 +188,10 @@ export function useAppShellLayoutNodesSection(
   const clientUiVisibility = useClientUiVisibility();
   const { isExitedSessionsHidden, toggleExitedSessionsHidden } =
     useExitedSessionVisibility();
-  const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] =
-    useState<Record<string, number>>({});
+  const [
+    rootSessionFolderDraftRequestByWorkspaceId,
+    setRootSessionFolderDraftRequestByWorkspaceId,
+  ] = useState<Record<string, number>>({});
   const onRequestRootSessionFolderDraft = useCallback((workspaceId: string) => {
     setRootSessionFolderDraftRequestByWorkspaceId((current) => ({
       ...current,
@@ -763,7 +780,18 @@ export function useAppShellLayoutNodesSection(
   );
 
   const handleSelectConversationEngine = useCallback(
-    async (engine: "claude" | "codex" | "gemini" | "grok" | "kimi" | "opencode" | "pi" | "dsh" | "qoder") => {
+    async (
+      engine:
+        | "claude"
+        | "codex"
+        | "gemini"
+        | "grok"
+        | "kimi"
+        | "opencode"
+        | "pi"
+        | "dsh"
+        | "qoder",
+    ) => {
       const thread =
         activeWorkspaceId && activeThreadId
           ? (threadsByWorkspace[activeWorkspaceId] ?? []).find(
@@ -782,12 +810,7 @@ export function useAppShellLayoutNodesSection(
         return;
       }
     },
-    [
-      activeThreadId,
-      activeWorkspaceId,
-      setActiveEngine,
-      threadsByWorkspace,
-    ],
+    [activeThreadId, activeWorkspaceId, setActiveEngine, threadsByWorkspace],
   );
   const mainFileExternalChangeAwarenessEnabled =
     appSettings.detachedExternalChangeAwarenessEnabled !== false;
@@ -978,7 +1001,8 @@ export function useAppShellLayoutNodesSection(
     rightPanelCollapsed,
     sidebarToggleProps: mainHeaderSidebarToggleProps,
     showRuntimeConsoleButton:
-      !isCompact && clientUiVisibility.isControlVisible("topTool.runtimeConsole"),
+      !isCompact &&
+      clientUiVisibility.isControlVisible("topTool.runtimeConsole"),
     isRuntimeConsoleVisible: runtimeRunState.runtimeConsoleVisible,
     onToggleRuntimeConsole: handleToggleRuntimeConsole,
     showTerminalButton:
@@ -990,7 +1014,9 @@ export function useAppShellLayoutNodesSection(
     isSoloMode,
     onToggleSoloMode: toggleSoloMode,
     isBrowserDockOpen: browserDockOpen,
-    onToggleBrowserDock: clientUiVisibility.isControlVisible("topTool.browserDock")
+    onToggleBrowserDock: clientUiVisibility.isControlVisible(
+      "topTool.browserDock",
+    )
       ? handleToggleBrowserDock
       : undefined,
     showClientDocumentationButton:
@@ -1193,6 +1219,10 @@ export function useAppShellLayoutNodesSection(
     });
   });
   const handleOpenSettings = useEventCallback(() => openSettings());
+  // 右键菜单「删除」旁的批量删除引导：直达 项目管理 → 会话管理
+  const handleOpenSessionManagement = useEventCallback(() =>
+    openSettings("project-management", "project-sessions"),
+  );
   const handleOpenShortcutsSettings = useEventCallback(() =>
     openSettings("shortcuts"),
   );
@@ -1202,10 +1232,9 @@ export function useAppShellLayoutNodesSection(
   const handleOpenPromptSettings = useEventCallback(() =>
     openSettings("agent-prompt-management", "prompt-library"),
   );
-  const handleOpenCliSettings = useEventCallback((
-    highlightTarget?: QoderSettingsHighlightTarget,
-  ) =>
-    openSettings("providers", highlightTarget),
+  const handleOpenCliSettings = useEventCallback(
+    (highlightTarget?: QoderSettingsHighlightTarget) =>
+      openSettings("providers", highlightTarget),
   );
   // Manual git panel refresh should dismiss stale commit/push/sync error banners.
   const handleManualGitStatusRefresh = useCallback(() => {
@@ -1234,6 +1263,17 @@ export function useAppShellLayoutNodesSection(
       workspaceId,
       setActiveThreadId,
     );
+  });
+  // 关闭最后一个 topbar 页签的落点：清空会话选择并落到 workspace home 首页
+  //（HomeChat）。禁止复用 handleSelectWorkspace——它会恢复 workspace last
+  // thread（刚被关闭的会话）造成幽灵内容。identity + chrome only，零 IPC。
+  const handleClearActiveThread = useEventCallback((workspaceId: string) => {
+    exitDiffView();
+    resetPullRequestSelection();
+    setHomeOpen(false);
+    setCenterMode("chat");
+    setActiveThreadId(null, workspaceId);
+    setWorkspaceHomeWorkspaceId(workspaceId);
   });
   const handleConnectWorkspace = useEventCallback(
     async (workspace: WorkspaceInfo) => {
@@ -1306,8 +1346,7 @@ export function useAppShellLayoutNodesSection(
             : undefined;
           if (!byCatalogId && runtimeHint) {
             const byRuntime = models.find(
-              (model) =>
-                (model.model?.trim() || model.id) === runtimeHint,
+              (model) => (model.model?.trim() || model.id) === runtimeHint,
             );
             if (byRuntime) {
               resolvedModelId = byRuntime.id;
@@ -1397,8 +1436,10 @@ export function useAppShellLayoutNodesSection(
   const handleArchiveThread = useEventCallback(
     async (workspaceId: string, threadId: string) => {
       try {
-        const response = await archiveWorkspaceSessions(workspaceId, [
-          threadId,
+        // v2 归档：Index First + metadata-only，零全量 catalog 扫描；成功后
+        // 本地摘行，不再 force full-catalog 重扫。
+        const response = await archiveWorkspaceSessionsV2(workspaceId, [
+          { threadId },
         ]);
         // Prefer exact id match; fall back to the only result when backend
         // normalizes the requested id into a different sessionId field.
@@ -1410,18 +1451,14 @@ export function useAppShellLayoutNodesSection(
             mutationResult?.error ?? t("workspace.archiveConversationFailed"),
           );
         }
-        if (
-          activeWorkspaceId === workspaceId &&
-          activeThreadId === threadId
-        ) {
+        if (activeWorkspaceId === workspaceId && activeThreadId === threadId) {
           setActiveThreadId(null, workspaceId);
         }
-        // Immediately drop the row from local sidebar state via deletedThreadIds.
-        // Without this, success only triggers a full catalog rescan — slow, easy
-        // to race with continuity merge, and looks like "click does nothing".
+        // 本地摘行（不触发 full-catalog 重扫；归档证据由 metadata 持久化，
+        // 下次自然刷新仍隐藏）。
         ensureWorkspaceThreadListLoaded(workspaceId, {
-          force: true,
           deletedThreadIds: [threadId],
+          localRemovalOnly: true,
         });
       } catch (error: unknown) {
         alertError(error instanceof Error ? error.message : String(error));
@@ -1511,7 +1548,12 @@ export function useAppShellLayoutNodesSection(
             ]
           : [workspace];
       await Promise.allSettled(
-        targets.map((target) => listThreadsForWorkspaceTracked(target)),
+        targets.map((target) =>
+          listThreadsForWorkspaceTracked(
+            target,
+            USER_RELOAD_THREAD_LIST_OPTIONS,
+          ),
+        ),
       );
     },
   );
@@ -1552,7 +1594,12 @@ export function useAppShellLayoutNodesSection(
             ]
           : [workspace];
       void Promise.allSettled(
-        targets.map((target) => listThreadsForWorkspaceTracked(target)),
+        targets.map((target) =>
+          listThreadsForWorkspaceTracked(
+            target,
+            USER_RELOAD_THREAD_LIST_OPTIONS,
+          ),
+        ),
       );
     },
   );
@@ -1791,6 +1838,14 @@ export function useAppShellLayoutNodesSection(
       }
     },
   );
+  const handleChangeDefaultVisibleThreadRootCount = useEventCallback(
+    async (count: number) => {
+      await queueSaveSettings({
+        ...appSettings,
+        defaultVisibleThreadRootCount: count,
+      });
+    },
+  );
   const handleCodexAutoCompactionSettingsChange = useEventCallback(
     async (patch: { enabled?: boolean; thresholdPercent?: number }) => {
       await queueSaveSettings({
@@ -1953,6 +2008,9 @@ export function useAppShellLayoutNodesSection(
       activeRateLimits,
       usageShowRemaining: appSettings.usageShowRemaining,
       showSidebarProviderLabels: appSettings.showSidebarProviderLabels,
+      defaultVisibleThreadRootCount: appSettings.defaultVisibleThreadRootCount,
+      onChangeDefaultVisibleThreadRootCount:
+        handleChangeDefaultVisibleThreadRootCount,
       onRefreshAccountRateLimits: handleRefreshAccountRateLimits,
       showMessageAnchors: appSettings.showMessageAnchors,
       accountInfo: activeAccount,
@@ -1978,6 +2036,7 @@ export function useAppShellLayoutNodesSection(
     },
     chrome: {
       onOpenSettings: handleOpenSettings,
+      onOpenSessionManagement: handleOpenSessionManagement,
       onOpenShortcutsSettings: handleOpenShortcutsSettings,
       onOpenAgentSettings: handleOpenAgentSettings,
       onOpenPromptSettings: handleOpenPromptSettings,
@@ -2001,6 +2060,7 @@ export function useAppShellLayoutNodesSection(
       onAddCloneAgent: handleAddCloneAgent,
       onToggleWorkspaceCollapse: handleToggleWorkspaceCollapse,
       onSelectThread: handleSelectThread,
+      onClearActiveThread: handleClearActiveThread,
       onProviderContinuationTargetReady: handleProviderContinuationTargetReady,
       onSelectHomeWorkspace: handleSelectHomeWorkspace,
       onDeleteThread: handleDeleteThread,
@@ -2350,7 +2410,8 @@ export function useAppShellLayoutNodesSection(
       accessMode,
       onSelectAccessMode: handleSetAccessMode,
       skills,
-      customSkillDirectories: appSettings.customSkillDirectories ?? EMPTY_STRING_ARRAY,
+      customSkillDirectories:
+        appSettings.customSkillDirectories ?? EMPTY_STRING_ARRAY,
       prompts,
       commands,
       files,
