@@ -1,5 +1,10 @@
 import type { ComposerSessionSelection } from "./selectedComposerSession";
 import type { EngineType, ModelOption } from "../../types";
+import {
+  CUSTOM_MODEL_DEFAULT_REASONING_EFFORT,
+  CUSTOM_MODEL_SUPPORTED_REASONING_OPTIONS,
+  isUserManagedCustomModelSource,
+} from "../../features/models/customModelReasoning";
 
 type GetEffectiveSelectedModelIdOptions = {
   activeEngine: EngineType;
@@ -159,7 +164,7 @@ export function enrichScopedCodexReasoningMetadata(
       getModelRuntimeIdentity(scopedModel),
     );
     if (!authoritativeModel) {
-      return scopedModel;
+      return withUserManagedReasoningDefaults(scopedModel);
     }
     const supportedReasoningEfforts =
       scopedModel.supportedReasoningEfforts.length > 0
@@ -172,14 +177,38 @@ export function enrichScopedCodexReasoningMetadata(
       supportedReasoningEfforts === scopedModel.supportedReasoningEfforts &&
       defaultReasoningEffort === scopedModel.defaultReasoningEffort
     ) {
-      return scopedModel;
+      return withUserManagedReasoningDefaults(scopedModel);
     }
-    return {
+    return withUserManagedReasoningDefaults({
       ...scopedModel,
       supportedReasoningEfforts,
       defaultReasoningEffort,
-    };
+    });
   });
+}
+
+/**
+ * provider-owned 用户管理来源（provider-custom / provider-config）在
+ * authoritative identity 填充后仍缺 reasoning metadata 时，回落公共默认档
+ * （low/medium/high/xhigh，默认 medium），使 scoped Codex 会话的思考强度
+ * 选择器可用。CLI runtime 发现的 unknown model（source 非 user-managed）
+ * 保持 capability-neutral，不发明档位（fix-codex-third-party-provider-model-catalog）。
+ */
+function withUserManagedReasoningDefaults(model: ModelOption): ModelOption {
+  if (
+    !isUserManagedCustomModelSource(model.source) ||
+    model.supportedReasoningEfforts.length > 0
+  ) {
+    return model;
+  }
+  return {
+    ...model,
+    supportedReasoningEfforts: CUSTOM_MODEL_SUPPORTED_REASONING_OPTIONS.map(
+      (entry) => ({ ...entry }),
+    ),
+    defaultReasoningEffort:
+      model.defaultReasoningEffort ?? CUSTOM_MODEL_DEFAULT_REASONING_EFFORT,
+  };
 }
 
 export function isReasoningEffortSupportedForEngine(

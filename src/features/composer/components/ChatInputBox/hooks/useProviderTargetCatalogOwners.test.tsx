@@ -1155,6 +1155,53 @@ describe("Provider target catalog owners", () => {
     ]);
   });
 
+  it("keeps runtime reasoning metadata on discovered Codex models", async () => {
+    discoverCodexModelsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: "relay-reasoning",
+          model: "relay-reasoning",
+          supported_reasoning_efforts: ["low", { reasoningEffort: "high", description: "Deep" }],
+          default_reasoning_effort: "high",
+        },
+        {
+          id: "relay-plain",
+          model: "relay-plain",
+        },
+      ],
+    });
+    const { result } = renderHook(() =>
+      useAtomicProviderTargetCatalog({
+        enabled: true,
+        mode: "create-session",
+        workspaceId: "ws-1",
+        currentProvider: "codex",
+        currentProviderProfileId: "__disk__",
+        resolveProviderLabel: (provider) => provider,
+        kimiDisabledReason: "source only",
+      }),
+    );
+
+    await act(async () => {
+      await result.current.ensureProfiles();
+      await result.current.discoverModels("codex", "__disk__");
+    });
+
+    const models =
+      result.current.groups
+        .find((group) => group.providerId === "codex")
+        ?.profiles.find((profile) => profile.id === "__disk__")?.models ?? [];
+    const reasoningRow = models.find((model) => model.id === "relay-reasoning");
+    expect(reasoningRow?.supportedReasoningEfforts?.map((e) => e.reasoningEffort)).toEqual([
+      "low",
+      "high",
+    ]);
+    expect(reasoningRow?.defaultReasoningEffort).toBe("high");
+    // 无 metadata 的 runtime 条目保持 capability-neutral，不因提取逻辑发明档位
+    const plainRow = models.find((model) => model.id === "relay-plain");
+    expect(plainRow?.supportedReasoningEfforts ?? []).toEqual([]);
+  });
+
   describe("CLI engine visibility", () => {
     it("hides user-disabled DSH from Home create-session groups", () => {
       seedCliEngineVisibility(["dsh"]);

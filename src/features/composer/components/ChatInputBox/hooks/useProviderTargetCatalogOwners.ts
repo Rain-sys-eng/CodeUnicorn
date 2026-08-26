@@ -436,9 +436,56 @@ function extractCodexDiscoveredModels(response: Record<string, unknown>): ModelI
           : runtimeModel,
       description:
         typeof model.description === "string" ? model.description : undefined,
+      // 保留 runtime `model/list` 返回的 reasoning metadata（runtime 优先于
+      // catalog / 默认档的既有 spec 语义）；字段名与 useModels 的
+      // normalizeReasoningEfforts 同源（camelCase / snake_case 双形态）。
+      supportedReasoningEfforts: normalizeDiscoveredReasoningEfforts(
+        model.supportedReasoningEfforts ?? model.supported_reasoning_efforts,
+      ),
+      defaultReasoningEffort:
+        typeof (model.defaultReasoningEffort ?? model.default_reasoning_effort) ===
+        "string"
+          ? ((model.defaultReasoningEffort ?? model.default_reasoning_effort) as string)
+          : null,
       source: "runtime",
     }];
   });
+}
+
+function normalizeDiscoveredReasoningEfforts(
+  value: unknown,
+): ModelInfo["supportedReasoningEfforts"] {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const efforts: NonNullable<ModelInfo["supportedReasoningEfforts"]> = [];
+  for (const entry of value) {
+    if (typeof entry === "string") {
+      const trimmed = entry.trim();
+      if (trimmed) {
+        efforts.push({ reasoningEffort: trimmed, description: "" });
+      }
+      continue;
+    }
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const effort =
+      typeof record.reasoningEffort === "string"
+        ? record.reasoningEffort.trim()
+        : typeof record.reasoning_effort === "string"
+          ? record.reasoning_effort.trim()
+          : "";
+    if (effort) {
+      efforts.push({
+        reasoningEffort: effort,
+        description:
+          typeof record.description === "string" ? record.description : "",
+      });
+    }
+  }
+  return efforts.length > 0 ? efforts : undefined;
 }
 
 function useProviderTargetCatalogOwner({
