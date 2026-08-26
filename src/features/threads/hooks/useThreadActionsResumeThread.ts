@@ -155,7 +155,7 @@ type ResumeThreadForWorkspaceCallback = (
   threadId: string,
   force?: boolean,
   replaceLocal?: boolean,
-  options?: { preferLocalCodexHistory?: boolean },
+  options?: ResumeThreadForWorkspaceOptions,
 ) => Promise<string | null>;
 
 export function useThreadActionsResumeThreadForWorkspace(
