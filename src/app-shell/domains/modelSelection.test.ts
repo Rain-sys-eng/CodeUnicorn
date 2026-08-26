@@ -43,11 +43,15 @@ describe("modelSelection", () => {
   ];
 
   it("uses codex models directly when codex is active", () => {
-    expect(getEffectiveModels("codex", codexModels, engineModels)).toEqual(codexModels);
+    expect(getEffectiveModels("codex", codexModels, engineModels)).toEqual(
+      codexModels,
+    );
   });
 
   it("uses engine-provided models for non-codex engines", () => {
-    expect(getEffectiveModels("claude", codexModels, engineModels)).toEqual(engineModels);
+    expect(getEffectiveModels("claude", codexModels, engineModels)).toEqual(
+      engineModels,
+    );
   });
 
   it("keeps the codex-selected model id when codex is active", () => {
@@ -175,7 +179,9 @@ describe("modelSelection", () => {
   });
 
   it("prefers a valid non-codex engine selection over defaults", () => {
-    const engineSelectedModelIdByType: Partial<Record<EngineType, string | null>> = {
+    const engineSelectedModelIdByType: Partial<
+      Record<EngineType, string | null>
+    > = {
       gemini: "engine-alt",
     };
     expect(
@@ -200,9 +206,7 @@ describe("modelSelection", () => {
         hasActiveThread: true,
         allowUnknownActiveThreadModel: true,
         codexModels,
-        engineModelsAsOptions: [
-          createModel("gpt-5.5", { isDefault: true }),
-        ],
+        engineModelsAsOptions: [createModel("gpt-5.5", { isDefault: true })],
         engineSelectedModelIdByType: {},
       }),
     ).toBe("gork-zhu/grok-4.6");
@@ -258,7 +262,9 @@ describe("modelSelection", () => {
   });
 
   it("falls back to the engine default when the saved non-codex selection is invalid", () => {
-    const engineSelectedModelIdByType: Partial<Record<EngineType, string | null>> = {
+    const engineSelectedModelIdByType: Partial<
+      Record<EngineType, string | null>
+    > = {
       opencode: "missing-model",
     };
     expect(
@@ -275,7 +281,9 @@ describe("modelSelection", () => {
   });
 
   it("prefers the active thread model over the global engine selection", () => {
-    const engineSelectedModelIdByType: Partial<Record<EngineType, string | null>> = {
+    const engineSelectedModelIdByType: Partial<
+      Record<EngineType, string | null>
+    > = {
       claude: "engine-default",
     };
     expect(
@@ -307,7 +315,9 @@ describe("modelSelection", () => {
   });
 
   it("ignores the global engine selection for active threads without a stored model", () => {
-    const engineSelectedModelIdByType: Partial<Record<EngineType, string | null>> = {
+    const engineSelectedModelIdByType: Partial<
+      Record<EngineType, string | null>
+    > = {
       claude: "engine-alt",
     };
     expect(
@@ -390,7 +400,9 @@ describe("modelSelection", () => {
   });
 
   it("keeps engine selection state identity when the default is already stored", () => {
-    const previousSelectionByEngine: Partial<Record<EngineType, string | null>> = {
+    const previousSelectionByEngine: Partial<
+      Record<EngineType, string | null>
+    > = {
       claude: "engine-default",
     };
 
@@ -404,7 +416,9 @@ describe("modelSelection", () => {
   });
 
   it("does not mutate engine selection state when no default is available", () => {
-    const previousSelectionByEngine: Partial<Record<EngineType, string | null>> = {
+    const previousSelectionByEngine: Partial<
+      Record<EngineType, string | null>
+    > = {
       claude: "engine-default",
     };
 
@@ -418,7 +432,9 @@ describe("modelSelection", () => {
   });
 
   it("writes a missing engine default without depending on the full selection map", () => {
-    const previousSelectionByEngine: Partial<Record<EngineType, string | null>> = {};
+    const previousSelectionByEngine: Partial<
+      Record<EngineType, string | null>
+    > = {};
 
     expect(
       upsertEngineSelectedModelId({
@@ -435,17 +451,23 @@ describe("modelSelection", () => {
     expect(getEffectiveReasoningSupported("gemini", true)).toBe(false);
     expect(isReasoningEffortSupportedForEngine("codex", ["medium"])).toBe(true);
     expect(isReasoningEffortSupportedForEngine("codex", [])).toBe(false);
-    expect(isReasoningEffortSupportedForEngine("gemini", ["medium"])).toBe(false);
+    expect(isReasoningEffortSupportedForEngine("gemini", ["medium"])).toBe(
+      false,
+    );
   });
 
   it("exposes Claude reasoning support independently from model catalog", () => {
     expect(getEffectiveReasoningSupported("claude", false)).toBe(true);
-    expect(getEffectiveReasoningOptions("claude", [])).toEqual(CLAUDE_REASONING_OPTIONS);
+    expect(getEffectiveReasoningOptions("claude", [])).toEqual(
+      CLAUDE_REASONING_OPTIONS,
+    );
   });
 
   it("exposes Grok reasoning support independently from model catalog", () => {
     expect(getEffectiveReasoningSupported("grok", false)).toBe(true);
-    expect(getEffectiveReasoningOptions("grok", [])).toEqual(GROK_REASONING_OPTIONS);
+    expect(getEffectiveReasoningOptions("grok", [])).toEqual(
+      GROK_REASONING_OPTIONS,
+    );
     expect(isReasoningEffortSupportedForEngine("grok", [])).toBe(true);
   });
 
@@ -543,11 +565,23 @@ describe("modelSelection", () => {
     expect(getEffectiveReasoningSupported("pi", true)).toBe(true);
     expect(getEffectiveReasoningSupported("pi", false)).toBe(false);
     expect(
-      isReasoningEffortSupportedForEngine("pi", ["off", "minimal", "low", "medium", "high"]),
+      isReasoningEffortSupportedForEngine("pi", [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+      ]),
     ).toBe(true);
     expect(isReasoningEffortSupportedForEngine("pi", [])).toBe(false);
     expect(
-      getEffectiveReasoningOptions("pi", ["off", "minimal", "low", "medium", "high"]),
+      getEffectiveReasoningOptions("pi", [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+      ]),
     ).toEqual(["off", "minimal", "low", "medium", "high"]);
   });
 
@@ -631,14 +665,13 @@ describe("modelSelection", () => {
   it("exposes DSH reasoning support only when the model declares efforts", () => {
     expect(getEffectiveReasoningSupported("dsh", true)).toBe(true);
     expect(getEffectiveReasoningSupported("dsh", false)).toBe(false);
-    expect(isReasoningEffortSupportedForEngine("dsh", ["off", "low", "high", "max"])).toBe(true);
+    expect(
+      isReasoningEffortSupportedForEngine("dsh", ["off", "low", "high", "max"]),
+    ).toBe(true);
     expect(isReasoningEffortSupportedForEngine("dsh", [])).toBe(false);
-    expect(getEffectiveReasoningOptions("dsh", ["off", "low", "high", "max"])).toEqual([
-      "off",
-      "low",
-      "high",
-      "max",
-    ]);
+    expect(
+      getEffectiveReasoningOptions("dsh", ["off", "low", "high", "max"]),
+    ).toEqual(["off", "low", "high", "max"]);
   });
 
   it("keeps a valid DSH thread effort and falls back to model default otherwise", () => {
@@ -689,7 +722,12 @@ describe("modelSelection", () => {
       ],
       defaultReasoningEffort: "high",
     });
-    expect(getReasoningOptionsForModel(model)).toEqual(["off", "low", "high", "max"]);
+    expect(getReasoningOptionsForModel(model)).toEqual([
+      "off",
+      "low",
+      "high",
+      "max",
+    ]);
     const plain = createModel("gork-zhu/grok-4.6");
     expect(getReasoningOptionsForModel(plain)).toEqual([]);
   });
@@ -774,10 +812,12 @@ describe("preserveLedgerModelOnFallbackCatalog", () => {
   });
 
   it("returns the original array reference when there is no ledger id or the catalog is empty", () => {
-    expect(preserveLedgerModelOnFallbackCatalog(fallbackOnlyCatalog, null)).toBe(
-      fallbackOnlyCatalog,
+    expect(
+      preserveLedgerModelOnFallbackCatalog(fallbackOnlyCatalog, null),
+    ).toBe(fallbackOnlyCatalog);
+    expect(preserveLedgerModelOnFallbackCatalog([], "kimi-coding/k3")).toEqual(
+      [],
     );
-    expect(preserveLedgerModelOnFallbackCatalog([], "kimi-coding/k3")).toEqual([]);
   });
 
   it("does not append when only some models are fallback-sourced", () => {
@@ -785,8 +825,8 @@ describe("preserveLedgerModelOnFallbackCatalog", () => {
       createModel("auto", { source: "fallback", isDefault: true }),
       createModel("kimi-coding/k3", { source: "detected" }),
     ];
-    expect(preserveLedgerModelOnFallbackCatalog(mixed, "my-relay/grok-4.6")).toBe(
-      mixed,
-    );
+    expect(
+      preserveLedgerModelOnFallbackCatalog(mixed, "my-relay/grok-4.6"),
+    ).toBe(mixed);
   });
 });

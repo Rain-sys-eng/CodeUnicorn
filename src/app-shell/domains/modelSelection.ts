@@ -32,7 +32,13 @@ type GetEffectiveSelectedEffortOptions = {
   reasoningOptions: string[];
 };
 
-export const CLAUDE_REASONING_OPTIONS = ["low", "medium", "high", "xhigh", "max"];
+export const CLAUDE_REASONING_OPTIONS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 
 /** Grok CLI composer allowlist — keep aligned with `GROK_REASONING_EFFORTS` in grok.rs. */
 export const GROK_REASONING_OPTIONS = ["low", "medium", "high"];
@@ -62,7 +68,9 @@ export function preserveLedgerModelOnFallbackCatalog(
   if (
     !ledgerId ||
     engineModelsAsOptions.length === 0 ||
-    !engineModelsAsOptions.every((model) => (model.source ?? "") === "fallback") ||
+    !engineModelsAsOptions.every(
+      (model) => (model.source ?? "") === "fallback",
+    ) ||
     findModelById(engineModelsAsOptions, ledgerId)
   ) {
     return engineModelsAsOptions;
@@ -225,7 +233,8 @@ export function getEffectiveSelectedModelId({
     return unrestrictedThreadModelId;
   }
   if (activeEngine === "codex") {
-    const selectedCodexModelId = findModelById(codexModels, selectedModelId)?.id ?? null;
+    const selectedCodexModelId =
+      findModelById(codexModels, selectedModelId)?.id ?? null;
     const threadCodexModelId =
       findModelById(codexModels, activeThreadSelectedModelId)?.id ?? null;
     const defaultCodexModelId = getDefaultModelId(codexModels);
@@ -260,8 +269,12 @@ export function getEffectiveSelectedEffort({
   activeThreadSelection,
   reasoningOptions,
 }: GetEffectiveSelectedEffortOptions) {
-  const normalizedReasoningOptions = getNormalizedReasoningOptions(reasoningOptions);
-  const normalizeEffort = (value: string | null, options?: { fallbackToFirst: boolean }) => {
+  const normalizedReasoningOptions =
+    getNormalizedReasoningOptions(reasoningOptions);
+  const normalizeEffort = (
+    value: string | null,
+    options?: { fallbackToFirst: boolean },
+  ) => {
     if (typeof value !== "string") {
       return null;
     }
@@ -273,11 +286,18 @@ export function getEffectiveSelectedEffort({
       normalizedReasoningOptions.length > 0 &&
       !normalizedReasoningOptions.includes(trimmed)
     ) {
-      return options?.fallbackToFirst ? normalizedReasoningOptions[0] ?? null : null;
+      return options?.fallbackToFirst
+        ? (normalizedReasoningOptions[0] ?? null)
+        : null;
     }
     return trimmed;
   };
-  if (!isReasoningEffortSupportedForEngine(activeEngine, normalizedReasoningOptions)) {
+  if (
+    !isReasoningEffortSupportedForEngine(
+      activeEngine,
+      normalizedReasoningOptions,
+    )
+  ) {
     return null;
   }
   // Claude / Grok: fixed CLI allowlist; only surface thread/draft selection (no silent default).
@@ -304,8 +324,12 @@ export function getEffectiveSelectedEffort({
   );
 }
 
-export function getReasoningOptionsForModel(model: ModelOption | null): string[] {
-  const supported = model?.supportedReasoningEfforts.map((effort) => effort.reasoningEffort) ?? [];
+export function getReasoningOptionsForModel(
+  model: ModelOption | null,
+): string[] {
+  const supported =
+    model?.supportedReasoningEfforts.map((effort) => effort.reasoningEffort) ??
+    [];
   if (supported.length > 0) {
     return supported;
   }
