@@ -1703,3 +1703,155 @@ fn pi_forked_session_id_noop_guard() {
         None
     );
 }
+
+// ===== cache-first engine model catalog (OpenSpec: cache-first-engine-model-catalog) =====
+
+fn catalog_test_status(
+    engine_type: crate::engine::EngineType,
+    model_ids: &[&str],
+) -> crate::engine::EngineStatus {
+    let mut status = crate::engine::disabled_engine_status(engine_type);
+    status.installed = true;
+    status.error = None;
+    status.models = model_ids
+        .iter()
+        .map(|id| crate::engine::ModelInfo::new(*id, *id))
+        .collect();
+    status
+}
+
+fn catalog_model_ids(models: &[crate::engine::ModelInfo]) -> Vec<String> {
+    models.iter().map(|model| model.id.clone()).collect()
+}
+
+#[tokio::test]
+async fn cache_first_returns_cached_models_without_invoking_refresh() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/cached"]))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Pi, &["pi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(
+        refresh_calls.load(Ordering::SeqCst),
+        0,
+        "cache hit must not spawn any CLI probe"
+    );
+    assert_eq!(catalog_model_ids(&models), vec!["pi/cached".to_string()]);
+}
+
+#[tokio::test]
+async fn cache_first_forced_refresh_bypasses_cache_and_writes_back() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/stale"]))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, true, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Pi, &["pi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(refresh_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(catalog_model_ids(&models), vec!["pi/fresh".to_string()]);
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("fresh status must be written back to cache");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/fresh".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_forced_refresh_with_empty_result_preserves_last_good() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/last-good"]))
+        .await;
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, true, || async {
+            catalog_test_status(EngineType::Pi, &[])
+        })
+        .await;
+
+    assert_eq!(
+        catalog_model_ids(&models),
+        vec!["pi/last-good".to_string()],
+        "empty fresh result must fall back to last-good cache"
+    );
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("last-good cache must survive a failed refresh");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/last-good".to_string()],
+        "empty fresh result must not evict the cache"
+    );
+}
+
+#[tokio::test]
+async fn cache_first_empty_cache_probes_fresh_and_writes_back() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Kimi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Kimi, &["kimi/k2"]) }
+        })
+        .await;
+
+    assert_eq!(refresh_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(catalog_model_ids(&models), vec!["kimi/k2".to_string()]);
+    let cached = manager
+        .get_engine_status(EngineType::Kimi)
+        .await
+        .expect("fresh status must populate the empty cache");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["kimi/k2".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_empty_cache_and_empty_probe_returns_empty() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Grok, false, || async {
+            catalog_test_status(EngineType::Grok, &[])
+        })
+        .await;
+
+    assert!(models.is_empty());
+}

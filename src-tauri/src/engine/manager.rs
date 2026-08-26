@@ -360,6 +360,14 @@ impl EngineManager {
         statuses.get(&engine_type).cloned()
     }
 
+    /// Insert or replace the cached status for an engine.
+    /// Used by cache-first catalog resolution to write back fresh probe
+    /// results, and by tests to seed the cache.
+    pub async fn cache_engine_status(&self, status: EngineStatus) {
+        let mut statuses = self.engine_statuses.write().await;
+        statuses.insert(status.engine_type, status);
+    }
+
     /// Get all cached engine statuses
     pub async fn get_all_statuses(&self) -> Vec<EngineStatus> {
         let statuses = self.engine_statuses.read().await;

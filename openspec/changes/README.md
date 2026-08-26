@@ -3,7 +3,7 @@
 本页是 `mossx` OpenSpec proposal 的当前入口。它只维护 active change 的执行状态，并把 archived change 路由到完整历史索引；详细治理快照仍以 [`../project.md`](../project.md) 为准。
 
 - Updated At: `2026-08-26`
-- Active proposals: `51`（以磁盘 `openspec/changes/*` 为准）
+- Active proposals: `52`（以磁盘 `openspec/changes/*` 为准）
 - Archived proposals: `919`
 - Main capability specs: `539`
 
@@ -11,6 +11,7 @@
 
 | Change | Progress | Current gate | Artifacts |
 | ------ | -------: | ------------ | --------- |
+| [`cache-first-engine-model-catalog`](cache-first-engine-model-catalog/proposal.md) | implementing / TDD | `get_engine_models` Pi/Kimi/Grok 分支改 cache-first（对齐 Claude/Codex 与 daemon remote）：首开下拉不再同步等 2~20s CLI 探测链；force/缓存空走 fresh 并回写，空结果保 last-good；**TDD 5 测先红后绿** | [proposal](cache-first-engine-model-catalog/proposal.md) · [tasks](cache-first-engine-model-catalog/tasks.md) · [specs](cache-first-engine-model-catalog/specs/) |
 | [`unify-engine-send-core`](unify-engine-send-core/proposal.md) | proposed / await review | Rust send 路径去双份：`engine/commands.rs`（~2.9k 行）与 `daemon_state.rs`（~2.4k 行）的 `engine_send_message(_sync)` 抽为共享 send core（EventSink 已有，补 SendRuntimeAccess 注入面），逐引擎迁移一引擎一 PR；命中 Engine Onboarding Gate 与 ADR 校准回写 Gate；**待 proposal review 后进脚手架 PR** | [proposal](unify-engine-send-core/proposal.md) · [design](unify-engine-send-core/design.md) · [tasks](unify-engine-send-core/tasks.md) · [specs](unify-engine-send-core/specs/) |
 | [`fix-turn-terminal-live-text-commit-loss`](fix-turn-terminal-live-text-commit-loss/proposal.md) | implemented / committed / await hand-test | 回合结束小概率「缺渲染」：terminal barrier 前不 drain contract batcher + 迟到 complete 无 salvage（含 codex quarantine 拦截）。Fix 1 drain + Fix 2 salvage 已落地，8 回归测试全绿、threads/app 全量零新增红；commit `19e264c97`；**待 codex-native/shared 真机手测后 verify + sync specs** | [proposal](fix-turn-terminal-live-text-commit-loss/proposal.md) · [design](fix-turn-terminal-live-text-commit-loss/design.md) · [tasks](fix-turn-terminal-live-text-commit-loss/tasks.md) · [specs](fix-turn-terminal-live-text-commit-loss/specs/) · [分析](../../docs/analysis/turn-terminal-live-text-commit-loss-2026-08-25.md) |
 | [`redesign-session-delete-architecture`](redesign-session-delete-architecture/proposal.md) | implemented / await hand-test 3.3 | 删除链路 v2：Index First O(1) 定位 + marker-first tombstone + 受控并发执行 + 事件通道 + 前端乐观删除；会话管理全选 / 右键菜单链接已接；H1 settled 竞态 + H2 panic 兜底 + R1 rollback 竞态已修；cargo/vitest/tsc/governance 绿；**待真机 3.3 验收后 verify** | [proposal](redesign-session-delete-architecture/proposal.md) · [design](redesign-session-delete-architecture/design.md) · [tasks](redesign-session-delete-architecture/tasks.md) · [specs](redesign-session-delete-architecture/specs/) · [plan](../../docs/plans/2026-08-24-session-delete-architecture-redesign.md) |

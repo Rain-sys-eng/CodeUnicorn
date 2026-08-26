@@ -1428,6 +1428,43 @@ pub async fn get_engine_active_process_diagnostics(
     ))
 }
 
+/// Cache-first catalog resolution for engines whose model probe spawns CLI
+/// processes (Pi/Kimi/Grok). Mirrors the Claude/Codex arm and the daemon
+/// remote path: a non-forced call with a non-empty cache MUST NOT spawn any
+/// CLI probe. A forced or cache-empty call runs `refresh`; a non-empty fresh
+/// result is written back to the cache, while an empty fresh result falls
+/// back to the last-good cache instead of evicting it.
+///
+/// Contract: openspec/changes/cache-first-engine-model-catalog
+pub(crate) async fn resolve_engine_models_cache_first<F, Fut>(
+    manager: &super::EngineManager,
+    engine_type: EngineType,
+    force_refresh: bool,
+    refresh: F,
+) -> Vec<super::ModelInfo>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = super::EngineStatus>,
+{
+    let cached_models = manager
+        .get_engine_status(engine_type)
+        .await
+        .map(|status| status.models)
+        .filter(|models| !models.is_empty());
+    if !force_refresh {
+        if let Some(models) = cached_models {
+            return models;
+        }
+    }
+    let fresh_status = refresh().await;
+    if fresh_status.models.is_empty() {
+        return cached_models.unwrap_or_default();
+    }
+    let models = fresh_status.models.clone();
+    manager.cache_engine_status(fresh_status).await;
+    models
+}
+
 /// Get models for a specific engine
 #[tauri::command]
 pub async fn get_engine_models(
@@ -1486,40 +1523,25 @@ pub async fn get_engine_models(
         EngineType::Gemini => Ok(Vec::new()),
         EngineType::Kimi => {
             let config = manager.get_engine_config(EngineType::Kimi).await;
-            let custom_bin = config
-                .as_ref()
-                .and_then(|cfg| cfg.bin_path.as_ref())
-                .map(|s| s.as_str());
-            let fresh_status = detect_kimi_status(custom_bin).await;
-
-            if !fresh_status.models.is_empty() {
-                return Ok(fresh_status.models);
-            }
-
-            if let Some(cached) = manager.get_engine_status(EngineType::Kimi).await {
-                if !cached.models.is_empty() {
-                    return Ok(cached.models);
-                }
-            }
-
-            Ok(fresh_status.models)
+            let custom_bin = config.as_ref().and_then(|cfg| cfg.bin_path.clone());
+            Ok(resolve_engine_models_cache_first(
+                manager,
+                EngineType::Kimi,
+                force_refresh,
+                move || async move { detect_kimi_status(custom_bin.as_deref()).await },
+            )
+            .await)
         }
         EngineType::Pi => {
             let config = manager.get_engine_config(EngineType::Pi).await;
-            let custom_bin = config
-                .as_ref()
-                .and_then(|cfg| cfg.bin_path.as_ref())
-                .map(|s| s.as_str());
-            let fresh_status = detect_pi_status(custom_bin).await;
-            if !fresh_status.models.is_empty() {
-                return Ok(fresh_status.models);
-            }
-            if let Some(cached) = manager.get_engine_status(EngineType::Pi).await {
-                if !cached.models.is_empty() {
-                    return Ok(cached.models);
-                }
-            }
-            Ok(fresh_status.models)
+            let custom_bin = config.as_ref().and_then(|cfg| cfg.bin_path.clone());
+            Ok(resolve_engine_models_cache_first(
+                manager,
+                EngineType::Pi,
+                force_refresh,
+                move || async move { detect_pi_status(custom_bin.as_deref()).await },
+            )
+            .await)
         }
         EngineType::Qoder => {
             let qoder_distribution_settings =
@@ -1547,23 +1569,14 @@ pub async fn get_engine_models(
         }
         EngineType::Grok => {
             let config = manager.get_engine_config(EngineType::Grok).await;
-            let custom_bin = config
-                .as_ref()
-                .and_then(|cfg| cfg.bin_path.as_ref())
-                .map(|s| s.as_str());
-            let fresh_status = detect_grok_status(custom_bin).await;
-
-            if !fresh_status.models.is_empty() {
-                return Ok(fresh_status.models);
-            }
-
-            if let Some(cached) = manager.get_engine_status(EngineType::Grok).await {
-                if !cached.models.is_empty() {
-                    return Ok(cached.models);
-                }
-            }
-
-            Ok(fresh_status.models)
+            let custom_bin = config.as_ref().and_then(|cfg| cfg.bin_path.clone());
+            Ok(resolve_engine_models_cache_first(
+                manager,
+                EngineType::Grok,
+                force_refresh,
+                move || async move { detect_grok_status(custom_bin.as_deref()).await },
+            )
+            .await)
         }
         EngineType::Claude | EngineType::Codex => {
             if force_refresh {
