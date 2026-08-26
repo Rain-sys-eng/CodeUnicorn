@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-24T15:47:24.193Z",
+  "generatedAt": "2026-08-26T10:41:07.402Z",
   "source": "CHANGELOG.md",
-  "sourceSha256": "e8967bf710d1b874c750c49e1196aa06132e4180f0a34caa6f5953cddf565276",
+  "sourceSha256": "c7defe3b7f5bf5d151db469c33767098166b639fb83015f08404d3bc04588b8f",
   "entryCount": 113,
   "entries": [
     {
@@ -9,7 +9,7 @@
       "tagName": "v0.9.3",
       "version": "0.9.3",
       "title": "v0.9.3",
-      "dateLabel": "2026/08/24",
+      "dateLabel": "2026/08/25",
       "file": "entries/0.9.3.json"
     },
     {
