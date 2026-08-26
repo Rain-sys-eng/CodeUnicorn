@@ -48,6 +48,45 @@ export function findModelById(models: ModelOption[], id: string | null) {
   );
 }
 
+/**
+ * catalog 降级为全静态兜底（如 PI 探测失败只剩合成的 auto，全部 source=fallback）
+ * 时，把会话账本里的 modelId 合成一个临时选项追加进列表：切历史会话不再被
+ * 静默修成兜底默认（auto），chip 显示真实模型 id；catalog 痊愈后账本 id 正常
+ * 命中，该合成选项自动消失。非降级场景返回原数组引用，保证 memo 稳定。
+ */
+export function preserveLedgerModelOnFallbackCatalog(
+  engineModelsAsOptions: ModelOption[],
+  threadLedgerModelId: string | null,
+): ModelOption[] {
+  const ledgerId = threadLedgerModelId?.trim() ?? "";
+  if (
+    !ledgerId ||
+    engineModelsAsOptions.length === 0 ||
+    !engineModelsAsOptions.every((model) => (model.source ?? "") === "fallback") ||
+    findModelById(engineModelsAsOptions, ledgerId)
+  ) {
+    return engineModelsAsOptions;
+  }
+  const ledgerOption: ModelOption = {
+    id: ledgerId,
+    model: ledgerId,
+    displayName: ledgerId,
+    description: "",
+    source: "ledger",
+    provider: null,
+    protocol: null,
+    provenance: null,
+    observedAt: null,
+    lastVerifiedAt: null,
+    lifecycle: null,
+    providerProfileId: null,
+    supportedReasoningEfforts: [],
+    defaultReasoningEffort: null,
+    isDefault: false,
+  };
+  return [...engineModelsAsOptions, ledgerOption];
+}
+
 function getDefaultModelId(models: ModelOption[]) {
   return models.find((model) => model.isDefault)?.id ?? models[0]?.id ?? null;
 }

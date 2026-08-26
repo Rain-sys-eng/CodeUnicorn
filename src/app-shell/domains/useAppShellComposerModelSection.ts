@@ -14,6 +14,7 @@ import {
   getEffectiveSelectedModelId,
   getNextEngineSelectedModelId,
   getReasoningOptionsForModel,
+  preserveLedgerModelOnFallbackCatalog,
   upsertEngineSelectedModelId,
 } from "./modelSelection";
 import { resolveClaudeManagedRuntimeModel } from "../../features/models/claudeManagedRuntimeModel";
@@ -64,6 +65,27 @@ export function useAppShellComposerModelSection({
   const [engineSelectedModelIdByType, setEngineSelectedModelIdByType] =
     useState<Record<string, string | null>>({});
   const activeEngineSelectedModelId = engineSelectedModelIdByType[activeEngine] ?? null;
+  // catalog 降级（探测失败只剩 source=fallback 的合成兜底，如 PI 的 auto）时，
+  // 把会话账本的 modelId 合成临时选项，避免切历史会话被静默修成兜底默认。
+  // codex / claude 有自己的 freeform / managed runtime 链路，不在此列。
+  const ledgerAwareEngineModels = useMemo<ModelOption[]>(() => {
+    if (
+      activeEngine === "codex" ||
+      activeEngine === "claude" ||
+      activeThreadId === null
+    ) {
+      return engineModelsAsOptions;
+    }
+    return preserveLedgerModelOnFallbackCatalog(
+      engineModelsAsOptions,
+      selectedComposerSelection?.modelId ?? null,
+    );
+  }, [
+    activeEngine,
+    activeThreadId,
+    engineModelsAsOptions,
+    selectedComposerSelection,
+  ]);
   const effectiveModels = useMemo<ModelOption[]>(() => {
     if (
       activeEngine === "codex" &&
@@ -72,13 +94,14 @@ export function useAppShellComposerModelSection({
     ) {
       return enrichScopedCodexReasoningMetadata(engineModelsAsOptions, models);
     }
-    return getEffectiveModels(activeEngine, models, engineModelsAsOptions);
+    return getEffectiveModels(activeEngine, models, ledgerAwareEngineModels);
   }, [
     activeEngine,
     activeProviderProfileId,
     activeThreadId,
     models,
     engineModelsAsOptions,
+    ledgerAwareEngineModels,
   ]);
   const providerModelCatalogs = useMemo(
     () => ({
@@ -127,7 +150,7 @@ export function useAppShellComposerModelSection({
         activeEngine === "qoder" ||
         activeThreadEngine === "qoder",
       codexModels: effectiveModels,
-      engineModelsAsOptions,
+      engineModelsAsOptions: ledgerAwareEngineModels,
       engineSelectedModelIdByType,
     });
   }, [
@@ -135,6 +158,7 @@ export function useAppShellComposerModelSection({
     activeProviderProfileId,
     effectiveModels,
     engineModelsAsOptions,
+    ledgerAwareEngineModels,
     engineSelectedModelIdByType,
     hasActiveComposerThread,
     selectedComposerSelection,

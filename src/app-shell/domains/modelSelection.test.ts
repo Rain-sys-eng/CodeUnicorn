@@ -11,6 +11,7 @@ import {
   getEffectiveSelectedModelId,
   getReasoningOptionsForModel,
   getNextEngineSelectedModelId,
+  preserveLedgerModelOnFallbackCatalog,
   upsertEngineSelectedModelId,
 } from "./modelSelection";
 
@@ -715,5 +716,77 @@ describe("modelSelection", () => {
         reasoningOptions: ["medium"],
       }),
     ).toBeNull();
+  });
+});
+
+describe("preserveLedgerModelOnFallbackCatalog", () => {
+  const fallbackOnlyCatalog = [
+    createModel("auto", { source: "fallback", isDefault: true }),
+  ];
+
+  it("appends a synthetic ledger option when the catalog is fallback-only", () => {
+    const result = preserveLedgerModelOnFallbackCatalog(
+      fallbackOnlyCatalog,
+      "kimi-coding/k3",
+    );
+    expect(result).toHaveLength(2);
+    const ledger = result[1];
+    expect(ledger.id).toBe("kimi-coding/k3");
+    expect(ledger.model).toBe("kimi-coding/k3");
+    expect(ledger.source).toBe("ledger");
+    expect(ledger.isDefault).toBe(false);
+    // 合成选项不得携带思考档位元数据（catalog 未痊愈前无法知道真实 levels）
+    expect(ledger.supportedReasoningEfforts).toEqual([]);
+  });
+
+  it("lets the ledger model id resolve as the effective selection instead of the fallback default", () => {
+    const augmented = preserveLedgerModelOnFallbackCatalog(
+      fallbackOnlyCatalog,
+      "kimi-coding/k3",
+    );
+    expect(
+      getEffectiveSelectedModelId({
+        activeEngine: "pi",
+        selectedModelId: null,
+        activeThreadSelectedModelId: "kimi-coding/k3",
+        hasActiveThread: true,
+        codexModels: [],
+        engineModelsAsOptions: augmented,
+        engineSelectedModelIdByType: {},
+      }),
+    ).toBe("kimi-coding/k3");
+  });
+
+  it("returns the original array reference when the catalog is healthy", () => {
+    const healthy = [
+      createModel("kimi-coding/k3", { source: "detected", isDefault: true }),
+      createModel("deepseek/deepseek-v4-flash", { source: "detected" }),
+    ];
+    expect(
+      preserveLedgerModelOnFallbackCatalog(healthy, "minimax-cn/MiniMax-M3"),
+    ).toBe(healthy);
+  });
+
+  it("returns the original array reference when the ledger id is already in the catalog", () => {
+    expect(
+      preserveLedgerModelOnFallbackCatalog(fallbackOnlyCatalog, "auto"),
+    ).toBe(fallbackOnlyCatalog);
+  });
+
+  it("returns the original array reference when there is no ledger id or the catalog is empty", () => {
+    expect(preserveLedgerModelOnFallbackCatalog(fallbackOnlyCatalog, null)).toBe(
+      fallbackOnlyCatalog,
+    );
+    expect(preserveLedgerModelOnFallbackCatalog([], "kimi-coding/k3")).toEqual([]);
+  });
+
+  it("does not append when only some models are fallback-sourced", () => {
+    const mixed = [
+      createModel("auto", { source: "fallback", isDefault: true }),
+      createModel("kimi-coding/k3", { source: "detected" }),
+    ];
+    expect(preserveLedgerModelOnFallbackCatalog(mixed, "my-relay/grok-4.6")).toBe(
+      mixed,
+    );
   });
 });

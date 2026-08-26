@@ -1724,6 +1724,107 @@ fn catalog_model_ids(models: &[crate::engine::ModelInfo]) -> Vec<String> {
     models.iter().map(|model| model.id.clone()).collect()
 }
 
+/// 模拟 PI 探测失败时合成的全静态兜底 catalog（`auto` 条目，source=fallback）。
+fn catalog_fallback_test_status(
+    engine_type: crate::engine::EngineType,
+) -> crate::engine::EngineStatus {
+    let mut status = crate::engine::disabled_engine_status(engine_type);
+    status.installed = true;
+    status.error = None;
+    status.models = vec![crate::engine::ModelInfo::new("auto", "PI Auto")
+        .with_source("fallback")
+        .as_default()];
+    status
+}
+
+#[tokio::test]
+async fn cache_first_fallback_only_cached_does_not_short_circuit() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_fallback_test_status(EngineType::Pi))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Pi, &["pi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(
+        refresh_calls.load(Ordering::SeqCst),
+        1,
+        "fallback-only cache must not be treated as a healthy hit"
+    );
+    assert_eq!(catalog_model_ids(&models), vec!["pi/fresh".to_string()]);
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("fresh real catalog must replace the fallback poison");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/fresh".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_fallback_only_fresh_does_not_evict_last_good() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_test_status(EngineType::Pi, &["pi/last-good"]))
+        .await;
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, true, || async {
+            catalog_fallback_test_status(EngineType::Pi)
+        })
+        .await;
+
+    assert_eq!(
+        catalog_model_ids(&models),
+        vec!["pi/last-good".to_string()],
+        "transient fallback-only probe must not evict the last-good catalog"
+    );
+    let cached = manager
+        .get_engine_status(EngineType::Pi)
+        .await
+        .expect("last-good cache must survive a fallback-only refresh");
+    assert_eq!(
+        catalog_model_ids(&cached.models),
+        vec!["pi/last-good".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn cache_first_fallback_only_fresh_without_cache_is_not_written_back() {
+    use crate::engine::{EngineManager, EngineType};
+
+    let manager = EngineManager::new();
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Pi, false, || async {
+            catalog_fallback_test_status(EngineType::Pi)
+        })
+        .await;
+
+    assert_eq!(
+        catalog_model_ids(&models),
+        vec!["auto".to_string()],
+        "fallback-only fresh still reaches the UI as a degrade path"
+    );
+    assert!(
+        manager.get_engine_status(EngineType::Pi).await.is_none(),
+        "fallback-only fresh must not be written back, so the next call re-probes"
+    );
+}
+
 #[tokio::test]
 async fn cache_first_returns_cached_models_without_invoking_refresh() {
     use crate::engine::{EngineManager, EngineType};

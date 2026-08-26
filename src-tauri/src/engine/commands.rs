@@ -1436,6 +1436,14 @@ pub async fn get_engine_active_process_diagnostics(
 /// back to the last-good cache instead of evicting it.
 ///
 /// Contract: openspec/changes/cache-first-engine-model-catalog
+/// 全静态兜底 catalog（如 PI 探测失败时合成的 `auto` 条目）不算健康数据：
+/// 非空 ≠ 可用。这类条目只允许作为「无旧数据时的 UI 降级展示」，禁止
+/// ① 被 cache-first 当缓存直接命中（一次瞬时失败把 catalog 钉死在兜底）；
+/// ② 在 force 刷新失败时写回 cache 顶掉上一份真实 catalog。
+fn is_fallback_only_catalog(models: &[super::ModelInfo]) -> bool {
+    !models.is_empty() && models.iter().all(|model| model.source == "fallback")
+}
+
 pub(crate) async fn resolve_engine_models_cache_first<F, Fut>(
     manager: &super::EngineManager,
     engine_type: EngineType,
@@ -1451,17 +1459,28 @@ where
         .await
         .map(|status| status.models)
         .filter(|models| !models.is_empty());
-    if !force_refresh {
-        if let Some(models) = cached_models {
-            return models;
-        }
+    let cached_is_usable = cached_models
+        .as_ref()
+        .map(|models| !is_fallback_only_catalog(models))
+        .unwrap_or(false);
+    if !force_refresh && cached_is_usable {
+        return cached_models.unwrap_or_default();
     }
     let fresh_status = refresh().await;
     if fresh_status.models.is_empty() {
         return cached_models.unwrap_or_default();
     }
+    let fresh_is_fallback_only = is_fallback_only_catalog(&fresh_status.models);
+    if fresh_is_fallback_only && cached_is_usable {
+        // 瞬时探测失败合成的兜底不得顶掉 last-good 真实 catalog。
+        return cached_models.unwrap_or_default();
+    }
     let models = fresh_status.models.clone();
-    manager.cache_engine_status(fresh_status).await;
+    if !fresh_is_fallback_only {
+        manager.cache_engine_status(fresh_status).await;
+    }
+    // 全 fallback 的 fresh（无旧 cache 或旧 cache 也是兜底）：交给 UI 降级展示，
+    // 但不写回 cache——下次调用重新探测，探测恢复即自愈。
     models
 }
 
