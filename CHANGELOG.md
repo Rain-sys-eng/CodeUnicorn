@@ -6,77 +6,77 @@
 
 中文：
 
-这一版升到 **0.9.3**，主线是 **PI 引擎更快更能干、删会话终于删得干净，外加一轮全界面提速**。PI 会话从「每句话都重启一次进程」改成常驻连接，响应明显更快，并一次带来四个新能力：从任意消息**分叉**新分支、**会话树**纵览分支结构、多会话**融合**、上下文太长一键**压缩**；PI 启动失败会自动回退旧模式，其余 8 个引擎完全不受影响。删除与归档彻底重做：点删除立刻从列表消失、后台真正清理文件，之前「删了过几分钟又刷出来」的幽灵会话被根除；归档即时生效，不再整表刷新。对话幕布新增**极简模式**，按回合整段折叠过程叙述、只留正文；侧栏置顶拆成**全局 / 项目内**两个互斥作用域；模型菜单支持**搜索筛选**，PI 也能按模型选**思考强度**；供应商认证支持**自定义供应商**直接读写 models.json。设置页、搜索、布局等重面板做了一轮系统提速，并修复中转断流回合永挂、PI 长任务被误杀、Linux 通知音崩溃、回合结尾丢字、Windows 数字错位等问题。
+这一版升到 **0.9.3**，主线是 **PI 引擎更快更能干、删会话终于删得干净，外加一轮全界面提速**。PI 引擎换成长驻连接，响应明显更快，一次带来四个新能力：从任意消息**分叉**新分支、**会话树**纵览分支结构、多会话**融合**、上下文太长一键**压缩**；PI 启动失败会自动回退旧模式，其他 8 个引擎完全不受影响。删除与归档彻底重做：点删除立刻从列表消失、后台真正清理文件，「删了过几分钟又冒出来」的幽灵会话被根除；归档即时生效、不再整表重载；快捷键里那个叫「归档」的按钮也终于真的在归档了。幕布新增**极简模式**，按回合整段折叠思考 / 工具过程、只留正文；侧栏置顶拆成**全局 / 项目内**两套互斥的作用域；模型菜单支持**搜索筛选**；PI 也能按模型选**思考强度**；供应商认证新增**自定义供应商**，可在应用内直接读写 `models.json`。设置页、搜索、布局等重面板做了一轮系统提速，并修复中转断流回合永挂、PI 长任务被误杀、Linux 通知音崩溃、回合结尾丢字、Windows 数字错位等问题。
 
 ✨ Features
 
-- **PI 常驻会话，响应更快**：PI 会话保持一条常驻连接，不再每句话都重新启动进程；启动失败自动回退旧模式，其余 8 个引擎零影响
-- **PI 四大新能力**：任意一条消息都可以**分叉**出新分支、用**会话树**纵览整个会话的分支结构、把多个会话**融合**成一个、上下文太长时一键**压缩**瘦身
-- **分叉体验更友好**：分叉弹窗全语言本地化，遇到不能分叉的会话会说明原因并给出解决办法；会话树界面更清爽
-- **删会话删得干净**：点删除立刻从侧栏消失，后台真正删除文件；个别删不掉的残留会自动重试，不会再「删掉又复活」；批量删除一次完成并实时显示进度，失败的项目可以单独回滚恢复；右键菜单新增「在会话管理中批量删除…」入口
-- **归档即时生效**：归档 / 取消归档秒完成，侧栏立刻摘行，不再整个列表重新加载；快捷键「归档」之前实际执行的是删除，这次修正为真正的归档
-- **侧栏默认显示会话数可调**：全局默认显示 5 个会话，可在设置里调 1~20；每个工作区还可以单独设置覆盖全局值，已存的设置不会被改写
-- **自动重试上限放宽**：供应商断线 / 报错后的自动续跑上限从 10 次提高到 999 次
+- **PI 常驻连接，响应更快**：PI 会话改成长驻连接，不再每句话都重启一次进程；启动失败会自动回退旧模式，其他 8 个引擎零影响
+- **PI 四大新能力**：任意一条消息都可以**分叉**出新分支、用**会话树**纵览整条分支结构、把多个会话**融合**成一个、上下文太长时一键**压缩**瘦身
+- **分叉体验更友好**：分叉弹窗做了全语言本地化，遇到不能分叉的会话会说明原因并给出解决办法；会话树界面也清爽了一截
+- **删会话真的删了**：点删除立刻从侧栏消失，后台接着清文件；个别删不掉的残留会自动重试，不会再「删掉又冒回来」；批量删除一次完成、实时显示进度，失败的项目可以单独回滚恢复；右键菜单新增「在会话管理中批量删除…」入口
+- **归档即时生效**：归档 / 取消归档秒完成，侧栏立刻摘行，不再整个列表重新加载；之前叫「归档」的快捷键其实在删东西，这次改成真正的归档
+- **侧栏默认显示的会话数可调**：全局默认 5 个，可在设置里调 1~20；每个工作区还能单独设置覆盖全局值，已存的设置不会被改写
+- **自动续跑上限放宽**：供应商断线 / 报错后的自动续跑上限从 10 次提高到 999 次
 - **幕布极简模式**：设置里开启后按回合整段折叠思考 / 工具过程，幕布只留正文；流式中的回合同样整段折叠，展开时内部仍按阶段逐段呈现，可随时切回常规模式
 - **置顶双作用域**：侧栏置顶拆成「全局置顶」与「项目内置顶」两个互斥作用域，并恢复总折叠行；已置顶会话的图钉常亮，区段头与工作区对齐
-- **模型菜单搜索筛选**：模型选择子菜单支持输入即筛，模型再多也一搜即得
-- **PI 按模型思考强度**：PI 引擎接入按模型的思考强度档位选择并打通发送闸门；Shared / Atomic 的思考档位联动同步扩展到 PI
-- **自定义供应商配置**：供应商认证新增自定义供应商区块，可在应用内直接读写 models.json
+- **模型菜单可搜索**：模型选择子菜单支持输入即筛，模型再多也一搜即得
+- **PI 按模型选思考强度**：PI 接入按模型的思考强度档位选择并打通发送闸门；Shared / Atomic 上的思考档位联动也同步扩展到 PI
+- **自定义供应商**：供应商认证新增自定义供应商区块，可在应用内直接读写 `models.json`
 
 🔧 Improvements
 
-- 将应用版本号提升到 `0.9.3`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），为 patch 发版对齐 SemVer 与打包元数据
-- **PI 会话压缩更可靠**：压缩有充足的时间余量（500 秒）和运行中防重入保护，成功后原地反馈，不再中途失败
-- **独立 PI 会话找得回来**：首次打开后后台补做 PI 磁盘扫描，在应用外创建的 PI 会话也会陆续出现在列表里
-- **超大终端输出不再拖慢界面**：终端工具输出设有上限，超大输出不会拖垮页面
+- 版本号统一升到 `0.9.3`（`package.json` / `package-lock.json` / `src-tauri/tauri.conf.json`），对齐 SemVer 与打包元数据
+- **PI 压缩更稳**：压缩有 500 秒时间余量和运行中防重入保护，成功后原地反馈，不再中途失败
+- **在应用外建的 PI 会话也能找到**：首次打开后后台补做 PI 磁盘扫描，应用外创建的 PI 会话会陆续出现在列表里
+- **超大终端输出不再拖慢界面**：终端工具输出设了上限，再大的输出也不会拖垮页面
 - **工作区别名弹窗重写**：打开更快、样式更顺手
-- **PI 会话丢失可诊断**：全链路增加埋点，遇到会话从列表里消失时更容易定位问题
+- **PI 会话丢失更容易诊断**：新增全链路埋点，遇到会话从列表里消失时更容易定位问题
 - **设置页按需加载**：6 个重 section 改为按需加载，打开设置明显更快
 - **大结果搜索虚拟化**：工作区搜索大结果集接入虚拟化，几千条结果也不卡
-- **重面板渲染收紧**：五个重面板节点补 memo，无关状态变化不再击穿整个布局
-- **运行时日志提速降噪**：收口本地 error / perf 日志链路中的 P0 卡顿点
+- **重面板渲染收紧**：5 个重面板节点补 memo，无关状态变化不再击穿整个布局
+- **运行时日志提速降噪**：本地 error / perf 日志链路中的 P0 卡顿点被收口
 - **PI 输出口径校准**：tool-output 统计口径对齐、thinking 夹紧、技能目录补齐
 
 🐛 Fixes
 
-- **PI 长会话打不开会话树**：修复长会话绘制会话树时程序崩溃（栈溢出）
-- **PI 分叉后主线消失**：修复分叉静默失败导致主会话被误隐藏、分叉条目挤占侧栏位置、分叉分支泄漏成顶层会话、会话树连线断开等一系列分叉显示问题
-- **PI 中文路径会话打不开**：修复附件包含中文路径时程序崩溃、相关会话永远进不去的问题
+- **PI 长会话打不开会话树**：长会话绘制会话树时栈溢出崩溃已修复
+- **PI 分叉后主线消失**：分叉静默失败导致主会话被隐藏、分叉条目挤占侧栏、分支泄漏成顶层会话、会话树连线断开等一系列显示问题已修复
+- **PI 中文路径会话打不开**：附件包含中文路径时程序崩溃、相关会话永远进不去的问题已修复
 - **PI 侧栏标题露出原始标签**：会话标题不再显示 `<file name="...">` 这类原始标记
-- **PI 切换模型不生效**：修复在会话里换了模型、发送时却仍用旧模型的问题
-- **回合结尾丢字**：修复 AI 回复最后一段偶尔丢失的问题
+- **PI 切换模型不生效**：在会话里换了模型、发送时却仍用旧模型的问题已修复
+- **回合结尾丢字**：AI 回复最后一段偶尔丢失的问题已修复
 - **关闭最后一个页签后停在空白**：现在会自动清空选择并回到工作区首页
-- **Qoder 登录凭证优先级**：修复已保存的 Qoder 凭证被系统环境变量覆盖导致登录异常的问题
-- **Windows 数字错位**：修复 Windows 上「改动文件」计数的前缀符号与首位数字重叠的问题
+- **Qoder 登录凭证优先级**：已保存的 Qoder 凭证被系统环境变量覆盖、导致登录异常的问题已修复
+- **Windows 数字错位**：Windows 上「改动文件」计数的前缀符号与首位数字重叠的问题已修复
 - **网络盘文件面板加载失败**：网络驱动器 / 映射盘上的项目，Files 面板现在能正常打开
 - **中转断流回合永挂**：Claude 回合中途流静默时由看门狗接管结算，不再永远卡在「生成中」
 - **PI 长任务被误杀**：PI 回合结算改为看门狗对账，跑 long task 不再被当成失败杀掉
-- **Shared 续跑死循环**：已完成回合被进程退出码误判为失败导致的自动续跑死循环已修复
-- **Linux 通知音崩溃**：修复 Linux WebKitGTK 上播放通知音导致程序崩溃的问题
+- **Shared 续跑死循环**：已完成回合被进程退出码误判为失败、进而无限续跑的死循环已修复
+- **Linux 通知音崩溃**：Linux WebKitGTK 上播放通知音导致程序崩溃的问题已修复
 - **新会话刷不出来**：侧栏「重新加载」现在强制索引重扫，在应用外新建的会话立刻出现
-- **PI 多会话并行恢复**：按会话隔离 RPC / fallback 忙锁，多个 PI 会话并行不再互相卡死；RPC 故障禁用后会冷却自恢复
-- **PI 历史附图还原**：从 RPC image block 还原历史中的用户附图；带图提问刷新后用户气泡不再接到助手回复的尾巴上
-- **Windows 文件链接打不开**：补齐 Windows 文件链接解析规则，Markdown 里的文件链接能正常在 Explorer 打开
+- **PI 多会话并行卡死**：按会话隔离 RPC / fallback 忙锁，多个 PI 会话并行不再互相卡死；RPC 故障禁用后会冷却自恢复
+- **PI 历史附图丢失**：从 RPC image block 还原历史中的用户附图；带图提问刷新后用户气泡不再接到助手回复的尾巴上
+- **Windows Markdown 文件链接打不开**：补齐 Windows 文件链接解析规则，文件链接能正常在资源管理器打开
 - **模型菜单空目录**：模型菜单打开时自动恢复只剩兜底条目的引擎 catalog
 
 English:
 
-This release moves the app to **0.9.3** with three big stories: **PI is faster and far more capable, deleting sessions finally deletes them for good, and a broad UI speed-up.** PI sessions keep a resident connection instead of relaunching a process for every message, and gain four new powers in one go: **fork** a branch from any message, a **session tree** view of the whole branch structure, **fusion** of multiple sessions into one, and one-click **compaction** for over-long contexts; if PI fails to start it falls back to the old mode automatically, leaving the other 8 engines untouched. Delete and archive were rebuilt from the ground up: confirming a delete removes the row instantly and cleans up files in the background, and the "deleted sessions that resurrect minutes later" ghost problem is gone; archiving takes effect immediately without a full-list reload. The canvas gains a **minimal mode** that folds each turn's process narrative into a single block; sidebar pins split into mutually-exclusive **global / in-project** scopes; the model menu is **searchable**, PI gets per-model **thinking effort**, and vendor auth accepts **custom providers** backed by models.json. Settings, search, and layout hot paths were systematically sped up, and we fixed relay stalls that hung turns forever, PI long tasks being killed mid-run, a Linux notification-sound crash, missing text at the end of replies, and misaligned digits on Windows.
+This release moves the app to **0.9.3** with three big stories: **PI is faster and far more capable, deleting sessions finally deletes them for good, and a broad UI speed-up.** PI switches to a long-lived connection instead of relaunching a process for every message, and gains four new powers in one go: **fork** a branch from any message, a **session tree** view of the whole branch structure, **fusion** of multiple sessions into one, and one-click **compaction** for over-long contexts; if PI fails to start it falls back to the old mode automatically with zero impact on the other 8 engines. Delete and archive were rebuilt from the ground up: confirming a delete removes the row instantly and cleans up files in the background, and the "deleted sessions that resurrect minutes later" ghost problem is gone; archiving takes effect immediately without a full-list reload; the shortcut that used to silently delete things when it said "archive" now actually archives. The canvas gains a **minimal mode** that folds each turn's thinking / tool process into one block; sidebar pins split into mutually-exclusive **global / in-project** scopes; the model menu is **searchable**, PI gets per-model **thinking effort**, and vendor auth accepts **custom providers** backed by `models.json`. Settings, search, and layout hot paths were systematically sped up, and we fixed relay stalls that hung turns forever, PI long tasks being killed mid-run, a Linux notification-sound crash, text lost at the end of replies, and misaligned digits on Windows.
 
 ✨ Features
 
-- **PI resident sessions, faster responses**: PI keeps a persistent connection instead of starting a new process for every message; startup failures fall back to the old mode automatically with zero impact on the other 8 engines
-- **Four new PI powers**: fork a new branch from any message, see the entire branch structure in a session tree, fuse multiple sessions into one, and compact an over-long context with one click
-- **Friendlier forking**: the fork dialog is fully localized, and when a session can't be forked you get the reason plus what to do next; the session tree view is cleaner
+- **PI keeps a persistent connection, faster responses**: PI no longer restarts a process for every message; if it can't start it falls back to the old mode automatically with zero impact on the other 8 engines
+- **Four new PI powers**: fork a branch from any message, see the whole branch structure in a session tree, fuse multiple sessions into one, and one-click compact an over-long context
+- **Friendlier forking**: the fork dialog is fully localized, and when a session can't be forked you see the reason plus what to do next; the session tree view is cleaner
 - **Deletion that actually deletes**: rows vanish from the sidebar the moment you confirm while files are cleaned up in the background; leftovers retry automatically instead of resurrecting; batch delete finishes in one shot with live progress, and failed items can be rolled back individually; the context menu gains a "Delete in Session Management…" entry
-- **Instant archiving**: archive / unarchive completes right away and the row leaves the sidebar without a full-list reload; the "archive" shortcut used to actually delete — it now truly archives
-- **Adjustable sidebar session count**: the sidebar shows 5 sessions by default, adjustable 1–20 in settings; each workspace can still override the global value, and existing settings are never rewritten
+- **Instant archiving**: archive / unarchive completes right away and the row leaves the sidebar without a full-list reload; the shortcut that used to silently delete things now truly archives
+- **Adjustable sidebar session count**: 5 sessions by default, adjustable 1–20 in settings; each workspace can still override the global value, and existing settings are never rewritten
 - **Higher auto-retry cap**: automatic continue after vendor failures goes from 10 attempts to 999
-- **Minimal canvas mode**: an optional minimal display folds each turn's thinking / tool process into one block, leaving only the body; live turns fold the same way, expanding reveals the per-phase breakdown, and you can switch back at any time
+- **Minimal canvas mode**: an optional minimal display folds each turn's thinking / tool process into one block, leaving only the body; live turns fold the same way, expanding reveals the per-phase breakdown, and you can switch back any time
 - **Dual pin scopes**: sidebar pins split into mutually-exclusive "global" and "in-project" scopes with the fold-all row restored; pinned sessions keep a lit pin, and section headers align with workspaces
 - **Searchable model menu**: the model picker submenu filters as you type, so even a long model list is one search away
 - **Per-model thinking effort on PI**: PI gains per-model thinking-effort selection wired through the send gate; Shared / Atomic effort linking extends to PI as well
-- **Custom provider configs**: vendor auth gains a custom-provider section that reads and writes models.json in-app
+- **Custom provider configs**: vendor auth gains a custom-provider section that reads and writes `models.json` in-app
 
 🔧 Improvements
 
@@ -94,9 +94,9 @@ This release moves the app to **0.9.3** with three big stories: **PI is faster a
 
 🐛 Fixes
 
-- **Long PI sessions couldn't open the session tree**: fixed a crash (stack overflow) when rendering trees for long sessions
-- **Main line vanished after a PI fork**: fixed a cluster of fork display issues — silent fork failures hiding the main session, fork entries crowding the sidebar, branches leaking as top-level sessions, and broken connector lines in the tree
-- **PI sessions with Chinese paths wouldn't open**: fixed a crash on attachments with Chinese paths that locked those sessions out forever
+- **Long PI sessions couldn't open the session tree**: fixed the stack-overflow crash when rendering trees for long sessions
+- **Main line vanished after a PI fork**: fixed the cluster of fork display issues — silent fork failures hiding the main session, fork entries crowding the sidebar, branches leaking as top-level sessions, and broken connector lines in the tree
+- **PI sessions with Chinese paths wouldn't open**: fixed the crash on attachments with Chinese paths that locked those sessions out forever
 - **Raw tags leaking into PI sidebar titles**: titles no longer show raw markup like `<file name="...">`
 - **PI model switch not taking effect**: fixed sending with the old model after switching models in a session
 - **Text lost at the end of replies**: fixed the last chunk of an AI reply occasionally going missing
