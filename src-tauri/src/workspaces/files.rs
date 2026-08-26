@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek};
 use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 
@@ -917,6 +917,43 @@ fn read_workspace_file_with_limit_inner(
         buffer.truncate(max_bytes as usize);
     }
 
+    let content = decode_text_bytes(&buffer, "File")?;
+    Ok(WorkspaceFileResponse { content, truncated })
+}
+
+/// 2.3 按需 tail：读文件**末尾**最多 max_bytes（默认 8 KiB），byte budget 对齐
+/// tool-output 口径；首字节对齐（read 从头截断）不适用日志场景。
+pub(crate) fn read_workspace_file_tail_inner(
+    root: &PathBuf,
+    relative_path: &str,
+    max_bytes: u64,
+) -> Result<WorkspaceFileResponse, String> {
+    let normalized_path = normalize_workspace_relative_file_path(relative_path)?;
+    let canonical_root = canonicalize_or_original(root);
+    let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
+    let canonical_path = canonicalize_or_original(&candidate);
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err("Invalid file path".to_string());
+    }
+    let metadata = std::fs::metadata(&canonical_path)
+        .map_err(|err| format!("Failed to read file metadata: {err}"))?;
+    if !metadata.is_file() {
+        return Err("Path is not a file".to_string());
+    }
+    let file_len = metadata.len();
+    let read_from = file_len.saturating_sub(max_bytes);
+    let mut file =
+        File::open(&canonical_path).map_err(|err| format!("Failed to open file: {err}"))?;
+    let mut buffer = Vec::new();
+    file.seek(std::io::SeekFrom::Start(read_from))
+        .map_err(|err| format!("Failed to seek file: {err}"))?;
+    file.take(max_bytes + 1)
+        .read_to_end(&mut buffer)
+        .map_err(|err| format!("Failed to read file: {err}"))?;
+    let truncated = buffer.len() > max_bytes as usize;
+    if truncated {
+        buffer.truncate(max_bytes as usize);
+    }
     let content = decode_text_bytes(&buffer, "File")?;
     Ok(WorkspaceFileResponse { content, truncated })
 }

@@ -3,6 +3,7 @@ import {
   extractBackgroundCommandTitle,
   isBackgroundStyleAgentTaskNotification,
   isCliInjectedAgentTaskNotificationText,
+  isPiBackgroundTaskNotification,
   isSubagentStyleAgentTaskNotification,
   parseAgentTaskNotification,
 } from "./agentTaskNotification";
@@ -127,6 +128,9 @@ describe("parseAgentTaskNotification", () => {
       status: "completed",
       summary: 'Agent "架构治理评估" completed',
       resultText: "第一段结果\n\n第二段结果",
+      tag: "task-notification",
+      taskName: null,
+      exitCode: null,
     });
   });
 
@@ -155,6 +159,9 @@ describe("parseAgentTaskNotification", () => {
       status: "completed",
       summary: 'Agent "Bug诊断与性能安全审查" completed',
       resultText: "读取关键文件后，继续进行全面审查。",
+      tag: "task-notification",
+      taskName: null,
+      exitCode: null,
     });
   });
 
@@ -175,6 +182,9 @@ describe("parseAgentTaskNotification", () => {
       status: "completed",
       summary: 'Agent "空结果任务" completed',
       resultText: "",
+      tag: "task-notification",
+      taskName: null,
+      exitCode: null,
     });
   });
 
@@ -200,6 +210,9 @@ describe("parseAgentTaskNotification", () => {
       status: null,
       summary: null,
       resultText: "双重转义结果",
+      tag: "task-notification",
+      taskName: null,
+      exitCode: null,
     });
   });
 
@@ -219,6 +232,9 @@ describe("parseAgentTaskNotification", () => {
       status: "completed",
       summary: 'Background command "Rebuild Windows bundles with latest code" completed',
       resultText: "",
+      tag: "task-notification",
+      taskName: null,
+      exitCode: null,
     });
   });
 
@@ -237,11 +253,105 @@ describe("parseAgentTaskNotification", () => {
       status: "completed",
       summary: 'Background command "bundle" completed',
       resultText: "",
+      tag: "task-notification",
+      taskName: null,
+      exitCode: null,
     });
   });
 
   it("returns null for an empty task-notification envelope", () => {
     expect(parseAgentTaskNotification("<task-notification></task-notification>")).toBeNull();
+  });
+});
+
+describe("pi <background-task-notification>", () => {
+  const PI_NOTIFICATION = `<background-task-notification>
+  <task-id>b2e2f48ad</task-id>
+  <task-name>spike-task</task-name>
+  <status>completed</status>
+
+  <exit-code>0</exit-code>
+  <output-file>.pi/tasks/session-24118-24118/b2e2f48ad.output</output-file>
+  <summary>Background task "spike-task" completed</summary>
+  <guidance>Terminal state and output metadata are durable.</guidance>
+</background-task-notification>`;
+
+  it("parses the pi terminal wakeup envelope with tag discriminator", () => {
+    expect(parseAgentTaskNotification(PI_NOTIFICATION)).toEqual({
+      taskId: "b2e2f48ad",
+      toolUseId: null,
+      outputFile: ".pi/tasks/session-24118-24118/b2e2f48ad.output",
+      status: "completed",
+      summary: 'Background task "spike-task" completed',
+      resultText: "",
+      tag: "background-task-notification",
+      taskName: "spike-task",
+      exitCode: "0",
+    });
+  });
+
+  it("parses failed notifications with non-zero exit code", () => {
+    const parsed = parseAgentTaskNotification(`<background-task-notification>
+  <task-id>b_fail1</task-id>
+  <task-name>failing-task</task-name>
+  <status>failed</status>
+  <exit-code>137</exit-code>
+</background-task-notification>`);
+
+    expect(parsed?.tag).toBe("background-task-notification");
+    expect(parsed?.status).toBe("failed");
+    expect(parsed?.exitCode).toBe("137");
+  });
+
+  it("is recognized by isPiBackgroundTaskNotification and not for Claude envelopes", () => {
+    const pi = parseAgentTaskNotification(PI_NOTIFICATION);
+    const claude = parseAgentTaskNotification(`<task-notification>
+<task-id>b234djc13</task-id>
+<status>completed</status>
+</task-notification>`);
+
+    expect(isPiBackgroundTaskNotification(pi)).toBe(true);
+    expect(isPiBackgroundTaskNotification(claude)).toBe(false);
+    expect(claude?.tag).toBe("task-notification");
+  });
+
+  it("is covered by isCliInjectedAgentTaskNotificationText", () => {
+    expect(isCliInjectedAgentTaskNotificationText(PI_NOTIFICATION)).toBe(true);
+  });
+
+  it("parses entity-escaped pi notifications", () => {
+    const parsed = parseAgentTaskNotification(`
+&lt;background-task-notification&gt;
+  &lt;task-id&gt;b_escaped&lt;/task-id&gt;
+  &lt;status&gt;completed&lt;/status&gt;
+&lt;/background-task-notification&gt;`);
+
+    expect(parsed?.tag).toBe("background-task-notification");
+    expect(parsed?.taskId).toBe("b_escaped");
+  });
+
+  it("returns null for an empty pi envelope", () => {
+    expect(
+      parseAgentTaskNotification(
+        "<background-task-notification></background-task-notification>",
+      ),
+    ).toBeNull();
+  });
+
+  it("does not swallow ordinary prose mentioning the tag mid-text", () => {
+    expect(
+      parseAgentTaskNotification(
+        "前文散文 <background-task-notification><task-id>x</task-id></background-task-notification>",
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects envelopes with attributes on the open tag (0.3.12 boundary)", () => {
+    expect(
+      parseAgentTaskNotification(
+        '<background-task-notification data-x="1"><task-id>x</task-id></background-task-notification>',
+      ),
+    ).toBeNull();
   });
 });
 

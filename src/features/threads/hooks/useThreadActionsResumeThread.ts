@@ -35,7 +35,11 @@ import {
 } from "../loaders/dshHistoryLoader";
 import { seedDshComposerSelectionFromHost } from "../../../app-shell-parts/selectedComposerSession";
 import { parseDshHistoryMessages } from "../loaders/dshHistoryParser";
-import { parsePiHistoryMessages } from "../loaders/piHistoryParser";
+import {
+  collectPiHistoryBackgroundTasks,
+  parsePiHistoryMessages,
+} from "../loaders/piHistoryParser";
+import { hydrateBackgroundTasksFromHistory } from "../../messages/utils/backgroundTaskStore";
 import { parseQoderHistoryMessages } from "../loaders/qoderHistoryParser";
 import { parseQoderSessionIdentity } from "../utils/qoderSessionIdentity";
 import {
@@ -1781,8 +1785,16 @@ export function useThreadActionsResumeThreadForWorkspace(
               },
               shouldContinue: isCurrentResumeRequest,
               load: () => loadPiSessionService(workspacePath, realSessionId),
-              extractMessages: (payload) =>
-                (payload as { messages?: unknown }).messages ?? payload,
+              extractMessages: (payload) => {
+                const rawMessages =
+                  (payload as { messages?: unknown }).messages ?? payload;
+                hydrateBackgroundTasksFromHistory(
+                  workspaceId,
+                  threadId,
+                  collectPiHistoryBackgroundTasks(rawMessages),
+                );
+                return rawMessages;
+              },
               parse: parsePiHistoryMessages,
               hydrate: async (items) => {
                 if (items.length > 0) {

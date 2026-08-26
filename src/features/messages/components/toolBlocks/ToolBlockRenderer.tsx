@@ -21,6 +21,12 @@ import { SearchToolBlock } from './SearchToolBlock';
 import { McpToolBlock } from './McpToolBlock';
 import { RequestUserInputSubmittedBlock } from './RequestUserInputSubmittedBlock';
 import {
+  BackgroundTaskCard,
+  isTerminalBackgroundTaskStatus,
+  parseBackgroundTaskInput,
+  parseBackgroundTaskSnapshot,
+} from '../../rows/components/BackgroundTaskCard';
+import {
   resolveResidualLiveItemDeltaText,
   useLiveItemDelta,
 } from '../../../threads/hooks/useLiveItemDelta';
@@ -115,6 +121,24 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
   // 0. 已提交的 request user input 历史卡片
   if (displayItem.toolType === 'requestUserInputSubmitted') {
     return <RequestUserInputSubmittedBlock item={displayItem} />;
+  }
+
+  // 0.5 PI 后台任务卡（bg_run / bg_delegate / fusion_*）：运行中活体卡，
+  // 终态原地折叠；不走普通工具块（折叠/分组语义由卡片自治）。
+  if (displayItem.toolType === 'backgroundTask') {
+    const task = parseBackgroundTaskSnapshot(displayItem.output);
+    const input = parseBackgroundTaskInput(displayItem.detail);
+    const terminal = isTerminalBackgroundTaskStatus(
+      task?.status ?? displayItem.status,
+    );
+    return (
+      <BackgroundTaskCard
+        toolName={displayItem.title || 'bg_run'}
+        input={input}
+        task={task}
+        terminal={terminal}
+      />
+    );
   }
 
   // ExitPlanMode handoff must keep its dedicated card even if the runtime

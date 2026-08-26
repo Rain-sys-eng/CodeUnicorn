@@ -226,6 +226,20 @@ export type AppServerEventHandlers = {
     threadId: string,
     item: Record<string, unknown>,
   ) => void;
+  /**
+   * PI 后台任务状态更新（pi-background-tasks 扩展）：receipt 快照（启动）与
+   * `<background-task-notification>` 终态唤醒。task 为 canonical 快照；
+   * notification 路径 toolId 为 null，按 task.id 关联。
+   */
+  onBackgroundTaskUpdated?: (
+    workspaceId: string,
+    threadId: string,
+    payload: {
+      toolId: string | null;
+      task: Record<string, unknown>;
+      source: string;
+    },
+  ) => void;
   onReasoningSummaryDelta?: (
     workspaceId: string,
     threadId: string,
@@ -3352,6 +3366,27 @@ export function dispatchAppServerEvent(
         );
       }
       handlers.onItemUpdated?.(workspace_id, threadId, contextualItem);
+    }
+    return;
+  }
+
+  if (method === "item/backgroundTask/updated") {
+    const params = message.params as Record<string, unknown>;
+    const rawItemThreadId = extractThreadIdFromParams(params);
+    const itemBridge = rawItemThreadId
+      ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
+      : null;
+    const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
+    const task =
+      params.task && typeof params.task === "object"
+        ? (params.task as Record<string, unknown>)
+        : null;
+    if (threadId && task) {
+      handlers.onBackgroundTaskUpdated?.(workspace_id, threadId, {
+        toolId: typeof params.toolId === "string" ? params.toolId : null,
+        task,
+        source: asString(params.source ?? ""),
+      });
     }
     return;
   }

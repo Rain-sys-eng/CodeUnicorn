@@ -1191,7 +1191,11 @@ fn convert_assistant_message(
                     text: String::new(),
                     images: None,
                     timestamp: timestamp.clone(),
-                    kind: "tool".to_string(),
+                    kind: if crate::engine::pi::is_pi_background_task_tool(&name) {
+                        "backgroundTask".to_string()
+                    } else {
+                        "tool".to_string()
+                    },
                     tool_type: Some(name),
                     title: None,
                     tool_input: input,
@@ -1269,7 +1273,47 @@ pub async fn load_pi_session(
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        if value.get("type").and_then(Value::as_str) != Some("message") {
+        let entry_type = value.get("type").and_then(Value::as_str).unwrap_or("");
+        // pi-background-tasks 终态唤醒在历史里持久化为 custom_message 条目
+        //（spike 2026-08-26：content XML + details 结构化 snapshot 全保留）。
+        // 投影为 backgroundTaskNotification 消息，前端消费它折叠任务卡；
+        // 通知本身不成行、不算用户提问。
+        let is_custom_notification = entry_type == "custom_message"
+            && value.get("customType").and_then(Value::as_str)
+                == Some(crate::engine::pi::PI_BACKGROUND_TASK_NOTIFICATION_CUSTOM_TYPE);
+        if entry_type != "message" && !is_custom_notification {
+            continue;
+        }
+        if is_custom_notification {
+            let details = value
+                .get("details")
+                .cloned()
+                .filter(|candidate| candidate.is_object());
+            let content = value.get("content").and_then(Value::as_str).unwrap_or("");
+            if let Some(task) =
+                crate::engine::pi::parse_pi_background_task_notification(details, content)
+            {
+                counter += 1;
+                messages.push(PiSessionMessage {
+                    id: value
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("pi-bg-notify-{counter}")),
+                    role: "assistant".to_string(),
+                    text: String::new(),
+                    images: None,
+                    timestamp: value
+                        .get("timestamp")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    kind: "backgroundTaskNotification".to_string(),
+                    tool_type: None,
+                    title: None,
+                    tool_input: None,
+                    tool_output: Some(task),
+                });
+            }
             continue;
         }
         let Some(message) = value.get("message") else {
@@ -1337,13 +1381,35 @@ pub async fn load_pi_session(
                     .get("isError")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
+                // bg 启动工具的 toolResult 携带结构化 receipt snapshot
+                //（details.task，spike 2026-08-26）：升级为 backgroundTask
+                // 条目，前端用它把任务卡重建为运行中/待折叠态。
+                let tool_name = message
+                    .get("toolName")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let receipt_task =
+                    if !is_error && crate::engine::pi::is_pi_background_task_tool(tool_name) {
+                        message
+                            .get("details")
+                            .and_then(|details| details.get("task"))
+                            .filter(|task| task.get("id").and_then(Value::as_str).is_some())
+                            .cloned()
+                    } else {
+                        None
+                    };
+                let is_background_task = receipt_task.is_some();
                 messages.push(PiSessionMessage {
                     id: format!("{call_id}-result"),
                     role: "tool".to_string(),
                     text: content.clone(),
                     images: None,
                     timestamp,
-                    kind: "tool".to_string(),
+                    kind: if is_background_task {
+                        "backgroundTask".to_string()
+                    } else {
+                        "tool".to_string()
+                    },
                     tool_type: Some(if is_error {
                         "error".to_string()
                     } else {
@@ -1351,7 +1417,7 @@ pub async fn load_pi_session(
                     }),
                     title: None,
                     tool_input: None,
-                    tool_output: Some(Value::String(content)),
+                    tool_output: Some(receipt_task.unwrap_or(Value::String(content))),
                 });
             }
             _ => {}
@@ -1454,6 +1520,86 @@ mod tests {
             .await
             .expect("delete");
         assert!(!file.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn load_pi_session_projects_background_task_entries() {
+        // Spike 2026-08-26 形态：bg_run toolCall + toolResult（details.task
+        // 结构化 receipt）+ custom_message 终态通知。历史链路必须把三者投影
+        // 为 backgroundTask / backgroundTaskNotification 条目，通知不成行、
+        // 不算用户提问。
+        let dir = std::env::temp_dir().join(format!(
+            "pi-history-bg-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let sessions = dir.join("sessions");
+        let cwd_dir = sessions.join("--tmp-project--");
+        std::fs::create_dir_all(&cwd_dir).expect("mkdir");
+        let session_id = "019fe705-27fd-712e-a1be-f972ef3773f4";
+        let file = cwd_dir.join(format!("2026-08-09T14-55-02-653Z_{session_id}.jsonl"));
+        let project = dir.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        let mut handle = std::fs::File::create(&file).expect("create");
+        writeln!(
+            handle,
+            r#"{{"type":"session","version":3,"id":"{session_id}","timestamp":"2026-08-09T14:55:02.653Z","cwd":"{}"}}"#,
+            project.display()
+        )
+        .unwrap();
+        writeln!(
+            handle,
+            r#"{{"type":"message","id":"m1","timestamp":"2026-08-09T14:55:02.745Z","message":{{"role":"user","content":[{{"type":"text","text":"run a bg task"}}]}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            handle,
+            r#"{{"type":"message","id":"m2","timestamp":"2026-08-09T14:55:10.000Z","message":{{"role":"assistant","content":[{{"type":"toolCall","id":"tool_bg1","name":"bg_run","arguments":{{"name":"spike-task","command":"sleep 3"}}}}]}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            handle,
+            r#"{{"type":"message","id":"m3","timestamp":"2026-08-09T14:55:10.500Z","message":{{"role":"toolResult","toolCallId":"tool_bg1","toolName":"bg_run","content":[{{"type":"text","text":"Started background task spike-task (b2e2f48ad)"}}],"details":{{"task":{{"id":"b2e2f48ad","name":"spike-task","status":"running","outputPath":".pi/tasks/session-1-1/b2e2f48ad.output"}}}},"isError":false}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            handle,
+            r#"{{"type":"custom_message","customType":"background-task-notification","content":"<background-task-notification>\n  <task-id>b2e2f48ad</task-id>\n  <status>completed</status>\n</background-task-notification>","display":true,"details":{{"id":"b2e2f48ad","name":"spike-task","status":"completed","exitCode":0}},"id":"m4","timestamp":"2026-08-09T14:55:14.000Z"}}"#
+        )
+        .unwrap();
+        drop(handle);
+
+        let agent_dir = dir.to_string_lossy().to_string();
+        let loaded = load_pi_session(&project, session_id, Some(&agent_dir))
+            .await
+            .expect("load");
+        assert_eq!(loaded.messages.len(), 4); // user + call + result + notification
+        assert_eq!(loaded.messages[0].role, "user");
+        let call = &loaded.messages[1];
+        assert_eq!(call.kind, "backgroundTask");
+        assert_eq!(call.tool_type.as_deref(), Some("bg_run"));
+        let result = &loaded.messages[2];
+        assert_eq!(result.kind, "backgroundTask");
+        let snapshot = result.tool_output.as_ref().expect("receipt snapshot");
+        assert_eq!(
+            snapshot.get("id").and_then(Value::as_str),
+            Some("b2e2f48ad")
+        );
+        let notification = &loaded.messages[3];
+        assert_eq!(notification.kind, "backgroundTaskNotification");
+        let task = notification
+            .tool_output
+            .as_ref()
+            .expect("notification task");
+        assert_eq!(
+            task.get("status").and_then(Value::as_str),
+            Some("completed")
+        );
+        assert_eq!(task.get("exitCode").and_then(Value::as_i64), Some(0));
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -374,6 +374,12 @@ fn classify_engine_event(event: &EngineEvent) -> (&'static str, AgentEventLane) 
         | EngineEvent::RequestUserInput { .. } => ("control.event", AgentEventLane::Critical),
         EngineEvent::ToolStarted { .. } => ("tool.started", AgentEventLane::Normal),
         EngineEvent::ToolCompleted { .. } => ("tool.completed", AgentEventLane::Normal),
+        EngineEvent::BackgroundTaskStarted { .. } => {
+            ("backgroundTask.started", AgentEventLane::Normal)
+        }
+        EngineEvent::BackgroundTaskUpdated { .. } => {
+            ("backgroundTask.updated", AgentEventLane::Normal)
+        }
         EngineEvent::UsageUpdate { .. } => ("usage.updated", AgentEventLane::Normal),
         EngineEvent::ProcessingHeartbeat { .. } => ("run.heartbeat", AgentEventLane::Normal),
         EngineEvent::Raw { .. } => ("engine.raw", AgentEventLane::Normal),
@@ -385,7 +391,9 @@ fn event_item_id(event: &EngineEvent) -> Option<String> {
         EngineEvent::ToolStarted { tool_id, .. }
         | EngineEvent::ToolCompleted { tool_id, .. }
         | EngineEvent::ToolInputUpdated { tool_id, .. }
-        | EngineEvent::ToolOutputDelta { tool_id, .. } => Some(tool_id.clone()),
+        | EngineEvent::ToolOutputDelta { tool_id, .. }
+        | EngineEvent::BackgroundTaskStarted { tool_id, .. } => Some(tool_id.clone()),
+        EngineEvent::BackgroundTaskUpdated { tool_id, .. } => tool_id.clone(),
         _ => None,
     }
 }

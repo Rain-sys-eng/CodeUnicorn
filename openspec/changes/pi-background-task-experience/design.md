@@ -8,10 +8,12 @@ pi RPC 事件流 ──► pi.rs 事件转换 ──► canonical item: backgrou
 扩展 followUp 注入 <background-task-notification> ──► agentTaskNotification 解析（A2）
                                               │        ├─► 按 taskId 驱动 A1 原地折叠
                                               │        └─► 触发 followUp turn（pi 原生行为，不拦截）
-.pi/tasks/session-<pid>/<taskId>.json ──► Rust registry watcher（B，P2）──► canonical event ──► 卡片/pill 状态
+.pi/tasks/session-<pid>/<taskId>.json ──► 前端 registry watcher（B，P2：复用 read_workspace_file + process_is_alive）──► applyBackgroundTaskUpdate(source:registry) ──► 卡片/pill 状态
 ```
 
 A1/A2 先行时卡片状态由通知驱动；B（P2）上线后切换为 registry 驱动 + 通知兜底，两者共存不冲突。
+
+**实现校准（2026-08-26 spike + 代码实证）**：通知有两条到达路径。① mid-run：模型收尾 turn 长于任务时，通知走 followUp 队列在**同 run 内**出现（无中间 agent_settled），事件经当前 forwarder 正常到达前端。② post-settle：任务长于收尾 turn 时先 settle，通知触发 pi 自唤醒 turn——pi.rs 建 **orphan run** 承接，其事件 turn_id 为合成 id，被 per-turn forwarder 过滤**天然丢弃**（pi.rs `PiRpcRun::new_orphan` 注释明确此语义）；且 orphan settle 后 run 被 take，缓冲文本也随之消失（收养回放只对 settle 前被收养的 run 生效）。因此 post-settle 路径下通知事件今天根本到不了前端——这不是本 change 引入的缺口，是现状（跟进 turn 的 assistant 文本同样不可见，只能靠历史重载或下次发送时收养回放）。P1 覆盖：mid-run live 折叠 + 历史重载折叠回放 + 收养时随 run 回放；post-settle 的**实时**折叠依赖 session 级通道，与 B（P2 registry watcher 挂在 commands 层、有 AppHandle）天然同路，P2 一并解决。
 
 ## 2. 关键设计决策
 
@@ -46,11 +48,13 @@ pill 数据源：会话级 backgroundTask 状态表（taskId → status/elapsed/
 - pill 状态更新由任务事件驱动；禁止秒级轮询根链。
 - 会话级状态表挂在 messages feature store 层，非 AppShell bag；若确需进 shell 层，必须先登记 `APP_SHELL_DOMAIN_CONTEXT_OWNED_KEYS`（AppShell Gate）。
 
-## 3. 实施前 spike（必须先做，结论回写本文件）
+## 3. 实施前 spike 结论（2026-08-26 已验证）
 
-1. **customType 透出**：pi RPC 模式下扩展 followUp 注入的消息，host 端事件是否携带 `customType: 'background-task-notification'`。决定 A2 走事件层还是文本层解析。方法：起 RPC resident，触发一次短 bg_run，dump 原始事件流。
-2. **历史重载形态**：notification 在 pi: 会话历史（jsonl）里的持久化形态；A1 卡片能否从历史 receipt + notification 重建折叠态。
-3. **registry 目录语义**：`session-<pid>-<pid>` 两段的含义；resume 旧会话时新 resident 能否读旧 pid 目录任务。
+验证方法：/tmp 下起 `pi --mode rpc --session-id spike-bg-task-0001` resident，prompt 驱动模型调一次 `bg_run sleep 3`，全量 dump stdout 事件流 + 会话 jsonl + registry 目录（原始样本当时存于 `/tmp/pi-bg-spike/events.jsonl`）。
+
+1. **customType 透出 ✅ 走事件层**：RPC 事件流中通知以 `message_start` / `message_end` 出现，`message.role === "custom"`、`message.customType === "background-task-notification"`，且 `message.details` 携带**结构化 BgTaskSnapshot 全量**（id / name / command / status / outputPath / cwd / startTime / endTime / exitCode / pid / bytesWritten）。A2 优先事件层解析（details 结构化，免 XML 正则）；`content`（XML 文本）作兜底。另证实 `tool_execution_end` 的 `result.details.task` 同样是结构化 snapshot（status=running、pid、outputPath），A1 receipt 解析优先读 details，文本 receipt 兜底。时序注意：通知到达时若 agent 仍在 streaming（模型收尾 turn 长于任务），走 followUp 队列**同 run 内**出现（无中间 agent_settled）；任务长于收尾 turn 时先 settle、再触发 orphan run（pi.rs 已有 orphan run 承接逻辑）。两种形态都要接。
+2. **历史重载形态 ✅ 可重建**：jsonl 持久化为 `custom_message` 条目，`customType` + `content`（XML 原文）+ `details`（结构化 snapshot）全保留，带 id/parentId/timestamp。历史链路可直接用 details 重建折叠态；`pi_history.rs` 目前不识别 `custom_message` 条目类型，需新增映射。
+3. **registry 目录语义 ✅ 两段皆 pid**：实测目录 `<cwd>/.pi/tasks/session-<residentPid>-<residentPid>/`——扩展读 `ctx.sessionId` 在 RPC 模式下为 undefined（pi ExtensionContext 只暴露 `sessionManager.getSessionId()`，无顶层 sessionId 字段），永远走 `session-${pid}` fallback，故两段都是 resident pid。codemoss spawn resident 时已知其 pid，可精确匹配 `session-<pid>-<pid>/`；resume / pid 失配时按 taskId glob `.pi/tasks/session-*-*/<taskId>.json` 兜底。metadata `<taskId>.json` 字段与 details snapshot 同构（status / exitCode / endTime / bytesWritten / notified），输出日志 `<taskId>.output` 为纯文本，watcher 设计可直接消费。
 
 ## 4. 降级矩阵
 

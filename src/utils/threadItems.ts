@@ -1158,6 +1158,25 @@ export function buildConversationItem(
       output: planText || fallbackOutput,
     };
   }
+  if (type === "backgroundTask") {
+    // pi-background-tasks 后台任务卡（bg_run / bg_delegate / fusion_*）：
+    // receipt / notification 快照走 output(JSON)，工具参数走 detail(JSON)，
+    // title 为 bg 工具名；ToolBlockRenderer 按 toolType 分发 BackgroundTaskCard。
+    const task =
+      item.task && typeof item.task === "object"
+        ? (item.task as Record<string, unknown>)
+        : null;
+    const status = asString(item.status ?? "") || asString(task?.status ?? "");
+    return {
+      id,
+      kind: "tool",
+      toolType: "backgroundTask",
+      title: asString(item.tool ?? item.title ?? ""),
+      detail: stringifyUnknown(item.input ?? item.arguments ?? ""),
+      status,
+      output: task ? JSON.stringify(task) : "",
+    };
+  }
   if (type === "commandExecution") {
     // DSH (and some hosts) pass `arguments`/`input` as a raw JSON string, not an object.
     // Parse both shapes so bash command/description survive into canvas terminal cards.

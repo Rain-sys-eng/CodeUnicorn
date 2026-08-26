@@ -603,6 +603,13 @@ enum PiStreamLine {
     },
     AssistantError(String),
     Usage(Value),
+    /// `message_start` for `role:"custom"` + `customType:"background-task-notification"`
+    /// (pi-background-tasks extension terminal wakeup). `message_end` carries an
+    /// identical payload and is collapsed to `Other` for dedupe.
+    BackgroundTaskNotification {
+        details: Option<Value>,
+        content: String,
+    },
     Other,
 }
 
@@ -707,6 +714,151 @@ fn pick_thinking_level(effort: Option<&str>, available: Option<&[String]>) -> Op
         .iter()
         .find(|level| **level == normalized)
         .map(|level| (*level).to_string())
+}
+
+/// pi-background-tasks extension tools that LAUNCH a durable background task
+/// (the tool returns a receipt immediately; terminal state arrives later via a
+/// `<background-task-notification>` followUp). Control tools (`bg_status` /
+/// `bg_logs` / `bg_kill` / `bg_result`) are deliberately excluded: they keep
+/// rendering as generic tool cards.
+pub(crate) const PI_BACKGROUND_TASK_TOOLS: &[&str] = &[
+    "bg_run",
+    "bg_delegate",
+    "bg_run_pi_attested",
+    "fusion_reason",
+    "fusion_investigate",
+    "fusion_research",
+    "fusion_validate",
+];
+
+/// `customType` the pi-background-tasks extension stamps on its terminal
+/// followUp message (spike 2026-08-26: RPC `message_start`/`message_end` with
+/// `message.role == "custom"`, structured snapshot under `message.details`).
+pub(crate) const PI_BACKGROUND_TASK_NOTIFICATION_CUSTOM_TYPE: &str = "background-task-notification";
+
+pub(crate) fn is_pi_background_task_tool(tool_name: &str) -> bool {
+    PI_BACKGROUND_TASK_TOOLS.contains(&tool_name.trim())
+}
+
+/// Canonical task snapshot from a bg tool receipt. The extension attaches the
+/// full snapshot at `result.details.task` (spike-verified); the text receipt is
+/// parsed as a fallback for older extension versions. Returns None when neither
+/// yields a task id — callers then degrade to a generic tool card.
+pub(crate) fn parse_pi_background_task_receipt(result: Option<&Value>) -> Option<Value> {
+    let result = result?;
+    if let Some(task) = result
+        .get("details")
+        .and_then(|details| details.get("task"))
+    {
+        if task.get("id").and_then(Value::as_str).is_some() {
+            return Some(task.clone());
+        }
+    }
+    parse_pi_background_task_receipt_text(&extract_tool_result_text(Some(result)))
+}
+
+/// Text receipt fallback shape:
+/// `Started background task <name> (<id>)\nStatus: running\nPID: 26137\nOutput: <path>`
+fn parse_pi_background_task_receipt_text(text: &str) -> Option<Value> {
+    let first_line = text.lines().next()?.trim();
+    let rest = first_line.strip_prefix("Started background task ")?;
+    let open = rest.rfind('(')?;
+    let close = rest.rfind(')')?;
+    if close <= open {
+        return None;
+    }
+    let id = rest[open + 1..close].trim();
+    if id.is_empty() {
+        return None;
+    }
+    let name = rest[..open].trim();
+    let mut task = json!({ "id": id, "status": "running" });
+    if !name.is_empty() {
+        task["name"] = json!(name);
+    }
+    for line in text.lines().skip(1) {
+        let line = line.trim();
+        if let Some(output) = line.strip_prefix("Output: ") {
+            task["outputPath"] = json!(output.trim());
+        } else if let Some(pid) = line.strip_prefix("PID: ") {
+            if let Ok(pid) = pid.trim().parse::<u64>() {
+                task["pid"] = json!(pid);
+            }
+        }
+    }
+    Some(task)
+}
+
+/// Canonical task snapshot from a `<background-task-notification>` wakeup:
+/// prefer the structured `message.details` snapshot; fall back to the XML-ish
+/// `content` envelope for older extension versions. None when no task id.
+pub(crate) fn parse_pi_background_task_notification(
+    details: Option<Value>,
+    content: &str,
+) -> Option<Value> {
+    if let Some(details) = details {
+        if details.get("id").and_then(Value::as_str).is_some() {
+            return Some(details);
+        }
+    }
+    fn tag<'a>(text: &'a str, name: &str) -> Option<&'a str> {
+        let open = format!("<{name}>");
+        let close = format!("</{name}>");
+        let start = text.find(&open)? + open.len();
+        let end = text[start..].find(&close)? + start;
+        let value = text[start..end].trim();
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    }
+    let id = tag(content, "task-id")?;
+    let mut task = json!({ "id": id });
+    if let Some(name) = tag(content, "task-name") {
+        task["name"] = json!(name);
+    }
+    if let Some(status) = tag(content, "status") {
+        task["status"] = json!(status);
+    }
+    if let Some(code) = tag(content, "exit-code").and_then(|v| v.parse::<i64>().ok()) {
+        task["exitCode"] = json!(code);
+    }
+    if let Some(output) = tag(content, "output-file") {
+        task["outputPath"] = json!(output);
+    }
+    Some(task)
+}
+
+/// Surface the extension's custom notification message once per wakeup:
+/// `message_start` wins, the identical `message_end` collapses to `Other`.
+fn parse_pi_custom_message_line(event_type: &str, message: Option<&Value>) -> PiStreamLine {
+    let Some(message) = message else {
+        return PiStreamLine::Other;
+    };
+    let custom_type = message
+        .get("customType")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if custom_type != PI_BACKGROUND_TASK_NOTIFICATION_CUSTOM_TYPE {
+        return PiStreamLine::Other;
+    }
+    if event_type != "message_start" {
+        return PiStreamLine::Other;
+    }
+    let details = message
+        .get("details")
+        .cloned()
+        .filter(|value| value.is_object());
+    let content = message
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    if details.is_none() && content.trim().is_empty() {
+        return PiStreamLine::Other;
+    }
+    PiStreamLine::BackgroundTaskNotification { details, content }
 }
 
 fn extract_tool_result_text(result: Option<&Value>) -> String {
@@ -844,6 +996,9 @@ fn parse_pi_stream_line(value: &Value) -> PiStreamLine {
                 .and_then(|m| m.get("role"))
                 .and_then(Value::as_str)
                 .unwrap_or("");
+            if role == "custom" {
+                return parse_pi_custom_message_line(event_type, message);
+            }
             if role == "assistant" {
                 if let Some(usage) = message.and_then(|m| m.get("usage")) {
                     return PiStreamLine::Usage(usage.clone());
@@ -1141,15 +1296,27 @@ impl PiSession {
                                 run.tool_names_by_id
                                     .insert(tool_id.clone(), tool_name.clone());
                                 run.tool_inputs_by_id.insert(tool_id.clone(), args.clone());
-                                emit(
-                                    &turn_id,
-                                    EngineEvent::ToolStarted {
-                                        workspace_id: workspace_id.clone(),
-                                        tool_id,
-                                        tool_name,
-                                        input: args,
-                                    },
-                                );
+                                if is_pi_background_task_tool(&tool_name) {
+                                    emit(
+                                        &turn_id,
+                                        EngineEvent::BackgroundTaskStarted {
+                                            workspace_id: workspace_id.clone(),
+                                            tool_id,
+                                            tool_name,
+                                            input: args,
+                                        },
+                                    );
+                                } else {
+                                    emit(
+                                        &turn_id,
+                                        EngineEvent::ToolStarted {
+                                            workspace_id: workspace_id.clone(),
+                                            tool_id,
+                                            tool_name,
+                                            input: args,
+                                        },
+                                    );
+                                }
                             }
                             PiStreamLine::ToolEnd {
                                 tool_id,
@@ -1158,6 +1325,29 @@ impl PiSession {
                             } => {
                                 run.saw_tool_activity = true;
                                 let tool_name = run.tool_names_by_id.get(&tool_id).cloned();
+                                let is_background_task_tool = tool_name
+                                    .as_deref()
+                                    .map(is_pi_background_task_tool)
+                                    .unwrap_or(false);
+                                let receipt_task = if is_background_task_tool && !is_error {
+                                    parse_pi_background_task_receipt(value.get("result"))
+                                } else {
+                                    None
+                                };
+                                if let Some(task) = receipt_task {
+                                    // bg 工具 receipt 解析成功：工具卡升级为后台
+                                    // 任务卡，不再发普通 ToolCompleted。
+                                    emit(
+                                        &turn_id,
+                                        EngineEvent::BackgroundTaskUpdated {
+                                            workspace_id: workspace_id.clone(),
+                                            tool_id: Some(tool_id),
+                                            task,
+                                            source: "receipt".to_string(),
+                                        },
+                                    );
+                                    continue;
+                                }
                                 let wrapped_output =
                                     match run.tool_inputs_by_id.get(&tool_id).cloned() {
                                         Some(Some(input_value)) => Some(json!({
@@ -1176,6 +1366,24 @@ impl PiSession {
                                         error: is_error.then_some(content),
                                     },
                                 );
+                            }
+                            PiStreamLine::BackgroundTaskNotification { details, content } => {
+                                // 通知不算 tool activity，但足以让 run 免于
+                                //「无输出」误判（notify-only 唤醒 turn）。
+                                run.saw_tool_activity = true;
+                                if let Some(task) =
+                                    parse_pi_background_task_notification(details, &content)
+                                {
+                                    emit(
+                                        &turn_id,
+                                        EngineEvent::BackgroundTaskUpdated {
+                                            workspace_id: workspace_id.clone(),
+                                            tool_id: None,
+                                            task,
+                                            source: "notification".to_string(),
+                                        },
+                                    );
+                                }
                             }
                             PiStreamLine::AssistantError(error) => {
                                 run.stream_error = Some(error);
@@ -2068,15 +2276,27 @@ impl PiSession {
                         saw_tool_activity = true;
                         tool_names_by_id.insert(tool_id.clone(), tool_name.clone());
                         tool_inputs_by_id.insert(tool_id.clone(), args.clone());
-                        self.emit_turn_event(
-                            turn_id,
-                            EngineEvent::ToolStarted {
-                                workspace_id: self.workspace_id.clone(),
-                                tool_id,
-                                tool_name,
-                                input: args,
-                            },
-                        );
+                        if is_pi_background_task_tool(&tool_name) {
+                            self.emit_turn_event(
+                                turn_id,
+                                EngineEvent::BackgroundTaskStarted {
+                                    workspace_id: self.workspace_id.clone(),
+                                    tool_id,
+                                    tool_name,
+                                    input: args,
+                                },
+                            );
+                        } else {
+                            self.emit_turn_event(
+                                turn_id,
+                                EngineEvent::ToolStarted {
+                                    workspace_id: self.workspace_id.clone(),
+                                    tool_id,
+                                    tool_name,
+                                    input: args,
+                                },
+                            );
+                        }
                     }
                     PiStreamLine::ToolEnd {
                         tool_id,
@@ -2085,6 +2305,28 @@ impl PiSession {
                     } => {
                         saw_tool_activity = true;
                         let tool_name = tool_names_by_id.get(&tool_id).cloned();
+                        let receipt_task = if tool_name
+                            .as_deref()
+                            .map(is_pi_background_task_tool)
+                            .unwrap_or(false)
+                            && !is_error
+                        {
+                            parse_pi_background_task_receipt(event.get("result"))
+                        } else {
+                            None
+                        };
+                        if let Some(task) = receipt_task {
+                            self.emit_turn_event(
+                                turn_id,
+                                EngineEvent::BackgroundTaskUpdated {
+                                    workspace_id: self.workspace_id.clone(),
+                                    tool_id: Some(tool_id),
+                                    task,
+                                    source: "receipt".to_string(),
+                                },
+                            );
+                            continue;
+                        }
                         let wrapped_output = match tool_inputs_by_id.get(&tool_id).cloned() {
                             Some(Some(input_value)) => Some(json!({
                                 "_input": input_value,
@@ -2102,6 +2344,21 @@ impl PiSession {
                                 error: is_error.then_some(content),
                             },
                         );
+                    }
+                    PiStreamLine::BackgroundTaskNotification { details, content } => {
+                        saw_tool_activity = true;
+                        if let Some(task) = parse_pi_background_task_notification(details, &content)
+                        {
+                            self.emit_turn_event(
+                                turn_id,
+                                EngineEvent::BackgroundTaskUpdated {
+                                    workspace_id: self.workspace_id.clone(),
+                                    tool_id: None,
+                                    task,
+                                    source: "notification".to_string(),
+                                },
+                            );
+                        }
                     }
                     PiStreamLine::AssistantError(error) => {
                         stream_error = Some(error);
@@ -2731,6 +2988,145 @@ mod tests {
             }
             _ => panic!("expected ToolEnd"),
         }
+    }
+
+    #[test]
+    fn background_task_tool_list_hits_launch_tools_only() {
+        for name in [
+            "bg_run",
+            "bg_delegate",
+            "bg_run_pi_attested",
+            "fusion_reason",
+            "fusion_investigate",
+            "fusion_research",
+            "fusion_validate",
+        ] {
+            assert!(is_pi_background_task_tool(name), "{name} should hit");
+        }
+        for name in [
+            "bg_status",
+            "bg_logs",
+            "bg_kill",
+            "bg_result",
+            "bash",
+            "read",
+            "todo_write",
+            "",
+        ] {
+            assert!(!is_pi_background_task_tool(name), "{name} should miss");
+        }
+    }
+
+    #[test]
+    fn background_task_receipt_prefers_structured_details() {
+        // Spike 2026-08-26: bg_run receipt carries the full snapshot at
+        // result.details.task.
+        let result = json!({
+            "content":[{"type":"text","text":"Started background task spike-task (b2e2f48ad)\nStatus: running\nPID: 26137\nOutput: .pi/tasks/session-1-1/b2e2f48ad.output"}],
+            "details":{"task":{"id":"b2e2f48ad","name":"spike-task","status":"running","outputPath":".pi/tasks/session-1-1/b2e2f48ad.output","pid":26137}}
+        });
+        let task = parse_pi_background_task_receipt(Some(&result)).expect("receipt parses");
+        assert_eq!(task.get("id").and_then(Value::as_str), Some("b2e2f48ad"));
+        assert_eq!(task.get("name").and_then(Value::as_str), Some("spike-task"));
+        assert_eq!(
+            task.get("outputPath").and_then(Value::as_str),
+            Some(".pi/tasks/session-1-1/b2e2f48ad.output")
+        );
+    }
+
+    #[test]
+    fn background_task_receipt_text_fallback_without_details() {
+        let result = json!({
+            "content":[{"type":"text","text":"Started background task spike-task (b2e2f48ad)\nStatus: running\nPID: 26137\nOutput: .pi/tasks/session-1-1/b2e2f48ad.output\nTerminal notification: enabled."}]
+        });
+        let task = parse_pi_background_task_receipt(Some(&result)).expect("text receipt parses");
+        assert_eq!(task.get("id").and_then(Value::as_str), Some("b2e2f48ad"));
+        assert_eq!(task.get("name").and_then(Value::as_str), Some("spike-task"));
+        assert_eq!(task.get("status").and_then(Value::as_str), Some("running"));
+        assert_eq!(
+            task.get("outputPath").and_then(Value::as_str),
+            Some(".pi/tasks/session-1-1/b2e2f48ad.output")
+        );
+        assert_eq!(task.get("pid").and_then(Value::as_u64), Some(26137));
+    }
+
+    #[test]
+    fn background_task_receipt_parse_failure_degrades_to_none() {
+        // 非 bg receipt 文本 / 空结果：None → 调用方降级普通工具卡。
+        let alien = json!({"content":[{"type":"text","text":"total 0\ndrwxr-xr-x 2 wheel 64"}]});
+        assert!(parse_pi_background_task_receipt(Some(&alien)).is_none());
+        assert!(parse_pi_background_task_receipt(None).is_none());
+        let empty = json!({"content":[{"type":"text","text":""}]});
+        assert!(parse_pi_background_task_receipt(Some(&empty)).is_none());
+    }
+
+    #[test]
+    fn background_task_notification_stream_line_surfaces_message_start_only() {
+        let start = json!({
+            "type":"message_start",
+            "message":{
+                "role":"custom",
+                "customType":"background-task-notification",
+                "content":"<background-task-notification>\n  <task-id>b2e2f48ad</task-id>\n  <status>completed</status>\n</background-task-notification>",
+                "details":{"id":"b2e2f48ad","name":"spike-task","status":"completed","exitCode":0}
+            }
+        });
+        match parse_pi_stream_line(&start) {
+            PiStreamLine::BackgroundTaskNotification { details, content } => {
+                assert!(content.contains("<task-id>b2e2f48ad</task-id>"));
+                let task = parse_pi_background_task_notification(details, &content)
+                    .expect("details snapshot parses");
+                assert_eq!(
+                    task.get("status").and_then(Value::as_str),
+                    Some("completed")
+                );
+                assert_eq!(task.get("exitCode").and_then(Value::as_i64), Some(0));
+            }
+            _ => panic!("expected BackgroundTaskNotification"),
+        }
+        // message_end 携带相同 payload：去重为 Other。
+        let mut end = start.clone();
+        end["type"] = json!("message_end");
+        assert!(matches!(parse_pi_stream_line(&end), PiStreamLine::Other));
+    }
+
+    #[test]
+    fn background_task_notification_content_fallback_without_details() {
+        let start = json!({
+            "type":"message_start",
+            "message":{
+                "role":"custom",
+                "customType":"background-task-notification",
+                "content":"<background-task-notification>\n  <task-id>b_abc</task-id>\n  <task-name>legacy-task</task-name>\n  <status>failed</status>\n  <exit-code>137</exit-code>\n  <output-file>.pi/tasks/session-1-1/b_abc.output</output-file>\n</background-task-notification>"
+            }
+        });
+        match parse_pi_stream_line(&start) {
+            PiStreamLine::BackgroundTaskNotification { details, content } => {
+                let task = parse_pi_background_task_notification(details, &content)
+                    .expect("content envelope parses");
+                assert_eq!(task.get("id").and_then(Value::as_str), Some("b_abc"));
+                assert_eq!(
+                    task.get("name").and_then(Value::as_str),
+                    Some("legacy-task")
+                );
+                assert_eq!(task.get("status").and_then(Value::as_str), Some("failed"));
+                assert_eq!(task.get("exitCode").and_then(Value::as_i64), Some(137));
+                assert_eq!(
+                    task.get("outputPath").and_then(Value::as_str),
+                    Some(".pi/tasks/session-1-1/b_abc.output")
+                );
+            }
+            _ => panic!("expected BackgroundTaskNotification"),
+        }
+    }
+
+    #[test]
+    fn non_notification_custom_messages_stay_other() {
+        let line = json!({
+            "type":"message_start",
+            "message":{"role":"custom","customType":"some-other-extension","content":"hi"}
+        });
+        assert!(matches!(parse_pi_stream_line(&line), PiStreamLine::Other));
     }
 
     #[test]

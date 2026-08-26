@@ -320,6 +320,11 @@ const composer = {
       edited: "已编辑",
       expandChrome: "展开运行状态",
       collapseChrome: "收起运行状态",
+      backgroundTasks: "后台任务",
+      bgLogLoading: "读取日志…",
+      bgLogError: "日志暂不可读",
+      bgLogEmpty: "（空日志）",
+      bgLogTruncated: "仅尾部（日志过长）",
     },
   },
 };

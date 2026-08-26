@@ -3702,6 +3702,10 @@ function ComposerImpl({
               sessionFileChanges={sessionFileChanges}
               sessionScopeKey={activeThreadId ?? null}
               piTree={piTreePill}
+              backgroundTasksScope={{
+                workspaceId: activeWorkspaceId ?? null,
+                threadId: activeThreadId ?? null,
+              }}
               isCodexEngine={isCodexEngine}
               onOpenDiffPath={onOpenDiffPath}
               onRevertFile={

@@ -337,6 +337,11 @@ const composer = {
       edited: "Edited",
       expandChrome: "Show run status",
       collapseChrome: "Hide run status",
+      backgroundTasks: "Background tasks",
+      bgLogLoading: "Loading log…",
+      bgLogError: "Log temporarily unavailable",
+      bgLogEmpty: "(empty log)",
+      bgLogTruncated: "tail only (log too long)",
     },
   },
 };

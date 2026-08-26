@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import ListChecks from "lucide-react/dist/esm/icons/list-checks";
 import Bot from "lucide-react/dist/esm/icons/bot";
@@ -7,6 +8,7 @@ import Pencil from "lucide-react/dist/esm/icons/pencil";
 import PanelTop from "lucide-react/dist/esm/icons/panel-top";
 import PanelTopClose from "lucide-react/dist/esm/icons/panel-top-close";
 import GitFork from "lucide-react/dist/esm/icons/git-fork";
+import HardDriveDownload from "lucide-react/dist/esm/icons/hard-drive-download";
 import type { LucideIcon } from "lucide-react";
 import type { TurnPlan } from "../../../../types";
 import { loadComposerRunStatusListStyles } from "../../../../styles/featureStyleLoaders";
@@ -22,7 +24,14 @@ import {
   useComposerRunStatus,
   type ComposerRunStatusInput,
 } from "./useComposerRunStatus";
+import {
+  useBackgroundTaskPill,
+  type BackgroundTaskPillScope,
+  type BackgroundTaskPillModel,
+} from "./useBackgroundTaskPill";
+import { useBackgroundTaskRegistryWatcher } from "../../../messages/utils/useBackgroundTaskRegistryWatcher";
 import type { RunStatusSection } from "./types";
+import { readWorkspaceFileTail } from "../../../../services/tauri/workspaceFiles";
 
 export type ComposerRunStatusStripProps = ComposerRunStatusInput & {
   isCodexEngine?: boolean;
@@ -39,6 +48,8 @@ export type ComposerRunStatusStripProps = ComposerRunStatusInput & {
     laneCount: number | null;
     onToggle: () => void;
   };
+  /** 3.1 「后台任务」pill 作用域（active thread）；store 为空时 pill 不占位。 */
+  backgroundTasksScope?: BackgroundTaskPillScope;
 };
 
 type PillDef = {
@@ -83,9 +94,7 @@ function buildPills(
       label: t("statusPanel.tabPlan"),
       Icon: ListTodo,
       countLabel:
-        model.planTotal > 0
-          ? `${model.planCompleted}/${model.planTotal}`
-          : "…",
+        model.planTotal > 0 ? `${model.planCompleted}/${model.planTotal}` : "…",
       running: false,
     });
   }
@@ -141,6 +150,7 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
     isPlanMode,
     isProcessing,
     piTree,
+    backgroundTasksScope,
     ...statusInput
   } = props;
 
@@ -149,6 +159,16 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
     isPlanMode,
     isProcessing,
   });
+
+  // 3.1 「后台任务」pill：会话级状态表事件驱动读副本，无任务不占位。
+  const backgroundTasks = useBackgroundTaskPill(
+    backgroundTasksScope ?? { workspaceId: null, threadId: null },
+  );
+  // P2 registry watcher：strip 在有任务时挂载，正好在需要时探测 registry
+  // 终态 metadata（post-settle 兜底）与断链判定。
+  useBackgroundTaskRegistryWatcher(
+    backgroundTasksScope ?? { workspaceId: null, threadId: null },
+  );
 
   // 任务 / Plan 复用 .sp-todo-* / .sp-plan-*；Status dock 已退役，必须自己拉切片。
   const needsListStyles = model.showTodoSection || model.showPlanSection;
@@ -203,14 +223,28 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [chromeOpen, collapse, expandedSection]);
 
-  if (!model.visible && !piTree) {
+  if (!model.visible && !piTree && !backgroundTasks.hasAny) {
     return null;
   }
 
   const pills = buildPills(model, t, isCodexEngine);
+  if (backgroundTasks.hasAny) {
+    pills.push({
+      id: "backgroundTask",
+      label: t("composer.runStatus.backgroundTasks"),
+      Icon: HardDriveDownload,
+      countLabel: backgroundTasks.anyRunning
+        ? `${backgroundTasks.runningCount}/${backgroundTasks.totalCount}`
+        : `${backgroundTasks.totalCount}`,
+      running: backgroundTasks.anyRunning,
+    });
+  }
   const sectionExpanded = chromeOpen ? model.expandedSection : null;
   const hasLive =
-    model.todoRunning || model.subagentRunning || model.editRunning;
+    model.todoRunning ||
+    model.subagentRunning ||
+    model.editRunning ||
+    backgroundTasks.anyRunning;
   const ToggleIcon = chromeOpen ? PanelTopClose : PanelTop;
 
   return (
@@ -250,6 +284,8 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
                   isProcessing={isProcessing}
                   isCodexEngine={isCodexEngine}
                   sessionFileChanges={model.sessionFileChanges}
+                  backgroundTasks={backgroundTasks}
+                  backgroundTasksWorkspaceId={backgroundTasksScope?.workspaceId ?? null}
                   onOpenDiffPath={onOpenDiffPath}
                   onInspectSubagent={onInspectSubagent}
                   onRevertFile={onRevertFile ? handleRevertFile : undefined}
@@ -298,7 +334,14 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
                   onClick={() => model.toggleSection(pill.id)}
                 >
                   {pill.running ? (
-                    <span className="composer-run-status-live-dot" aria-hidden />
+                    <span
+                      className={`composer-run-status-live-dot${
+                        pill.id === "backgroundTask"
+                          ? " composer-run-status-live-dot--info"
+                          : ""
+                      }`}
+                      aria-hidden
+                    />
                   ) : null}
                   <Icon
                     size={14}
@@ -350,9 +393,7 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
                   aria-hidden
                   className="composer-run-status-pill-icon"
                 />
-                <span className="composer-run-status-pill-label">
-                  会话树
-                </span>
+                <span className="composer-run-status-pill-label">会话树</span>
                 {piTree.laneCount !== null && piTree.laneCount > 1 ? (
                   <span className="composer-run-status-pill-count">
                     {piTree.laneCount} lane
@@ -395,6 +436,181 @@ export const ComposerRunStatusStrip = memo(function ComposerRunStatusStrip(
   );
 });
 
+function isTerminalBackgroundTaskStatus(status: unknown): boolean {
+  const value = typeof status === "string" ? status.trim().toLowerCase() : "";
+  return value === "completed" || value === "failed" || value === "killed";
+}
+
+function BackgroundTaskRows({
+  model,
+  workspaceId,
+}: {
+  model: BackgroundTaskPillModel;
+  workspaceId: string | null;
+}) {
+  const { t } = useTranslation();
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [openLogId, setOpenLogId] = useState<string | null>(null);
+  const [tailById, setTailById] = useState<
+    Map<string, { text: string; truncated: boolean; loading: boolean; error?: boolean }>
+  >(new Map());
+  useEffect(() => {
+    if (!model.anyRunning) return undefined;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [model.anyRunning]);
+  const running = model.tasks.filter(
+    (record) => !isTerminalBackgroundTaskStatus(record.task.status),
+  );
+  const done = model.tasks.filter((record) =>
+    isTerminalBackgroundTaskStatus(record.task.status),
+  );
+  const toggleLog = (taskId: string, outputPath: string): void => {
+    const isOpening = openLogId !== taskId;
+    setOpenLogId(isOpening ? taskId : null);
+    if (!isOpening) return;
+    if (!workspaceId || tailById.has(taskId)) return;
+    setTailById((prev) => new Map(prev).set(taskId, { text: "", truncated: false, loading: true }));
+    readWorkspaceFileTail(workspaceId, outputPath)
+      .then((res) =>
+        setTailById((prev) =>
+          new Map(prev).set(taskId, {
+            text: res.content,
+            truncated: res.truncated,
+            loading: false,
+          }),
+        ),
+      )
+      .catch(() =>
+        setTailById((prev) =>
+          new Map(prev).set(taskId, { text: "", truncated: false, loading: false, error: true }),
+        ),
+      );
+  };
+  const renderTail = (taskId: string): ReactNode => {
+    const entry = tailById.get(taskId);
+    if (!entry) return null;
+    if (entry.loading) return <span>{t("composer.runStatus.bgLogLoading")}</span>;
+    if (entry.error)
+      return <span className="composer-run-status-bg-tail-empty">{t("composer.runStatus.bgLogError")}</span>;
+    if (!entry.text.trim())
+      return <span className="composer-run-status-bg-tail-empty">{t("composer.runStatus.bgLogEmpty")}</span>;
+    return (
+      <pre className="composer-run-status-bg-tail-pre">
+        {entry.text}
+        {entry.truncated ? `\n… ${t("composer.runStatus.bgLogTruncated")}` : ""}
+      </pre>
+    );
+  };
+  const renderRow = (record: (typeof model.tasks)[number]): ReactNode => {
+    const task = record.task as {
+      id?: string;
+      name?: string | null;
+      command?: string | null;
+      status?: string | null;
+      exitCode?: number | null;
+      startTime?: number | null;
+      endTime?: number | null;
+      outputPath?: string | null;
+    };
+    const terminal = isTerminalBackgroundTaskStatus(task.status);
+    const label =
+      typeof task.name === "string" && task.name.trim()
+        ? task.name.trim()
+        : (record.toolName ?? record.taskId);
+    const durationSeconds =
+      typeof task.startTime === "number"
+        ? Math.max(
+            0,
+            Math.floor(
+              ((terminal ? (task.endTime ?? nowMs) : nowMs) - task.startTime) /
+                1000,
+            ),
+          )
+        : null;
+    const mm =
+      durationSeconds != null
+        ? String(Math.floor(durationSeconds / 60)).padStart(2, "0")
+        : "--";
+    const ss =
+      durationSeconds != null
+        ? String(durationSeconds % 60).padStart(2, "0")
+        : "--";
+    return (
+      <li
+        key={record.taskId}
+        className={`composer-run-status-bg-row${terminal ? " is-terminal" : " is-running"}`}
+        data-testid="composer-run-status-bg-row"
+      >
+        <span
+          className={`composer-run-status-bg-status is-${(
+            task.status ?? ""
+          ).toLowerCase()}`}
+        >
+          {terminal
+            ? (task.status ?? "").toLowerCase() === "completed"
+              ? t("messages.backgroundTaskCardCompleted")
+              : (task.status ?? "").toLowerCase() === "killed"
+                ? t("messages.backgroundTaskCardKilled")
+                : t("messages.backgroundTaskCardFailed")
+            : t("messages.backgroundTaskCardRunning")}
+        </span>
+        <span
+          className="composer-run-status-bg-name"
+          title={typeof task.command === "string" ? task.command : undefined}
+        >
+          {label}
+        </span>
+        <span className="composer-run-status-bg-elapsed">
+          {mm}:{ss}
+        </span>
+        {task.exitCode != null ? (
+          <span className="composer-run-status-bg-exit">
+            exit {task.exitCode}
+          </span>
+        ) : null}
+        {typeof task.outputPath === "string" && task.outputPath ? (
+          <button
+            type="button"
+            className="composer-run-status-bg-log"
+            aria-expanded={openLogId === record.taskId}
+            onClick={() => toggleLog(record.taskId, task.outputPath as string)}
+          >
+            {openLogId === record.taskId
+              ? t("messages.backgroundTaskFoldCollapse")
+              : t("messages.backgroundTaskCardViewLog")}
+          </button>
+        ) : null}
+        {openLogId === record.taskId ? (
+          <span className="composer-run-status-bg-tail">
+            {renderTail(record.taskId)}
+          </span>
+        ) : null}
+      </li>
+    );
+  };
+  return (
+    <div className="composer-run-status-body composer-run-status-body--bg-tasks">
+      {running.length > 0 ? (
+        <ul
+          className="composer-run-status-bg-list"
+          data-testid="composer-run-status-bg-list-running"
+        >
+          {running.map(renderRow)}
+        </ul>
+      ) : null}
+      {done.length > 0 ? (
+        <ul
+          className="composer-run-status-bg-list is-done"
+          data-testid="composer-run-status-bg-list-done"
+        >
+          {done.map(renderRow)}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function ExpandedBody({
   section,
   listStylesReady,
@@ -405,6 +621,8 @@ function ExpandedBody({
   isProcessing,
   isCodexEngine,
   sessionFileChanges,
+  backgroundTasks,
+  backgroundTasksWorkspaceId,
   onOpenDiffPath,
   onInspectSubagent,
   onRevertFile,
@@ -419,11 +637,21 @@ function ExpandedBody({
   isProcessing: boolean;
   isCodexEngine: boolean;
   sessionFileChanges: TurnFileChangesSummary | null;
+  backgroundTasks: BackgroundTaskPillModel;
+  backgroundTasksWorkspaceId: string | null;
   onOpenDiffPath?: (path: string) => void;
   onInspectSubagent?: (agent: SubagentInfo) => void;
   onRevertFile?: (path: string) => void | Promise<void>;
   onRevertAllFiles?: (paths: string[]) => void | Promise<void>;
 }) {
+  if (section === "backgroundTask") {
+    return (
+      <BackgroundTaskRows
+        model={backgroundTasks}
+        workspaceId={backgroundTasksWorkspaceId}
+      />
+    );
+  }
   if ((section === "todo" || section === "plan") && !listStylesReady) {
     return null;
   }

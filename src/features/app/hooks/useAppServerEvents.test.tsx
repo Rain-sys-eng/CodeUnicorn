@@ -336,6 +336,70 @@ describe("useAppServerEvents", () => {
     });
   });
 
+  it("routes background task updates to onBackgroundTaskUpdated", async () => {
+    const onBackgroundTaskUpdated = vi.fn();
+    const handlers: Handlers = { onBackgroundTaskUpdated };
+    const { root } = await mount(handlers);
+
+    await act(async () => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/backgroundTask/updated",
+          params: {
+            threadId: "pi:session-1",
+            toolId: null,
+            task: { id: "b2e2f48ad", status: "completed", exitCode: 0 },
+            source: "notification",
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await act(async () => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/backgroundTask/updated",
+          params: {
+            threadId: "pi:session-1",
+            toolId: "tool-bg-1",
+            task: { id: "b2e2f48ad", status: "running" },
+            source: "receipt",
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(onBackgroundTaskUpdated).toHaveBeenCalledTimes(2);
+    expect(onBackgroundTaskUpdated).toHaveBeenNthCalledWith(
+      1,
+      "ws-1",
+      "pi:session-1",
+      {
+        toolId: null,
+        task: { id: "b2e2f48ad", status: "completed", exitCode: 0 },
+        source: "notification",
+      },
+    );
+    expect(onBackgroundTaskUpdated).toHaveBeenNthCalledWith(
+      2,
+      "ws-1",
+      "pi:session-1",
+      {
+        toolId: "tool-bg-1",
+        task: { id: "b2e2f48ad", status: "running" },
+        source: "receipt",
+      },
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("routes item and tool-delta events when threadId is nested in turn", async () => {
     const handlers: Handlers = {
       onItemStarted: vi.fn(),
