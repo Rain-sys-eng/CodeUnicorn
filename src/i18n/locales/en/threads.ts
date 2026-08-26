@@ -128,6 +128,8 @@ const threads = {
       "Switching to the merged follow-up and waiting for resume evidence...",
     turnFailed: "Turn failed.",
     turnFailedWithMessage: "Turn failed: {{message}}",
+    turnOrphanedRetryable:
+      "The engine sent no response events for this turn (backend restart or engine unavailable). The turn was aborted — please send again.",
     claudeMcpRouteMapped:
       "MCP routing notice: detected `playwright-mcp`, automatically mapped this session to `chrome-devtools`.",
     claudeMcpRouteUnavailable:

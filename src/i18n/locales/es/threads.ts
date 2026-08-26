@@ -73,6 +73,7 @@ const threads = {
     "sessionStoppedForFusion": "Cambiando al seguimiento fusionado y esperando evidencia de reanudación...",
     "turnFailed": "El turno falló.",
     "turnFailedWithMessage": "El turno falló: {{message}}",
+    "turnOrphanedRetryable": "El motor no envió ningún evento de respuesta para este turno (reinicio del backend o motor no disponible). El turno se abortó; envíelo de nuevo.",
     "claudeMcpRouteMapped": "Aviso de enrutamiento MCP: se detectó `playwright-mcp`, se asignó automáticamente esta sesión a `chrome-devtools`.",
     "claudeMcpRouteUnavailable": "Aviso de enrutamiento MCP: se detectó `playwright-mcp`, pero esta sesión no ha confirmado que esa herramienta sea visible.",
     "turnFailedToStart": "El turno no pudo iniciarse.",

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { WorkspaceScopedMap } from "./workspaceScopedMap";
+import { useOrphanTurnWatchdog } from "./useOrphanTurnWatchdog";
 import {
   workspaceScopedDelete,
   workspaceScopedHas,
@@ -560,6 +561,13 @@ export function useThreadMessaging({
   >(new Map());
   const sendMessageToThreadRef = useRef<SendMessageToThreadFn | null>(null);
   const { createRecoveryAttempt } = useCodexMessageRecovery();
+  const { armOrphanTurnWatchdog } = useOrphanTurnWatchdog({
+    threadStatusById,
+    markProcessing,
+    setActiveTurnId,
+    pushThreadErrorMessage,
+    onDebug,
+  });
   const {
     claudeCandidateSessionIdByPendingThreadRef,
     claudePendingThreadAwaitingNativeSessionRef,
@@ -1209,6 +1217,12 @@ export function useThreadMessaging({
         });
         // 同步亮起 processing，避免 emptyThread + 无「响应中」的空白闪屏
         markProcessing(threadId, true);
+        // Orphan turn watchdog（fix-orphan-turn-during-backend-unavailability）：
+        // 仅 native 路径 arm；90s 零首事件（后端重启窗口 / wedge）时 settle 为
+        // 可重试错误，防止「响应中」永久卡死。shared V2 由 durable 状态机自管。
+        if (threadKind !== "shared") {
+          armOrphanTurnWatchdog(workspace.id, threadId);
+        }
         safeMessageActivity();
         emitMessagesForcePinBottom();
       }

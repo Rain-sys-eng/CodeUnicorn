@@ -73,6 +73,7 @@ const threads = {
     "sessionStoppedForFusion": "मर्ज किए गए फ़ॉलो-अप पर स्विच कर रहे हैं और resume साक्ष्य की प्रतीक्षा कर रहे हैं...",
     "turnFailed": "टर्न विफल हुआ।",
     "turnFailedWithMessage": "टर्न विफल हुआ: {{message}}",
+    "turnOrphanedRetryable": "इस टर्न के लिए इंजन से कोई रिस्पॉन्स इवेंट नहीं आया (बैकएंड पुनरारंभ या इंजन अनुपलब्ध)। टर्न निरस्त कर दिया गया — कृपया फिर से भेजें।",
     "claudeMcpRouteMapped": "MCP रूटिंग सूचना: `playwright-mcp` का पता चला, इस सत्र को स्वचालित रूप से `chrome-devtools` पर मैप किया गया।",
     "claudeMcpRouteUnavailable": "MCP रूटिंग सूचना: `playwright-mcp` का पता चला, लेकिन इस सत्र ने पुष्टि नहीं की कि वह टूल दिखाई दे रहा है।",
     "turnFailedToStart": "टर्न शुरू होने में विफल रहा।",

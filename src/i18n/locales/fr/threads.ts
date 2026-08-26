@@ -73,6 +73,7 @@ const threads = {
     "sessionStoppedForFusion": "Passage au suivi fusionné et attente des preuves de reprise...",
     "turnFailed": "Échec du tour.",
     "turnFailedWithMessage": "Échec du tour : {{message}}",
+    "turnOrphanedRetryable": "Le moteur n'a envoyé aucun événement de réponse pour ce tour (redémarrage du backend ou moteur indisponible). Le tour a été abandonné — veuillez renvoyer.",
     "claudeMcpRouteMapped": "Avis de routage MCP : `playwright-mcp` détecté, cette session a été automatiquement mappée sur `chrome-devtools`.",
     "claudeMcpRouteUnavailable": "Avis de routage MCP : `playwright-mcp` détecté, mais cette session n'a pas confirmé que cet outil est visible.",
     "turnFailedToStart": "Échec du démarrage du tour.",

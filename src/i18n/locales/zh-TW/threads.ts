@@ -73,6 +73,7 @@ const threads = {
     "sessionStoppedForFusion": "正在切換至合併後的後續對話並等待繼續佐證…",
     "turnFailed": "回合失敗。",
     "turnFailedWithMessage": "回合失敗：{{message}}",
+    "turnOrphanedRetryable": "引擎在本輪未回傳任何回應事件（後端重啟或引擎不可用）。本輪已中止，請重新發送。",
     "claudeMcpRouteMapped": "MCP 路由提示：偵測到 `playwright-mcp`，已自動將此工作階段對應至 `chrome-devtools`。",
     "claudeMcpRouteUnavailable": "MCP 路由提示：偵測到 `playwright-mcp`，但此工作階段尚未確認該工具是否可見。",
     "turnFailedToStart": "回合啟動失敗。",

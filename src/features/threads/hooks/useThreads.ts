@@ -71,6 +71,8 @@ import {
 } from "../policies/threadSelectResumePolicy";
 import { clearLiveAssistantText } from "../utils/liveAssistantTextChannel";
 import { clearLiveItemDelta } from "../utils/liveItemDeltaChannel";
+import { noteEngineEventForThread } from "../utils/orphanTurnWatchdog";
+import type { AppServerEvent } from "../../../types/conversation";
 import {
   resolvePendingThreadIdForSession,
   resolvePendingThreadIdForTurn,
@@ -3152,6 +3154,24 @@ export function useThreads({
   const appServerEventHandlers = useMemo(
     () => ({
       ...handlers,
+      // Orphan turn watchdog（fix-orphan-turn-during-backend-unavailability）：
+      // 任何携带 threadId 的引擎事件都算「首事件」，cancel 该 thread 的看门狗
+      // （fire 时判定读取；这里只登记，不打渲染链）。链式保留原诊断 handler。
+      onAppServerEvent: (event: AppServerEvent) => {
+        const params = (event.message?.params ?? {}) as Record<string, unknown>;
+        const eventThreadId = params.threadId ?? params.thread_id;
+        const threadObject = params.thread as { id?: unknown } | undefined;
+        const threadId =
+          typeof eventThreadId === "string"
+            ? eventThreadId
+            : typeof threadObject?.id === "string"
+              ? threadObject.id
+              : "";
+        if (threadId) {
+          noteEngineEventForThread(threadId);
+        }
+        handlers.onAppServerEvent?.(event);
+      },
       onThreadStarted: (
         workspaceId: string,
         thread: Record<string, unknown>,

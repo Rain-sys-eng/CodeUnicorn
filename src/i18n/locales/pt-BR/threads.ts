@@ -73,6 +73,7 @@ const threads = {
     "sessionStoppedForFusion": "Alternando para o acompanhamento mesclado e aguardando evidência de retomada...",
     "turnFailed": "A rodada falhou.",
     "turnFailedWithMessage": "A rodada falhou: {{message}}",
+    "turnOrphanedRetryable": "O motor não enviou nenhum evento de resposta para esta rodada (reinício do backend ou motor indisponível). A rodada foi abortada — envie novamente.",
     "claudeMcpRouteMapped": "Aviso de roteamento MCP: `playwright-mcp` detectado, esta sessão foi mapeada automaticamente para `chrome-devtools`.",
     "claudeMcpRouteUnavailable": "Aviso de roteamento MCP: `playwright-mcp` detectado, mas esta sessão não confirmou que essa ferramenta está visível.",
     "turnFailedToStart": "A rodada não conseguiu iniciar.",

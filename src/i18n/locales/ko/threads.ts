@@ -73,6 +73,7 @@ const threads = {
     "sessionStoppedForFusion": "병합된 후속 대화로 전환하고 재개 증거를 기다리는 중...",
     "turnFailed": "턴이 실패했습니다.",
     "turnFailedWithMessage": "턴 실패: {{message}}",
+    "turnOrphanedRetryable": "이 턴에 대해 엔진에서 응답 이벤트가 전혀 수신되지 않았습니다(백엔드 재시작 또는 엔진 사용 불가). 턴이 중단되었습니다. 다시 전송해 주세요.",
     "claudeMcpRouteMapped": "MCP 라우팅 알림: `playwright-mcp`를 감지하여 이 세션을 자동으로 `chrome-devtools`에 매핑했습니다.",
     "claudeMcpRouteUnavailable": "MCP 라우팅 알림: `playwright-mcp`를 감지했지만 이 세션은 해당 도구가 표시되는지 확인하지 못했습니다.",
     "turnFailedToStart": "턴을 시작하지 못했습니다.",

@@ -119,6 +119,8 @@ const threads = {
     sessionStoppedForFusion: "正在切换到融合回复，等待新的接续事件…",
     turnFailed: "会话失败。",
     turnFailedWithMessage: "会话失败：{{message}}",
+    turnOrphanedRetryable:
+      "引擎在本轮未回传任何响应事件（后端重启或引擎不可用）。本轮已中止，请重新发送。",
     claudeMcpRouteMapped:
       "MCP 路由提示：检测到 `playwright-mcp`，当前会话已自动映射为 `chrome-devtools`。",
     claudeMcpRouteUnavailable:

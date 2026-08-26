@@ -73,6 +73,7 @@ const threads = {
     "sessionStoppedForFusion": "マージされた後続処理に切り替えて、再開の証跡を待っています...",
     "turnFailed": "ターンが失敗しました。",
     "turnFailedWithMessage": "ターンが失敗しました: {{message}}",
+    "turnOrphanedRetryable": "このターンに対してエンジンから応答イベントが一切届きませんでした（バックエンド再起動またはエンジン利用不可）。ターンを中止しました。再送してください。",
     "claudeMcpRouteMapped": "MCPルーティング通知: `playwright-mcp` を検出したため、このセッションを自動的に `chrome-devtools` にマッピングしました。",
     "claudeMcpRouteUnavailable": "MCPルーティング通知: `playwright-mcp` を検出しましたが、このセッションではそのツールが表示されていることを確認できていません。",
     "turnFailedToStart": "ターンの開始に失敗しました。",
