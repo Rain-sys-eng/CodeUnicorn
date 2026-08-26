@@ -3270,8 +3270,17 @@ pub(crate) fn process_is_alive(pid: i32) -> bool {
     if pid <= 0 {
         return false;
     }
-    // kill(pid, 0) 仅探测可发送信号；ESRCH=进程不存在，EPERM/0=存在。
-    unsafe { libc::kill(pid, 0) == 0 }
+    #[cfg(unix)]
+    {
+        // kill(pid, 0) 仅探测可发送信号；ESRCH=进程不存在，EPERM/0=存在。
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+    #[cfg(windows)]
+    {
+        // Windows 没有 POSIX kill(pid, 0) 等价探测面，按"已断链"返回 false
+        // 由上层 watchdog / reconnect 兜底，宁误报回收不误报存活。
+        false
+    }
 }
 
 #[cfg(test)]
