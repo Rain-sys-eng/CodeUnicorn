@@ -10,7 +10,7 @@ status: active
 落地后若行为进入产品，以代码和 OpenSpec 为准；本目录只保留对照稿。
 
 | 稿件 | 用途 | 打开方式 |
-|---|---|---|
+| --- | --- | --- |
 | [`loading-picker/index.html`](loading-picker/index.html) | 「响应中」loading 25 选 1（01–10 几何 / 11–25 意象）；生产仍是 Mac `03` / Windows `10` | 浏览器打开 gallery |
 | [`session-loading/index.html`](session-loading/index.html) | 切换会话画布幕布第一轮（保留 03 / 04 / 10） | 浏览器打开 gallery |
 | [`session-loading/r2/index.html`](session-loading/r2/index.html) | 第二轮 10 稿：换几何（日食 / 底栏 / 竖脊 / 握手 / 地平线 / 仪表 / 星座 / 扫光 / 双月 / 大字） | 浏览器打开 gallery |
@@ -28,6 +28,7 @@ status: active
 | [`network-drive-files/index.html`](network-drive-files/index.html) | 网络盘工作区 Files 面板：添加项目 → 选网络挂载目录 → 修复前加载失败 / 修复后可浏览打开 | 浏览器打开，切「修复前/后」，点添加项目 |
 | [`qoder-distribution-options.html`](qoder-distribution-options.html) | Qoder CLI Global / CN 的客户端身份形态对照：A 双入口（推荐）与 C 单入口地区切换 | 浏览器打开，点击 Global / CN 对比会话身份 |
 | [`qoder-distribution-options-v2.html`](qoder-distribution-options-v2.html) | Qoder CLI 单父入口、双分发子入口：新建会话菜单子菜单 + 同页 Global / CN 供应商配置 | 浏览器打开，点击 Qoder CLI、Global / CN 或管理按钮 |
+| [`pi-background-tasks/index.html`](pi-background-tasks/index.html) | PI 后台任务（bg_run）体验三层一体（真壳 base：真实 CSS @import + 真实 DOM class）：现状割裂视图 vs 方案视图（A1 任务卡·终态原地折叠 / A2 通知消费·驱动折叠 / A3+C 等待态与后台任务 pill·复用真实 composer-run-status / B registry 健康信号），含断链模拟；方案文档 `docs/plans/2026-08-26-pi-background-tasks-experience-plan.md` | 浏览器打开，切「现状/方案」，方案页点步骤条或自动播放 |
 
 存量 `docs/previews/`、`docs/prototypes/` 因高 fan-out 引用暂不搬迁。新设计稿一律进本目录，不要放仓库根 `designs/` 或 `.artifacts/`。
 
