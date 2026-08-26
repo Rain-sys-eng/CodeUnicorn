@@ -23,6 +23,8 @@ pub(crate) mod claude_history_large_payload;
 mod claude_history_large_payload_tests;
 #[cfg(test)]
 mod claude_history_list_budget_tests;
+#[cfg(test)]
+mod claude_history_window_fidelity_tests;
 pub(crate) mod claude_history_subagents;
 pub(crate) mod claude_message_content;
 pub(crate) mod cli_image_input;

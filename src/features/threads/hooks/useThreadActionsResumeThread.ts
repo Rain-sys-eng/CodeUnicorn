@@ -43,6 +43,7 @@ import {
   mergeHistoryProjectionItems,
 } from "../assembly/conversationAssembler";
 import { asString } from "../utils/threadNormalize";
+import { mergeHydratedItemsPreservePrefix } from "../utils/mergeHydratedItemsPreservePrefix";
 import {
   collectKnownCodexThreadIds,
   normalizeComparableWorkspacePath,
@@ -121,6 +122,12 @@ function buildHistorySnapshotPaintKey(snapshot: {
 
 export type ResumeThreadForWorkspaceOptions = {
   preferLocalCodexHistory?: boolean;
+  /**
+   * fix-claude-history-window-message-loss：post-turn reconcile（自动 refresh）
+   * 专用。hydrated window 仅覆盖尾部时保留当前列表中窗口之外的旧消息
+   * （preserve-prefix merge）。显式 rewind / fork / delete 不得开启。
+   */
+  mergeHydratedPrefix?: boolean;
 };
 
 type ResumeThreadForWorkspaceContext = UseThreadActionsOptions & {
@@ -340,15 +347,22 @@ export function useThreadActionsResumeThreadForWorkspace(
           loadedThreadsRef.current[targetThreadId] = loaded;
         }
       };
+      const mergeHydratedPrefix = options?.mergeHydratedPrefix === true;
       const applyHydratedItems = async (
         targetThreadId: string,
         items: ConversationItem[],
         options?: { mode?: "tail-first" | "atomic" },
       ) => {
+        // fix-claude-history-window-message-loss：post-turn reconcile（force+replace）
+        // 的 hydrated window 只覆盖尾部，整体替换会裁掉窗口之外已展示的旧消息。
+        // preserve-prefix merge：锚点对齐保留前缀；无法对齐时回退信任磁盘。
+        const effectiveItems = mergeHydratedPrefix
+          ? mergeHydratedItemsPreservePrefix(localItems, items)
+          : items;
         const result = await dispatchThreadItemsProgressively(
           dispatch,
           targetThreadId,
-          items,
+          effectiveItems,
           {
             mode: options?.mode ?? "tail-first",
             shouldContinue: () => isCurrentResumeRequest(),
@@ -360,7 +374,7 @@ export function useThreadActionsResumeThreadForWorkspace(
         if (result.remainingOlderCount > 0) {
           rememberFullHistoryForWindow(
             targetThreadId,
-            items,
+            effectiveItems,
             result.displayedCount,
           );
         } else {

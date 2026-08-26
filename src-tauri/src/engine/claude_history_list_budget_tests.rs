@@ -192,7 +192,7 @@ async fn list_claude_sessions_does_not_inventory_subagent_jsonl() {
 }
 
 #[tokio::test]
-async fn load_claude_session_window_returns_tail_and_has_more() {
+async fn load_claude_session_window_whole_file_returns_all_without_cursor() {
     let unique = Uuid::new_v4();
     let temp_root = std::env::temp_dir().join(format!("ccgui-claude-load-window-{unique}"));
     let base_dir = temp_root.join("claude-projects");
@@ -222,11 +222,13 @@ async fn load_claude_session_window_returns_tail_and_has_more() {
     )
     .await
     .expect("window load");
-    assert_eq!(windowed.messages.len(), 3);
-    assert_eq!(windowed.messages[0].text, "prompt 17");
-    assert_eq!(windowed.messages[2].text, "prompt 19");
-    assert_eq!(windowed.has_more, Some(true));
-    assert!(windowed.next_cursor.is_some());
+    // fix-claude-history-window-message-loss：整文件可被 window 覆盖时不再 drain，
+    // 全量返回且不再广告死游标。
+    assert_eq!(windowed.messages.len(), 20);
+    assert_eq!(windowed.messages[0].text, "prompt 0");
+    assert_eq!(windowed.messages[19].text, "prompt 19");
+    assert_eq!(windowed.has_more, Some(false));
+    assert_eq!(windowed.next_cursor, None);
 
     let full = load_claude_session_from_base_dir(&base_dir, &workspace_path, &session_id)
         .await

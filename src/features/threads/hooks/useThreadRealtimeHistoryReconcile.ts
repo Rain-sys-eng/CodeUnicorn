@@ -275,6 +275,22 @@ export function useThreadRealtimeHistoryReconcile({
             );
             return;
           }
+          // fix-claude-history-window-message-loss：待定乐观用户气泡未被磁盘
+          // window 覆盖，整体替换会把气泡吞掉；与 codex 路径对齐先延迟一次。
+          if (
+            attempt === 0 &&
+            hasPendingOptimisticUserBubble(
+              itemsByThreadRef.current[canonicalThreadId] ?? [],
+            )
+          ) {
+            scheduleClaudeRealtimeHistoryReconcile(
+              workspaceId,
+              canonicalThreadId,
+              reconciliationTurnId,
+              attempt + 1,
+            );
+            return;
+          }
           onDebug?.({
             id: `${Date.now()}-claude-realtime-history-reconcile`,
             timestamp: Date.now(),
@@ -332,6 +348,7 @@ export function useThreadRealtimeHistoryReconcile({
     },
     [
       getClaudeItemCount,
+      itemsByThreadRef,
       onDebug,
       refreshThread,
       resolveCanonicalThreadId,

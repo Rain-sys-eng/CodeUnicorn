@@ -361,7 +361,11 @@ export function useThreadActions({
         return null;
       }
       replaceOnResumeRef.current[threadId] = true;
-      return resumeThreadForWorkspace(workspaceId, threadId, true, true);
+      // fix-claude-history-window-message-loss：post-turn reconcile 走
+      // preserve-prefix merge，保住 hydrated window 之外的已展示旧消息。
+      return resumeThreadForWorkspace(workspaceId, threadId, true, true, {
+        mergeHydratedPrefix: true,
+      });
     },
     [replaceOnResumeRef, resumeThreadForWorkspace],
   );
