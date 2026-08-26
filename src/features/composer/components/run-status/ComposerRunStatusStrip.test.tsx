@@ -104,8 +104,8 @@ describe("ComposerRunStatusStrip background task pill", () => {
       '[data-section="backgroundTask"]',
     ) as HTMLElement | null;
     expect(pill).not.toBeNull();
-    expect(pill.classList.contains("is-running")).toBe(true);
-    expect(pill.textContent).toContain("1/1");
+    expect(pill?.classList.contains("is-running")).toBe(true);
+    expect(pill?.textContent).toContain("1/1");
   });
 
   it("expands the task panel on pill click with running rows and terminal rows", () => {
