@@ -3044,6 +3044,30 @@ pub async fn engine_send_message(
                 custom_spec_root: normalized_custom_spec_root.clone(),
             };
 
+            // OpenSpec change：fix-orphan-turn-during-backend-unavailability（F2）。
+            // Send gate 双证据快速失败：RPC spawn disabled latch 冷却期内 AND
+            // print-json fallback 被同 session 占用。此时 dispatch 大概率无人
+            // 认领（引擎持续不可用，如 dev 重启窗口），不返回 started 让前端
+            // 孤儿等待；返回结构化 error 走既有 rpcError 路径（不进入 turn
+            // 状态机）。单证据（仅 latch 或仅 busy）照常放行——存活 resident
+            // 复用与 fallback 各自有自愈路径。
+            if session.rpc_spawn_blocked().await
+                && session
+                    .print_json_fallback_blocked(response_session_id.as_deref())
+                    .await
+            {
+                log::warn!(
+                    "[engine_send_message] pi send gate rejected: rpc cooldown + fallback busy (workspace={workspace_id}, session={:?})",
+                    response_session_id
+                );
+                return Ok(json!({
+                    "error": {
+                        "message": "PI engine is unavailable (rpc cooldown and fallback busy); please retry",
+                        "code": "pi_engine_unavailable",
+                    }
+                }));
+            }
+
             let turn_id = format!("pi-turn-{}", uuid::Uuid::new_v4());
             let thread_id = thread_id.unwrap_or_else(|| turn_id.clone());
             let binding_session_id = response_session_id
@@ -3207,10 +3231,17 @@ pub async fn engine_send_message(
 
             let session_clone = session.clone();
             let turn_id_clone = turn_id.clone();
+            // OpenSpec change：fix-orphan-turn-during-backend-unavailability（F3）。
+            // detached send 失败/panic 必须有事件兜底：send_message 内部失败路径
+            // 已 emit_error；panic（如 in-flight dev 代码缺陷）若不 catch 会静默
+            // 吞掉，turn 永远无回执 → 前端孤儿（F1 看门狗之外的后端侧兜底）。
             tokio::spawn(async move {
-                if let Err(e) = session_clone.send_message(params, &turn_id_clone).await {
-                    log::error!("PI send_message failed: {}", e);
-                }
+                drive_detached_pi_send(
+                    &turn_id_clone,
+                    |turn_id, error| session_clone.emit_error(turn_id, error),
+                    session_clone.send_message(params, &turn_id_clone),
+                )
+                .await;
             });
             if let (Some(session_id), Some(metadata)) =
                 (response_session_id.as_deref(), auto_session.clone())
@@ -4858,6 +4889,33 @@ mod commands_tests;
 //
 // These expose the RPC-only command surface (stats / compact / fork / tree).
 // They never fall back to print-json: the data only exists on the resident.
+
+/// OpenSpec change：fix-orphan-turn-during-backend-unavailability（F3）。
+/// detached PI send 的统一驱动：`Err` 只记日志（pi.rs `send_message` 内部
+/// 失败路径已 `emit_error`）；panic 捕获后经 `emit_error` 补发 TurnError，
+/// 保证 turn 必有回执，防止静默孤儿（前端 F1 看门狗之外的后端侧兜底）。
+pub(super) async fn drive_detached_pi_send<F>(
+    turn_id: &str,
+    emit_error: impl Fn(&str, String),
+    send: F,
+) where
+    F: std::future::Future<Output = Result<String, String>>,
+{
+    let wrapped = std::panic::AssertUnwindSafe(send);
+    match futures_util::FutureExt::catch_unwind(wrapped).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => log::error!("PI send_message failed: {e}"),
+        Err(panic) => {
+            let panic_text = panic
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "unknown panic".to_string());
+            log::error!("PI send_message panicked: {panic_text}");
+            emit_error(turn_id, format!("pi send task panicked: {panic_text}"));
+        }
+    }
+}
 
 async fn resolve_pi_session_for_rpc_commands(
     state: &State<'_, AppState>,

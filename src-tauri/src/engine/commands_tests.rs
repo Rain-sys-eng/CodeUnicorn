@@ -1985,3 +1985,57 @@ async fn cache_first_empty_cache_and_empty_probe_returns_empty() {
 
     assert!(models.is_empty());
 }
+
+// OpenSpec change：fix-orphan-turn-during-backend-unavailability（F3）。
+mod orphan_turn_send_guard {
+    use super::super::drive_detached_pi_send;
+    use std::sync::{Arc, Mutex};
+
+    #[tokio::test]
+    async fn pi_detached_send_panic_emits_turn_error() {
+        let emitted = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let sink = emitted.clone();
+        drive_detached_pi_send(
+            "turn-1",
+            move |turn_id, error| sink.lock().unwrap().push((turn_id.to_string(), error)),
+            async { panic!("boom") },
+        )
+        .await;
+        let emitted = emitted.lock().unwrap();
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].0, "turn-1");
+        assert!(
+            emitted[0].1.contains("pi send task panicked"),
+            "panic must surface as TurnError text: {}",
+            emitted[0].1
+        );
+        assert!(emitted[0].1.contains("boom"));
+    }
+
+    #[tokio::test]
+    async fn pi_detached_send_error_only_logs_without_duplicate_event() {
+        let emitted = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let sink = emitted.clone();
+        drive_detached_pi_send(
+            "turn-2",
+            move |turn_id, error| sink.lock().unwrap().push((turn_id.to_string(), error)),
+            async { Err("engine exploded".to_string()) },
+        )
+        .await;
+        // pi.rs send_message 内部失败路径已 emit_error；这里仅记日志，不重复发事件。
+        assert!(emitted.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn pi_detached_send_success_is_noop() {
+        let emitted = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let sink = emitted.clone();
+        drive_detached_pi_send(
+            "turn-3",
+            move |turn_id, error| sink.lock().unwrap().push((turn_id.to_string(), error)),
+            async { Ok("done".to_string()) },
+        )
+        .await;
+        assert!(emitted.lock().unwrap().is_empty());
+    }
+}

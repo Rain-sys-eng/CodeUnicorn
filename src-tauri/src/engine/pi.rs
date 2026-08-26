@@ -1717,6 +1717,26 @@ impl PiSession {
         }
     }
 
+    /// OpenSpec change：fix-orphan-turn-during-backend-unavailability（F2）。
+    /// Send gate 双证据之一（只读，不置位不清闩）：RPC spawn disabled latch
+    /// 是否处于冷却期。与 fallback busy 叠加时 engine_send_message 快速失败，
+    /// 不返回 started 让前端孤儿等待。
+    pub async fn rpc_spawn_blocked(&self) -> bool {
+        let disabled_since = *self.rpc_disabled_since.lock().await;
+        rpc_disabled_blocks_spawn(disabled_since, Instant::now())
+    }
+
+    /// OpenSpec change：fix-orphan-turn-during-backend-unavailability（F2）。
+    /// Send gate 双证据之二（只读）：print-json spawn-per-turn fallback 是否
+    /// 被同 session 的活跃子进程占用。
+    pub async fn print_json_fallback_blocked(&self, session_id: Option<&str>) -> bool {
+        let active = self.active_processes.lock().await;
+        print_json_fallback_busy(
+            active.values().map(|process| process.session_id.as_deref()),
+            session_id,
+        )
+    }
+
     /// steer 发送后的统一 attach：run 缺失（pi 自唤醒 turn 的 agent_start
     /// 尚未泵到）时补 orphan run；orphan run 被首个真实 turn 收养——改写
     /// main turn id，`TurnStarted` 后回放已缓冲文本为一条 `TextDelta`，
@@ -2770,6 +2790,33 @@ mod tests {
             Some(t0),
             t0 + PI_RPC_DISABLED_RETRY_COOLDOWN * 2
         ));
+    }
+
+    // OpenSpec change：fix-orphan-turn-during-backend-unavailability（F2）。
+    #[tokio::test]
+    async fn send_gate_rpc_spawn_blocked_reads_latch_readonly() {
+        let dir = std::env::temp_dir().join(format!("pi-send-gate-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let session = PiSession::new("ws".to_string(), dir.clone(), None);
+        // 未置位：不拦。
+        assert!(!session.rpc_spawn_blocked().await);
+        // 置位后冷却期内：拦。
+        *session.rpc_disabled_since.lock().await = Some(Instant::now());
+        assert!(session.rpc_spawn_blocked().await);
+        // 只读语义：查询不改变闩状态（不清闩不自愈）。
+        assert!(session.rpc_disabled_since.lock().await.is_some());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn send_gate_print_json_fallback_blocked_empty_map_is_false() {
+        let dir = std::env::temp_dir().join(format!("pi-send-gate-empty-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let session = PiSession::new("ws".to_string(), dir.clone(), None);
+        // 无活跃子进程：任何 session（含 None / Some）都不 busy。
+        assert!(!session.print_json_fallback_blocked(None).await);
+        assert!(!session.print_json_fallback_blocked(Some("s1")).await);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
