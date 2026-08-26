@@ -3718,4 +3718,4 @@ User Fork / Provider Continuation
 
 | Trigger | Current implementation fact | OpenSpec / code source |
 | --- | --- | --- |
-| provider binding / Codex runtime launch | GUI 启动 Codex app-server 前，根据 effective `CODEX_HOME/config.toml` 的 `model_providers.*.env_key` 解析缺失环境变量，并仅注入 child process | `src-tauri/src/codex/provider_env.rs`; `src-tauri/src/backend/app_server.rs`; `openspec/changes/fix-codex-macos-provider-env-key-resolution/` |
+| provider binding / Codex runtime launch | GUI 启动 Codex app-server 前，根据 effective `CODEX_HOME/config.toml` 的 `model_providers.*.env_key` 一次性批量解析缺失环境变量（单次 allowlisted login shell，单一 5s 超时），仅注入 child process | `src-tauri/src/codex/provider_env.rs`; `src-tauri/src/backend/app_server.rs`; `src-tauri/src/bin/cc_gui_daemon.rs`; `openspec/changes/fix-codex-macos-provider-env-key-resolution/` |
