@@ -1246,14 +1246,32 @@ pub(crate) fn parse_pi_available_models(data: &Value) -> Vec<ModelInfo> {
     parsed
 }
 
+/// PI catalog RPC 探测 spawn 参数：跳过 extension boot。扩展齐全的 pi 冷启动
+/// 实测 ~10s，贴爆/超出预算；跳过后 ~1s 且模型与 thinkingLevelMap 元数据
+/// 完全一致。
+const PI_CATALOG_PROBE_RPC_ARGS: &str = "--no-session --no-extensions";
+
+/// PI catalog 探测预算：比全局 DETECTION_TIMEOUT(10s) 放宽到 15s 兜底。
+/// 跳过 extension boot 后常态 ~1s，15s 纯属慢机/冷 FS 缓存的余量；只圈
+/// catalog 探测（RPC 请求 + `--list-models`），version 探测与其他引擎不动。
+const PI_CATALOG_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+
 async fn fetch_pi_models_via_rpc(
     bin: &str,
     home_dir: Option<&str>,
 ) -> Result<Vec<ModelInfo>, String> {
     let cwd = std::env::temp_dir();
-    let client = PiRpcClient::spawn(bin, &cwd, None, None, home_dir, Some("--no-session")).await?;
+    let client = PiRpcClient::spawn(
+        bin,
+        &cwd,
+        None,
+        None,
+        home_dir,
+        Some(PI_CATALOG_PROBE_RPC_ARGS),
+    )
+    .await?;
     let data = match timeout(
-        DETECTION_TIMEOUT,
+        PI_CATALOG_PROBE_TIMEOUT,
         client.request(json!({"type": "get_available_models"})),
     )
     .await
@@ -1369,6 +1387,35 @@ pub(crate) fn parse_pi_models_output(stdout: &str) -> Vec<ModelInfo> {
     models
 }
 
+async fn run_pi_list_models(
+    bin: &str,
+    path_env: Option<&String>,
+    extra_args: &[&str],
+) -> Result<Vec<ModelInfo>, String> {
+    let mut cmd = crate::backend::app_server::build_command_for_binary(bin);
+    cmd.arg("--list-models");
+    for arg in extra_args {
+        cmd.arg(arg);
+    }
+    if let Some(path) = path_env {
+        cmd.env("PATH", path);
+    }
+    let output = timeout(PI_CATALOG_PROBE_TIMEOUT, cmd.output())
+        .await
+        .map_err(|_| "pi --list-models timed out".to_string())?
+        .map_err(|error| format!("failed to run pi --list-models: {error}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("pi --list-models failed: {}", stderr.trim()));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let models = parse_pi_models_output(&stdout);
+    if models.is_empty() {
+        return Err("pi --list-models returned no models".to_string());
+    }
+    Ok(models)
+}
+
 async fn get_pi_models(bin: &str, path_env: Option<&String>) -> (Vec<ModelInfo>, Option<String>) {
     match fetch_pi_models_via_rpc(bin, None).await {
         Ok(models) => return (models, None),
@@ -1376,39 +1423,17 @@ async fn get_pi_models(bin: &str, path_env: Option<&String>) -> (Vec<ModelInfo>,
             log::info!("[pi] catalog rpc unavailable ({error}); falling back to --list-models");
         }
     }
-    let mut cmd = crate::backend::app_server::build_command_for_binary(bin);
-    cmd.arg("--list-models");
-    if let Some(path) = path_env {
-        cmd.env("PATH", path);
+    // 先跳过 extension boot（同 RPC 探测理由，实测 9.3s → 1.0s）；失败再裸
+    // 跑一次兜底不识别 --no-extensions 的旧版 pi，两次皆败才落 generated fallback。
+    match run_pi_list_models(bin, path_env, &["--no-extensions"]).await {
+        Ok(models) => return (models, None),
+        Err(error) => {
+            log::info!("[pi] --list-models with --no-extensions failed ({error}); retrying bare");
+        }
     }
-    match timeout(DETECTION_TIMEOUT, cmd.output()).await {
-        Ok(Ok(output)) if output.status.success() => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let models = parse_pi_models_output(&stdout);
-            if models.is_empty() {
-                (
-                    get_generated_fallback_models(EngineType::Pi),
-                    Some("pi --list-models returned no models".to_string()),
-                )
-            } else {
-                (models, None)
-            }
-        }
-        Ok(Ok(output)) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            (
-                get_generated_fallback_models(EngineType::Pi),
-                Some(format!("pi --list-models failed: {}", stderr.trim())),
-            )
-        }
-        Ok(Err(error)) => (
-            get_generated_fallback_models(EngineType::Pi),
-            Some(format!("failed to run pi --list-models: {error}")),
-        ),
-        Err(_) => (
-            get_generated_fallback_models(EngineType::Pi),
-            Some("pi --list-models timed out".to_string()),
-        ),
+    match run_pi_list_models(bin, path_env, &[]).await {
+        Ok(models) => (models, None),
+        Err(error) => (get_generated_fallback_models(EngineType::Pi), Some(error)),
     }
 }
 
@@ -2516,6 +2541,16 @@ anthropic claude-opus    200k   32k    no       yes
             supported_thinking_levels_for_pi_model(true, Some(&map)),
             vec!["high", "max"]
         );
+    }
+
+    /// 探测 spawn 参数必须同时跳过会话恢复与 extension boot：任一缺失都会
+    /// 把探测推回 ~10s 量级（2026-08-26 实证）。预算同时钉在 15s 兜底：
+    /// 改动任一常量都必须是显式决策（同步更新 OpenSpec 提案设计）。
+    #[test]
+    fn pi_catalog_probe_rpc_args_skip_session_and_extension_boot() {
+        let args: Vec<&str> = PI_CATALOG_PROBE_RPC_ARGS.split_whitespace().collect();
+        assert_eq!(args, vec!["--no-session", "--no-extensions"]);
+        assert_eq!(PI_CATALOG_PROBE_TIMEOUT, Duration::from_secs(15));
     }
 
     #[test]
