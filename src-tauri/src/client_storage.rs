@@ -256,26 +256,64 @@ pub(crate) fn client_store_read(store: String) -> Result<Value, String> {
     read_store(&format!("{store}.json"))
 }
 
+/// 载荷以单一 pre-stringified JSON string 过桥：WKWebView 桥按对象数同步转换嵌套
+/// 对象图（实测 274KB patch 同步段 3338ms 主线程冻结），字符串成本 O(len)。
+fn parse_store_payload_json(payload_json: &str) -> Result<Value, String> {
+    serde_json::from_str(payload_json)
+        .map_err(|error| format!("invalid client store payload JSON: {error}"))
+}
+
+fn parse_store_patch_json(payload_json: &str) -> Result<serde_json::Map<String, Value>, String> {
+    let value = parse_store_payload_json(payload_json)?;
+    match value {
+        Value::Object(map) => Ok(map),
+        _ => Err("client_store_patch expects an object patch".to_string()),
+    }
+}
+
 #[tauri::command]
-pub(crate) fn client_store_write(store: String, data: Value) -> Result<(), String> {
+pub(crate) fn client_store_write(store: String, payload_json: String) -> Result<(), String> {
     validate_store_name(&store)?;
+    let data = parse_store_payload_json(&payload_json)?;
     write_store(&format!("{store}.json"), &data)
 }
 
 #[tauri::command]
-pub(crate) fn client_store_patch(store: String, patch: Value) -> Result<(), String> {
+pub(crate) fn client_store_patch(store: String, payload_json: String) -> Result<(), String> {
     validate_store_name(&store)?;
-    let patch_map = patch
-        .as_object()
-        .ok_or_else(|| "client_store_patch expects an object patch".to_string())?;
-    patch_store(&format!("{store}.json"), patch_map)
+    let patch_map = parse_store_patch_json(&payload_json)?;
+    patch_store(&format!("{store}.json"), &patch_map)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{patch_store_at_path, read_store};
+    use super::{patch_store_at_path, parse_store_patch_json, parse_store_payload_json, read_store};
     use serde_json::json;
     use uuid::Uuid;
+
+    #[test]
+    fn parse_store_payload_json_parses_object_string() {
+        let value = parse_store_payload_json(r#"{"__schemaVersion":1,"sidebarWidth":280}"#)
+            .expect("valid payload json should parse");
+        assert_eq!(value, json!({"__schemaVersion": 1, "sidebarWidth": 280}));
+    }
+
+    #[test]
+    fn parse_store_payload_json_rejects_invalid_json() {
+        let error =
+            parse_store_payload_json("{not-json").expect_err("invalid json must be rejected");
+        assert!(
+            error.contains("invalid client store payload JSON"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn parse_store_patch_json_rejects_non_object_payload() {
+        let error =
+            parse_store_patch_json(r#"[1,2]"#).expect_err("non-object patch must be rejected");
+        assert_eq!(error, "client_store_patch expects an object patch");
+    }
 
     #[test]
     fn read_missing_file_returns_null() {

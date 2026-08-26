@@ -265,7 +265,7 @@ export async function runMessageMarkdownPrecompute(
     setCachedMessageMarkdownPrecompute(request, result);
     return result;
   } catch (error) {
-    return createResult(request, {
+    const fallbackResult = createResult(request, {
       cacheState: "miss",
       durationMs: now() - startedAt,
       evidenceClass: "unsupported",
@@ -273,6 +273,11 @@ export async function runMessageMarkdownPrecompute(
       mode: "fallback",
       precomputeResult: null,
     });
+    // 负缓存：崩溃的 worker 常态是「每次请求都重建再崩」，同一 request 身份重复
+    // 付 worker 往返（实测同 contentHash 10 次、每次 88–325ms）。缓存 fallback
+    // 结果后二次调用直接命中，fallbackReason 保留供诊断区分。
+    setCachedMessageMarkdownPrecompute(request, fallbackResult);
+    return fallbackResult;
   }
 }
 

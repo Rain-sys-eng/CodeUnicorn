@@ -8,6 +8,7 @@ import {
 import { runClientStoreMaintenance } from "./clientStoreMaintenance";
 import { MAX_CUSTOM_NAME_ENTRIES } from "../features/threads/utils/threadStorage";
 import {
+  isBlockedThreadSessionLogLabel,
   MAX_THREAD_SESSION_LOG_ENTRIES,
   MAX_THREAD_SESSION_LOG_PAYLOAD_CHARS,
 } from "../features/debug/hooks/useDebugLog";
@@ -33,6 +34,8 @@ describe("runClientStoreMaintenance", () => {
       makeEntry("thread/session:turn-diagnostic:codex-no-progress-watchdog-scheduled"),
       makeEntry("thread/list older"),
       makeEntry("thread/list older response"),
+      makeEntry("thread/session:reasoning-text-delta", { deltaLength: 7 }),
+      makeEntry("thread/session:reasoning-summary-delta", { deltaLength: 3 }),
       makeEntry("thread/session:turn-start", { ok: true }),
     ]);
 
@@ -43,6 +46,19 @@ describe("runClientStoreMaintenance", () => {
       THREAD_SESSION_LOG_KEY,
     );
     expect(cleaned?.map((entry) => entry.label)).toEqual(["thread/session:turn-start"]);
+  });
+
+  it("blocks reasoning per-delta labels from threadSessionLog persistence", () => {
+    // 流式期间逐 delta 落盘会以 ≥300ms 周期全量重写 threadSessionLog key
+    // （实测单会话 323 条），turn 级聚合由 realtime.turnTrace.summary 承担。
+    expect(isBlockedThreadSessionLogLabel("thread/session:reasoning-text-delta")).toBe(true);
+    expect(isBlockedThreadSessionLogLabel("thread/session:reasoning-summary-delta")).toBe(true);
+    // 归一化（trim + lowercase）后同 label 仍必须命中，防止旁路大小写变体。
+    expect(isBlockedThreadSessionLogLabel("  THREAD/SESSION:reasoning-text-delta ")).toBe(true);
+    // 非 per-delta 的 reasoning 路由日志不受影响。
+    expect(isBlockedThreadSessionLogLabel("thread/session:reasoning-snapshot-accepted")).toBe(false);
+    expect(isBlockedThreadSessionLogLabel("thread/session:turn-start")).toBe(false);
+    expect(isBlockedThreadSessionLogLabel("thread/session:claude-stream:reasoning-text-delta")).toBe(false);
   });
 
   it("truncates oversized backlog payloads and enforces the entry cap", () => {

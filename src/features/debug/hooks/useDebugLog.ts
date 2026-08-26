@@ -244,6 +244,10 @@ export function isBlockedThreadSessionLogLabel(label: string): boolean {
   const normalized = label.trim().toLowerCase();
   return (
     normalized === "thread/session:turn-diagnostic:codex-no-progress-watchdog-scheduled" ||
+    // reasoning per-delta：流式期间逐条落盘（实测单会话 323 条），turn 级聚合
+    // 由 realtime.turnTrace.summary 承担。
+    normalized === "thread/session:reasoning-text-delta" ||
+    normalized === "thread/session:reasoning-summary-delta" ||
     normalized === "thread/list" ||
     normalized === "thread/list response" ||
     normalized === "thread/list older" ||
