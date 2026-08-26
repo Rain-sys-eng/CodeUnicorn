@@ -408,6 +408,24 @@ fn opencode_provider_models_from_config(
     models
 }
 
+/// 按引擎收尾 provider-scoped catalog：Codex 不拼 public generated fallback。
+///
+/// Codex generated fallback 描述的是官方 OpenAI 模型的可用性，属 provider relay
+/// 的事实而非 binding 的事实：拼进三方 scope 会呈现幽灵可选模型（选中即 API
+/// 报错，且假条目带满档 reasoning metadata，与真实三方条目形成误导对比）。
+/// 空 catalog 由前端 configured-default / custom-model guidance 降级链路兜底
+/// （fix-codex-third-party-provider-model-catalog）。Claude / Kimi / Grok 的
+/// public 拼接行为保持不变。
+fn finalize_provider_scoped_catalog(
+    engine_type: EngineType,
+    provider_models: Vec<ModelInfo>,
+) -> Vec<ModelInfo> {
+    if engine_type == EngineType::Codex {
+        return provider_models;
+    }
+    merge_provider_models_with_public(provider_models, public_models_for_engine(engine_type))
+}
+
 pub(crate) fn get_provider_scoped_engine_models(
     engine_type: EngineType,
     provider_profile_id: Option<&str>,
@@ -481,9 +499,9 @@ pub(crate) fn get_provider_scoped_engine_models(
             return Ok(None)
         }
     };
-    Ok(Some(merge_provider_models_with_public(
+    Ok(Some(finalize_provider_scoped_catalog(
+        engine_type,
         provider_models,
-        public_models_for_engine(engine_type),
     )))
 }
 
@@ -2878,9 +2896,9 @@ xai      grok-4.5        256k   64k    yes      yes
             "ANTHROPIC_MODEL".to_string(),
             "claude-opus-5".to_string(),
         )]);
-        let models = merge_provider_models_with_public(
+        let models = finalize_provider_scoped_catalog(
+            EngineType::Claude,
             claude_provider_models_from_env("provider-a", &env),
-            public_models_for_engine(EngineType::Claude),
         );
 
         // Provider catalog carries the full tier list, all scoped to the profile.
@@ -2902,7 +2920,7 @@ xai      grok-4.5        256k   64k    yes      yes
     }
 
     #[test]
-    fn codex_provider_catalog_merges_config_custom_and_public_models() {
+    fn codex_provider_catalog_skips_public_fallback_merge() {
         let provider_models = codex_provider_models_from_config(
             "provider-a",
             "model = \"gpt-5.3-codex\"\nmodel_provider = \"proxy-a\"\n",
@@ -2913,10 +2931,7 @@ xai      grok-4.5        256k   64k    yes      yes
             }],
         )
         .expect("parse provider catalog");
-        let models = merge_provider_models_with_public(
-            provider_models,
-            public_models_for_engine(EngineType::Codex),
-        );
+        let models = finalize_provider_scoped_catalog(EngineType::Codex, provider_models);
 
         assert_eq!(
             models
@@ -2929,9 +2944,10 @@ xai      grok-4.5        256k   64k    yes      yes
             model.model == "provider-only"
                 && model.provider_profile_id.as_deref() == Some("provider-a")
         }));
+        // Codex managed scope 不得出现幽灵官方 fallback 条目
         assert!(models
             .iter()
-            .any(|model| { model.source == "fallback" && model.provider_profile_id.is_none() }));
+            .all(|model| model.source != "fallback" && model.provider_profile_id.is_some()));
     }
 
     #[test]
@@ -2952,9 +2968,9 @@ xai      grok-4.5        256k   64k    yes      yes
             max_context_size: None,
             display_name: Some("Provider Kimi".to_string()),
         };
-        let models = merge_provider_models_with_public(
+        let models = finalize_provider_scoped_catalog(
+            EngineType::Kimi,
             kimi_provider_models_from_config("provider-a", provider),
-            public_models_for_engine(EngineType::Kimi),
         );
 
         assert_eq!(
