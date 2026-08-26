@@ -42,6 +42,8 @@ export default {
       chipTitle:
         "Session branches ({{count}} lanes) · open the session tree (pi RPC has no lane-switch command)",
       sidebarBadgeTitle: "Session tree has {{count}} branches · click to view",
+      loadFailed: "セッションツリーの読み込みに失敗しました",
+      retry: "再試行",
     },
   },
 };
