@@ -101,6 +101,46 @@ describe("atomicModelReasoning", () => {
     );
   });
 
+  it("enriches provider-owned Codex models with mainstream defaults when identity misses", () => {
+    for (const source of ["provider-custom", "provider-config"] as const) {
+      const enriched = enrichModelInfoWithAtomicReasoning("codex", {
+        id: "glm-4.6",
+        model: "glm-4.6",
+        source,
+      });
+      expect(enriched.defaultReasoningEffort).toBe("medium");
+      expect(resolveAtomicReasoningOptions("codex", enriched)).toEqual(
+        expect.arrayContaining(["low", "medium", "high", "xhigh"]),
+      );
+    }
+  });
+
+  it("prefers built-in catalog identity over mainstream defaults for provider-owned models", () => {
+    const enriched = enrichModelInfoWithAtomicReasoning("codex", {
+      id: "gpt-5.6-sol",
+      model: "gpt-5.6-sol",
+      source: "provider-custom",
+    });
+    expect(resolveAtomicReasoningOptions("codex", enriched)).toEqual(
+      expect.arrayContaining(["low", "medium", "high", "xhigh", "max", "ultra"]),
+    );
+    expect(enriched.defaultReasoningEffort).toBe("low");
+  });
+
+  it("keeps provider-owned runtime efforts instead of defaults", () => {
+    const enriched = enrichModelInfoWithAtomicReasoning("codex", {
+      id: "glm-4.6",
+      model: "glm-4.6",
+      source: "provider-custom",
+      supportedReasoningEfforts: [{ reasoningEffort: "turbo" }],
+      defaultReasoningEffort: "turbo",
+    });
+    expect(resolveAtomicReasoningOptions("codex", enriched)).toEqual([
+      "turbo",
+    ]);
+    expect(enriched.defaultReasoningEffort).toBe("turbo");
+  });
+
   it("keeps unknown runtime Codex models capability-neutral", () => {
     const model = {
       id: "some-runtime-only-model",

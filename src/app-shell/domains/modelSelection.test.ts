@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EngineType, ModelOption } from "../../types";
 import {
   CLAUDE_REASONING_OPTIONS,
+  enrichScopedCodexReasoningMetadata,
   getEffectiveReasoningOptions,
   getEffectiveModels,
   getEffectiveSelectedEffort,
@@ -879,5 +880,79 @@ describe("resolveLedgerAwareEngineModels", () => {
         threadLedgerModelId: "kimi-coding/k3",
       }),
     ).toBe(fallbackOnlyCatalog);
+  });
+});
+
+describe("enrichScopedCodexReasoningMetadata", () => {
+  it("fills authoritative identity metadata for matching models", () => {
+    const scoped = [
+      createModel("gpt-5.5", { source: "provider-custom" }),
+    ];
+    const authoritative = [
+      createModel("gpt-5.5", {
+        source: "runtime",
+        supportedReasoningEfforts: [
+          { reasoningEffort: "low", description: "" },
+          { reasoningEffort: "high", description: "" },
+        ],
+        defaultReasoningEffort: "high",
+      }),
+    ];
+    const result = enrichScopedCodexReasoningMetadata(scoped, authoritative);
+    expect(result[0].supportedReasoningEfforts.map((e) => e.reasoningEffort)).toEqual(["low", "high"]);
+    expect(result[0].defaultReasoningEffort).toBe("high");
+  });
+
+  it("falls back to mainstream defaults for provider-owned rows without metadata", () => {
+    const scoped = [
+      createModel("glm-4.6", { source: "provider-custom" }),
+      createModel("relay-default", { source: "provider-config" }),
+    ];
+    const result = enrichScopedCodexReasoningMetadata(scoped, [createModel("gpt-5.5")]);
+    for (const row of result) {
+      expect(row.supportedReasoningEfforts.map((e) => e.reasoningEffort)).toEqual(
+        ["low", "medium", "high", "xhigh"],
+      );
+      expect(row.defaultReasoningEffort).toBe("medium");
+    }
+  });
+
+  it("keeps authoritative identity metadata over mainstream defaults", () => {
+    const scoped = [
+      createModel("gpt-5.6-sol", { source: "provider-custom" }),
+    ];
+    const authoritative = [
+      createModel("gpt-5.6-sol", {
+        source: "runtime",
+        supportedReasoningEfforts: [
+          { reasoningEffort: "max", description: "" },
+          { reasoningEffort: "ultra", description: "" },
+        ],
+        defaultReasoningEffort: "max",
+      }),
+    ];
+    const result = enrichScopedCodexReasoningMetadata(scoped, authoritative);
+    expect(result[0].supportedReasoningEfforts.map((e) => e.reasoningEffort)).toEqual(["max", "ultra"]);
+    expect(result[0].defaultReasoningEffort).toBe("max");
+  });
+
+  it("keeps runtime-discovered unknown rows capability-neutral", () => {
+    const scoped = [createModel("weird-model", { source: "runtime" })];
+    const result = enrichScopedCodexReasoningMetadata(scoped, []);
+    expect(result[0].supportedReasoningEfforts).toEqual([]);
+    expect(result[0].defaultReasoningEffort).toBeNull();
+  });
+
+  it("keeps existing scoped efforts over mainstream defaults", () => {
+    const scoped = [
+      createModel("glm-4.6", {
+        source: "provider-custom",
+        supportedReasoningEfforts: [{ reasoningEffort: "turbo", description: "" }],
+        defaultReasoningEffort: "turbo",
+      }),
+    ];
+    const result = enrichScopedCodexReasoningMetadata(scoped, [createModel("gpt-5.5")]);
+    expect(result[0].supportedReasoningEfforts.map((e) => e.reasoningEffort)).toEqual(["turbo"]);
+    expect(result[0].defaultReasoningEffort).toBe("turbo");
   });
 });

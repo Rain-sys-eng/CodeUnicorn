@@ -15,6 +15,7 @@ import { CODEX_MODEL_CATALOG } from "./codexModelCatalog";
 import {
   CUSTOM_MODEL_DEFAULT_REASONING_EFFORT,
   CUSTOM_MODEL_REASONING_EFFORTS,
+  isUserManagedCustomModelSource,
 } from "./customModelReasoning";
 
 /** Keep aligned with `CLAUDE_REASONING_OPTIONS` in modelSelection.ts. */
@@ -125,6 +126,18 @@ export function enrichModelInfoWithAtomicReasoning<
       }
       if (!defaultEffort) {
         defaultEffort = normalizeEffort(catalog.defaultReasoningEffort);
+      }
+    }
+    // provider-owned 用户管理来源（provider-custom / provider-config）在 catalog
+    // identity miss 后回落公共默认档（identity 命中优先，如 relay 上的
+    // gpt-5.6-sol 保留 max/ultra）；CLI runtime 发现的 unknown model
+    // （source 非 custom 的未登记来源）保持 capability-neutral。
+    if (isUserManagedCustomModelSource(source)) {
+      if (supported.length === 0) {
+        supported = [...CUSTOM_MODEL_REASONING_EFFORTS];
+      }
+      if (!defaultEffort) {
+        defaultEffort = CUSTOM_MODEL_DEFAULT_REASONING_EFFORT;
       }
     }
   }
