@@ -515,6 +515,13 @@ pub(crate) fn max_updated_at_for_engine(
 /// True when a send/create marked this workspace's Index sources stale.
 /// Restart first-paint / next non-force list must rescan writers even if
 /// some Claude/Codex rows already exist.
+///
+/// 只认显式失效(last_sync_ms = 0,来自 send/create 的
+/// invalidate_workspace_sources)。sync 失败的失效由
+/// invalidate_source_freshness 标为 -1:失败引擎自身会在下次 sync 重试
+/// (age 恒超新鲜窗口),但不得触发 workspace 级全引擎重扫——否则一个
+/// 引擎探测反复失败(partial)会让每次列表查询都连坐 5~10s 磁盘扫描
+/// (2026-08-26 实证:pi/qoder/grok partial 失效循环,syncMs 5272~10427)。
 pub(crate) fn workspace_index_sources_invalidated(
     connection: &Connection,
     workspace_path: &str,
@@ -526,7 +533,7 @@ pub(crate) fn workspace_index_sources_invalidated(
     let count: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM session_index_sources
-             WHERE last_sync_ms <= 0
+             WHERE last_sync_ms = 0
                AND (source_key LIKE ?1 OR source_key LIKE ?2)",
             rusqlite::params![format!("%:{}", key), format!("%{}", key)],
             |row| row.get(0),
@@ -535,13 +542,16 @@ pub(crate) fn workspace_index_sources_invalidated(
     Ok(count > 0)
 }
 
+/// Sync-failure invalidation: -1 marks the engine stale for its own retry
+/// (source_is_fresh age check fails) without poisoning the workspace-level
+/// invalidated scan, which is reserved for explicit send/create marks (= 0).
 pub(crate) fn invalidate_source_freshness(
     connection: &Connection,
     source_key: &str,
 ) -> Result<(), String> {
     connection
         .execute(
-            "UPDATE session_index_sources SET last_sync_ms = 0 WHERE source_key = ?1",
+            "UPDATE session_index_sources SET last_sync_ms = -1 WHERE source_key = ?1",
             [source_key],
         )
         .map_err(|error| error.to_string())?;
@@ -1969,6 +1979,35 @@ mod tests {
         assert!(
             workspace_index_sources_invalidated(&connection, "/tmp/proj")
                 .expect("stale after PI send")
+        );
+    }
+
+    #[test]
+    fn sync_failure_invalidation_does_not_trigger_workspace_level_rescan() {
+        let connection = Connection::open_in_memory().expect("open");
+        connection.execute_batch(DDL).expect("ddl");
+        upsert_rows(&connection, &[index_row("claude", "claude-1", 100)]).expect("upsert");
+        mark_source_synced(&connection, "pi:/tmp/proj", "fp-a", 1).expect("mark");
+        // sync 失败路径(commit_engine_rows partial)→ invalidate_source_freshness
+        // 标 -1:引擎自身不再 fresh(下次 sync 重试),但不得触发 workspace 级
+        // 全引擎重扫(否则失败引擎把每次列表查询都连坐成 5~10s 磁盘扫描)。
+        invalidate_source_freshness(&connection, "pi:/tmp/proj").expect("invalidate");
+        assert!(
+            !workspace_index_sources_invalidated(&connection, "/tmp/proj")
+                .expect("sync-failure must not poison workspace scan")
+        );
+        assert!(!source_is_fresh(&connection, "pi:/tmp/proj", "fp-a", 8_000)
+            .expect("engine must stay not-fresh for its own retry"));
+        // 显式 send/create 标 0 仍触发 workspace 级重扫(契约不变)。
+        connection
+            .execute(
+                "UPDATE session_index_sources SET last_sync_ms = 0 WHERE source_key = ?1",
+                ["pi:/tmp/proj"],
+            )
+            .expect("explicit invalidate");
+        assert!(
+            workspace_index_sources_invalidated(&connection, "/tmp/proj")
+                .expect("explicit send/create mark still triggers rescan")
         );
     }
 

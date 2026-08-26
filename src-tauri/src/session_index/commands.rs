@@ -1,7 +1,9 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::time::timeout;
 
 use super::store::{
@@ -990,9 +992,55 @@ pub async fn upsert_session_index_rows(rows: Vec<SessionIndexRow>) -> Result<u32
     Ok(changed as u32)
 }
 
+/// 失效源的后台异步重扫:同一 workspace 同时在飞最多一次;完成后 upsert
+/// 有变化则 emit session-index-imported(与 importer 同事件),前端重拉
+/// 拿到新行。guard 用进程级 OnceLock,泄漏面仅为 sync panic 时该
+/// workspace 永久不再调度——sync_session_index_core 内部按引擎隔离
+/// panic,风险可接受。
+fn schedule_background_index_sync(app: &AppHandle, workspace_id: &str, limit: usize) {
+    static INFLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let inflight = INFLIGHT.get_or_init(|| Mutex::new(HashSet::new()));
+    {
+        let mut guard = match inflight.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if !guard.insert(workspace_id.to_string()) {
+            return;
+        }
+    }
+    let app = app.clone();
+    let workspace_id = workspace_id.to_string();
+    tauri::async_runtime::spawn(async move {
+        let result = {
+            let state = app.state::<AppState>();
+            sync_session_index_core(&state, &workspace_id, limit, false).await
+        };
+        if let Ok(report) = &result {
+            if report.upserted > 0 {
+                let _ = app.emit(
+                    super::importer::SESSION_INDEX_IMPORTED_EVENT,
+                    super::importer::SessionIndexImportedPayload {
+                        workspace_ids: vec![workspace_id.clone()],
+                        upserted: report.upserted as u32,
+                    },
+                );
+            }
+        }
+        if let Some(set) = INFLIGHT.get() {
+            let mut guard = match set.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            guard.remove(&workspace_id);
+        }
+    });
+}
+
 /// List sidebar sessions from SQLite. Optionally sync first when stale/empty.
 #[tauri::command]
 pub async fn list_session_index_for_workspace(
+    app: AppHandle,
     workspace_id: String,
     limit: Option<u32>,
     sync_if_needed: Option<bool>,
@@ -1024,23 +1072,38 @@ pub async fn list_session_index_for_workspace(
 
     if sync_if_needed || force_sync {
         let path_for_check = path_str.clone();
-        let index_empty = force_sync
-            || tokio::task::spawn_blocking(move || {
+        // rows_empty:workspace 在 index 里一行都没有(首次落行)。
+        // sources_invalidated:send/create 显式标 stale(last_sync_ms = 0)。
+        let (rows_empty, sources_invalidated) = if force_sync {
+            (false, false)
+        } else {
+            tokio::task::spawn_blocking(move || {
                 let connection = open_connection()?;
                 let existing = list_for_workspace_path(&connection, &path_for_check, 1, false)?;
                 if existing.is_empty() {
-                    return Ok(true);
+                    return Ok::<(bool, bool), String>((true, false));
                 }
-                workspace_index_sources_invalidated(&connection, &path_for_check)
+                let invalidated =
+                    workspace_index_sources_invalidated(&connection, &path_for_check)?;
+                Ok((false, invalidated))
             })
             .await
-            .map_err(|error| error.to_string())??;
-        if force_sync || index_empty {
+            .map_err(|error| error.to_string())??
+        };
+        if force_sync || rows_empty {
+            // 显式 force(手动 reload / settle)/ 首次落行:阻塞 sync,契约不变。
             let report = sync_session_index_core(&state, &workspace_id, limit, force_sync).await?;
-            synced = !report.skipped_fresh || index_empty;
+            synced = !report.skipped_fresh || force_sync || rows_empty;
             sync_ms = Some(report.duration_ms);
             partial_source = report.partial_source;
             engines = report.engines;
+        } else if sources_invalidated {
+            // 新鲜度失效但已有行:立即返回当前 SQLite 行,后台异步重扫,完成
+            // 后 emit session-index-imported 由前端重拉。新会话在发送时已由
+            // 前端 upsert 直接落 index,重扫只是补元数据——不该把 5~10s 全
+            // 引擎磁盘扫描挡在列表返回前(2026-08-26 实证 syncMs 5272~10427
+            // 阻塞 early paint)。
+            schedule_background_index_sync(&app, &workspace_id, limit);
         }
     }
 
