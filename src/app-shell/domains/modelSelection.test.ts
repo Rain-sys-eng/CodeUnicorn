@@ -12,6 +12,7 @@ import {
   getReasoningOptionsForModel,
   getNextEngineSelectedModelId,
   preserveLedgerModelOnFallbackCatalog,
+  resolveLedgerAwareEngineModels,
   upsertEngineSelectedModelId,
 } from "./modelSelection";
 
@@ -828,5 +829,55 @@ describe("preserveLedgerModelOnFallbackCatalog", () => {
     expect(
       preserveLedgerModelOnFallbackCatalog(mixed, "my-relay/grok-4.6"),
     ).toBe(mixed);
+  });
+});
+
+describe("resolveLedgerAwareEngineModels", () => {
+  const fallbackOnlyCatalog = [
+    createModel("auto", { source: "fallback", isDefault: true }),
+  ];
+
+  it("appends the ledger option only for pi threads", () => {
+    const result = resolveLedgerAwareEngineModels({
+      activeEngine: "pi",
+      hasActiveThread: true,
+      engineModelsAsOptions: fallbackOnlyCatalog,
+      threadLedgerModelId: "kimi-coding/k3",
+    });
+    expect(result).toHaveLength(2);
+    expect(result[1].id).toBe("kimi-coding/k3");
+  });
+
+  it.each([
+    "claude",
+    "codex",
+    "gemini",
+    "grok",
+    "kimi",
+    "opencode",
+    "dsh",
+    "qoder",
+  ] as EngineType[])("leaves %s catalogs untouched", (engine) => {
+    // Gemini 的 generated fallbacks 天生 source=fallback：回归红线——非 PI
+    // 引擎的 fallback-only catalog 不得被注入合成选项。
+    expect(
+      resolveLedgerAwareEngineModels({
+        activeEngine: engine,
+        hasActiveThread: true,
+        engineModelsAsOptions: fallbackOnlyCatalog,
+        threadLedgerModelId: "vendor/some-model",
+      }),
+    ).toBe(fallbackOnlyCatalog);
+  });
+
+  it("leaves pi untouched without an active thread", () => {
+    expect(
+      resolveLedgerAwareEngineModels({
+        activeEngine: "pi",
+        hasActiveThread: false,
+        engineModelsAsOptions: fallbackOnlyCatalog,
+        threadLedgerModelId: "kimi-coding/k3",
+      }),
+    ).toBe(fallbackOnlyCatalog);
   });
 });

@@ -1459,9 +1459,13 @@ where
         .await
         .map(|status| status.models)
         .filter(|models| !models.is_empty());
+    // 防中毒判定仅圈 PI：只有 PI 的 parse 层会在探测失败时合成 source=fallback
+    // 兜底条目（auto），「非空」唯独对 PI 失去健康意义；Kimi / Grok 等共用此
+    // 函数的引擎没有合成兜底语义，cached 命中行为必须保持不变。
+    let guard_fallback_poison = engine_type == EngineType::Pi;
     let cached_is_usable = cached_models
         .as_ref()
-        .map(|models| !is_fallback_only_catalog(models))
+        .map(|models| !guard_fallback_poison || !is_fallback_only_catalog(models))
         .unwrap_or(false);
     if !force_refresh && cached_is_usable {
         return cached_models.unwrap_or_default();
@@ -1470,7 +1474,8 @@ where
     if fresh_status.models.is_empty() {
         return cached_models.unwrap_or_default();
     }
-    let fresh_is_fallback_only = is_fallback_only_catalog(&fresh_status.models);
+    let fresh_is_fallback_only =
+        guard_fallback_poison && is_fallback_only_catalog(&fresh_status.models);
     if fresh_is_fallback_only && cached_is_usable {
         // 瞬时探测失败合成的兜底不得顶掉 last-good 真实 catalog。
         return cached_models.unwrap_or_default();

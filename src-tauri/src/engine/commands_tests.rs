@@ -1826,6 +1826,35 @@ async fn cache_first_fallback_only_fresh_without_cache_is_not_written_back() {
 }
 
 #[tokio::test]
+async fn cache_first_fallback_guard_does_not_touch_other_engines() {
+    use crate::engine::{EngineManager, EngineType};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // 防中毒仅圈 PI：Kimi 等共用函数的引擎即使 cached 全 fallback，
+    // cached 命中行为也必须与原语义一致（不触发刷新）。
+    let manager = EngineManager::new();
+    manager
+        .cache_engine_status(catalog_fallback_test_status(EngineType::Kimi))
+        .await;
+    let refresh_calls = Arc::new(AtomicUsize::new(0));
+    let refresh_calls_in_closure = Arc::clone(&refresh_calls);
+
+    let models =
+        super::resolve_engine_models_cache_first(&manager, EngineType::Kimi, false, move || {
+            refresh_calls_in_closure.fetch_add(1, Ordering::SeqCst);
+            async move { catalog_test_status(EngineType::Kimi, &["kimi/fresh"]) }
+        })
+        .await;
+
+    assert_eq!(
+        refresh_calls.load(Ordering::SeqCst),
+        0,
+        "non-PI engines must keep the original cache-hit semantics"
+    );
+    assert_eq!(catalog_model_ids(&models), vec!["auto".to_string()]);
+}
+
+#[tokio::test]
 async fn cache_first_returns_cached_models_without_invoking_refresh() {
     use crate::engine::{EngineManager, EngineType};
     use std::sync::atomic::{AtomicUsize, Ordering};

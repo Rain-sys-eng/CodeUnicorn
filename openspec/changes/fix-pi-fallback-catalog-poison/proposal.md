@@ -13,19 +13,19 @@ PI composer 模型 chip 卡在 `auto`、切历史会话丢失账本里的模型�
 
 ## What Changes
 
-- **后端防中毒（主修）**：`resolve_engine_models_cache_first` 新增 `is_fallback_only_catalog` 判定（全部 `source == "fallback"`）：
+- **后端防中毒（主修，严格圈 PI）**：`resolve_engine_models_cache_first` 新增 `is_fallback_only_catalog` 判定（全部 `source == "fallback"`），但**仅在 `engine_type == EngineType::Pi` 时启用**——只有 PI 的 parse 层会在探测失败时合成兜底条目，「非空」唯独对 PI 失去健康意义；Kimi / Grok 等共用此函数的引擎 cached 命中与写回语义零变化（有专门回归测试锁定）。PI 侧规则：
   - cached 全 fallback → 不视为缓存命中，照常走刷新；
   - fresh 全 fallback 且 cached 有真实 catalog → 返回 last-good，**不写回**；
   - fresh 全 fallback 且无可用 cached → 兜底仍交给 UI 降级展示，但**不写入 cache**，下次调用重新探测，探测恢复即自愈。
-- **前端保账本**：`modelSelection.ts` 新增纯函数 `preserveLedgerModelOnFallbackCatalog`——catalog 全 fallback 且会话账本 modelId 不在其中时，合成 `source: "ledger"` 临时选项追加进列表；`useAppShellComposerModelSection` 用它同时喂 `effectiveModels` 与 `getEffectiveSelectedModelId`，切历史会话显示真实模型 id（如 `kimi-coding/k3`），不再被修成 `auto`。catalog 痊愈后账本 id 正常命中，合成选项自动消失。codex / claude 走既有 freeform / managed runtime 链路，不在此列。
+- **前端保账本（严格圈 PI）**：`modelSelection.ts` 新增纯函数 `preserveLedgerModelOnFallbackCatalog`（catalog 全 fallback 且会话账本 modelId 不在其中时，合成 `source: "ledger"` 临时选项）与圈定函数 `resolveLedgerAwareEngineModels`（**仅 `activeEngine === "pi"` 且有活动会话时生效，其他引擎一律原样返回**——Gemini 的 generated fallbacks 天生 `source=fallback`，绝不受影响）；`useAppShellComposerModelSection` 用它同时喂 `effectiveModels` 与 `getEffectiveSelectedModelId`，切历史会话显示真实模型 id（如 `kimi-coding/k3`），不再被修成 `auto`。catalog 痊愈后账本 id 正常命中，合成选项自动消失。
 - 合成 ledger 选项不带思考档位元数据（catalog 未痊愈前无法知道真实 levels），降级期间思考强度选择器保持隐藏；catalog 恢复后自动回归。
 
 ## Impact
 
 | 维度 | 说明 |
 | ---- | ---- |
-| Backend | `engine/commands.rs`（cache-first 防中毒 + `is_fallback_only_catalog`）；`engine/commands_tests.rs` +3 测试 |
-| Frontend | `app-shell/domains/modelSelection.ts`（纯函数）、`useAppShellComposerModelSection.ts`（接线）、`modelSelection.test.ts` +6 测试 |
+| Backend | `engine/commands.rs`（cache-first 防中毒 + `is_fallback_only_catalog`，仅 PI 启用）；`engine/commands_tests.rs` +4 测试（含「其他引擎 cached 命中语义不变」回归） |
+| Frontend | `app-shell/domains/modelSelection.ts`（纯函数 + PI 圈定）、`useAppShellComposerModelSection.ts`（接线）、`modelSelection.test.ts` +9 测试（含 8 个非 PI 引擎不受影响参数化回归） |
 | 热路径红线 | 切会话点击路径零新增 IPC（本 change 不新增任何 catalog fetch；只是缓存命中判定与前端选择投影变化），符合 `session-switch-catalog-fetch-pitfall.md` |
 | 既有行为 | `auto` 兜底条目保留为「探测失败 + 全新会话」的降级发送路径；10bee91d6 菜单打开自动恢复不变，且在本 change 后成功率更高（不再被中毒 cache 短路） |
 | Out of scope | 删除 `auto` 兜底条目（产品决策，用户若拍板可单独跟进）；其他引擎探测链超时调优 |

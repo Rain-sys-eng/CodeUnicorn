@@ -14,7 +14,7 @@ import {
   getEffectiveSelectedModelId,
   getNextEngineSelectedModelId,
   getReasoningOptionsForModel,
-  preserveLedgerModelOnFallbackCatalog,
+  resolveLedgerAwareEngineModels,
   upsertEngineSelectedModelId,
 } from "./modelSelection";
 import { resolveClaudeManagedRuntimeModel } from "../../features/models/claudeManagedRuntimeModel";
@@ -66,21 +66,16 @@ export function useAppShellComposerModelSection({
     useState<Record<string, string | null>>({});
   const activeEngineSelectedModelId =
     engineSelectedModelIdByType[activeEngine] ?? null;
-  // catalog 降级（探测失败只剩 source=fallback 的合成兜底，如 PI 的 auto）时，
+  // catalog 降级（探测失败只剩 source=fallback 的合成兜底，即 PI 的 auto）时，
   // 把会话账本的 modelId 合成临时选项，避免切历史会话被静默修成兜底默认。
-  // codex / claude 有自己的 freeform / managed runtime 链路，不在此列。
+  // 引擎圈定收敛在 resolveLedgerAwareEngineModels（仅 PI；其他引擎原样返回）。
   const ledgerAwareEngineModels = useMemo<ModelOption[]>(() => {
-    if (
-      activeEngine === "codex" ||
-      activeEngine === "claude" ||
-      activeThreadId === null
-    ) {
-      return engineModelsAsOptions;
-    }
-    return preserveLedgerModelOnFallbackCatalog(
+    return resolveLedgerAwareEngineModels({
+      activeEngine,
+      hasActiveThread: activeThreadId !== null,
       engineModelsAsOptions,
-      selectedComposerSelection?.modelId ?? null,
-    );
+      threadLedgerModelId: selectedComposerSelection?.modelId ?? null,
+    });
   }, [
     activeEngine,
     activeThreadId,

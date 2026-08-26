@@ -95,6 +95,32 @@ export function preserveLedgerModelOnFallbackCatalog(
   return [...engineModelsAsOptions, ledgerOption];
 }
 
+/**
+ * 合成账本选项的引擎圈定：仅 PI 适用（PI 的 parse 层在探测失败时合成
+ * source=fallback 兜底条目，「非空」对 PI 失去健康意义）。Gemini 的
+ * generated fallbacks 天生 source=fallback、其他引擎也没有合成兜底语义，
+ * 一律返回原数组引用，保证其他引擎 catalog 行为零变化。
+ */
+export function resolveLedgerAwareEngineModels({
+  activeEngine,
+  hasActiveThread,
+  engineModelsAsOptions,
+  threadLedgerModelId,
+}: {
+  activeEngine: EngineType;
+  hasActiveThread: boolean;
+  engineModelsAsOptions: ModelOption[];
+  threadLedgerModelId: string | null;
+}): ModelOption[] {
+  if (activeEngine !== "pi" || !hasActiveThread) {
+    return engineModelsAsOptions;
+  }
+  return preserveLedgerModelOnFallbackCatalog(
+    engineModelsAsOptions,
+    threadLedgerModelId,
+  );
+}
+
 function getDefaultModelId(models: ModelOption[]) {
   return models.find((model) => model.isDefault)?.id ?? models[0]?.id ?? null;
 }
