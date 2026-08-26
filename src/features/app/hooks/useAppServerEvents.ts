@@ -814,7 +814,18 @@ function resolveLegacyModelContextWindow(
   if (parsed !== null && parsed > 0) {
     return parsed;
   }
-  return isClaudeThreadId(threadId) ? null : 200000;
+  // Claude/Codex（含 codex-pending）不伪造 200K 默认窗口：三方 provider 的真实
+  // 窗口未知（128K~1M 都有可能），伪造值只会产生误导百分比；window 未上报时
+  // 透传 null，context 指示器按「未上报」降级
+  // （fix-codex-third-party-provider-model-catalog）。其他引擎维持原行为。
+  if (
+    isClaudeThreadId(threadId) ||
+    threadId.startsWith("codex:") ||
+    threadId.startsWith("codex-pending-")
+  ) {
+    return null;
+  }
+  return 200000;
 }
 
 function isGeminiThreadId(threadId: string): boolean {
