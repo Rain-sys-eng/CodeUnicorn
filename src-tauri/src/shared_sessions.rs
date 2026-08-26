@@ -1010,8 +1010,17 @@ pub(crate) fn load_workspace_shared_ownership_seed(
     if !directory.exists() {
         return Ok(WorkspaceSharedOwnershipSeed::default());
     }
+    load_seed_from_shared_sessions_dir(&directory)
+}
+
+/// Iterate one `shared-sessions/<workspace_id>` directory. Split out for
+/// tests (temp dir) — behavior must stay identical to reading via
+/// workspace_id paths.
+fn load_seed_from_shared_sessions_dir(
+    directory: &std::path::Path,
+) -> Result<WorkspaceSharedOwnershipSeed, String> {
     let mut seed = WorkspaceSharedOwnershipSeed::default();
-    for entry in std::fs::read_dir(&directory).map_err(|error| error.to_string())? {
+    for entry in std::fs::read_dir(directory).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let file_type = entry.file_type().map_err(|error| error.to_string())?;
         if !file_type.is_dir() {
@@ -1021,13 +1030,25 @@ pub(crate) fn load_workspace_shared_ownership_seed(
         if shared_session_id.trim().is_empty() {
             continue;
         }
-        let meta = match read_shared_session_meta(workspace_id, &shared_session_id) {
-            Ok(meta) => meta,
-            Err(_) => {
-                seed.skipped_meta += 1;
-                continue;
-            }
+        let meta_path = entry.path().join("meta.json");
+        // meta.json 整个缺失（崩溃/中断创建的残留空目录）不是真实 session，
+        // 静默跳过；只有 meta.json 存在但读不出/解析失败才按保守策略记
+        // skipped_meta（→ projection unavailable，前端 defer 全部 native
+        // 行直到 hide 验证）。此前残留空目录会让 skipped_meta>0 →
+        // visibility 恒 unavailable → 侧栏 first-paint early paint 全部
+        // 被 defer，首段必空（2026-08-26 实证：7 个 workspace 42 个残留
+        // 空目录，reason=legacy-meta-skipped:N）。
+        if !meta_path.exists() {
+            continue;
+        }
+        let meta = std::fs::read_to_string(&meta_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<SharedSessionMeta>(&raw).ok());
+        let Some(mut meta) = meta else {
+            seed.skipped_meta += 1;
+            continue;
         };
+        sanitize_shared_session_meta(&mut meta);
         seed.session_ids.push(meta.id.clone());
         for (engine, binding) in &meta.bindings_by_engine {
             let native_id =
@@ -2052,6 +2073,54 @@ mod tests {
     use crate::engine::EngineType;
     use serde_json::{json, Value};
     use std::collections::HashMap;
+
+    #[test]
+    fn ownership_seed_skips_meta_less_leftover_dirs_but_counts_corrupt_meta() {
+        let dir = std::env::temp_dir().join(format!(
+            "mossx-ownership-seed-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        // 崩溃/中断创建的残留空目录（无 meta.json）→ 静默跳过，不计 skipped_meta
+        std::fs::create_dir_all(dir.join("leftover-empty")).expect("mkdir empty");
+        // meta.json 存在但损坏 → 保守策略记 skipped_meta
+        std::fs::create_dir_all(dir.join("corrupt")).expect("mkdir corrupt");
+        std::fs::write(dir.join("corrupt").join("meta.json"), "{not json").expect("write");
+        // 正常 meta → 收录
+        std::fs::create_dir_all(dir.join("good")).expect("mkdir good");
+        std::fs::write(
+            dir.join("good").join("meta.json"),
+            r#"{
+                "id": "good-session",
+                "workspaceId": "ws-1",
+                "title": "t",
+                "createdAt": 1,
+                "updatedAt": 1,
+                "selectedEngine": "claude",
+                "lastTurnSeq": 0,
+                "bindingsByEngine": {},
+                "bindingsByTarget": {}
+            }"#,
+        )
+        .expect("write good");
+
+        let seed = super::load_seed_from_shared_sessions_dir(&dir).expect("seed");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(seed.skipped_meta, 1, "only corrupt meta counts as skipped");
+        assert!(
+            seed.session_ids.iter().any(|id| id == "good-session"),
+            "good meta collected: {:?}",
+            seed.session_ids
+        );
+        assert!(
+            !seed.session_ids.iter().any(|id| id.contains("leftover")),
+            "meta-less leftover dir must be ignored: {:?}",
+            seed.session_ids
+        );
+    }
 
     #[test]
     fn derives_title_from_first_user_message() {
