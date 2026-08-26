@@ -1284,6 +1284,11 @@ async fn spawn_workspace_session_once<E: EventSink>(
     if let Some(codex_home) = codex_home {
         command.env("CODEX_HOME", codex_home);
     }
+    crate::codex::provider_env::apply_codex_provider_env(
+        &mut command,
+        effective_codex_home.as_deref(),
+    )
+    .await;
     if launch_options.launch_mode == CodexAppServerLaunchMode::SessionHooksDisabled {
         command.env("CODEX_NON_INTERACTIVE", "1");
     }

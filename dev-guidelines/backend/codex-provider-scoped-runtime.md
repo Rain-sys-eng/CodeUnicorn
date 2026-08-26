@@ -300,3 +300,9 @@ Template constraints:
 - Classifier tests for `staleRecoveryClassification`: `malformed-thread-id`, `missing-thread-binding`, `stale-thread-binding`, and unrelated errors.
 - Provider template implementations MUST add provider-focused tests before enabling runtime behavior.
 - Contract validation after behavior changes: `npm run check:runtime-contracts`, focused Vitest hook tests, and relevant OpenSpec strict validate.
+### GUI-launched provider environment resolution
+
+- Before spawning the Codex app-server, the macOS desktop path MUST inspect the effective `CODEX_HOME/config.toml` and collect only valid `model_providers.*.env_key` names.
+- Existing non-empty process environment values MUST win. Missing values MAY be resolved through an allowlisted login/interactive shell with a bounded timeout; shell command text MUST be fixed and the variable name MUST be passed as a positional argument.
+- Framed stdout parsing MUST tolerate shell startup noise. Resolved secrets MUST be injected into the Codex child process only; they MUST NOT be written to config, logged, or returned to the renderer.
+- A missing config, invalid TOML, unsupported shell, timeout, or empty value MUST fail soft and preserve the normal launch path.
