@@ -7,6 +7,7 @@ use super::models::{
     CreateDelegationRun, DelegationDispatchBinding, DelegationResult, DelegationRun,
     DelegationRunStatus,
 };
+use super::persistence::AgentBridgePersistence;
 
 #[derive(Debug, Clone, Copy)]
 pub struct DelegationRunLimits {
@@ -29,14 +30,72 @@ pub struct DelegationRunRegistry {
     runs: Mutex<HashMap<String, DelegationRun>>,
     sequence: AtomicU64,
     limits: DelegationRunLimits,
+    persistence: Option<AgentBridgePersistence>,
+    persistence_error: Option<String>,
 }
 
 impl DelegationRunRegistry {
+    /// Volatile registry used by focused tests and explicit in-memory callers.
     pub fn new(limits: DelegationRunLimits) -> Self {
         Self {
             runs: Mutex::new(HashMap::new()),
             sequence: AtomicU64::new(0),
             limits,
+            persistence: None,
+            persistence_error: None,
+        }
+    }
+
+    pub(crate) fn persistent(
+        persistence: AgentBridgePersistence,
+        limits: DelegationRunLimits,
+    ) -> Self {
+        let loaded = persistence.load();
+        let (mut runs, mut persistence_error) = match loaded {
+            Ok(runs) => match recovered_map(runs) {
+                Ok(runs) => (runs, None),
+                Err(error) => (HashMap::new(), Some(error)),
+            },
+            Err(error) => (HashMap::new(), Some(error)),
+        };
+
+        let sequence = runs
+            .keys()
+            .filter_map(|run_id| run_id.rsplit('-').next()?.parse::<u64>().ok())
+            .max()
+            .unwrap_or(0);
+
+        if persistence_error.is_none() && recover_stale_runtime_owners(&mut runs) {
+            let snapshot = sorted_runs(&runs);
+            if let Err(error) = persistence.save(&snapshot) {
+                persistence_error = Some(format!(
+                    "failed to persist Agent Bridge recovery state at {}: {error}",
+                    persistence.path().display()
+                ));
+            }
+        }
+
+        Self {
+            runs: Mutex::new(runs),
+            sequence: AtomicU64::new(sequence),
+            limits,
+            persistence: Some(persistence),
+            persistence_error,
+        }
+    }
+
+    fn production_default(limits: DelegationRunLimits) -> Self {
+        match AgentBridgePersistence::default_path() {
+            Ok(path) => Self::persistent(AgentBridgePersistence::new(path), limits),
+            Err(error) => Self {
+                runs: Mutex::new(HashMap::new()),
+                sequence: AtomicU64::new(0),
+                limits,
+                persistence: None,
+                persistence_error: Some(format!(
+                    "failed to resolve Agent Bridge durable store path: {error}"
+                )),
+            },
         }
     }
 
@@ -90,7 +149,7 @@ impl DelegationRunRegistry {
             (String::new(), 0)
         };
 
-        let id = self.next_run_id();
+        let id = self.next_run_id(&runs);
         let root_run_id = if root_run_id.is_empty() {
             id.clone()
         } else {
@@ -117,7 +176,9 @@ impl DelegationRunRegistry {
             started_at_ms: None,
             completed_at_ms: None,
         };
-        runs.insert(id, run.clone());
+        let mut candidate = runs.clone();
+        candidate.insert(id, run.clone());
+        self.commit_candidate(&mut runs, candidate)?;
         Ok(run)
     }
 
@@ -134,30 +195,55 @@ impl DelegationRunRegistry {
             .runs
             .lock()
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
-        let mut values = runs.values().cloned().collect::<Vec<_>>();
-        values.sort_by_key(|run| run.created_at_ms);
-        Ok(values)
+        Ok(sorted_runs(&runs))
+    }
+
+    pub fn backing_thread_ids_for_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<String>, String> {
+        let runs = self
+            .runs
+            .lock()
+            .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
+        let mut ids = runs
+            .values()
+            .filter(|run| run.workspace_id == workspace_id)
+            .filter_map(|run| {
+                run.dispatch_binding
+                    .as_ref()
+                    .map(|binding| binding.backing_thread_id.clone())
+            })
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
     }
 
     /// Atomically owns the Queued -> Running dispatch edge. A second dispatcher cannot
-    /// reuse a run that is already in-flight.
+    /// reuse a run that is already in-flight. Durable persistence commits before memory swaps.
     pub fn claim_dispatch(&self, run_id: &str) -> Result<DelegationRun, String> {
         let mut runs = self
             .runs
             .lock()
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
-        let run = runs
-            .get_mut(run_id)
+        let existing = runs
+            .get(run_id)
+            .cloned()
             .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
-        if run.status != DelegationRunStatus::Queued {
+        if existing.status != DelegationRunStatus::Queued {
             return Err(format!(
                 "delegated run {run_id} cannot be dispatched from state {:?}",
-                run.status
+                existing.status
             ));
         }
-        run.status = DelegationRunStatus::Running;
-        run.started_at_ms = Some(now_ms());
-        Ok(run.clone())
+        let mut updated = existing;
+        updated.status = DelegationRunStatus::Running;
+        updated.started_at_ms = Some(now_ms());
+        let mut candidate = runs.clone();
+        candidate.insert(run_id.to_string(), updated.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(updated)
     }
 
     pub fn set_dispatch_binding(
@@ -169,23 +255,28 @@ impl DelegationRunRegistry {
             .runs
             .lock()
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
-        let run = runs
-            .get_mut(run_id)
+        let existing = runs
+            .get(run_id)
+            .cloned()
             .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
-        if run.status.is_terminal() {
+        if existing.status.is_terminal() {
             return Err(format!("cannot bind terminal delegated run: {run_id}"));
         }
-        if let Some(existing) = run.dispatch_binding.as_ref() {
-            if existing == &binding {
-                return Ok(run.clone());
+        if let Some(existing_binding) = existing.dispatch_binding.as_ref() {
+            if existing_binding == &binding {
+                return Ok(existing);
             }
             return Err(format!(
                 "delegated run {run_id} already owns a different dispatch binding"
             ));
         }
-        run.target.logical_session_id = Some(binding.backing_thread_id.clone());
-        run.dispatch_binding = Some(binding);
-        Ok(run.clone())
+        let mut updated = existing;
+        updated.target.logical_session_id = Some(binding.backing_thread_id.clone());
+        updated.dispatch_binding = Some(binding);
+        let mut candidate = runs.clone();
+        candidate.insert(run_id.to_string(), updated.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(updated)
     }
 
     pub fn record_runtime_ack(
@@ -206,13 +297,15 @@ impl DelegationRunRegistry {
             .runs
             .lock()
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
-        let run = runs
-            .get_mut(run_id)
+        let existing = runs
+            .get(run_id)
+            .cloned()
             .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
-        if run.status.is_terminal() {
+        if existing.status.is_terminal() {
             return Err(format!("cannot ACK terminal delegated run: {run_id}"));
         }
-        let binding = run
+        let mut updated = existing;
+        let binding = updated
             .dispatch_binding
             .as_mut()
             .ok_or_else(|| format!("delegated run {run_id} has no dispatch binding"))?;
@@ -237,8 +330,11 @@ impl DelegationRunRegistry {
         }
         binding.native_session_id = Some(native_session_id.to_string());
         binding.runtime_turn_id = Some(runtime_turn_id.to_string());
-        run.target.native_session_id = Some(native_session_id.to_string());
-        Ok(run.clone())
+        updated.target.native_session_id = Some(native_session_id.to_string());
+        let mut candidate = runs.clone();
+        candidate.insert(run_id.to_string(), updated.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(updated)
     }
 
     pub fn transition(
@@ -250,16 +346,17 @@ impl DelegationRunRegistry {
             .runs
             .lock()
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
-        let run = runs
-            .get_mut(run_id)
+        let existing = runs
+            .get(run_id)
+            .cloned()
             .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
-        if run.status == next_status {
-            return Ok(run.clone());
+        if existing.status == next_status {
+            return Ok(existing);
         }
-        if run.status.is_terminal() {
+        if existing.status.is_terminal() {
             return Err(format!(
                 "delegated run {run_id} is already terminal: {:?}",
-                run.status
+                existing.status
             ));
         }
         if next_status.is_terminal() {
@@ -267,22 +364,26 @@ impl DelegationRunRegistry {
                 "use settle_* for terminal delegated run transition: {run_id}"
             ));
         }
-        match (run.status, next_status) {
+        match (existing.status, next_status) {
             (DelegationRunStatus::Queued, DelegationRunStatus::Running)
             | (DelegationRunStatus::Running, DelegationRunStatus::WaitingApproval)
             | (DelegationRunStatus::WaitingApproval, DelegationRunStatus::Running) => {}
             _ => {
                 return Err(format!(
                     "invalid delegated run transition for {run_id}: {:?} -> {:?}",
-                    run.status, next_status
+                    existing.status, next_status
                 ));
             }
         }
-        if next_status == DelegationRunStatus::Running && run.started_at_ms.is_none() {
-            run.started_at_ms = Some(now_ms());
+        let mut updated = existing;
+        if next_status == DelegationRunStatus::Running && updated.started_at_ms.is_none() {
+            updated.started_at_ms = Some(now_ms());
         }
-        run.status = next_status;
-        Ok(run.clone())
+        updated.status = next_status;
+        let mut candidate = runs.clone();
+        candidate.insert(run_id.to_string(), updated.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(updated)
     }
 
     pub fn settle_completed(
@@ -315,35 +416,136 @@ impl DelegationRunRegistry {
             .runs
             .lock()
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
-        let run = runs
-            .get_mut(run_id)
+        let existing = runs
+            .get(run_id)
+            .cloned()
             .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
-        if run.status == terminal_status {
-            return Ok(run.clone());
+        if existing.status == terminal_status {
+            return Ok(existing);
         }
-        if run.status.is_terminal() {
+        if existing.status.is_terminal() {
             return Err(format!(
                 "delegated run {run_id} already settled as {:?}",
-                run.status
+                existing.status
             ));
         }
-        run.status = terminal_status;
-        run.result = result;
-        run.error = error;
-        run.completed_at_ms = Some(now_ms());
-        Ok(run.clone())
+        let mut updated = existing;
+        updated.status = terminal_status;
+        updated.result = result;
+        updated.error = error;
+        updated.completed_at_ms = Some(now_ms());
+        let mut candidate = runs.clone();
+        candidate.insert(run_id.to_string(), updated.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(updated)
     }
 
-    fn next_run_id(&self) -> String {
-        let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
-        format!("delegation-{}-{sequence}", now_ms())
+    fn commit_candidate(
+        &self,
+        current: &mut HashMap<String, DelegationRun>,
+        candidate: HashMap<String, DelegationRun>,
+    ) -> Result<(), String> {
+        if let Some(error) = self.persistence_error.as_deref() {
+            return Err(format!("agent bridge persistence unavailable: {error}"));
+        }
+        if let Some(persistence) = self.persistence.as_ref() {
+            persistence.save(&sorted_runs(&candidate)).map_err(|error| {
+                format!(
+                    "failed to persist Agent Bridge run facts at {}: {error}",
+                    persistence.path().display()
+                )
+            })?;
+        }
+        *current = candidate;
+        Ok(())
+    }
+
+    fn next_run_id(&self, existing: &HashMap<String, DelegationRun>) -> String {
+        loop {
+            let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
+            let candidate = format!("delegation-{}-{sequence}", now_ms());
+            if !existing.contains_key(&candidate) {
+                return candidate;
+            }
+        }
     }
 }
 
 impl Default for DelegationRunRegistry {
     fn default() -> Self {
-        Self::new(DelegationRunLimits::default())
+        #[cfg(test)]
+        {
+            Self::new(DelegationRunLimits::default())
+        }
+        #[cfg(not(test))]
+        {
+            Self::production_default(DelegationRunLimits::default())
+        }
     }
+}
+
+fn sorted_runs(runs: &HashMap<String, DelegationRun>) -> Vec<DelegationRun> {
+    let mut values = runs.values().cloned().collect::<Vec<_>>();
+    values.sort_by(|left, right| {
+        left.created_at_ms
+            .cmp(&right.created_at_ms)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    values
+}
+
+fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationRun>, String> {
+    let mut recovered = HashMap::new();
+    for run in runs {
+        if run.id.trim().is_empty() || run.root_run_id.trim().is_empty() {
+            return Err("Agent Bridge durable store contains an empty run/root identity".to_string());
+        }
+        let id = run.id.clone();
+        if recovered.insert(id.clone(), run).is_some() {
+            return Err(format!(
+                "Agent Bridge durable store contains duplicate run identity: {id}"
+            ));
+        }
+    }
+    Ok(recovered)
+}
+
+fn recover_stale_runtime_owners(runs: &mut HashMap<String, DelegationRun>) -> bool {
+    let recovered_at = now_ms();
+    let mut changed = false;
+    for run in runs.values_mut() {
+        let stale_running = matches!(
+            run.status,
+            DelegationRunStatus::Running | DelegationRunStatus::WaitingApproval
+        );
+        let inconsistent_queued = run.status == DelegationRunStatus::Queued
+            && (run.started_at_ms.is_some() || run.dispatch_binding.is_some());
+        if !stale_running && !inconsistent_queued {
+            continue;
+        }
+
+        let detail = run
+            .dispatch_binding
+            .as_ref()
+            .map(|binding| {
+                format!(
+                    "backingThreadId={}, attemptId={}, nativeSessionId={}, runtimeTurnId={}",
+                    binding.backing_thread_id,
+                    binding.attempt_id,
+                    binding.native_session_id.as_deref().unwrap_or("<missing>"),
+                    binding.runtime_turn_id.as_deref().unwrap_or("<missing>")
+                )
+            })
+            .unwrap_or_else(|| "dispatch binding was not durably established".to_string());
+        run.status = DelegationRunStatus::Failed;
+        run.result = None;
+        run.error = Some(format!(
+            "recovery-required: app restarted without a provable live runtime owner; {detail}"
+        ));
+        run.completed_at_ms = Some(recovered_at);
+        changed = true;
+    }
+    changed
 }
 
 fn now_ms() -> u64 {
@@ -362,14 +564,15 @@ mod tests {
     use crate::engine::EngineType;
     use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
     use crate::shared_session_v2::ExecutionTargetInput;
+    use uuid::Uuid;
 
     fn execution_target() -> ExecutionTargetInput {
         ExecutionTargetInput {
             engine: EngineType::Codex,
             provider_profile_id: None,
-            model_catalog_entry_id: Some("gpt-5.3-codex-spark".to_string()),
-            model: Some("gpt-5.3-codex-spark".to_string()),
-            reasoning_effort: None,
+            model_catalog_entry_id: Some("gpt-5.6-sol".to_string()),
+            model: Some("gpt-5.6-sol".to_string()),
+            reasoning_effort: Some("low".to_string()),
             provider_profile_name_snapshot: Some("Local".to_string()),
             provider_profile_source: Some(CanonicalProviderProfileSource::Local),
             runtime_capability_fingerprint: None,
@@ -436,7 +639,10 @@ mod tests {
             .record_runtime_ack(&run.id, "attempt-1", "native-1", "runtime-turn-1")
             .expect("record ack");
 
-        assert_eq!(acked.target.logical_session_id.as_deref(), Some("shared:bridge-session"));
+        assert_eq!(
+            acked.target.logical_session_id.as_deref(),
+            Some("shared:bridge-session")
+        );
         assert_eq!(acked.target.native_session_id.as_deref(), Some("native-1"));
         assert_eq!(
             acked
@@ -500,5 +706,56 @@ mod tests {
 
         assert!(error.contains("max depth"));
         assert_eq!(registry.list().expect("list runs").len(), 2);
+    }
+
+    #[test]
+    fn durable_registry_restores_terminal_facts_and_fails_stale_runtime_closed() {
+        let root = std::env::temp_dir().join(format!("agent-bridge-registry-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let path = root.join("runs.json");
+        let persistence = AgentBridgePersistence::new(path.clone());
+        let registry = DelegationRunRegistry::persistent(
+            persistence.clone(),
+            DelegationRunLimits::default(),
+        );
+        let run = registry.create(request(None)).expect("create persisted run");
+        registry.claim_dispatch(&run.id).expect("claim persisted run");
+        registry
+            .set_dispatch_binding(
+                &run.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:bridge-session".to_string(),
+                    attempt_id: "attempt-1".to_string(),
+                    logical_turn_id: "turn-1".to_string(),
+                    binding_key: "squad:run:delegate:codex:default".to_string(),
+                    native_session_id: Some("native-1".to_string()),
+                    runtime_turn_id: Some("runtime-turn-1".to_string()),
+                },
+            )
+            .expect("persist binding");
+        drop(registry);
+
+        let recovered = DelegationRunRegistry::persistent(
+            AgentBridgePersistence::new(path),
+            DelegationRunLimits::default(),
+        );
+        let restored = recovered
+            .get(&run.id)
+            .expect("read recovered")
+            .expect("restored run");
+
+        assert_eq!(restored.status, DelegationRunStatus::Failed);
+        assert!(restored
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("recovery-required")));
+        assert_eq!(
+            restored
+                .dispatch_binding
+                .as_ref()
+                .and_then(|binding| binding.native_session_id.as_deref()),
+            Some("native-1")
+        );
+        std::fs::remove_dir_all(root).ok();
     }
 }
