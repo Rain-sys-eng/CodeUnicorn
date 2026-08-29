@@ -1,20 +1,26 @@
-//! In-process HTTP MCP server exposing a single `AskUserQuestion` tool.
+//! In-process HTTP MCP server for CodeUnicorn-managed Claude tools.
 //!
 //! # Why this exists
 //! The `claude` CLI only offers the native `AskUserQuestion` tool to the model in
 //! **plan mode**. To restore mid-turn structured asks in default/acceptEdits, we
 //! register an MCP tool — MCP tools are not plan-gated — and route its call into
-//! the existing `RequestUserInput` dialog machinery.
+//! the existing `RequestUserInput` dialog machinery. The same authenticated,
+//! runtime-bound server now also exposes Agent Bridge delegation tools.
 //!
 //! # Transport
 //! Streamable-HTTP: provider-aware sessions use
 //! `POST /mcp/:workspace_id/:runtime_locator`; the workspace-only endpoint remains
-//! for local compatibility. Both speak JSON-RPC (`initialize`, `tools/list`,
-//! `tools/call`) and respond `application/json`. No SSE stream is needed for
-//! request/response. Verified against CLI v2.1.201.
+//! for local AskUserQuestion compatibility. Both speak JSON-RPC (`initialize`,
+//! `tools/list`, `tools/call`) and respond `application/json`. No SSE stream is
+//! needed for request/response. Verified against CLI v2.1.201.
+//!
+//! # Identity boundary
+//! Agent Bridge tools are accepted only on the provider-aware route. The bearer
+//! token and opaque `runtime_locator` are minted by CodeUnicorn; the model cannot
+//! provide or override source engine/workspace/session identity in tool arguments.
 //!
 //! # Answer path (B2)
-//! On `tools/call`, resolve the runtime's `ClaudeSession` and call
+//! On `AskUserQuestion`, resolve the runtime's `ClaudeSession` and call
 //! `ask_via_mcp`, which emits `RequestUserInput` to the live turn's subscriber
 //! and blocks until the user answers. The answer text is returned as the MCP
 //! tool_result — the CLI turn continues natively, no kill/`--resume`.
@@ -32,7 +38,7 @@ use tokio::net::TcpListener;
 
 use super::ClaudeSessionManager;
 
-/// The tool name the model sees (prefixed by the CLI as `mcp__ccgui__AskUserQuestion`).
+/// The MCP server name used by Claude (`mcp__ccgui__<tool>`).
 pub const MCP_SERVER_NAME: &str = "ccgui";
 pub const ASK_TOOL_NAME: &str = "AskUserQuestion";
 
@@ -64,7 +70,7 @@ struct McpServerState {
     token: Arc<str>,
 }
 
-/// A running in-process AskUserQuestion MCP server. Holds the bound port so the
+/// A running in-process CodeUnicorn MCP server. Holds the bound port so the
 /// CLI spawn wiring can build the per-workspace `--mcp-config` URL, plus the bearer
 /// token injected into that config's headers and required on every request.
 pub struct AskUserMcpServer {
@@ -79,7 +85,7 @@ impl AskUserMcpServer {
     pub async fn start(claude_manager: Arc<ClaudeSessionManager>) -> Result<Self, String> {
         let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
             .await
-            .map_err(|err| format!("failed to bind AskUserQuestion MCP server: {err}"))?;
+            .map_err(|err| format!("failed to bind CodeUnicorn MCP server: {err}"))?;
         let port = listener
             .local_addr()
             .map_err(|err| format!("failed to read MCP server addr: {err}"))?
@@ -103,11 +109,11 @@ impl AskUserMcpServer {
 
         tokio::spawn(async move {
             if let Err(err) = axum::serve(listener, router).await {
-                log::error!("AskUserQuestion MCP server stopped: {err}");
+                log::error!("CodeUnicorn MCP server stopped: {err}");
             }
         });
 
-        log::info!("AskUserQuestion MCP server listening on 127.0.0.1:{port}");
+        log::info!("CodeUnicorn MCP server listening on 127.0.0.1:{port}");
         Ok(Self { port, token })
     }
 
@@ -131,13 +137,15 @@ impl AskUserMcpServer {
         .to_string()
     }
 
-    /// The fully-qualified tool name the CLI exposes, for `--allowedTools`.
+    /// Allow all tools on this private, bearer-authenticated CodeUnicorn MCP server.
+    /// The Bridge itself still enforces workspace/source identity, target availability,
+    /// execution scope and target runtime permission/approval contracts.
     pub fn allowed_tool_name() -> String {
-        format!("mcp__{MCP_SERVER_NAME}__{ASK_TOOL_NAME}")
+        format!("mcp__{MCP_SERVER_NAME}__*")
     }
 }
 
-fn tool_definition() -> Value {
+fn ask_tool_definition() -> Value {
     json!({
         "name": ASK_TOOL_NAME,
         "description": "Ask the user a structured multiple-choice question and get their selection back. \
@@ -177,12 +185,35 @@ fn tool_definition() -> Value {
     })
 }
 
+fn all_tool_definitions() -> Vec<Value> {
+    let mut tools = vec![ask_tool_definition()];
+    tools.extend(crate::agent_orchestration::bridge::mcp_gateway::tool_definitions());
+    tools
+}
+
 fn rpc_result(id: Value, result: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
 
 fn rpc_error(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+}
+
+fn text_tool_result(id: Value, text: String) -> McpResponse {
+    McpResponse::Json(rpc_result(
+        id,
+        json!({ "content": [{ "type": "text", "text": text }] }),
+    ))
+}
+
+fn error_tool_result(id: Value, label: &str, error: impl std::fmt::Display) -> McpResponse {
+    McpResponse::Json(rpc_result(
+        id,
+        json!({
+            "content": [{ "type": "text", "text": format!("{label} failed: {error}") }],
+            "isError": true
+        }),
+    ))
 }
 
 /// A JSON-RPC response, or 202-with-no-body for notifications.
@@ -264,58 +295,75 @@ async fn handle_mcp_request(
         }
         // Notifications (no `id`) get no response body.
         "notifications/initialized" | "notifications/cancelled" => McpResponse::Accepted,
-        "tools/list" => McpResponse::Json(rpc_result(id, json!({ "tools": [tool_definition()] }))),
+        "tools/list" => McpResponse::Json(rpc_result(id, json!({ "tools": all_tool_definitions() }))),
         "tools/call" => {
             let tool_name = msg
                 .get("params")
                 .and_then(|p| p.get("name"))
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            if tool_name != ASK_TOOL_NAME {
-                return McpResponse::Json(rpc_error(
-                    id,
-                    -32602,
-                    &format!("unknown tool: {tool_name}"),
-                ));
-            }
             let arguments = msg
                 .get("params")
                 .and_then(|p| p.get("arguments"))
                 .cloned()
                 .unwrap_or_else(|| json!({}));
 
-            let session = match runtime_locator.as_deref() {
-                Some(locator) => {
-                    state
-                        .claude_manager
-                        .get_session_by_locator(&workspace_id, locator)
-                        .await
-                }
-                None => state.claude_manager.get_session(&workspace_id).await,
-            };
-            let Some(session) = session else {
-                return McpResponse::Json(rpc_error(
-                    id,
-                    -32000,
-                    "no active Claude session for this workspace",
-                ));
-            };
+            if tool_name == ASK_TOOL_NAME {
+                let session = match runtime_locator.as_deref() {
+                    Some(locator) => {
+                        state
+                            .claude_manager
+                            .get_session_by_locator(&workspace_id, locator)
+                            .await
+                    }
+                    None => state.claude_manager.get_session(&workspace_id).await,
+                };
+                let Some(session) = session else {
+                    return McpResponse::Json(rpc_error(
+                        id,
+                        -32000,
+                        "no active Claude session for this workspace",
+                    ));
+                };
 
-            match session.ask_via_mcp(&arguments).await {
-                Ok(answer_text) => McpResponse::Json(rpc_result(
-                    id,
-                    json!({ "content": [{ "type": "text", "text": answer_text }] }),
-                )),
-                // Return a tool_result error (isError) rather than a JSON-RPC
-                // error so the CLI recovers and the model can continue.
-                Err(err) => McpResponse::Json(rpc_result(
-                    id,
-                    json!({
-                        "content": [{ "type": "text", "text": format!("AskUserQuestion failed: {err}") }],
-                        "isError": true
-                    }),
-                )),
+                return match session.ask_via_mcp(&arguments).await {
+                    Ok(answer_text) => text_tool_result(id, answer_text),
+                    Err(error) => error_tool_result(id, ASK_TOOL_NAME, error),
+                };
             }
+
+            if crate::agent_orchestration::bridge::mcp_gateway::handles_tool(tool_name) {
+                let source = match crate::agent_orchestration::bridge::mcp_source::resolve_claude_mcp_source(
+                    &state.claude_manager,
+                    &workspace_id,
+                    runtime_locator.as_deref(),
+                )
+                .await
+                {
+                    Ok(source) => source,
+                    Err(error) => return error_tool_result(id, tool_name, error),
+                };
+                return match crate::agent_orchestration::bridge::mcp_runtime::call_tool(
+                    &workspace_id,
+                    source,
+                    tool_name,
+                    arguments,
+                )
+                .await
+                {
+                    Ok(result) => match serde_json::to_string(&result) {
+                        Ok(text) => text_tool_result(id, text),
+                        Err(error) => error_tool_result(id, tool_name, error),
+                    },
+                    Err(error) => error_tool_result(id, tool_name, error),
+                };
+            }
+
+            McpResponse::Json(rpc_error(
+                id,
+                -32602,
+                &format!("unknown tool: {tool_name}"),
+            ))
         }
         other => McpResponse::Json(rpc_error(id, -32601, &format!("method not found: {other}"))),
     }
@@ -345,16 +393,13 @@ mod tests {
     }
 
     #[test]
-    fn allowed_tool_name_matches_cli_mcp_prefix() {
-        assert_eq!(
-            AskUserMcpServer::allowed_tool_name(),
-            "mcp__ccgui__AskUserQuestion"
-        );
+    fn allowed_tool_name_covers_private_ccgui_server_tools() {
+        assert_eq!(AskUserMcpServer::allowed_tool_name(), "mcp__ccgui__*");
     }
 
     #[test]
     fn tool_definition_schema_matches_native_questions_shape() {
-        let def = tool_definition();
+        let def = ask_tool_definition();
         assert_eq!(def["name"], ASK_TOOL_NAME);
         // The engine's convert_ask_user_question_to_request parses these exact keys.
         let props = &def["inputSchema"]["properties"]["questions"]["items"]["properties"];
@@ -365,5 +410,23 @@ mod tests {
         let opt = &props["options"]["items"]["properties"];
         assert!(opt.get("label").is_some());
         assert!(opt.get("description").is_some());
+    }
+
+    #[test]
+    fn managed_server_lists_ask_and_all_bridge_tools() {
+        let tools = all_tool_definitions();
+        assert_eq!(tools.len(), 8);
+        assert!(tools.iter().any(|tool| tool["name"] == ASK_TOOL_NAME));
+        for expected in [
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_DELEGATE_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_STATUS_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_WAIT_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_RESULT_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_SEND_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_CANCEL_TOOL,
+        ] {
+            assert!(tools.iter().any(|tool| tool["name"] == expected));
+        }
     }
 }
