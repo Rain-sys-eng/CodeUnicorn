@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::shared_session_v2::ExecutionTargetInput;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DelegationContextPolicy {
@@ -66,6 +68,19 @@ impl AgentEndpoint {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DelegationDispatchBinding {
+    pub backing_thread_id: String,
+    pub attempt_id: String,
+    pub logical_turn_id: String,
+    pub binding_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime_turn_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DelegationResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
@@ -87,6 +102,8 @@ pub struct DelegationRun {
     pub depth: u16,
     pub source: AgentEndpoint,
     pub target: AgentEndpoint,
+    /// Fully-resolved target snapshot frozen before any runtime side effect.
+    pub target_execution: ExecutionTargetInput,
     pub workspace_id: String,
     pub task: String,
     #[serde(default)]
@@ -96,6 +113,8 @@ pub struct DelegationRun {
     #[serde(default)]
     pub execution_scope: DelegationExecutionScope,
     pub status: DelegationRunStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dispatch_binding: Option<DelegationDispatchBinding>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<DelegationResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,6 +130,9 @@ pub struct DelegationRun {
 pub struct CreateDelegationRun {
     pub source: AgentEndpoint,
     pub target: AgentEndpoint,
+    /// Optional caller-selected target. AgentBridgeService resolves and freezes a local
+    /// default when omitted, then the registry requires this field to be populated.
+    pub target_execution: Option<ExecutionTargetInput>,
     pub workspace_id: String,
     pub task: String,
     pub file_refs: Vec<String>,
