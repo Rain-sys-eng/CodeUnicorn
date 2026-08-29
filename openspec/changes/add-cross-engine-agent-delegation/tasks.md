@@ -20,13 +20,13 @@
 - [x] 3.3 对当前 Shared V2 已支持 target（Claude/Codex/Kimi/Grok/OpenCode/Pi/Qoder）复用 `begin_squad_worker_turn_core -> prepare_delivery -> dispatch_turn -> await_terminal` 完成单跳 delegated dispatch；Bridge 不直接 spawn/parse CLI。
 - [x] 3.4 将 backing logical thread / attempt / binding / native session / runtime turn identity 写回 delegated run，并以 atomic dispatch claim 防止重复发送。
 - [x] 3.5 复用 `EngineManager.agent_event_bus()` 与现有 Shared runtime event sink；Bridge 对自身 backing thread 做 scoped re-attribution，将 live EngineEvent / settlement 以 delegated `run_id` 再发布，同时保留 native session/turn identity，且不创建第二套 event bus。
-- [ ] 3.6 在 MCP/UI 对外开放前，为 Bridge backing Shared Session 增加 internal/hidden presentation marker，并从普通 Shared Session 列表过滤；ownership/native hiding 仍需保留。
+- [x] 3.6 Bridge backing Shared Session 在 runtime side effect 前写入 canonical `agent-bridge.internal-backing-session` control marker；App 启动时按 durable `backingThreadId` 补齐缺失 marker；普通 Shared Session 列表按 projection marker 过滤，而底层 Shared/native binding ownership 与 visibility seed 保持完整。注意 `start_shared_session` 返回到 marker append 之间仍存在极窄 orphan crash window，后续如需完全原子化应下沉到 Shared create transaction/专用 orphan sweep，不在 presentation 层伪装解决。
 - [ ] 3.7 补齐最终目标 engine parity：Gemini 当前受 runtime policy 禁用、Dsh 当前不在 Shared V2 dispatch set；在最终验收前接入 Shared V2 或等价 existing-runtime dispatch，不为它们新建第二套 CLI parser。
 
 ## 4. Result / Continuation / Cancellation
 
 - [x] 4.1 复用 `conversation.turnCommitted` 生成 normalized delegated result：assistant text summary + terminal status + artifact locator；changed-files/diff 后续由 worktree/result 层补齐。
-- [ ] 4.2 实现 `agent_send` continuation，对 Persistent/OneShot engine 保持统一上层 contract。
+- [x] 4.2 continuation 使用新的 immutable `DelegationRun` identity + `continuationOfRunId`，不重开 terminal run；dispatcher 沿 continuation chain 回溯原 backing Shared lane 与 stable scoped binding owner，复用同一 native CLI session，同时与 nested `parentRunId/depth` 语义分离。AppState 已提供 continue boundary，后续 `agent_send` MCP 仅需调用该层。
 - [ ] 4.3 实现 `agent_cancel` 与 cancellation propagation；**propagation core 已完成**：Queued 本地取消；durable attempt 先走 Shared V2 live interrupt，无 runtime owner 时仅允许 existing pre-dispatch cancel；控制失败保留 run/binding owner。MCP tool 尚未暴露，因此本项不提前打勾。
 - [ ] 4.4 approval request 不自动放行，沿现有 approval contract 转发。
 
