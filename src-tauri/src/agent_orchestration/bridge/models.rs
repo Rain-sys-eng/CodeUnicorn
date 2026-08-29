@@ -99,6 +99,11 @@ pub struct DelegationRun {
     pub root_run_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_run_id: Option<String>,
+    /// Multi-turn continuation lineage is intentionally separate from nested delegation.
+    /// A continuation keeps the same delegation depth and reuses the previous backing/native
+    /// session, while parentRunId means the target Agent itself delegated another Agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_of_run_id: Option<String>,
     pub depth: u16,
     pub source: AgentEndpoint,
     pub target: AgentEndpoint,
