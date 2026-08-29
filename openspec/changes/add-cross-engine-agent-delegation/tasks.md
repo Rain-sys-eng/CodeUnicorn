@@ -27,15 +27,15 @@
 
 - [x] 4.1 复用 `conversation.turnCommitted` 生成 normalized delegated result：assistant text summary + terminal status + artifact locator；changed-files/diff 后续由 worktree/result 层补齐。
 - [ ] 4.2 实现 `agent_send` continuation，对 Persistent/OneShot engine 保持统一上层 contract。
-- [ ] 4.3 实现 `agent_cancel` 与 cancellation propagation；cleanup 失败保留 owner 便于 retry/diagnostics。
+- [ ] 4.3 实现 `agent_cancel` 与 cancellation propagation；**propagation core 已完成**：Queued 本地取消；durable attempt 先走 Shared V2 live interrupt，无 runtime owner 时仅允许 existing pre-dispatch cancel；控制失败保留 run/binding owner。MCP tool 尚未暴露，因此本项不提前打勾。
 - [ ] 4.4 approval request 不自动放行，沿现有 approval contract 转发。
 
 ## 5. Persistence / Recovery
 
-- [ ] 5.1 设计 versioned durable run fact schema。
-- [ ] 5.2 复用 storage lock + atomic write 持久化 identity/lineage/status/session/result metadata。
-- [ ] 5.3 App 重启后恢复 run facts，不持久化全部 live deltas。
-- [ ] 5.4 stale native binding fail-closed，并提供 recoverable state。
+- [x] 5.1 新增 schemaVersion=1 的 durable run store，仅保存 run identity/lineage/frozen target/status/session binding/result metadata，不保存 live delta。
+- [x] 5.2 复用 storage lock + atomic JSON write；registry 每次 mutation 先持久化 candidate snapshot，成功后才替换内存 state，避免 disk failure 产生内存假成功。
+- [x] 5.3 production registry 默认从 durable store 恢复；malformed JSON 仅在 parse failure 时 quarantine，I/O/未知未来 schema 均 fail closed，避免覆盖有效 store。
+- [x] 5.4 App 重启后 `Running/WaitingApproval` 或不一致的已启动 Queued run fail closed 为 `Failed + recovery-required`，保留 backing/native/runtime identity 供 retry/diagnostics；terminal/clean Queued facts 保持。
 
 ## 6. Agent-facing MCP Gateway
 
