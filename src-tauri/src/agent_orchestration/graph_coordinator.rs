@@ -1,4 +1,5 @@
 use tauri::AppHandle;
+use tokio::sync::Mutex;
 
 use crate::state::AppState;
 
@@ -13,14 +14,19 @@ use super::scheduler::{
 ///
 /// The coordinator owns graph-level orchestration facts only. Each node's process/session/result
 /// remains owned by Agent Bridge. Graph identity and node -> Bridge run mappings are persisted
-/// before the corresponding target runtime may start.
+/// before the corresponding target runtime may start. `advance_lock` serializes graph state
+/// transitions so simultaneous fan-out settlements cannot create the same downstream node twice.
 pub(crate) struct AgentGraphCoordinator {
     registry: AgentGraphRegistry,
+    advance_lock: Mutex<()>,
 }
 
 impl AgentGraphCoordinator {
     pub(crate) fn new(registry: AgentGraphRegistry) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            advance_lock: Mutex::new(()),
+        }
     }
 
     pub(crate) fn volatile() -> Self {
@@ -44,6 +50,7 @@ impl AgentGraphCoordinator {
         state: &AppState,
         app: &AppHandle,
     ) -> Result<AgentGraphDispatchBatch, String> {
+        let _guard = self.advance_lock.lock().await;
         let (validated, execution) = AgentGraphExecution::new(&plan, workspace_id, source)?;
         let record = DurableAgentGraphRun::new(plan, execution)?;
         let durable = self.registry.create(record)?;
@@ -57,6 +64,7 @@ impl AgentGraphCoordinator {
         state: &AppState,
         app: &AppHandle,
     ) -> Result<AgentGraphDispatchBatch, String> {
+        let _guard = self.advance_lock.lock().await;
         let durable = self
             .registry
             .get(graph_id)?
