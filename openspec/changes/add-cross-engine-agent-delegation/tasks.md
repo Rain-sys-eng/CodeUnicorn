@@ -28,7 +28,7 @@
 - [x] 4.1 复用 `conversation.turnCommitted` 生成 normalized delegated result：assistant text summary + terminal status + artifact locator；changed-files/diff 后续由 worktree/result 层补齐。
 - [x] 4.2 continuation 使用新的 immutable `DelegationRun` identity + `continuationOfRunId`，不重开 terminal run；dispatcher 沿 continuation chain 回溯原 backing Shared lane 与 stable scoped binding owner，复用同一 native CLI session，同时与 nested `parentRunId/depth` 语义分离。AppState 已提供 continue boundary，`agent_send` MCP 复用该层。
 - [x] 4.3 实现 `agent_cancel` 与 cancellation propagation：Queued 本地取消；durable attempt 先走 Shared V2 live interrupt，无 runtime owner 时仅允许 existing pre-dispatch cancel；控制失败保留 run/binding owner；当前 Claude managed MCP ingress 已暴露 `agent_cancel`，不做 workspace-wide fallback。
-- [x] 4.4 approval request 不自动放行，沿现有 approval contract 转发；process-wide Bridge approval observer 只消费 re-attributed AgentEventBus 事件，`ApprovalRequest` 将 durable run 置为 `WaitingApproval`，真实 text/reasoning/tool progress 才恢复 `Running`，heartbeat/usage 不作为批准证据。
+- [x] 4.4 approval request 不自动放行，沿现有 approval contract 转发；process-wide Bridge approval observer 只消费 re-attributed AgentEventBus 事件。`ApprovalRequest` 按 `requestId` 记录 pending gate 并将 durable run 置为 `WaitingApproval`；native runtime control owner 接受用户 decision 后发布 `ApprovalResolved`，全部批准才恢复 `Running`，任一拒绝立即 `Failed`；heartbeat/usage/unrelated tool progress 均不能绕过 pending approval。
 
 ## 5. Persistence / Recovery
 
@@ -40,7 +40,7 @@
 ## 6. Agent-facing MCP Gateway
 
 - [x] 6.1 新增 bridge MCP transport adapter：复用现有 bearer-authenticated、runtime-bound Claude managed HTTP MCP server；Bridge handler 保持独立于 MCP transport，不直接 spawn CLI。
-- [x] 6.2 暴露 `agent_list` / `agent_delegate` / `agent_status` / `agent_wait` / `agent_result` / `agent_send` / `agent_cancel`；`agent_wait` 单次调用 hard cap 30 秒，所有 run control 均做 workspace/source ownership 校验。
+- [x] 6.2 暴露 `agent_list` / `agent_delegate` / `agent_status` / `agent_wait` / `agent_result` / `agent_send` / `agent_cancel`；`agent_wait` 单次调用 hard cap 30 秒，所有 run control 均做 workspace/source ownership 校验。`agent_delegate/agent_send` 在 durable run 已创建后即使 dispatch 失败也返回该 terminal run；若 settlement 本身缺失，MCP error 必须显式携带已创建 `runId`。
 - [x] 6.3 source identity 不进入 tool schema；当前 Claude ingress 从 CodeUnicorn-minted runtime locator + live active turn + native session 解析可信 source，legacy workspace-only route 对 Bridge fail closed。其他 engine 在接入 6.4 前必须实现等价 runtime-bound resolver。
 - [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**当前首个 ingress 已完成：Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools。MCP source 已进一步抽象为 transport-neutral `TrustedMcpRuntimeBinding -> ResolvedMcpSource` fail-closed contract，Codex/Kimi/OpenCode ingress 可复用同一安全边界；Codex caller 的 remaining gate 是拿到 thread+turn 级可信 runtime locator，禁止退化成 workspace-only source。**
 
@@ -75,7 +75,7 @@
 
 - [ ] 11.1 Rust focused tests + rustfmt check（仅改动文件）。
 - [ ] 11.2 frontend focused tests + typecheck + runtime contracts/governance gates。
-- [ ] 11.3 MCP contract tests、parallel/cancel/recovery integration tests、fake-engine tests。
+- [ ] 11.3 MCP contract tests、parallel/cancel/recovery integration tests、fake-engine tests。**已加入 managed Claude transport contract coverage：authenticated `tools/list` 精确枚举七个 Bridge tools、legacy route fail closed、unknown runtime locator、bearer rejection 与 unknown-tool JSON-RPC error；仍缺带 fake AppState/runtime 的 delegate/wait/result/send/cancel integration harness，因此本项不提前打勾。**
 - [ ] 11.4 手工验收 Claude→Codex、Codex→Claude、并行三 Agent、nested delegation、worktree isolation。
 - [ ] 11.5 strict OpenSpec validate / consistency sync。
 - [ ] 11.6 更新 foundation ADR，写 verification，sync main specs，archive change。

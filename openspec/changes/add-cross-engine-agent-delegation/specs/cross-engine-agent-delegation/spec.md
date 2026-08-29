@@ -107,6 +107,15 @@ Target Agent 的 text/tool/approval/terminal events SHALL 通过现有 AgentEven
 - **AND** CodeUnicorn MUST 使用现有 approval/user-confirmation contract
 - **AND** delegation MUST NOT 自动提升权限或自动批准
 
+#### Scenario: Approval decisions settle the delegated lifecycle exactly
+
+- **WHEN** delegated target Agent 进入一个或多个 pending approval requests
+- **THEN** run MUST 保持 `waitingApproval`，直到所有 pending requests 均由用户批准
+- **AND** heartbeat、usage 或 unrelated tool progress MUST NOT 绕过仍未解决的 approval gate
+- **AND** 全部批准后 run MUST 恢复 `running`
+- **AND** 任一请求被用户拒绝后 run MUST fail closed 为 `failed`
+- **AND** approval decision MUST 先由 existing native runtime control owner 接受，再通过 existing `AgentEventBus` 同步给 Bridge
+
 ### Requirement: Agent-facing MCP SHALL Be A Transport Adapter Over AgentBridgeService
 
 系统 SHALL 向支持 MCP 的 CodeUnicorn-managed Agent 提供 Agent Bridge MCP tools。MCP handler MUST 只做 validation/source identity resolution/service invocation，不得直接 spawn target CLI。
@@ -117,6 +126,7 @@ Target Agent 的 text/tool/approval/terminal events SHALL 通过现有 AgentEven
 - **THEN** MCP gateway MUST 将请求交给 `AgentBridgeService`
 - **AND** service MUST 创建/调度 delegated run
 - **AND** MCP gateway MUST 返回 run identity/status
+- **AND** 若 run 已 durable create 但 runtime dispatch 失败，response/error MUST 保留该 `runId`，不得让 caller 丢失后续 status/result ownership
 
 #### Scenario: Prompt cannot spoof source identity
 

@@ -1,4 +1,5 @@
-use std::sync::{Arc, OnceLock};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tauri::{AppHandle, Manager};
 
@@ -11,6 +12,7 @@ use super::service::AgentBridgeService;
 
 const APPROVAL_OBSERVER_CAPACITY: usize = 256;
 static APPROVAL_OBSERVER_STARTED: OnceLock<()> = OnceLock::new();
+static PENDING_APPROVALS: OnceLock<Mutex<HashMap<String, HashSet<String>>>> = OnceLock::new();
 
 /// Start one process-wide observer that mirrors delegated approval lifecycle into durable
 /// `DelegationRun.status` facts.
@@ -52,12 +54,17 @@ fn observe_bus_event(
     service: &AgentBridgeService,
     event: &MossxAgentEvent,
 ) -> Result<(), String> {
+    if event.kind == "run.settled" {
+        clear_pending_approvals(&event.run_id)?;
+        return Ok(());
+    }
     // Native runtime events use native turn ids and therefore are not Bridge-owned. Only the
     // re-attributed copy has a DelegationRun id and can change Bridge state.
     let Some(run) = service.get_run(&event.run_id)? else {
         return Ok(());
     };
-    if run.status.is_terminal() || event.kind == "run.settled" {
+    if run.status.is_terminal() {
+        clear_pending_approvals(&event.run_id)?;
         return Ok(());
     }
 
@@ -73,13 +80,32 @@ fn sync_engine_event(
     event: &EngineEvent,
 ) -> Result<(), String> {
     match event {
-        EngineEvent::ApprovalRequest { .. } => {
+        EngineEvent::ApprovalRequest { request_id, .. } => {
+            track_pending_approval(run_id, request_id)?;
             transition_if_current(
                 service,
                 run_id,
                 DelegationRunStatus::Running,
                 DelegationRunStatus::WaitingApproval,
             )?;
+        }
+        EngineEvent::ApprovalResolved {
+            request_id,
+            approved,
+            ..
+        } => {
+            let resolution = resolve_pending_approval(run_id, request_id)?;
+            if !approved {
+                clear_pending_approvals(run_id)?;
+                settle_rejected_if_active(service, run_id)?;
+            } else if resolution.was_pending && resolution.remaining == 0 {
+                transition_if_current(
+                    service,
+                    run_id,
+                    DelegationRunStatus::WaitingApproval,
+                    DelegationRunStatus::Running,
+                )?;
+            }
         }
         EngineEvent::TextDelta { .. }
         | EngineEvent::ReasoningDelta { .. }
@@ -91,17 +117,113 @@ fn sync_engine_event(
         | EngineEvent::BackgroundTaskUpdated { .. } => {
             // These events are evidence that the target resumed after the approval gate. We
             // intentionally ignore heartbeat/usage/raw/session events because they can occur while
-            // a runtime is still blocked waiting for the user.
-            transition_if_current(
-                service,
-                run_id,
-                DelegationRunStatus::WaitingApproval,
-                DelegationRunStatus::Running,
-            )?;
+            // a runtime is still blocked waiting for the user. Progress also cannot release the
+            // gate while another request from the same delegated turn remains pending.
+            if !has_pending_approvals(run_id)? {
+                transition_if_current(
+                    service,
+                    run_id,
+                    DelegationRunStatus::WaitingApproval,
+                    DelegationRunStatus::Running,
+                )?;
+            }
         }
         _ => {}
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ApprovalResolution {
+    was_pending: bool,
+    remaining: usize,
+}
+
+fn approval_request_key(request_id: &serde_json::Value) -> Result<String, String> {
+    serde_json::to_string(request_id)
+        .map_err(|error| format!("serialize Agent Bridge approval request identity: {error}"))
+}
+
+fn pending_approvals() -> &'static Mutex<HashMap<String, HashSet<String>>> {
+    PENDING_APPROVALS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn track_pending_approval(
+    run_id: &str,
+    request_id: &serde_json::Value,
+) -> Result<(), String> {
+    let request_key = approval_request_key(request_id)?;
+    let mut pending = pending_approvals()
+        .lock()
+        .map_err(|_| "Agent Bridge approval tracker lock poisoned".to_string())?;
+    pending
+        .entry(run_id.to_string())
+        .or_default()
+        .insert(request_key);
+    Ok(())
+}
+
+fn resolve_pending_approval(
+    run_id: &str,
+    request_id: &serde_json::Value,
+) -> Result<ApprovalResolution, String> {
+    let request_key = approval_request_key(request_id)?;
+    let mut pending = pending_approvals()
+        .lock()
+        .map_err(|_| "Agent Bridge approval tracker lock poisoned".to_string())?;
+    let Some(requests) = pending.get_mut(run_id) else {
+        return Ok(ApprovalResolution {
+            was_pending: false,
+            remaining: 0,
+        });
+    };
+    let was_pending = requests.remove(&request_key);
+    let remaining = requests.len();
+    if requests.is_empty() {
+        pending.remove(run_id);
+    }
+    Ok(ApprovalResolution {
+        was_pending,
+        remaining,
+    })
+}
+
+fn has_pending_approvals(run_id: &str) -> Result<bool, String> {
+    let pending = pending_approvals()
+        .lock()
+        .map_err(|_| "Agent Bridge approval tracker lock poisoned".to_string())?;
+    Ok(pending
+        .get(run_id)
+        .is_some_and(|requests| !requests.is_empty()))
+}
+
+fn clear_pending_approvals(run_id: &str) -> Result<(), String> {
+    let mut pending = pending_approvals()
+        .lock()
+        .map_err(|_| "Agent Bridge approval tracker lock poisoned".to_string())?;
+    pending.remove(run_id);
+    Ok(())
+}
+
+fn settle_rejected_if_active(
+    service: &AgentBridgeService,
+    run_id: &str,
+) -> Result<(), String> {
+    match service.settle_failed(
+        run_id,
+        "approval-rejected: user rejected delegated target approval".to_string(),
+    ) {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            if service
+                .get_run(run_id)?
+                .is_some_and(|run| run.status.is_terminal())
+            {
+                return Ok(());
+            }
+            Err(error)
+        }
+    }
 }
 
 fn transition_if_current(
@@ -181,21 +303,105 @@ mod tests {
         (AgentBridgeService::new(registry), run.id)
     }
 
+    fn approval_request(request_id: &str) -> EngineEvent {
+        EngineEvent::ApprovalRequest {
+            workspace_id: "workspace-1".to_string(),
+            request_id: json!(request_id),
+            tool_name: "shell".to_string(),
+            input: Some(json!({"command":"git status"})),
+            message: None,
+        }
+    }
+
+    fn approval_resolved(request_id: &str, approved: bool) -> EngineEvent {
+        EngineEvent::ApprovalResolved {
+            workspace_id: "workspace-1".to_string(),
+            request_id: json!(request_id),
+            approved,
+        }
+    }
+
     #[test]
     fn approval_request_moves_running_run_to_waiting_approval() {
         let (service, run_id) = running_service();
+        sync_engine_event(&service, &run_id, &approval_request("approval-1"))
+            .expect("sync approval");
+
+        assert_eq!(
+            service.get_run(&run_id).expect("read").expect("run").status,
+            DelegationRunStatus::WaitingApproval
+        );
+    }
+
+    #[test]
+    fn all_pending_approvals_must_be_accepted_before_running_resumes() {
+        let (service, run_id) = running_service();
+        sync_engine_event(&service, &run_id, &approval_request("approval-1"))
+            .expect("first approval");
+        sync_engine_event(&service, &run_id, &approval_request("approval-2"))
+            .expect("second approval");
+
         sync_engine_event(
             &service,
             &run_id,
-            &EngineEvent::ApprovalRequest {
+            &approval_resolved("approval-1", true),
+        )
+        .expect("accept first");
+        assert_eq!(
+            service.get_run(&run_id).expect("read").expect("run").status,
+            DelegationRunStatus::WaitingApproval
+        );
+
+        sync_engine_event(
+            &service,
+            &run_id,
+            &approval_resolved("approval-2", true),
+        )
+        .expect("accept second");
+        assert_eq!(
+            service.get_run(&run_id).expect("read").expect("run").status,
+            DelegationRunStatus::Running
+        );
+    }
+
+    #[test]
+    fn rejected_approval_fails_run_immediately() {
+        let (service, run_id) = running_service();
+        sync_engine_event(&service, &run_id, &approval_request("approval-1"))
+            .expect("approval");
+        sync_engine_event(
+            &service,
+            &run_id,
+            &approval_resolved("approval-1", false),
+        )
+        .expect("reject");
+
+        let run = service.get_run(&run_id).expect("read").expect("run");
+        assert_eq!(run.status, DelegationRunStatus::Failed);
+        assert!(run
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("approval-rejected")));
+    }
+
+    #[test]
+    fn tool_progress_cannot_bypass_an_unresolved_approval() {
+        let (service, run_id) = running_service();
+        sync_engine_event(&service, &run_id, &approval_request("approval-1"))
+            .expect("approval");
+
+        sync_engine_event(
+            &service,
+            &run_id,
+            &EngineEvent::ToolCompleted {
                 workspace_id: "workspace-1".to_string(),
-                request_id: json!("approval-1"),
-                tool_name: "shell".to_string(),
-                input: Some(json!({"command":"git status"})),
-                message: None,
+                tool_id: "tool-1".to_string(),
+                tool_name: Some("shell".to_string()),
+                output: None,
+                error: None,
             },
         )
-        .expect("sync approval");
+        .expect("tool progress");
 
         assert_eq!(
             service.get_run(&run_id).expect("read").expect("run").status,

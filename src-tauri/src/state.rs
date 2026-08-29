@@ -88,15 +88,8 @@ impl AppState {
         task: String,
         app: &AppHandle,
     ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
-        let settings = self.app_settings.lock().await.clone();
         let run = self
-            .agent_bridge
-            .continue_run(
-                previous_run_id,
-                task,
-                &self.engine_manager,
-                &settings,
-            )
+            .create_delegation_continuation(previous_run_id, task)
             .await?;
         crate::agent_orchestration::bridge::dispatcher::dispatch_run(
             Arc::clone(&self.agent_bridge),
@@ -104,6 +97,22 @@ impl AppState {
             app.clone(),
         )
         .await
+    }
+
+    pub(crate) async fn create_delegation_continuation(
+        &self,
+        previous_run_id: &str,
+        task: String,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        let settings = self.app_settings.lock().await.clone();
+        self.agent_bridge
+            .continue_run(
+                previous_run_id,
+                task,
+                &self.engine_manager,
+                &settings,
+            )
+            .await
     }
 
     pub(crate) async fn cancel_delegation_run(

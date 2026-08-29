@@ -371,6 +371,7 @@ fn classify_engine_event(event: &EngineEvent) -> (&'static str, AgentEventLane) 
         }
         EngineEvent::SessionEnded { .. }
         | EngineEvent::ApprovalRequest { .. }
+        | EngineEvent::ApprovalResolved { .. }
         | EngineEvent::RequestUserInput { .. } => ("control.event", AgentEventLane::Critical),
         EngineEvent::ToolStarted { .. } => ("tool.started", AgentEventLane::Normal),
         EngineEvent::ToolCompleted { .. } => ("tool.completed", AgentEventLane::Normal),

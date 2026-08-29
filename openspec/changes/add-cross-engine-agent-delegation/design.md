@@ -109,6 +109,12 @@ Target engine events 继续进入现有 `AgentEventBus`，以 delegated `run_id`
 
 Delegated target 可以继承更严格权限，但不能因为 source 调用 Bridge 就提升 access mode/sandbox/MCP/file/network permission。
 
+Approval lifecycle 继续以 native runtime/UI control response 为唯一决策入口。`ApprovalRequest`
+通过既有 `AgentEventBus` 归属 delegated run；native control owner 接受用户 decision 后发布
+`ApprovalResolved` control fact。Bridge 只按 `requestId` 跟踪 pending approvals：全部批准后才从
+`WaitingApproval` 恢复 `Running`，任一拒绝立即 fail closed 为 `Failed`；普通 tool progress、heartbeat
+或 usage event 都不能代替用户 decision。
+
 ### 11. Engine availability 在 run creation 前 fail closed
 
 Bridge 只接受当前 built-in engine registry 的 canonical engine ids。source/target id 会先 canonicalize；未知或 disabled engine 直接拒绝。target availability 复用 `EngineManager` status cache；缓存没有已安装证据时才走现有 refresh gate。CLI 未安装、不可达或 runtime policy disabled 时，不创建 delegated run。

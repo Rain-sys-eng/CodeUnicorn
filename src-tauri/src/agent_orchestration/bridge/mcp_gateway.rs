@@ -190,7 +190,12 @@ pub async fn call_tool(
                 parent_run_id,
             };
             let run = state.create_delegation_run(request).await?;
-            let dispatched = state.dispatch_delegation_run(&run.id, app).await?;
+            let dispatch = state.dispatch_delegation_run(&run.id, app).await;
+            let dispatched = preserve_created_run_after_dispatch(
+                state.agent_bridge.as_ref(),
+                &run.id,
+                dispatch,
+            )?;
             serde_json::to_value(dispatched).map_err(|error| error.to_string())
         }
         AGENT_STATUS_TOOL => {
@@ -223,8 +228,18 @@ pub async fn call_tool(
             let run_id = required_string(&arguments, "runId")?;
             let task = required_string(&arguments, "task")?;
             let _ = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
-            let run = state.continue_delegation_run(&run_id, task, app).await?;
-            serde_json::to_value(run).map_err(|error| error.to_string())
+            let continuation = state
+                .create_delegation_continuation(&run_id, task)
+                .await?;
+            let dispatch = state
+                .dispatch_delegation_run(&continuation.id, app)
+                .await;
+            let dispatched = preserve_created_run_after_dispatch(
+                state.agent_bridge.as_ref(),
+                &continuation.id,
+                dispatch,
+            )?;
+            serde_json::to_value(dispatched).map_err(|error| error.to_string())
         }
         AGENT_CANCEL_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
@@ -372,6 +387,26 @@ fn result_view(run: &DelegationRun) -> Value {
     })
 }
 
+fn preserve_created_run_after_dispatch(
+    service: &crate::agent_orchestration::bridge::AgentBridgeService,
+    run_id: &str,
+    dispatch: Result<DelegationRun, String>,
+) -> Result<DelegationRun, String> {
+    match dispatch {
+        Ok(run) => Ok(run),
+        Err(dispatch_error) => match service.get_run(run_id)? {
+            Some(run) if run.status.is_terminal() => Ok(run),
+            Some(run) => Err(format!(
+                "Agent Bridge dispatch failed after creating runId={run_id}; durable status={:?}; {dispatch_error}",
+                run.status
+            )),
+            None => Err(format!(
+                "Agent Bridge dispatch failed after creating runId={run_id}, but the durable run disappeared; {dispatch_error}"
+            )),
+        },
+    }
+}
+
 fn required_string(arguments: &Value, key: &str) -> Result<String, String> {
     arguments
         .get(key)
@@ -424,6 +459,9 @@ fn parse_execution_scope(value: Option<&Value>) -> Result<DelegationExecutionSco
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_orchestration::bridge::DelegationRunRegistry;
+    use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
+    use crate::shared_session_v2::ExecutionTargetInput;
 
     fn endpoint(engine: &str, logical: Option<&str>, native: Option<&str>) -> AgentEndpoint {
         AgentEndpoint {
@@ -431,6 +469,36 @@ mod tests {
             logical_session_id: logical.map(str::to_string),
             native_session_id: native.map(str::to_string),
         }
+    }
+
+    fn created_service() -> (crate::agent_orchestration::bridge::AgentBridgeService, String) {
+        let registry = DelegationRunRegistry::new(Default::default());
+        let run = registry
+            .create(CreateDelegationRun {
+                source: endpoint("claude", Some("runtime-a"), Some("native-a")),
+                target: endpoint("codex", None, None),
+                target_execution: Some(ExecutionTargetInput {
+                    engine: EngineType::Codex,
+                    provider_profile_id: None,
+                    model_catalog_entry_id: Some("gpt-5.6-sol".to_string()),
+                    model: Some("gpt-5.6-sol".to_string()),
+                    reasoning_effort: Some("low".to_string()),
+                    provider_profile_name_snapshot: Some("Local".to_string()),
+                    provider_profile_source: Some(CanonicalProviderProfileSource::Local),
+                    runtime_capability_fingerprint: None,
+                }),
+                workspace_id: "workspace-1".to_string(),
+                task: "review".to_string(),
+                file_refs: Vec::new(),
+                context_policy: DelegationContextPolicy::Explicit,
+                execution_scope: DelegationExecutionScope::Observe,
+                parent_run_id: None,
+            })
+            .expect("create run");
+        (
+            crate::agent_orchestration::bridge::AgentBridgeService::new(registry),
+            run.id,
+        )
     }
 
     #[test]
@@ -484,5 +552,39 @@ mod tests {
             &endpoint("codex", Some("runtime-a"), Some("native-a")),
             &owner
         ));
+    }
+
+    #[test]
+    fn dispatch_error_returns_the_durable_failed_run_identity() {
+        let (service, run_id) = created_service();
+        service
+            .settle_failed(&run_id, "dispatch failed".to_string())
+            .expect("settle failure");
+
+        let run = preserve_created_run_after_dispatch(
+            &service,
+            &run_id,
+            Err("runtime unavailable".to_string()),
+        )
+        .expect("durable terminal run");
+
+        assert_eq!(run.id, run_id);
+        assert_eq!(
+            run.status,
+            crate::agent_orchestration::bridge::DelegationRunStatus::Failed
+        );
+    }
+
+    #[test]
+    fn dispatch_error_always_reports_created_run_id_when_settlement_is_missing() {
+        let (service, run_id) = created_service();
+        let error = preserve_created_run_after_dispatch(
+            &service,
+            &run_id,
+            Err("runtime unavailable".to_string()),
+        )
+        .expect_err("non-terminal dispatch failure must remain an MCP error");
+
+        assert!(error.contains(&format!("runId={run_id}")));
     }
 }

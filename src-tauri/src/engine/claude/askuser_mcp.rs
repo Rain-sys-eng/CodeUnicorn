@@ -391,6 +391,30 @@ async fn handle_mcp_request(
 mod tests {
     use super::*;
 
+    fn test_state(manager: Arc<ClaudeSessionManager>) -> McpServerState {
+        McpServerState {
+            claude_manager: manager,
+            token: Arc::from("test-token"),
+        }
+    }
+
+    fn authorized_headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            "Bearer test-token".parse().expect("authorization header"),
+        );
+        headers
+    }
+
+    fn json_response(response: McpResponse) -> Value {
+        match response {
+            McpResponse::Json(value) => value,
+            McpResponse::Accepted => panic!("expected JSON response, got accepted"),
+            McpResponse::Unauthorized => panic!("expected JSON response, got unauthorized"),
+        }
+    }
+
     fn server_at(port: u16) -> AskUserMcpServer {
         AskUserMcpServer {
             port,
@@ -446,5 +470,176 @@ mod tests {
         ] {
             assert!(tools.iter().any(|tool| tool["name"] == expected));
         }
+    }
+
+    #[tokio::test]
+    async fn authenticated_tools_list_exposes_the_exact_bridge_contract() {
+        let response = handle_mcp_request(
+            "workspace-1".to_string(),
+            Some("runtime-1".to_string()),
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list",
+                "params": {}
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+        let tools = payload["result"]["tools"]
+            .as_array()
+            .expect("tools/list result");
+        let bridge_names = tools
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .filter(|name| {
+                crate::agent_orchestration::bridge::mcp_gateway::handles_tool(name)
+            })
+            .collect::<std::collections::HashSet<_>>();
+
+        assert_eq!(bridge_names.len(), 7);
+        for expected in [
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_DELEGATE_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_STATUS_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_WAIT_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_RESULT_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_SEND_TOOL,
+            crate::agent_orchestration::bridge::mcp_gateway::AGENT_CANCEL_TOOL,
+        ] {
+            assert!(bridge_names.contains(expected));
+        }
+    }
+
+    #[tokio::test]
+    async fn legacy_route_cannot_call_an_advertised_bridge_tool() {
+        let response = handle_mcp_request(
+            "workspace-1".to_string(),
+            None,
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": crate::agent_orchestration::bridge::mcp_gateway::AGENT_STATUS_TOOL,
+                    "arguments": { "runId": "run-1" }
+                }
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+
+        assert_eq!(payload["result"]["isError"], true);
+        assert!(payload["result"]["content"][0]["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("runtime-bound MCP endpoint")));
+    }
+
+    #[tokio::test]
+    async fn runtime_route_requires_a_live_locator_before_bridge_dispatch() {
+        let response = handle_mcp_request(
+            "workspace-1".to_string(),
+            Some("unknown-runtime".to_string()),
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
+                    "arguments": {}
+                }
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+
+        assert_eq!(payload["result"]["isError"], true);
+        assert!(payload["result"]["content"][0]["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("source runtime is not active")));
+    }
+
+    #[tokio::test]
+    async fn live_runtime_route_reaches_the_bridge_runtime_boundary() {
+        let manager = Arc::new(ClaudeSessionManager::new());
+        let session = manager
+            .get_or_create_session(
+                "workspace-1",
+                &std::path::PathBuf::from("/tmp/agent-bridge-mcp-contract"),
+            )
+            .await;
+        session.set_mcp_active_turn_for_test(Some("runtime-turn-1"));
+        let locator = session.runtime_locator().to_string();
+
+        let response = handle_mcp_request(
+            "workspace-1".to_string(),
+            Some(locator),
+            test_state(manager),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 31,
+                "method": "tools/call",
+                "params": {
+                    "name": crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
+                    "arguments": {}
+                }
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+
+        assert_eq!(payload["result"]["isError"], true);
+        assert!(payload["result"]["content"][0]["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("MCP runtime is not initialized")));
+    }
+
+    #[tokio::test]
+    async fn bridge_transport_rejects_missing_bearer_before_tool_resolution() {
+        let response = handle_mcp_request(
+            "workspace-1".to_string(),
+            Some("runtime-1".to_string()),
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            HeaderMap::new(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/list",
+                "params": {}
+            }),
+        )
+        .await;
+
+        assert!(matches!(response, McpResponse::Unauthorized));
+    }
+
+    #[tokio::test]
+    async fn unknown_tool_uses_json_rpc_invalid_params_error() {
+        let response = handle_mcp_request(
+            "workspace-1".to_string(),
+            Some("runtime-1".to_string()),
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": { "name": "agent_unknown", "arguments": {} }
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+
+        assert_eq!(payload["error"]["code"], -32602);
+        assert!(payload["error"]["message"]
+            .as_str()
+            .is_some_and(|text| text.contains("unknown tool")));
     }
 }
