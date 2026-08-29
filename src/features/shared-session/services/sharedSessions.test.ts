@@ -93,7 +93,7 @@ describe("listSharedSessions", () => {
           id: "1:control",
           kind: "systemNotice",
           content: {
-            text: "Control: agent-bridge.internalBackingSession",
+            text: "Control: agent-bridge.internal-backing-session",
           },
           fidelity: "canonical",
           checksum: "checksum-1",
