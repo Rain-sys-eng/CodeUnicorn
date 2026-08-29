@@ -2,6 +2,7 @@ use std::sync::OnceLock;
 
 use tauri::AppHandle;
 
+use super::approval;
 use super::mcp_gateway;
 use super::mcp_source::ResolvedMcpSource;
 
@@ -9,7 +10,11 @@ static MCP_APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 /// Bind the process-global Tauri handle used by the already process-global managed MCP server.
 /// Idempotent for normal startup; tests may leave it unset and exercise pure gateway pieces.
+///
+/// The same startup edge also owns the process-wide delegated approval observer so approval state
+/// remains synchronized even when no Agent Bridge tool call is currently in flight.
 pub(crate) fn init_app_handle(app: AppHandle) -> Result<(), String> {
+    approval::ensure_observer_started(&app)?;
     if MCP_APP_HANDLE.get().is_some() {
         return Ok(());
     }
