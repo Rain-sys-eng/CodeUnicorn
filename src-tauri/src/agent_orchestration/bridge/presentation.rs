@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use serde_json::Value;
+
 use crate::shared_event_log::canonical::types::{CanonicalFact, ControlFact};
 use crate::shared_event_log::SharedEventWriter;
 use crate::shared_sessions::{now_millis, parse_shared_session_id};
@@ -17,14 +19,16 @@ pub(crate) fn session_has_internal_backing_marker(
         .events_for_session(shared_session_id)
         .map_err(|error| error.to_string())?
     {
-        let fact = match serde_json::from_str::<CanonicalFact>(&event.payload_json) {
-            Ok(fact) => fact,
+        let payload = match serde_json::from_str::<Value>(&event.payload_json) {
+            Ok(payload) => payload,
             Err(_) => continue,
         };
-        if let CanonicalFact::Control(control) = fact {
-            if control.control_kind == BRIDGE_INTERNAL_BACKING_CONTROL_KIND {
-                return Ok(true);
-            }
+        let control_kind = payload
+            .get("controlKind")
+            .or_else(|| payload.get("control_kind"))
+            .and_then(Value::as_str);
+        if control_kind == Some(BRIDGE_INTERNAL_BACKING_CONTROL_KIND) {
+            return Ok(true);
         }
     }
     Ok(false)
@@ -46,7 +50,7 @@ pub(crate) fn ensure_backing_session_hidden(
 
     writer
         .append_canonical_fact(
-            shared_session_id,
+            &shared_session_id,
             CanonicalFact::Control(ControlFact {
                 fact_id: format!("agent-bridge:{owner_run_id}:internal-backing-session"),
                 control_kind: BRIDGE_INTERNAL_BACKING_CONTROL_KIND.to_string(),
