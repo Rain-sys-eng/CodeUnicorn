@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -32,6 +33,14 @@ const BRIDGE_NODE_ID: &str = "delegate";
 const BRIDGE_WORKER_ROLE: &str = "delegated-agent";
 const BRIDGE_EVENT_SUBSCRIPTION_CAPACITY: usize = 256;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BridgeDispatchLane {
+    backing_thread_id: String,
+    /// Stable run identity used only to derive the scoped Shared binding key. Continuations
+    /// keep this owner so `begin_squad_worker_turn_core` reuses the same native session.
+    binding_owner_run_id: String,
+}
+
 /// Dispatch one already-created delegated run into the existing Shared V2 runtime path.
 ///
 /// This module intentionally does not own or parse any CLI process. Shared V2 remains the
@@ -64,11 +73,10 @@ async fn dispatch_claimed_run(
     run: DelegationRun,
     app: AppHandle,
 ) -> Result<DelegationRun, String> {
-    // CU-A2A-001 phase 3 uses a fresh Shared session as the durable backing lane for
-    // Explicit context. The Bridge has no public command/MCP entry yet; before exposing the
-    // gateway, the backing lane will gain an internal/hidden presentation marker so it never
-    // pollutes the normal Shared Session list.
-    let backing_thread_id = create_backing_thread(&run, &app).await?;
+    // Root delegations get a fresh durable Shared backing lane. A continuation resolves the
+    // original lane and scoped binding owner, so the existing native CLI session is reused.
+    let lane = resolve_dispatch_lane(&service, &run, &app).await?;
+    let backing_thread_id = lane.backing_thread_id.clone();
     let shared_session_id = parse_shared_session_id(&backing_thread_id)?;
     let attempt_id = Uuid::new_v4().to_string();
     let logical_turn_id = Uuid::new_v4().to_string();
@@ -94,7 +102,7 @@ async fn dispatch_claimed_run(
             &run.target_execution,
             prompt,
             None,
-            &run.id,
+            &lane.binding_owner_run_id,
             BRIDGE_NODE_ID,
             BRIDGE_WORKER_ROLE,
             permission_class,
@@ -104,6 +112,8 @@ async fn dispatch_claimed_run(
                 "runId": run.id.clone(),
                 "rootRunId": run.root_run_id.clone(),
                 "parentRunId": run.parent_run_id.clone(),
+                "continuationOfRunId": run.continuation_of_run_id.clone(),
+                "bindingOwnerRunId": lane.binding_owner_run_id.clone(),
                 "contextPolicy": "explicit",
             }),
             attempt_id.clone(),
@@ -226,6 +236,103 @@ async fn dispatch_claimed_run(
     service
         .get_run(&run.id)?
         .ok_or_else(|| format!("delegated run disappeared after dispatch: {}", run.id))
+}
+
+async fn resolve_dispatch_lane(
+    service: &AgentBridgeService,
+    run: &DelegationRun,
+    app: &AppHandle,
+) -> Result<BridgeDispatchLane, String> {
+    if run.continuation_of_run_id.is_some() {
+        return resolve_continuation_lane(service, run);
+    }
+    Ok(BridgeDispatchLane {
+        backing_thread_id: create_backing_thread(run, app).await?,
+        binding_owner_run_id: run.id.clone(),
+    })
+}
+
+fn resolve_continuation_lane(
+    service: &AgentBridgeService,
+    run: &DelegationRun,
+) -> Result<BridgeDispatchLane, String> {
+    let mut cursor_id = run
+        .continuation_of_run_id
+        .clone()
+        .ok_or_else(|| format!("delegated run {} is not a continuation", run.id))?;
+    let mut seen = HashSet::new();
+    let mut backing_thread_id: Option<String> = None;
+
+    loop {
+        if !seen.insert(cursor_id.clone()) {
+            return Err(format!(
+                "delegated continuation cycle detected while resolving run {}",
+                run.id
+            ));
+        }
+        let previous = service
+            .get_run(&cursor_id)?
+            .ok_or_else(|| format!("continuation source run not found: {cursor_id}"))?;
+        if previous.status != DelegationRunStatus::Completed {
+            return Err(format!(
+                "continuation lane owner is not completed: {} is {:?}",
+                previous.id, previous.status
+            ));
+        }
+        if previous.workspace_id != run.workspace_id
+            || previous.target.engine_id != run.target.engine_id
+            || previous.target_execution != run.target_execution
+            || previous.execution_scope != run.execution_scope
+        {
+            return Err(format!(
+                "continuation lane ownership mismatch: {} -> {}",
+                run.id, previous.id
+            ));
+        }
+        let binding = previous.dispatch_binding.as_ref().ok_or_else(|| {
+            format!("continuation source run has no dispatch binding: {}", previous.id)
+        })?;
+        let previous_backing = binding.backing_thread_id.trim();
+        if previous_backing.is_empty() {
+            return Err(format!(
+                "continuation source run has empty backing thread identity: {}",
+                previous.id
+            ));
+        }
+        if binding
+            .native_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(format!(
+                "continuation source run has no reusable native session: {}",
+                previous.id
+            ));
+        }
+        match backing_thread_id.as_deref() {
+            Some(expected) if expected != previous_backing => {
+                return Err(format!(
+                    "continuation chain changed backing thread: {} -> {}",
+                    run.id, previous.id
+                ));
+            }
+            None => backing_thread_id = Some(previous_backing.to_string()),
+            _ => {}
+        }
+
+        if let Some(older) = previous.continuation_of_run_id.clone() {
+            cursor_id = older;
+            continue;
+        }
+        return Ok(BridgeDispatchLane {
+            backing_thread_id: backing_thread_id.ok_or_else(|| {
+                format!("continuation lane missing backing thread for run {}", run.id)
+            })?,
+            binding_owner_run_id: previous.id,
+        });
+    }
 }
 
 fn spawn_bridge_event_reattribution(
@@ -501,13 +608,29 @@ async fn await_and_settle(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent_orchestration::bridge::AgentEndpoint;
+    use crate::agent_orchestration::bridge::{
+        AgentEndpoint, CreateDelegationRun, DelegationRunRegistry,
+    };
+
+    fn target() -> ExecutionTargetInput {
+        ExecutionTargetInput {
+            engine: EngineType::Codex,
+            provider_profile_id: None,
+            model_catalog_entry_id: Some("gpt-5.6-sol".to_string()),
+            model: Some("gpt-5.6-sol".to_string()),
+            reasoning_effort: Some("low".to_string()),
+            provider_profile_name_snapshot: Some("Local".to_string()),
+            provider_profile_source: Some(CanonicalProviderProfileSource::Local),
+            runtime_capability_fingerprint: None,
+        }
+    }
 
     fn run_with_scope(scope: DelegationExecutionScope) -> DelegationRun {
         DelegationRun {
             id: "run-1".to_string(),
             root_run_id: "run-1".to_string(),
             parent_run_id: None,
+            continuation_of_run_id: None,
             depth: 0,
             source: AgentEndpoint {
                 engine_id: "claude".to_string(),
@@ -519,16 +642,7 @@ mod tests {
                 logical_session_id: None,
                 native_session_id: None,
             },
-            target_execution: ExecutionTargetInput {
-                engine: EngineType::Codex,
-                provider_profile_id: None,
-                model_catalog_entry_id: Some("gpt-5.6-sol".to_string()),
-                model: Some("gpt-5.6-sol".to_string()),
-                reasoning_effort: Some("low".to_string()),
-                provider_profile_name_snapshot: Some("Local".to_string()),
-                provider_profile_source: Some(CanonicalProviderProfileSource::Local),
-                runtime_capability_fingerprint: None,
-            },
+            target_execution: target(),
             workspace_id: "workspace-1".to_string(),
             task: "Review authentication".to_string(),
             file_refs: vec!["src/auth.rs".to_string(), "  ".to_string()],
@@ -541,6 +655,28 @@ mod tests {
             created_at_ms: 1,
             started_at_ms: None,
             completed_at_ms: None,
+        }
+    }
+
+    fn request() -> CreateDelegationRun {
+        CreateDelegationRun {
+            source: AgentEndpoint {
+                engine_id: "claude".to_string(),
+                logical_session_id: Some("source".to_string()),
+                native_session_id: None,
+            },
+            target: AgentEndpoint {
+                engine_id: "codex".to_string(),
+                logical_session_id: None,
+                native_session_id: None,
+            },
+            target_execution: Some(target()),
+            workspace_id: "workspace-1".to_string(),
+            task: "review".to_string(),
+            file_refs: Vec::new(),
+            context_policy: DelegationContextPolicy::Explicit,
+            execution_scope: DelegationExecutionScope::Observe,
+            parent_run_id: None,
         }
     }
 
@@ -564,6 +700,46 @@ mod tests {
             "current-workspace"
         );
         assert!(permission_class(DelegationExecutionScope::IsolatedWorktree).is_err());
+    }
+
+    #[test]
+    fn continuation_lane_reuses_original_backing_and_binding_owner() {
+        let registry = DelegationRunRegistry::new(Default::default());
+        let root = registry.create(request()).expect("create root");
+        registry.claim_dispatch(&root.id).expect("claim root");
+        registry
+            .set_dispatch_binding(
+                &root.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:backing".to_string(),
+                    attempt_id: "attempt-1".to_string(),
+                    logical_turn_id: "turn-1".to_string(),
+                    binding_key: format!("squad:{}:delegate:codex:default", root.id),
+                    native_session_id: Some("native-1".to_string()),
+                    runtime_turn_id: Some("runtime-1".to_string()),
+                },
+            )
+            .expect("bind root");
+        registry
+            .settle_completed(
+                &root.id,
+                DelegationResult {
+                    summary: Some("done".to_string()),
+                    changed_files: Vec::new(),
+                    branch: None,
+                    artifact_path: None,
+                },
+            )
+            .expect("complete root");
+        let continuation = registry
+            .create_continuation(&root.id, "follow up".to_string())
+            .expect("continue");
+        let service = AgentBridgeService::new(registry);
+
+        let lane = resolve_continuation_lane(&service, &continuation).expect("resolve lane");
+
+        assert_eq!(lane.backing_thread_id, "shared:backing");
+        assert_eq!(lane.binding_owner_run_id, root.id);
     }
 
     #[tokio::test]
