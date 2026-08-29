@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{backup_corrupted_file, read_json_file, write_json_file};
+use crate::storage::{backup_corrupted_file, write_json_file};
 
 use super::models::DelegationRun;
 
@@ -36,16 +36,25 @@ impl AgentBridgePersistence {
     }
 
     pub fn load(&self) -> Result<Vec<DelegationRun>, String> {
-        let store = match read_json_file::<DurableDelegationRunStore>(&self.path) {
-            Ok(Some(store)) => store,
-            Ok(None) => return Ok(Vec::new()),
+        if !self.path.exists() {
+            return Ok(Vec::new());
+        }
+        let data = std::fs::read_to_string(&self.path).map_err(|error| {
+            format!(
+                "failed to read Agent Bridge durable store {}: {error}",
+                self.path.display()
+            )
+        })?;
+        let store = match serde_json::from_str::<DurableDelegationRunStore>(&data) {
+            Ok(store) => store,
             Err(error) => {
                 let path = self.path.clone();
-                if backup_corrupted_file(&path, &error).is_some() {
+                let detail = format!("failed to parse Agent Bridge durable store: {error}");
+                if backup_corrupted_file(&path, &detail).is_some() {
                     return Ok(Vec::new());
                 }
                 return Err(format!(
-                    "agent bridge durable store is unreadable and could not be quarantined ({}): {error}",
+                    "agent bridge durable store is malformed and could not be quarantined ({}): {error}",
                     self.path.display()
                 ));
             }
