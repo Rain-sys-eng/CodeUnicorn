@@ -82,6 +82,43 @@ impl AppState {
         .await
     }
 
+    pub(crate) async fn continue_delegation_run(
+        &self,
+        previous_run_id: &str,
+        task: String,
+        app: &AppHandle,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        let settings = self.app_settings.lock().await.clone();
+        let run = self
+            .agent_bridge
+            .continue_run(
+                previous_run_id,
+                task,
+                &self.engine_manager,
+                &settings,
+            )
+            .await?;
+        crate::agent_orchestration::bridge::dispatcher::dispatch_run(
+            Arc::clone(&self.agent_bridge),
+            run.id.clone(),
+            app.clone(),
+        )
+        .await
+    }
+
+    pub(crate) async fn cancel_delegation_run(
+        &self,
+        run_id: &str,
+        app: &AppHandle,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        crate::agent_orchestration::bridge::control::cancel_run(
+            Arc::clone(&self.agent_bridge),
+            run_id.to_string(),
+            app.clone(),
+        )
+        .await
+    }
+
     /// Push current app_settings binary paths into the EngineManager so that
     /// new engine sessions pick up user-configured CLI paths (e.g. reclaude).
     /// Also drops cached Claude sessions whose bin_path is stale so the next
