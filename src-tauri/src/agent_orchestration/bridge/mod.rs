@@ -10,6 +10,7 @@ pub(crate) mod presentation;
 pub mod run_registry;
 pub mod service;
 pub(crate) mod worktree;
+pub(crate) mod worktree_store;
 
 pub use models::{
     AgentEndpoint, CreateDelegationRun, DelegationContextPolicy, DelegationDispatchBinding,
