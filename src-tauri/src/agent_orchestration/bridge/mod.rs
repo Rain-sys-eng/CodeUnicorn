@@ -1,5 +1,6 @@
 pub(crate) mod control;
 pub(crate) mod dispatcher;
+pub(crate) mod mcp_gateway;
 pub mod models;
 pub(crate) mod persistence;
 pub(crate) mod presentation;
