@@ -1,8 +1,15 @@
 use crate::engine::adapter_registry::engine_id;
-use crate::engine::{engine_enabled_in_settings, EngineManager, EngineType};
+use crate::engine::{
+    engine_enabled_in_settings, EngineManager, EngineStatus, EngineType,
+};
+use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
+use crate::shared_session_v2::{validate_resolved_execution_target, ExecutionTargetInput};
 use crate::types::AppSettings;
 
-use super::models::{CreateDelegationRun, DelegationResult, DelegationRun, DelegationRunStatus};
+use super::models::{
+    CreateDelegationRun, DelegationDispatchBinding, DelegationResult, DelegationRun,
+    DelegationRunStatus,
+};
 use super::run_registry::DelegationRunRegistry;
 
 const BUILTIN_ENGINES: [EngineType; 9] = [
@@ -53,11 +60,17 @@ impl AgentBridgeService {
 
         ensure_engine_enabled(settings, source_engine, "source")?;
         ensure_engine_enabled(settings, target_engine, "target")?;
-        ensure_target_available(engine_manager, settings, target_engine).await?;
+        ensure_delegated_dispatch_supported(target_engine)?;
+        let target_status = ensure_target_available(engine_manager, settings, target_engine).await?;
 
         // Persist only canonical registry ids so lineage comparisons are deterministic.
         request.source.engine_id = engine_id(source_engine).to_string();
         request.target.engine_id = engine_id(target_engine).to_string();
+        request.target_execution = Some(resolve_target_execution(
+            request.target_execution.take(),
+            target_engine,
+            &target_status,
+        )?);
         self.validate_parent_lineage(&request)?;
         self.runs.create(request)
     }
@@ -68,6 +81,33 @@ impl AgentBridgeService {
 
     pub fn list_runs(&self) -> Result<Vec<DelegationRun>, String> {
         self.runs.list()
+    }
+
+    pub(crate) fn claim_dispatch(&self, run_id: &str) -> Result<DelegationRun, String> {
+        self.runs.claim_dispatch(run_id)
+    }
+
+    pub(crate) fn set_dispatch_binding(
+        &self,
+        run_id: &str,
+        binding: DelegationDispatchBinding,
+    ) -> Result<DelegationRun, String> {
+        self.runs.set_dispatch_binding(run_id, binding)
+    }
+
+    pub(crate) fn record_runtime_ack(
+        &self,
+        run_id: &str,
+        attempt_id: &str,
+        native_session_id: &str,
+        runtime_turn_id: &str,
+    ) -> Result<DelegationRun, String> {
+        self.runs.record_runtime_ack(
+            run_id,
+            attempt_id,
+            native_session_id,
+            runtime_turn_id,
+        )
     }
 
     pub fn transition(
@@ -144,17 +184,34 @@ fn ensure_engine_enabled(
     ))
 }
 
+fn ensure_delegated_dispatch_supported(engine: EngineType) -> Result<(), String> {
+    if matches!(
+        engine,
+        EngineType::Claude
+            | EngineType::Codex
+            | EngineType::Kimi
+            | EngineType::Grok
+            | EngineType::OpenCode
+            | EngineType::Pi
+            | EngineType::Qoder
+    ) {
+        return Ok(());
+    }
+    Err(format!(
+        "target engine is not supported by the current delegated Shared V2 dispatcher: {}",
+        engine_id(engine)
+    ))
+}
+
 async fn ensure_target_available(
     engine_manager: &EngineManager,
     settings: &AppSettings,
     target_engine: EngineType,
-) -> Result<(), String> {
-    if engine_manager
-        .get_engine_status(target_engine)
-        .await
-        .is_some_and(|status| status.installed)
-    {
-        return Ok(());
+) -> Result<EngineStatus, String> {
+    if let Some(status) = engine_manager.get_engine_status(target_engine).await {
+        if status.installed {
+            return Ok(status);
+        }
     }
 
     let gemini_enabled = engine_enabled_in_settings(settings, EngineType::Gemini);
@@ -162,7 +219,7 @@ async fn ensure_target_available(
         .refresh_engine_status_with_gates(target_engine, gemini_enabled)
         .await;
     if status.installed {
-        return Ok(());
+        return Ok(status);
     }
 
     let detail = status
@@ -177,12 +234,83 @@ async fn ensure_target_available(
     ))
 }
 
+fn resolve_target_execution(
+    requested: Option<ExecutionTargetInput>,
+    target_engine: EngineType,
+    status: &EngineStatus,
+) -> Result<ExecutionTargetInput, String> {
+    let target = match requested {
+        Some(target) => {
+            if target.engine != target_engine {
+                return Err(format!(
+                    "delegated target execution engine mismatch: endpoint={}, execution={}",
+                    engine_id(target_engine),
+                    engine_id(target.engine)
+                ));
+            }
+            target
+        }
+        None => default_local_execution_target(target_engine, status)?,
+    };
+    validate_resolved_execution_target(&target)
+        .map_err(|error| format!("delegated target is not executable: {error}"))?;
+    Ok(target)
+}
+
+fn default_local_execution_target(
+    engine: EngineType,
+    status: &EngineStatus,
+) -> Result<ExecutionTargetInput, String> {
+    let preferred = status.default_model.as_deref();
+    let model = preferred
+        .and_then(|preferred| {
+            status.models.iter().find(|model| {
+                model.id == preferred
+                    || (!model.model.trim().is_empty() && model.model == preferred)
+            })
+        })
+        .or_else(|| status.models.iter().find(|model| model.default))
+        .or_else(|| status.models.first());
+
+    let (catalog_id, runtime_model, reasoning_effort) = if let Some(model) = model {
+        let runtime_model = if model.model.trim().is_empty() {
+            model.id.clone()
+        } else {
+            model.model.clone()
+        };
+        (
+            model.id.clone(),
+            runtime_model,
+            model.default_reasoning_effort.clone(),
+        )
+    } else if let Some(preferred) = preferred.map(str::trim).filter(|value| !value.is_empty()) {
+        (preferred.to_string(), preferred.to_string(), None)
+    } else {
+        return Err(format!(
+            "target engine has no resolvable default model for Agent Bridge: {}",
+            engine_id(engine)
+        ));
+    };
+
+    Ok(ExecutionTargetInput {
+        engine,
+        provider_profile_id: None,
+        model_catalog_entry_id: Some(catalog_id),
+        model: Some(runtime_model),
+        reasoning_effort,
+        provider_profile_name_snapshot: Some("Local".to_string()),
+        provider_profile_source: Some(CanonicalProviderProfileSource::Local),
+        runtime_capability_fingerprint: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::agent_orchestration::bridge::{
         AgentEndpoint, DelegationContextPolicy, DelegationExecutionScope,
     };
+    use crate::engine::ModelInfo;
 
     fn request(source_engine_id: &str, target_engine_id: &str) -> CreateDelegationRun {
         CreateDelegationRun {
@@ -196,6 +324,7 @@ mod tests {
                 logical_session_id: None,
                 native_session_id: None,
             },
+            target_execution: None,
             workspace_id: "workspace-1".to_string(),
             task: "review authentication".to_string(),
             file_refs: Vec::new(),
@@ -209,6 +338,12 @@ mod tests {
         let mut status = crate::engine::disabled_engine_status(engine);
         status.installed = true;
         status.error = None;
+        if engine == EngineType::Codex {
+            status.models = vec![
+                ModelInfo::new("gpt-5.3-codex-spark", "gpt-5.3-codex-spark").as_default(),
+            ];
+            status.default_model = Some("gpt-5.3-codex-spark".to_string());
+        }
         manager.cache_engine_status(status).await;
     }
 
@@ -230,7 +365,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_run_accepts_cached_installed_target_and_canonicalizes_ids() {
+    async fn create_run_accepts_cached_installed_target_and_freezes_execution_snapshot() {
         let service = AgentBridgeService::default();
         let manager = EngineManager::new();
         cache_installed(&manager, EngineType::Codex).await;
@@ -246,6 +381,11 @@ mod tests {
 
         assert_eq!(run.source.engine_id, "claude");
         assert_eq!(run.target.engine_id, "codex");
+        assert_eq!(run.target_execution.engine, EngineType::Codex);
+        assert_eq!(
+            run.target_execution.model.as_deref(),
+            Some("gpt-5.3-codex-spark")
+        );
         assert_eq!(run.status, DelegationRunStatus::Queued);
     }
 
@@ -254,7 +394,6 @@ mod tests {
         let service = AgentBridgeService::default();
         let manager = EngineManager::new();
         cache_installed(&manager, EngineType::Codex).await;
-        cache_installed(&manager, EngineType::Pi).await;
 
         let parent = service
             .create_run(
@@ -288,6 +427,23 @@ mod tests {
             .expect_err("disabled engine must fail closed");
 
         assert!(error.contains("disabled for Agent Bridge"));
+        assert!(service.list_runs().expect("list runs").is_empty());
+    }
+
+    #[tokio::test]
+    async fn unsupported_shared_dispatch_target_fails_before_run_creation() {
+        let service = AgentBridgeService::default();
+        let manager = EngineManager::new();
+        let error = service
+            .create_run(
+                request("claude", "dsh"),
+                &manager,
+                &AppSettings::default(),
+            )
+            .await
+            .expect_err("DSH is not yet on Shared V2 dispatcher");
+
+        assert!(error.contains("current delegated Shared V2 dispatcher"));
         assert!(service.list_runs().expect("list runs").is_empty());
     }
 }
