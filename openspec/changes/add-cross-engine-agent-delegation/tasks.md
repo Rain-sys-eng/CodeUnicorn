@@ -16,14 +16,16 @@
 ## 3. Runtime Integration
 
 - [x] 3.1 将 `AgentBridgeService` 以单一 long-lived owner 接入 `AppState`，并在 AppState boundary 先验证 workspace identity。
-- [x] 3.2 复用 EngineManager status cache/refresh 与现有 engine enable gate 验证 target availability；未知、禁用或不可达 target 在 run 创建前 fail closed。
-- [ ] 3.3 复用 Shared Session/engine send core 完成单跳 delegated dispatch，不直接 spawn CLI。
-- [ ] 3.4 将 native/logical session binding 写回 delegated run。
-- [ ] 3.5 通过现有 AgentEventBus 以 delegated `run_id` 归属 target engine events。
+- [x] 3.2 复用 EngineManager status cache/refresh 与现有 engine enable gate 验证 target availability；未知、禁用或不可达 target 在 run 创建前 fail closed；创建时冻结 resolved Execution Target snapshot。
+- [x] 3.3 对当前 Shared V2 已支持 target（Claude/Codex/Kimi/Grok/OpenCode/Pi/Qoder）复用 `begin_squad_worker_turn_core -> prepare_delivery -> dispatch_turn -> await_terminal` 完成单跳 delegated dispatch；Bridge 不直接 spawn/parse CLI。
+- [x] 3.4 将 backing logical thread / attempt / binding / native session / runtime turn identity 写回 delegated run，并以 atomic dispatch claim 防止重复发送。
+- [ ] 3.5 通过现有 AgentEventBus 以 delegated `run_id` 归属 target engine live events。
+- [ ] 3.6 在 MCP/UI 对外开放前，为 Bridge backing Shared Session 增加 internal/hidden presentation marker，并从普通 Shared Session 列表过滤；ownership/native hiding 仍需保留。
+- [ ] 3.7 补齐最终目标 engine parity：Gemini 当前受 runtime policy 禁用、Dsh 当前不在 Shared V2 dispatch set；在最终验收前接入 Shared V2 或等价 existing-runtime dispatch，不为它们新建第二套 CLI parser。
 
 ## 4. Result / Continuation / Cancellation
 
-- [ ] 4.1 从 terminal event/native result 生成 normalized delegated result。
+- [x] 4.1 复用 `conversation.turnCommitted` 生成 normalized delegated result：assistant text summary + terminal status + artifact locator；changed-files/diff 后续由 worktree/result 层补齐。
 - [ ] 4.2 实现 `agent_send` continuation，对 Persistent/OneShot engine 保持统一上层 contract。
 - [ ] 4.3 实现 `agent_cancel` 与 cancellation propagation；cleanup 失败保留 owner 便于 retry/diagnostics。
 - [ ] 4.4 approval request 不自动放行，沿现有 approval contract 转发。
@@ -44,13 +46,13 @@
 
 ## 7. Context Policy
 
-- [ ] 7.1 默认 Explicit：仅 task + explicit file refs/context。
+- [x] 7.1 默认 Explicit：每个 delegated run 使用 fresh backing lane；仅 target task + explicit file refs 进入当前 prompt，不继承 source transcript。
 - [ ] 7.2 Portable/Inherited 复用现有 context compiler 与 budget/omission contract。
 - [ ] 7.3 增加敏感/超预算/不可迁移 context 的 fail-closed evidence。
 
 ## 8. Worktree Isolation
 
-- [ ] 8.1 实现 `Observe` / `SharedWorkspace` / `IsolatedWorktree` scope mapping。
+- [ ] 8.1 实现 `Observe` / `SharedWorkspace` / `IsolatedWorktree` scope mapping；当前 dispatcher 已将 Observe/SharedWorkspace 映射到既有 squad permission class，IsolatedWorktree 在 provision 前 fail closed。
 - [ ] 8.2 并行写任务 provision 独立 worktree/branch，记录 ownership。
 - [ ] 8.3 result 返回 changed files/diff/branch/artifact metadata；默认不自动 merge。
 - [ ] 8.4 cleanup 遵循 owner-retention-on-failure contract。
