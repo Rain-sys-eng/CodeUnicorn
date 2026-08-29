@@ -19,7 +19,7 @@
 - [x] 3.2 复用 EngineManager status cache/refresh 与现有 engine enable gate 验证 target availability；未知、禁用或不可达 target 在 run 创建前 fail closed；创建时冻结 resolved Execution Target snapshot。
 - [x] 3.3 对当前 Shared V2 已支持 target（Claude/Codex/Kimi/Grok/OpenCode/Pi/Qoder）复用 `begin_squad_worker_turn_core -> prepare_delivery -> dispatch_turn -> await_terminal` 完成单跳 delegated dispatch；Bridge 不直接 spawn/parse CLI。
 - [x] 3.4 将 backing logical thread / attempt / binding / native session / runtime turn identity 写回 delegated run，并以 atomic dispatch claim 防止重复发送。
-- [ ] 3.5 通过现有 AgentEventBus 以 delegated `run_id` 归属 target engine live events。
+- [x] 3.5 复用 `EngineManager.agent_event_bus()` 与现有 Shared runtime event sink；Bridge 对自身 backing thread 做 scoped re-attribution，将 live EngineEvent / settlement 以 delegated `run_id` 再发布，同时保留 native session/turn identity，且不创建第二套 event bus。
 - [ ] 3.6 在 MCP/UI 对外开放前，为 Bridge backing Shared Session 增加 internal/hidden presentation marker，并从普通 Shared Session 列表过滤；ownership/native hiding 仍需保留。
 - [ ] 3.7 补齐最终目标 engine parity：Gemini 当前受 runtime policy 禁用、Dsh 当前不在 Shared V2 dispatch set；在最终验收前接入 Shared V2 或等价 existing-runtime dispatch，不为它们新建第二套 CLI parser。
 
