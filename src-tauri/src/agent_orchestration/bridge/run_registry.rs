@@ -110,13 +110,7 @@ impl DelegationRunRegistry {
             .lock()
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
 
-        let active_runs = runs.values().filter(|run| !run.status.is_terminal()).count();
-        if active_runs >= self.limits.max_active_runs {
-            return Err(format!(
-                "agent bridge active run limit reached: {}",
-                self.limits.max_active_runs
-            ));
-        }
+        self.ensure_active_capacity(&runs)?;
 
         let (root_run_id, depth) = if let Some(parent_run_id) = request.parent_run_id.as_deref() {
             let parent = runs
@@ -159,6 +153,7 @@ impl DelegationRunRegistry {
             id: id.clone(),
             root_run_id,
             parent_run_id: request.parent_run_id,
+            continuation_of_run_id: None,
             depth,
             source: request.source,
             target: request.target,
@@ -168,6 +163,76 @@ impl DelegationRunRegistry {
             file_refs: request.file_refs,
             context_policy: request.context_policy,
             execution_scope: request.execution_scope,
+            status: DelegationRunStatus::Queued,
+            dispatch_binding: None,
+            result: None,
+            error: None,
+            created_at_ms: now_ms(),
+            started_at_ms: None,
+            completed_at_ms: None,
+        };
+        let mut candidate = runs.clone();
+        candidate.insert(id, run.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(run)
+    }
+
+    /// Create a new logical run for a follow-up turn while keeping the previous target session.
+    /// Terminal immutability is preserved: the completed run is never reopened.
+    pub fn create_continuation(
+        &self,
+        previous_run_id: &str,
+        task: String,
+    ) -> Result<DelegationRun, String> {
+        let task = task.trim();
+        if task.is_empty() {
+            return Err("delegated continuation task is required".to_string());
+        }
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
+        self.ensure_active_capacity(&runs)?;
+        let previous = runs
+            .get(previous_run_id)
+            .cloned()
+            .ok_or_else(|| format!("continuation source run not found: {previous_run_id}"))?;
+        if previous.status != DelegationRunStatus::Completed {
+            return Err(format!(
+                "delegated continuation requires a completed run: {previous_run_id} is {:?}",
+                previous.status
+            ));
+        }
+        let previous_binding = previous.dispatch_binding.as_ref().ok_or_else(|| {
+            format!("completed delegated run has no dispatch binding: {previous_run_id}")
+        })?;
+        if previous_binding
+            .native_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            return Err(format!(
+                "completed delegated run has no reusable native session: {previous_run_id}"
+            ));
+        }
+
+        let id = self.next_run_id(&runs);
+        let run = DelegationRun {
+            id: id.clone(),
+            root_run_id: previous.root_run_id.clone(),
+            parent_run_id: previous.parent_run_id.clone(),
+            continuation_of_run_id: Some(previous.id.clone()),
+            depth: previous.depth,
+            source: previous.source.clone(),
+            target: previous.target.clone(),
+            target_execution: previous.target_execution.clone(),
+            workspace_id: previous.workspace_id.clone(),
+            task: task.to_string(),
+            file_refs: Vec::new(),
+            context_policy: previous.context_policy,
+            execution_scope: previous.execution_scope,
             status: DelegationRunStatus::Queued,
             dispatch_binding: None,
             result: None,
@@ -440,6 +505,17 @@ impl DelegationRunRegistry {
         Ok(updated)
     }
 
+    fn ensure_active_capacity(&self, runs: &HashMap<String, DelegationRun>) -> Result<(), String> {
+        let active_runs = runs.values().filter(|run| !run.status.is_terminal()).count();
+        if active_runs >= self.limits.max_active_runs {
+            return Err(format!(
+                "agent bridge active run limit reached: {}",
+                self.limits.max_active_runs
+            ));
+        }
+        Ok(())
+    }
+
     fn commit_candidate(
         &self,
         current: &mut HashMap<String, DelegationRun>,
@@ -505,6 +581,24 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
             return Err(format!(
                 "Agent Bridge durable store contains duplicate run identity: {id}"
             ));
+        }
+    }
+    for run in recovered.values() {
+        if let Some(previous_run_id) = run.continuation_of_run_id.as_deref() {
+            let previous = recovered.get(previous_run_id).ok_or_else(|| {
+                format!(
+                    "Agent Bridge durable store continuation source is missing: {} -> {previous_run_id}",
+                    run.id
+                )
+            })?;
+            if previous.workspace_id != run.workspace_id
+                || previous.target.engine_id != run.target.engine_id
+            {
+                return Err(format!(
+                    "Agent Bridge durable store continuation owner mismatch: {} -> {previous_run_id}",
+                    run.id
+                ));
+            }
         }
     }
     Ok(recovered)
@@ -614,6 +708,7 @@ mod tests {
         assert_eq!(child.root_run_id, root.id);
         assert_eq!(child.parent_run_id.as_deref(), Some(root.id.as_str()));
         assert_eq!(child.depth, 1);
+        assert_eq!(child.continuation_of_run_id, None);
     }
 
     #[test]
@@ -650,6 +745,56 @@ mod tests {
                 .as_ref()
                 .and_then(|binding| binding.runtime_turn_id.as_deref()),
             Some("runtime-turn-1")
+        );
+    }
+
+    #[test]
+    fn continuation_gets_new_identity_without_reopening_completed_run() {
+        let registry = DelegationRunRegistry::default();
+        let run = registry.create(request(None)).expect("create run");
+        registry.claim_dispatch(&run.id).expect("claim");
+        registry
+            .set_dispatch_binding(
+                &run.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:bridge-session".to_string(),
+                    attempt_id: "attempt-1".to_string(),
+                    logical_turn_id: "turn-1".to_string(),
+                    binding_key: "squad:run:delegate:codex:default".to_string(),
+                    native_session_id: Some("native-1".to_string()),
+                    runtime_turn_id: Some("runtime-turn-1".to_string()),
+                },
+            )
+            .expect("bind");
+        registry
+            .settle_completed(
+                &run.id,
+                DelegationResult {
+                    summary: Some("done".to_string()),
+                    changed_files: Vec::new(),
+                    branch: None,
+                    artifact_path: None,
+                },
+            )
+            .expect("complete");
+
+        let continuation = registry
+            .create_continuation(&run.id, "check one more thing".to_string())
+            .expect("continue");
+        let original = registry.get(&run.id).expect("read").expect("original");
+
+        assert_ne!(continuation.id, original.id);
+        assert_eq!(original.status, DelegationRunStatus::Completed);
+        assert_eq!(continuation.status, DelegationRunStatus::Queued);
+        assert_eq!(
+            continuation.continuation_of_run_id.as_deref(),
+            Some(original.id.as_str())
+        );
+        assert_eq!(continuation.root_run_id, original.root_run_id);
+        assert_eq!(continuation.depth, original.depth);
+        assert_eq!(
+            continuation.target.native_session_id.as_deref(),
+            Some("native-1")
         );
     }
 
