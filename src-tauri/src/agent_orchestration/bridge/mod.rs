@@ -1,3 +1,4 @@
+pub(crate) mod control;
 pub(crate) mod dispatcher;
 pub mod models;
 pub(crate) mod persistence;
