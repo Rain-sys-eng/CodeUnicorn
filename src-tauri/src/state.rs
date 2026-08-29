@@ -46,9 +46,29 @@ pub(crate) struct AppState {
     pub(crate) renderer_heartbeats: Mutex<crate::renderer_stability::RendererHeartbeatStore>,
     pub(crate) semantic_navigation_runtime: crate::code_intel_lsp::SemanticNavigationRuntime,
     pub(crate) engine_manager: EngineManager,
+    pub(crate) agent_bridge: Arc<crate::agent_orchestration::bridge::AgentBridgeService>,
 }
 
 impl AppState {
+    pub(crate) async fn create_delegation_run(
+        &self,
+        request: crate::agent_orchestration::bridge::CreateDelegationRun,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        {
+            let workspaces = self.workspaces.lock().await;
+            if !workspaces.contains_key(&request.workspace_id) {
+                return Err(format!(
+                    "workspace not found for Agent Bridge delegation: {}",
+                    request.workspace_id
+                ));
+            }
+        }
+        let settings = self.app_settings.lock().await.clone();
+        self.agent_bridge
+            .create_run(request, &self.engine_manager, &settings)
+            .await
+    }
+
     /// Push current app_settings binary paths into the EngineManager so that
     /// new engine sessions pick up user-configured CLI paths (e.g. reclaude).
     /// Also drops cached Claude sessions whose bin_path is stale so the next
@@ -276,6 +296,9 @@ impl AppState {
                 crate::code_intel_lsp::cache_root_for_channel(&data_dir, cfg!(debug_assertions)),
             ),
             engine_manager,
+            agent_bridge: Arc::new(
+                crate::agent_orchestration::bridge::AgentBridgeService::default(),
+            ),
         }
     }
 }
