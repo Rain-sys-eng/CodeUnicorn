@@ -8,6 +8,55 @@ pub(crate) struct ResolvedMcpSource {
     pub runtime_turn_id: String,
 }
 
+/// Transport-neutral, already-authenticated runtime identity supplied by a CodeUnicorn-managed
+/// MCP ingress. Individual engine transports must prove these values from their live runtime;
+/// the model/tool arguments must never be allowed to populate this structure directly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TrustedMcpRuntimeBinding {
+    pub engine_id: String,
+    pub logical_session_id: String,
+    pub native_session_id: Option<String>,
+    pub runtime_turn_id: String,
+}
+
+/// Convert one ingress-authenticated runtime binding into the source identity consumed by the
+/// engine-agnostic Bridge MCP gateway.
+///
+/// Keeping this validation separate from engine-specific lookup logic means Claude, Codex, Kimi,
+/// OpenCode and future managed callers can share the exact same fail-closed source contract while
+/// retaining their native runtime/session implementations.
+pub(crate) fn resolve_trusted_runtime_binding(
+    binding: TrustedMcpRuntimeBinding,
+) -> Result<ResolvedMcpSource, String> {
+    let engine_id = required_identity(binding.engine_id, "engine id")?;
+    let logical_session_id = required_identity(binding.logical_session_id, "logical session id")?;
+    let runtime_turn_id = required_identity(binding.runtime_turn_id, "runtime turn id")?;
+    let native_session_id = binding
+        .native_session_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let endpoint = AgentEndpoint {
+        engine_id,
+        logical_session_id: Some(logical_session_id),
+        native_session_id,
+    };
+    endpoint.validate("source")?;
+
+    Ok(ResolvedMcpSource {
+        endpoint,
+        runtime_turn_id,
+    })
+}
+
+fn required_identity(value: String, label: &str) -> Result<String, String> {
+    let value = value.trim().to_string();
+    if value.is_empty() {
+        return Err(format!("Agent Bridge MCP trusted {label} is required"));
+    }
+    Ok(value)
+}
+
 /// Resolve the trusted source identity for a Bridge call arriving through CodeUnicorn's managed
 /// Claude MCP transport.
 ///
@@ -48,13 +97,11 @@ pub async fn resolve_claude_mcp_source(
         )
     })?;
 
-    Ok(ResolvedMcpSource {
-        endpoint: AgentEndpoint {
-            engine_id: "claude".to_string(),
-            // This opaque locator is process-scoped and was minted by CodeUnicorn, not by the model.
-            logical_session_id: Some(runtime_locator.to_string()),
-            native_session_id: session.get_session_id().await,
-        },
+    resolve_trusted_runtime_binding(TrustedMcpRuntimeBinding {
+        engine_id: "claude".to_string(),
+        // This opaque locator is process-scoped and was minted by CodeUnicorn, not by the model.
+        logical_session_id: runtime_locator.to_string(),
+        native_session_id: session.get_session_id().await,
         runtime_turn_id,
     })
 }
@@ -63,6 +110,37 @@ pub async fn resolve_claude_mcp_source(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn trusted_runtime_binding_is_engine_neutral() {
+        let source = resolve_trusted_runtime_binding(TrustedMcpRuntimeBinding {
+            engine_id: " codex ".to_string(),
+            logical_session_id: " runtime:codex:workspace-1 ".to_string(),
+            native_session_id: Some(" thread-1 ".to_string()),
+            runtime_turn_id: " turn-1 ".to_string(),
+        })
+        .expect("trusted codex binding");
+
+        assert_eq!(source.endpoint.engine_id, "codex");
+        assert_eq!(
+            source.endpoint.logical_session_id.as_deref(),
+            Some("runtime:codex:workspace-1")
+        );
+        assert_eq!(source.endpoint.native_session_id.as_deref(), Some("thread-1"));
+        assert_eq!(source.runtime_turn_id, "turn-1");
+    }
+
+    #[test]
+    fn trusted_runtime_binding_rejects_incomplete_identity() {
+        let error = resolve_trusted_runtime_binding(TrustedMcpRuntimeBinding {
+            engine_id: "codex".to_string(),
+            logical_session_id: "runtime-1".to_string(),
+            native_session_id: None,
+            runtime_turn_id: "   ".to_string(),
+        })
+        .expect_err("missing live turn must fail closed");
+        assert!(error.contains("runtime turn id"));
+    }
 
     #[tokio::test]
     async fn legacy_workspace_only_source_is_rejected() {
