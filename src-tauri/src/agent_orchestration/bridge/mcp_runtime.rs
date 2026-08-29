@@ -11,10 +11,12 @@ static MCP_APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 /// Bind the process-global Tauri handle used by the already process-global managed MCP server.
 /// Idempotent for normal startup; tests may leave it unset and exercise pure gateway pieces.
 ///
-/// The same startup edge also owns the process-wide delegated approval observer so approval state
-/// remains synchronized even when no Agent Bridge tool call is currently in flight.
+/// The same startup edge owns process-wide Bridge observers: approval lifecycle synchronization and
+/// durable DAG wake/reconcile. Neither observer creates a second engine runtime; DAG execution still
+/// enters target agents exclusively through `AgentBridgeService`.
 pub(crate) fn init_app_handle(app: AppHandle) -> Result<(), String> {
     approval::ensure_observer_started(&app)?;
+    crate::agent_orchestration::graph_runtime::ensure_observer_started(&app)?;
     if MCP_APP_HANDLE.get().is_some() {
         return Ok(());
     }
