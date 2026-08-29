@@ -1,3 +1,4 @@
+pub(crate) mod approval;
 pub(crate) mod control;
 pub(crate) mod dispatcher;
 pub(crate) mod mcp_gateway;
