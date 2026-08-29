@@ -11,12 +11,12 @@
 - [x] 2.2 实现 thread-safe `DelegationRunRegistry`：create/get/list/transition/settle/cancel。
 - [x] 2.3 实现 root/parent lineage、max depth、per-parent child limit、global active-run limit。
 - [x] 2.4 补 Core unit tests：lineage、terminal 幂等、terminal reopen 拒绝、depth limit。
-- [ ] 2.5 增加 source/target engine registry validation 与 cycle semantics（需要 runtime identity integration）。
+- [x] 2.5 增加 source/target engine canonical validation；nested child source 必须匹配 parent target、workspace 必须一致；run graph 使用新 child identity + immutable parent 指向保持结构无环，递归爆炸由 depth/concurrency guard 限制。
 
 ## 3. Runtime Integration
 
-- [ ] 3.1 将 bridge service/state 以 narrow owner 接入 `AppState`。
-- [ ] 3.2 复用 EngineManager / EngineAdapterRegistry 验证 target engine availability/capability。
+- [x] 3.1 将 `AgentBridgeService` 以单一 long-lived owner 接入 `AppState`，并在 AppState boundary 先验证 workspace identity。
+- [x] 3.2 复用 EngineManager status cache/refresh 与现有 engine enable gate 验证 target availability；未知、禁用或不可达 target 在 run 创建前 fail closed。
 - [ ] 3.3 复用 Shared Session/engine send core 完成单跳 delegated dispatch，不直接 spawn CLI。
 - [ ] 3.4 将 native/logical session binding 写回 delegated run。
 - [ ] 3.5 通过现有 AgentEventBus 以 delegated `run_id` 归属 target engine events。
