@@ -39,7 +39,7 @@ src-tauri/src/agent_orchestration/bridge/
   mod.rs
   models.rs
   run_registry.rs
-  service.rs          # 后续
+  service.rs
   persistence.rs      # 后续
   dispatcher.rs       # 后续
 ```
@@ -49,6 +49,8 @@ src-tauri/src/agent_orchestration/bridge/
 ### 2. Agent Bridge 是 logical control plane，不拥有 engine process
 
 `AgentBridgeService` 负责 run identity、lineage、state transition、dispatch request 和 result ownership；实际 Claude/Codex/Kimi 等 process/session 继续由现有 engine manager/runtime owner 管理。
+
+第二批实现已将唯一 long-lived `AgentBridgeService` owner 放入 `AppState`。`AppState::create_delegation_run` 先验证 workspace identity，再将请求交给 Bridge service；service 不持有 workspace/store/runtime 的第二份 ownership。
 
 ### 3. Delegation 使用异步 run identity
 
@@ -63,6 +65,13 @@ source Agent 可以继续 delegate 其他任务；`agent_wait` / `agent_result` 
 ### 4. Run identity 与 lineage 独立于 native session id
 
 每个 delegated run 至少持有 `run_id/root_run_id/parent_run_id/depth/source/target/workspace/logical_session/native_session`。native session 可以被 continuation 复用，但不能成为 bridge run identity。
+
+Nested child 进入 registry 前必须满足：
+
+- child workspace 与 parent workspace 相同；
+- child source engine 必须等于 parent target engine；
+- parent 指向只允许 existing older run，新 child 使用全新 run identity，因此 run graph 不提供回指 ancestor 的结构入口；
+- recursive explosion 继续由 max depth、per-parent child 与 global active limit 控制。
 
 ### 5. 第一批 Core 使用明确 state machine 与幂等 settlement
 
@@ -100,11 +109,17 @@ Target engine events 继续进入现有 `AgentEventBus`，以 delegated `run_id`
 
 Delegated target 可以继承更严格权限，但不能因为 source 调用 Bridge 就提升 access mode/sandbox/MCP/file/network permission。
 
-### 11. Existing Multi-Agent V1 后续改为 Bridge consumer
+### 11. Engine availability 在 run creation 前 fail closed
+
+Bridge 只接受当前 built-in engine registry 的 canonical engine ids。source/target id 会先 canonicalize；未知或 disabled engine 直接拒绝。target availability 复用 `EngineManager` status cache；缓存没有已安装证据时才走现有 refresh gate。CLI 未安装、不可达或 runtime policy disabled 时，不创建 delegated run。
+
+这一步只做 target validation，不启动 target process；实际 dispatch 仍由后续 dispatcher 通过现有 send/session boundary 完成。
+
+### 12. Existing Multi-Agent V1 后续改为 Bridge consumer
 
 现有 Plan/Implement/Review V1 暂不迁移。Bridge 稳定后，可把 V1 每个 stage dispatch 改为通过 `AgentBridgeService` 发起，从而统一 runtime ownership/observability；迁移必须保持 V1 projection 与用户确认行为兼容。
 
-### 12. Durable facts 与 live deltas 分离
+### 13. Durable facts 与 live deltas 分离
 
 持久化 identity、lineage、target、scope、status、session binding、result/artifact metadata；不持久化全部 token/tool deltas。
 
@@ -116,12 +131,14 @@ Delegated target 可以继承更严格权限，但不能因为 source 调用 Bri
 - cancellation propagation policy；
 - terminal settlement idempotency；
 - source identity 来自 runtime/tool binding，不能由 prompt 参数伪造；
-- worktree path ownership validation。
+- worktree path ownership validation；
+- workspace identity 在 `AppState` boundary 验证；
+- unknown/disabled/unavailable target 在 run creation 前 fail closed。
 
 ## Migration Plan
 
-1. OpenSpec + Bridge Core data model + in-memory registry + unit tests。
-2. 接 `AppState`/service owner；不暴露 UI/MCP。
+1. OpenSpec + Bridge Core data model + in-memory registry + unit tests。**已完成。**
+2. 接 `AppState`/service owner + engine availability validation；不暴露 UI/MCP。**已完成。**
 3. 接 existing engine/shared dispatch，完成单跳 delegation。
 4. 接 AgentEventBus result/continuation/cancel。
 5. durable persistence/recovery。
