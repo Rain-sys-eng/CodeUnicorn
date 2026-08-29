@@ -172,10 +172,13 @@ impl AgentBridgeWorktreeStore {
 /// Thread-safe Bridge worktree ownership registry.
 ///
 /// Every mutation uses the same disk-first rule as delegated runs: write the candidate durable
-/// map first and publish it to memory only after the atomic write succeeds.
+/// map first and publish it to memory only after the atomic write succeeds. If startup cannot read
+/// the durable owner store, the registry remains available for diagnostics but all reads/mutations
+/// fail closed instead of silently switching to a writable volatile map.
 pub(crate) struct AgentBridgeWorktreeRegistry {
     ownership: Mutex<BTreeMap<String, DelegatedWorktreeOwnership>>,
     persistence: Option<AgentBridgeWorktreeStore>,
+    load_error: Option<String>,
 }
 
 impl AgentBridgeWorktreeRegistry {
@@ -183,6 +186,15 @@ impl AgentBridgeWorktreeRegistry {
         Self {
             ownership: Mutex::new(BTreeMap::new()),
             persistence: None,
+            load_error: None,
+        }
+    }
+
+    fn degraded(error: String) -> Self {
+        Self {
+            ownership: Mutex::new(BTreeMap::new()),
+            persistence: None,
+            load_error: Some(error),
         }
     }
 
@@ -192,6 +204,7 @@ impl AgentBridgeWorktreeRegistry {
         Ok(Self {
             ownership: Mutex::new(ownership),
             persistence: Some(store),
+            load_error: None,
         })
     }
 
@@ -199,6 +212,7 @@ impl AgentBridgeWorktreeRegistry {
         &self,
         run_id: &str,
     ) -> Result<Option<DelegatedWorktreeOwnership>, String> {
+        self.ensure_available()?;
         Ok(self.lock()?.get(run_id).cloned())
     }
 
@@ -208,6 +222,7 @@ impl AgentBridgeWorktreeRegistry {
         source_workspace_id: &str,
         branch: &str,
     ) -> Result<DelegatedWorktreeOwnership, String> {
+        self.ensure_available()?;
         let run_id = run_id.trim();
         let source_workspace_id = source_workspace_id.trim();
         let branch = branch.trim();
@@ -246,6 +261,7 @@ impl AgentBridgeWorktreeRegistry {
         &self,
         provision: &DelegatedWorktreeProvision,
     ) -> Result<DelegatedWorktreeOwnership, String> {
+        self.ensure_available()?;
         let mut current = self.lock()?;
         let reserved = current
             .get(&provision.owner_run_id)
@@ -273,10 +289,20 @@ impl AgentBridgeWorktreeRegistry {
             .transpose()
     }
 
+    fn ensure_available(&self) -> Result<(), String> {
+        match self.load_error.as_deref() {
+            Some(error) => Err(format!(
+                "Agent Bridge worktree ownership is unavailable; refusing mutation/read until durable evidence is repaired: {error}"
+            )),
+            None => Ok(()),
+        }
+    }
+
     fn persist(
         &self,
         candidate: &BTreeMap<String, DelegatedWorktreeOwnership>,
     ) -> Result<(), String> {
+        self.ensure_available()?;
         if let Some(store) = self.persistence.as_ref() {
             store.save(candidate)?;
         }
@@ -298,12 +324,10 @@ impl Default for AgentBridgeWorktreeRegistry {
             Ok(registry) => registry,
             Err(error) => {
                 log::error!(
-                    "[agent-bridge] failed to load durable worktree ownership; mutations will fail closed only after app restart evidence is unavailable: {}",
+                    "[agent-bridge] failed to load durable worktree ownership; isolated-worktree operations are disabled: {}",
                     error
                 );
-                // Do not silently overwrite an unreadable durable file. A volatile fallback is used
-                // only so AppState can finish constructing; callers must not infer recovery success.
-                Self::volatile()
+                Self::degraded(error)
             }
         }
     }
@@ -426,6 +450,7 @@ mod tests {
         let registry = AgentBridgeWorktreeRegistry {
             ownership: Mutex::new(BTreeMap::new()),
             persistence: Some(AgentBridgeWorktreeStore::new(path.clone())),
+            load_error: None,
         };
         registry
             .reserve(
@@ -445,6 +470,15 @@ mod tests {
             .expect("get")
             .is_some());
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn degraded_registry_rejects_mutation() {
+        let registry = AgentBridgeWorktreeRegistry::degraded("future schema".to_string());
+        let error = registry
+            .reserve("run-1", "source", "codeunicorn/delegate/run-1")
+            .expect_err("degraded registry must fail closed");
+        assert!(error.contains("ownership is unavailable"));
     }
 
     #[test]
