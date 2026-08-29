@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -168,6 +169,146 @@ impl AgentBridgeWorktreeStore {
     }
 }
 
+/// Thread-safe Bridge worktree ownership registry.
+///
+/// Every mutation uses the same disk-first rule as delegated runs: write the candidate durable
+/// map first and publish it to memory only after the atomic write succeeds.
+pub(crate) struct AgentBridgeWorktreeRegistry {
+    ownership: Mutex<BTreeMap<String, DelegatedWorktreeOwnership>>,
+    persistence: Option<AgentBridgeWorktreeStore>,
+}
+
+impl AgentBridgeWorktreeRegistry {
+    pub(crate) fn volatile() -> Self {
+        Self {
+            ownership: Mutex::new(BTreeMap::new()),
+            persistence: None,
+        }
+    }
+
+    pub(crate) fn durable_default() -> Result<Self, String> {
+        let store = AgentBridgeWorktreeStore::new(AgentBridgeWorktreeStore::default_path()?);
+        let ownership = store.load()?;
+        Ok(Self {
+            ownership: Mutex::new(ownership),
+            persistence: Some(store),
+        })
+    }
+
+    pub(crate) fn get(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<DelegatedWorktreeOwnership>, String> {
+        Ok(self.lock()?.get(run_id).cloned())
+    }
+
+    pub(crate) fn reserve(
+        &self,
+        run_id: &str,
+        source_workspace_id: &str,
+        branch: &str,
+    ) -> Result<DelegatedWorktreeOwnership, String> {
+        let run_id = run_id.trim();
+        let source_workspace_id = source_workspace_id.trim();
+        let branch = branch.trim();
+        if run_id.is_empty() || source_workspace_id.is_empty() || branch.is_empty() {
+            return Err("delegated worktree reservation identity is incomplete".to_string());
+        }
+
+        let mut current = self.lock()?;
+        if let Some(existing) = current.get(run_id) {
+            if existing.source_workspace_id == source_workspace_id && existing.branch == branch {
+                return Ok(existing.clone());
+            }
+            return Err(format!(
+                "delegated worktree run {run_id} already owns a different reservation"
+            ));
+        }
+        if let Some((owner, _)) = current.iter().find(|(_, value)| value.branch == branch) {
+            return Err(format!(
+                "delegated worktree branch {branch} is already reserved by run {owner}"
+            ));
+        }
+
+        let reserved = DelegatedWorktreeOwnership::reserved(
+            run_id.to_string(),
+            source_workspace_id.to_string(),
+            branch.to_string(),
+        );
+        let mut candidate = current.clone();
+        candidate.insert(run_id.to_string(), reserved.clone());
+        self.persist(&candidate)?;
+        *current = candidate;
+        Ok(reserved)
+    }
+
+    pub(crate) fn complete(
+        &self,
+        provision: &DelegatedWorktreeProvision,
+    ) -> Result<DelegatedWorktreeOwnership, String> {
+        let mut current = self.lock()?;
+        let reserved = current
+            .get(&provision.owner_run_id)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "delegated worktree provision has no durable reservation: {}",
+                    provision.owner_run_id
+                )
+            })?;
+        let completed = reserved.complete(provision)?;
+        let mut candidate = current.clone();
+        candidate.insert(provision.owner_run_id.clone(), completed.clone());
+        self.persist(&candidate)?;
+        *current = candidate;
+        Ok(completed)
+    }
+
+    pub(crate) fn provision_for_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<DelegatedWorktreeProvision>, String> {
+        self.get(run_id)?
+            .map(|ownership| ownership.as_provision())
+            .transpose()
+    }
+
+    fn persist(
+        &self,
+        candidate: &BTreeMap<String, DelegatedWorktreeOwnership>,
+    ) -> Result<(), String> {
+        if let Some(store) = self.persistence.as_ref() {
+            store.save(candidate)?;
+        }
+        Ok(())
+    }
+
+    fn lock(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, BTreeMap<String, DelegatedWorktreeOwnership>>, String> {
+        self.ownership
+            .lock()
+            .map_err(|_| "Agent Bridge worktree ownership lock poisoned".to_string())
+    }
+}
+
+impl Default for AgentBridgeWorktreeRegistry {
+    fn default() -> Self {
+        match Self::durable_default() {
+            Ok(registry) => registry,
+            Err(error) => {
+                log::error!(
+                    "[agent-bridge] failed to load durable worktree ownership; mutations will fail closed only after app restart evidence is unavailable: {}",
+                    error
+                );
+                // Do not silently overwrite an unreadable durable file. A volatile fallback is used
+                // only so AppState can finish constructing; callers must not infer recovery success.
+                Self::volatile()
+            }
+        }
+    }
+}
+
 fn validate_ownership(
     ownership: &BTreeMap<String, DelegatedWorktreeOwnership>,
 ) -> Result<(), String> {
@@ -212,7 +353,7 @@ fn validate_ownership(
                     .ok_or_else(|| {
                         format!("provisioned Agent Bridge worktree {run_id} has no workspace id")
                     })?;
-                let path = owner
+                owner
                     .path
                     .as_deref()
                     .map(str::trim)
@@ -220,7 +361,6 @@ fn validate_ownership(
                     .ok_or_else(|| {
                         format!("provisioned Agent Bridge worktree {run_id} has no path")
                     })?;
-                let _ = path;
                 if let Some(previous) = workspace_owners.insert(workspace_id, run_id) {
                     return Err(format!(
                         "Agent Bridge worktree workspace {workspace_id} has multiple owners: {previous}, {run_id}"
@@ -275,6 +415,35 @@ mod tests {
         ]);
         store.save(&ownership).expect("save");
         assert_eq!(store.load().expect("load"), ownership);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn registry_persists_reservation_before_completion() {
+        let root = std::env::temp_dir().join(format!("bridge-worktree-registry-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("temp dir");
+        let path = root.join("worktrees.json");
+        let registry = AgentBridgeWorktreeRegistry {
+            ownership: Mutex::new(BTreeMap::new()),
+            persistence: Some(AgentBridgeWorktreeStore::new(path.clone())),
+        };
+        registry
+            .reserve(
+                "run-1",
+                "source-workspace",
+                "codeunicorn/delegate/run-1",
+            )
+            .expect("reserve");
+        let loaded = AgentBridgeWorktreeStore::new(path).load().expect("load");
+        assert_eq!(
+            loaded["run-1"].state,
+            DelegatedWorktreeOwnershipState::Reserved
+        );
+        registry.complete(&provision("run-1")).expect("complete");
+        assert!(registry
+            .provision_for_run("run-1")
+            .expect("get")
+            .is_some());
         std::fs::remove_dir_all(root).ok();
     }
 
