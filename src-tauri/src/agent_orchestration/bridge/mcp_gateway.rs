@@ -7,6 +7,7 @@ use crate::engine::adapter_registry::engine_id;
 use crate::engine::{engine_enabled_in_settings, EngineType};
 use crate::state::AppState;
 
+use super::mcp_source::ResolvedMcpSource;
 use super::models::{
     AgentEndpoint, CreateDelegationRun, DelegationContextPolicy, DelegationExecutionScope,
     DelegationRun,
@@ -81,12 +82,12 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": AGENT_STATUS_TOOL,
-            "description": "Read the durable status and ownership metadata for one delegated run.",
+            "description": "Read the durable status and ownership metadata for one delegated run created by this source agent.",
             "inputSchema": run_id_schema()
         }),
         json!({
             "name": AGENT_WAIT_TOOL,
-            "description": "Wait for a delegated run to settle, bounded to at most 30 seconds per call.",
+            "description": "Wait for a delegated run created by this source agent to settle, bounded to at most 30 seconds per call.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -99,12 +100,12 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": AGENT_RESULT_TOOL,
-            "description": "Read the normalized result/error for one delegated run without waiting.",
+            "description": "Read the normalized result/error for one delegated run created by this source agent without waiting.",
             "inputSchema": run_id_schema()
         }),
         json!({
             "name": AGENT_SEND_TOOL,
-            "description": "Continue a completed delegated conversation on the same backing/native agent session using a new immutable run id.",
+            "description": "Continue a completed delegated conversation created by this source agent on the same backing/native agent session using a new immutable run id.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -117,7 +118,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": AGENT_CANCEL_TOOL,
-            "description": "Cancel one delegated run using its exact durable runtime owner; never performs workspace-wide interruption.",
+            "description": "Cancel one delegated run created by this source agent using its exact durable runtime owner; never performs workspace-wide interruption.",
             "inputSchema": run_id_schema()
         }),
     ]
@@ -150,14 +151,14 @@ pub fn handles_tool(name: &str) -> bool {
 pub async fn call_tool(
     app: &AppHandle,
     workspace_id: &str,
-    source: AgentEndpoint,
+    source: ResolvedMcpSource,
     tool_name: &str,
     arguments: Value,
 ) -> Result<Value, String> {
     if workspace_id.trim().is_empty() {
         return Err("Agent Bridge MCP source workspace is required".to_string());
     }
-    source.validate("source")?;
+    source.endpoint.validate("source")?;
     let state = app.state::<AppState>();
 
     match tool_name {
@@ -168,8 +169,13 @@ pub async fn call_tool(
             let file_refs = optional_string_array(&arguments, "fileRefs")?;
             let context_policy = parse_context_policy(arguments.get("contextPolicy"))?;
             let execution_scope = parse_execution_scope(arguments.get("executionScope"))?;
+            let parent_run_id = infer_active_parent_run_id(
+                state.inner(),
+                workspace_id,
+                &source,
+            )?;
             let request = CreateDelegationRun {
-                source,
+                source: source.endpoint,
                 target: AgentEndpoint {
                     engine_id: target_engine,
                     logical_session_id: None,
@@ -181,7 +187,7 @@ pub async fn call_tool(
                 file_refs,
                 context_policy,
                 execution_scope,
-                parent_run_id: None,
+                parent_run_id,
             };
             let run = state.create_delegation_run(request).await?;
             let dispatched = state.dispatch_delegation_run(&run.id, app).await?;
@@ -189,7 +195,7 @@ pub async fn call_tool(
         }
         AGENT_STATUS_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
-            let run = require_workspace_run(state.inner(), workspace_id, &run_id)?;
+            let run = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
             serde_json::to_value(run).map_err(|error| error.to_string())
         }
         AGENT_WAIT_TOOL => {
@@ -199,23 +205,30 @@ pub async fn call_tool(
                 .and_then(Value::as_u64)
                 .unwrap_or(WAIT_DEFAULT_MS)
                 .min(WAIT_MAX_MS);
-            wait_for_run(state.inner(), workspace_id, &run_id, timeout_ms).await
+            wait_for_run(
+                state.inner(),
+                workspace_id,
+                &source.endpoint,
+                &run_id,
+                timeout_ms,
+            )
+            .await
         }
         AGENT_RESULT_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
-            let run = require_workspace_run(state.inner(), workspace_id, &run_id)?;
+            let run = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
             Ok(result_view(&run))
         }
         AGENT_SEND_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
             let task = required_string(&arguments, "task")?;
-            let _ = require_workspace_run(state.inner(), workspace_id, &run_id)?;
+            let _ = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
             let run = state.continue_delegation_run(&run_id, task, app).await?;
             serde_json::to_value(run).map_err(|error| error.to_string())
         }
         AGENT_CANCEL_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
-            let _ = require_workspace_run(state.inner(), workspace_id, &run_id)?;
+            let _ = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
             let run = state.cancel_delegation_run(&run_id, app).await?;
             serde_json::to_value(run).map_err(|error| error.to_string())
         }
@@ -240,9 +253,54 @@ async fn agent_list(state: &AppState) -> Result<Value, String> {
     Ok(json!({ "agents": agents }))
 }
 
-fn require_workspace_run(
+/// A delegated target that calls the managed MCP server must become the parent of its own child
+/// delegation. Runtime turn identity is the strongest available owner proof: it is emitted by the
+/// actual target runtime, persisted in `dispatch_binding`, and cannot be supplied by the model.
+fn infer_active_parent_run_id(
     state: &AppState,
     workspace_id: &str,
+    source: &ResolvedMcpSource,
+) -> Result<Option<String>, String> {
+    let mut owners = state
+        .agent_bridge
+        .list_runs()?
+        .into_iter()
+        .filter(|run| run.workspace_id == workspace_id)
+        .filter(|run| !run.status.is_terminal())
+        .filter(|run| run.target.engine_id == source.endpoint.engine_id)
+        .filter(|run| {
+            run.dispatch_binding
+                .as_ref()
+                .and_then(|binding| binding.runtime_turn_id.as_deref())
+                == Some(source.runtime_turn_id.as_str())
+        })
+        .filter(|run| {
+            match (
+                source.endpoint.native_session_id.as_deref(),
+                run.target.native_session_id.as_deref(),
+            ) {
+                (Some(source_native), Some(target_native)) => source_native == target_native,
+                _ => true,
+            }
+        })
+        .map(|run| run.id)
+        .collect::<Vec<_>>();
+    owners.sort();
+    owners.dedup();
+    match owners.as_slice() {
+        [] => Ok(None),
+        [run_id] => Ok(Some(run_id.clone())),
+        _ => Err(format!(
+            "Agent Bridge MCP source turn has ambiguous delegated parent ownership: {} active runs",
+            owners.len()
+        )),
+    }
+}
+
+fn require_source_run(
+    state: &AppState,
+    workspace_id: &str,
+    source: &AgentEndpoint,
     run_id: &str,
 ) -> Result<DelegationRun, String> {
     let run = state
@@ -254,18 +312,41 @@ fn require_workspace_run(
             "delegated run workspace mismatch for {run_id}: source workspace cannot access another workspace"
         ));
     }
+    if !source_owns_run(source, &run.source) {
+        return Err(format!(
+            "delegated run source mismatch for {run_id}: this MCP runtime does not own the run"
+        ));
+    }
     Ok(run)
+}
+
+fn source_owns_run(caller: &AgentEndpoint, owner: &AgentEndpoint) -> bool {
+    if caller.engine_id != owner.engine_id {
+        return false;
+    }
+    let logical_match = caller
+        .logical_session_id
+        .as_deref()
+        .zip(owner.logical_session_id.as_deref())
+        .is_some_and(|(caller_id, owner_id)| caller_id == owner_id);
+    let native_match = caller
+        .native_session_id
+        .as_deref()
+        .zip(owner.native_session_id.as_deref())
+        .is_some_and(|(caller_id, owner_id)| caller_id == owner_id);
+    logical_match || native_match
 }
 
 async fn wait_for_run(
     state: &AppState,
     workspace_id: &str,
+    source: &AgentEndpoint,
     run_id: &str,
     timeout_ms: u64,
 ) -> Result<Value, String> {
     let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
     loop {
-        let run = require_workspace_run(state, workspace_id, run_id)?;
+        let run = require_source_run(state, workspace_id, source, run_id)?;
         if run.status.is_terminal() || tokio::time::Instant::now() >= deadline {
             return Ok(json!({
                 "settled": run.status.is_terminal(),
@@ -344,6 +425,14 @@ fn parse_execution_scope(value: Option<&Value>) -> Result<DelegationExecutionSco
 mod tests {
     use super::*;
 
+    fn endpoint(engine: &str, logical: Option<&str>, native: Option<&str>) -> AgentEndpoint {
+        AgentEndpoint {
+            engine_id: engine.to_string(),
+            logical_session_id: logical.map(str::to_string),
+            native_session_id: native.map(str::to_string),
+        }
+    }
+
     #[test]
     fn tool_schemas_never_accept_source_identity() {
         let definitions = tool_definitions();
@@ -370,8 +459,30 @@ mod tests {
             .find(|definition| definition["name"] == AGENT_WAIT_TOOL)
             .expect("agent_wait definition");
         assert_eq!(
-            definition["inputSchema"]["properties"]["timeoutMs"]["maximum"],
-            WAIT_MAX_MS
+            definition["inputSchema"]["properties"]["timeoutMs"]["maximum"]
+                .as_u64(),
+            Some(WAIT_MAX_MS)
         );
+    }
+
+    #[test]
+    fn run_control_requires_same_source_runtime_or_native_session() {
+        let owner = endpoint("claude", Some("runtime-a"), Some("native-a"));
+        assert!(source_owns_run(
+            &endpoint("claude", Some("runtime-a"), None),
+            &owner
+        ));
+        assert!(source_owns_run(
+            &endpoint("claude", Some("runtime-b"), Some("native-a")),
+            &owner
+        ));
+        assert!(!source_owns_run(
+            &endpoint("claude", Some("runtime-b"), Some("native-b")),
+            &owner
+        ));
+        assert!(!source_owns_run(
+            &endpoint("codex", Some("runtime-a"), Some("native-a")),
+            &owner
+        ));
     }
 }
