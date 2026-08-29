@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::shared_event_log::canonical::types::{CanonicalFact, ControlFact};
 use crate::shared_event_log::SharedEventWriter;
@@ -9,7 +9,7 @@ use crate::shared_sessions::{now_millis, parse_shared_session_id};
 use super::service::AgentBridgeService;
 
 pub(crate) const BRIDGE_INTERNAL_BACKING_CONTROL_KIND: &str =
-    "agent-bridge.internalBackingSession";
+    "agent-bridge.internal-backing-session";
 
 pub(crate) fn session_has_internal_backing_marker(
     writer: &SharedEventWriter,
@@ -48,17 +48,21 @@ pub(crate) fn ensure_backing_session_hidden(
         return Ok(());
     }
 
+    let marked_at = i64::try_from(now_millis()).unwrap_or(i64::MAX);
     writer
         .append_canonical_fact(
             &shared_session_id,
             CanonicalFact::Control(ControlFact {
-                fact_id: format!("agent-bridge:{owner_run_id}:internal-backing-session"),
                 control_kind: BRIDGE_INTERNAL_BACKING_CONTROL_KIND.to_string(),
                 logical_turn_id: None,
                 attempt_id: None,
                 binding_key: None,
-                reason: Some(format!("Agent Bridge backing lane for {owner_run_id}")),
-                controlled_at: i64::try_from(now_millis()).unwrap_or(i64::MAX),
+                reason: Some("Agent Bridge internal backing lane".to_string()),
+                details: Some(json!({
+                    "ownerRunId": owner_run_id,
+                    "markedAt": marked_at,
+                })),
+                extra: Value::Object(Default::default()),
             }),
         )
         .map(|_| ())
@@ -100,10 +104,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn marker_kind_is_namespaced_and_stable() {
+    fn marker_kind_is_namespaced_and_validator_compatible() {
         assert_eq!(
             BRIDGE_INTERNAL_BACKING_CONTROL_KIND,
-            "agent-bridge.internalBackingSession"
+            "agent-bridge.internal-backing-session"
         );
+        let fact = CanonicalFact::Control(ControlFact {
+            control_kind: BRIDGE_INTERNAL_BACKING_CONTROL_KIND.to_string(),
+            logical_turn_id: None,
+            attempt_id: None,
+            binding_key: None,
+            reason: Some("internal".to_string()),
+            details: Some(json!({"ownerRunId":"run-1"})),
+            extra: Value::Object(Default::default()),
+        });
+        crate::shared_event_log::canonical::validator::validate_fact(&fact)
+            .expect("marker must satisfy canonical control validation");
     }
 }
