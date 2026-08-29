@@ -35,14 +35,11 @@ pub async fn cancel_run(
         return service.cancel(&run_id);
     }
 
-    let binding = run
-        .dispatch_binding
-        .clone()
-        .ok_or_else(|| {
-            format!(
-                "delegated cancel owner unavailable for {run_id}: dispatch binding is not durably established"
-            )
-        })?;
+    let binding = run.dispatch_binding.clone().ok_or_else(|| {
+        format!(
+            "delegated cancel owner unavailable for {run_id}: dispatch binding is not durably established"
+        )
+    })?;
 
     let interrupt = shared_session_v2_interrupt_turn(
         run.workspace_id.clone(),
@@ -136,8 +133,9 @@ mod tests {
 
     #[test]
     fn interrupted_response_settles_cancelled() {
-        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
-        let run = service.runs_for_test_create(request()).expect("create");
+        let registry = DelegationRunRegistry::new(Default::default());
+        let run = registry.create(request()).expect("create");
+        let service = AgentBridgeService::new(registry);
         let cancelled = settle_after_control_response(
             &service,
             &run.id,
