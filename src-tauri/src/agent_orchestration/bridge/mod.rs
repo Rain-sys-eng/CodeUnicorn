@@ -9,6 +9,7 @@ pub(crate) mod persistence;
 pub(crate) mod presentation;
 pub mod run_registry;
 pub mod service;
+pub(crate) mod worktree;
 
 pub use models::{
     AgentEndpoint, CreateDelegationRun, DelegationContextPolicy, DelegationDispatchBinding,
