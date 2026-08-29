@@ -16,7 +16,7 @@ import {
 } from "../utils/sharedSessionEngines";
 
 const BRIDGE_INTERNAL_BACKING_NOTICE =
-  "Control: agent-bridge.internalBackingSession";
+  "Control: agent-bridge.internal-backing-session";
 
 export async function startSharedSession(
   workspaceId: string,
