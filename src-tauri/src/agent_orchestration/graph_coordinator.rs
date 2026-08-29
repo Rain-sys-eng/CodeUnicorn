@@ -5,13 +5,15 @@ use crate::state::AppState;
 use super::bridge::AgentEndpoint;
 use super::graph::AgentGraphPlan;
 use super::graph_store::{AgentGraphRegistry, DurableAgentGraphRun};
-use super::scheduler::{dispatch_ready_batch, AgentGraphDispatchBatch, AgentGraphExecution};
+use super::scheduler::{
+    dispatch_prepared_batch, prepare_ready_batch, AgentGraphDispatchBatch, AgentGraphExecution,
+};
 
 /// Durable coordinator for Bridge-backed DAG execution.
 ///
 /// The coordinator owns graph-level orchestration facts only. Each node's process/session/result
-/// remains owned by Agent Bridge. Every graph mutation is persisted before the caller may observe
-/// it as durable progress.
+/// remains owned by Agent Bridge. Graph identity and node -> Bridge run mappings are persisted
+/// before the corresponding target runtime may start.
 pub(crate) struct AgentGraphCoordinator {
     registry: AgentGraphRegistry,
 }
@@ -33,7 +35,7 @@ impl AgentGraphCoordinator {
         self.registry.list()
     }
 
-    /// Create the graph's durable identity before dispatching any target runtime.
+    /// Create graph identity, prepare Bridge runs, persist their graph mapping, then start runtimes.
     pub(crate) async fn start(
         &self,
         plan: AgentGraphPlan,
@@ -43,32 +45,12 @@ impl AgentGraphCoordinator {
         app: &AppHandle,
     ) -> Result<AgentGraphDispatchBatch, String> {
         let (validated, execution) = AgentGraphExecution::new(&plan, workspace_id, source)?;
-        let record = DurableAgentGraphRun::new(plan, execution.clone())?;
+        let record = DurableAgentGraphRun::new(plan, execution)?;
         let durable = self.registry.create(record)?;
-
-        match dispatch_ready_batch(&validated, durable.execution.clone(), state, app).await {
-            Ok(batch) => {
-                self.registry
-                    .update_execution(&batch.graph_id, batch.execution.clone())?;
-                Ok(batch)
-            }
-            Err(error) => {
-                // `dispatch_ready_batch` may have created/settled Bridge runs before a later error.
-                // Reconcile the graph projection from those durable Bridge facts before returning.
-                let mut recovered = durable.execution;
-                let _ = recovered.reconcile(state);
-                let _ = self
-                    .registry
-                    .update_execution(&recovered.graph_id, recovered);
-                Err(error)
-            }
-        }
+        self.advance_record(&validated, durable, state, app).await
     }
 
     /// Advance one previously-created graph after one or more node runs changed state.
-    ///
-    /// Repeated calls are idempotent with respect to already-started nodes because the persisted
-    /// node -> delegation run mapping is reconciled before calculating newly-ready nodes.
     pub(crate) async fn tick(
         &self,
         graph_id: &str,
@@ -80,10 +62,47 @@ impl AgentGraphCoordinator {
             .get(graph_id)?
             .ok_or_else(|| format!("orchestration graph not found: {graph_id}"))?;
         let validated = durable.plan.validate()?;
-        let batch = dispatch_ready_batch(&validated, durable.execution, state, app).await?;
+        self.advance_record(&validated, durable, state, app).await
+    }
+
+    async fn advance_record(
+        &self,
+        validated: &super::graph::ValidatedAgentGraph,
+        durable: DurableAgentGraphRun,
+        state: &AppState,
+        app: &AppHandle,
+    ) -> Result<AgentGraphDispatchBatch, String> {
+        let prepared = prepare_ready_batch(validated, durable.execution, state).await?;
+
+        // Critical ordering guarantee: the graph's mapping to each freshly-created Bridge run is
+        // durable before any target runtime side effect occurs.
         self.registry
-            .update_execution(graph_id, batch.execution.clone())?;
-        Ok(batch)
+            .update_execution(&prepared.graph_id, prepared.execution.clone())?;
+
+        match dispatch_prepared_batch(validated, prepared, state, app).await {
+            Ok(batch) => {
+                self.registry
+                    .update_execution(&batch.graph_id, batch.execution.clone())?;
+                Ok(batch)
+            }
+            Err(error) => {
+                let current = self
+                    .registry
+                    .get(&durable.plan.id)?
+                    .ok_or_else(|| {
+                        format!(
+                            "orchestration graph disappeared during recovery: {}",
+                            durable.plan.id
+                        )
+                    })?;
+                let mut recovered = current.execution;
+                let _ = recovered.reconcile(state);
+                let _ = self
+                    .registry
+                    .update_execution(&recovered.graph_id, recovered);
+                Err(error)
+            }
+        }
     }
 }
 
