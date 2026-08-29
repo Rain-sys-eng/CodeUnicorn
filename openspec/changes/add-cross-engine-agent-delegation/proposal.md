@@ -16,7 +16,8 @@ CodeUnicorn 已经能够在同一桌面应用内原生承载 Claude Code、Codex
 
 ## What Changes
 
-- 新增 `src-tauri/src/agent_orchestration/bridge/**`：delegation DTO、run registry、lineage、result、context policy、permission/cancel contract、durable facts persistence 与 service boundary。
+- 新增 `src-tauri/src/agent_orchestration/bridge/**`：delegation DTO、run registry、service boundary、lineage、result、context policy、permission/cancel contract 与后续 durable persistence/dispatcher。
+- `AppState` 持有唯一 long-lived `AgentBridgeService`；workspace identity、engine canonical id、enable gate 和 target availability 在 run creation 前校验。
 - 在现有 `agent_orchestration` 上扩展 Parallel / DAG / nested delegation，避免创建第二套 orchestrator。
 - 将 Agent Bridge dispatch 接入现有 EngineManager / Shared Session execution target，而不是直接 spawn/parse 各 CLI。
 - 新增 Agent Bridge MCP tools：`agent_list`、`agent_delegate`、`agent_status`、`agent_wait`、`agent_result`、`agent_send`、`agent_cancel`。
@@ -30,7 +31,7 @@ CodeUnicorn 已经能够在同一桌面应用内原生承载 Claude Code、Codex
 - 不直接嵌入 PAL/clink、CAO、Reeves 等外部 orchestrator 作为 runtime dependency。
 - 不默认绕过 sandbox/approval。
 - 不要求所有 delegated task 共享完整 source Agent transcript；默认 context policy 为 Explicit。
-- 第一批 Core 不改 UI、不改现有 Multi-Agent V1 execution path。
+- 当前 Core/Service 批次不改 UI、不改现有 Multi-Agent V1 execution path。
 
 ## Capabilities
 
@@ -47,12 +48,19 @@ CodeUnicorn 已经能够在同一桌面应用内原生承载 Claude Code、Codex
 
 ## Impact
 
-- Backend：主要新增 `agent_orchestration/bridge/**`，后续窄接线 state/command registry/engine/shared boundary。
+- Backend：主要新增 `agent_orchestration/bridge/**`，并窄接线 `state.rs`；后续进入 shared/engine dispatch boundary。
 - Frontend：后续新增 collaboration domain；普通聊天及现有 Multi-Agent V1 保持兼容。
 - Runtime：复用各 engine native session 与 AgentEventBus；Bridge 只持有 logical run ownership。
-- Storage：新增 delegated run durable facts，遵循 lock + atomic write。
+- Storage：后续新增 delegated run durable facts，遵循 lock + atomic write。
 - Git：写任务可采用 isolated worktree。
 - Security：delegation 不提升 target 权限，approval 继续走现有确认链。
+
+## 当前实现进度
+
+- 已完成 Core DTO、run registry、lineage/depth/concurrency/terminal settlement。
+- 已完成 `AgentBridgeService` 与 AppState single owner。
+- 已完成 canonical source/target validation、engine enable gate、target CLI availability fail-closed、workspace identity gate。
+- 未开始实际 target dispatch、AgentEventBus result binding、persistence、MCP、worktree、UI。
 
 ## 验收标准
 
