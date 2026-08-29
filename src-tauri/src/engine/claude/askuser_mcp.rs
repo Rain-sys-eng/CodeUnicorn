@@ -38,6 +38,24 @@ use tokio::net::TcpListener;
 
 use super::ClaudeSessionManager;
 
+impl super::ClaudeSession {
+    /// Snapshot the exact live Claude turn that is issuing an authenticated managed MCP call.
+    /// Kept on the MCP child module so ordinary engine consumers do not gain a new control API.
+    pub(crate) fn mcp_active_turn_id(&self) -> Option<String> {
+        self.active_turn_id
+            .lock()
+            .ok()
+            .and_then(|turn_id| turn_id.clone())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_mcp_active_turn_for_test(&self, turn_id: Option<&str>) {
+        if let Ok(mut active_turn_id) = self.active_turn_id.lock() {
+            *active_turn_id = turn_id.map(str::to_string);
+        }
+    }
+}
+
 /// The MCP server name used by Claude (`mcp__ccgui__<tool>`).
 pub const MCP_SERVER_NAME: &str = "ccgui";
 pub const ASK_TOOL_NAME: &str = "AskUserQuestion";
