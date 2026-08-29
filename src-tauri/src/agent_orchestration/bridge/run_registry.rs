@@ -4,7 +4,8 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::models::{
-    CreateDelegationRun, DelegationResult, DelegationRun, DelegationRunStatus,
+    CreateDelegationRun, DelegationDispatchBinding, DelegationResult, DelegationRun,
+    DelegationRunStatus,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -41,6 +42,10 @@ impl DelegationRunRegistry {
 
     pub fn create(&self, request: CreateDelegationRun) -> Result<DelegationRun, String> {
         request.validate()?;
+        let target_execution = request
+            .target_execution
+            .clone()
+            .ok_or_else(|| "resolved delegated target execution is required".to_string())?;
         let mut runs = self
             .runs
             .lock()
@@ -98,12 +103,14 @@ impl DelegationRunRegistry {
             depth,
             source: request.source,
             target: request.target,
+            target_execution,
             workspace_id: request.workspace_id,
             task: request.task,
             file_refs: request.file_refs,
             context_policy: request.context_policy,
             execution_scope: request.execution_scope,
             status: DelegationRunStatus::Queued,
+            dispatch_binding: None,
             result: None,
             error: None,
             created_at_ms: now_ms(),
@@ -130,6 +137,108 @@ impl DelegationRunRegistry {
         let mut values = runs.values().cloned().collect::<Vec<_>>();
         values.sort_by_key(|run| run.created_at_ms);
         Ok(values)
+    }
+
+    /// Atomically owns the Queued -> Running dispatch edge. A second dispatcher cannot
+    /// reuse a run that is already in-flight.
+    pub fn claim_dispatch(&self, run_id: &str) -> Result<DelegationRun, String> {
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
+        let run = runs
+            .get_mut(run_id)
+            .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
+        if run.status != DelegationRunStatus::Queued {
+            return Err(format!(
+                "delegated run {run_id} cannot be dispatched from state {:?}",
+                run.status
+            ));
+        }
+        run.status = DelegationRunStatus::Running;
+        run.started_at_ms = Some(now_ms());
+        Ok(run.clone())
+    }
+
+    pub fn set_dispatch_binding(
+        &self,
+        run_id: &str,
+        binding: DelegationDispatchBinding,
+    ) -> Result<DelegationRun, String> {
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
+        let run = runs
+            .get_mut(run_id)
+            .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
+        if run.status.is_terminal() {
+            return Err(format!("cannot bind terminal delegated run: {run_id}"));
+        }
+        if let Some(existing) = run.dispatch_binding.as_ref() {
+            if existing == &binding {
+                return Ok(run.clone());
+            }
+            return Err(format!(
+                "delegated run {run_id} already owns a different dispatch binding"
+            ));
+        }
+        run.target.logical_session_id = Some(binding.backing_thread_id.clone());
+        run.dispatch_binding = Some(binding);
+        Ok(run.clone())
+    }
+
+    pub fn record_runtime_ack(
+        &self,
+        run_id: &str,
+        attempt_id: &str,
+        native_session_id: &str,
+        runtime_turn_id: &str,
+    ) -> Result<DelegationRun, String> {
+        let native_session_id = native_session_id.trim();
+        let runtime_turn_id = runtime_turn_id.trim();
+        if native_session_id.is_empty() || runtime_turn_id.is_empty() {
+            return Err(format!(
+                "delegated run {run_id} runtime ACK requires native session and turn identity"
+            ));
+        }
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
+        let run = runs
+            .get_mut(run_id)
+            .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
+        if run.status.is_terminal() {
+            return Err(format!("cannot ACK terminal delegated run: {run_id}"));
+        }
+        let binding = run
+            .dispatch_binding
+            .as_mut()
+            .ok_or_else(|| format!("delegated run {run_id} has no dispatch binding"))?;
+        if binding.attempt_id != attempt_id {
+            return Err(format!(
+                "delegated run {run_id} runtime ACK attempt mismatch: expected {}, got {attempt_id}",
+                binding.attempt_id
+            ));
+        }
+        if binding
+            .native_session_id
+            .as_deref()
+            .is_some_and(|existing| existing != native_session_id)
+            || binding
+                .runtime_turn_id
+                .as_deref()
+                .is_some_and(|existing| existing != runtime_turn_id)
+        {
+            return Err(format!(
+                "delegated run {run_id} received conflicting runtime ACK identity"
+            ));
+        }
+        binding.native_session_id = Some(native_session_id.to_string());
+        binding.runtime_turn_id = Some(runtime_turn_id.to_string());
+        run.target.native_session_id = Some(native_session_id.to_string());
+        Ok(run.clone())
     }
 
     pub fn transition(
@@ -250,6 +359,22 @@ mod tests {
     use crate::agent_orchestration::bridge::models::{
         AgentEndpoint, DelegationContextPolicy, DelegationExecutionScope,
     };
+    use crate::engine::EngineType;
+    use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
+    use crate::shared_session_v2::ExecutionTargetInput;
+
+    fn execution_target() -> ExecutionTargetInput {
+        ExecutionTargetInput {
+            engine: EngineType::Codex,
+            provider_profile_id: None,
+            model_catalog_entry_id: Some("gpt-5.3-codex-spark".to_string()),
+            model: Some("gpt-5.3-codex-spark".to_string()),
+            reasoning_effort: None,
+            provider_profile_name_snapshot: Some("Local".to_string()),
+            provider_profile_source: Some(CanonicalProviderProfileSource::Local),
+            runtime_capability_fingerprint: None,
+        }
+    }
 
     fn request(parent_run_id: Option<String>) -> CreateDelegationRun {
         CreateDelegationRun {
@@ -263,6 +388,7 @@ mod tests {
                 logical_session_id: None,
                 native_session_id: None,
             },
+            target_execution: Some(execution_target()),
             workspace_id: "workspace-1".to_string(),
             task: "review authentication".to_string(),
             file_refs: Vec::new(),
@@ -285,6 +411,40 @@ mod tests {
         assert_eq!(child.root_run_id, root.id);
         assert_eq!(child.parent_run_id.as_deref(), Some(root.id.as_str()));
         assert_eq!(child.depth, 1);
+    }
+
+    #[test]
+    fn dispatch_claim_is_single_owner_and_runtime_ack_updates_binding() {
+        let registry = DelegationRunRegistry::default();
+        let run = registry.create(request(None)).expect("create run");
+        registry.claim_dispatch(&run.id).expect("claim dispatch");
+        assert!(registry.claim_dispatch(&run.id).is_err());
+        registry
+            .set_dispatch_binding(
+                &run.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:bridge-session".to_string(),
+                    attempt_id: "attempt-1".to_string(),
+                    logical_turn_id: "turn-1".to_string(),
+                    binding_key: "squad:run:delegate:codex:default".to_string(),
+                    native_session_id: None,
+                    runtime_turn_id: None,
+                },
+            )
+            .expect("set binding");
+        let acked = registry
+            .record_runtime_ack(&run.id, "attempt-1", "native-1", "runtime-turn-1")
+            .expect("record ack");
+
+        assert_eq!(acked.target.logical_session_id.as_deref(), Some("shared:bridge-session"));
+        assert_eq!(acked.target.native_session_id.as_deref(), Some("native-1"));
+        assert_eq!(
+            acked
+                .dispatch_binding
+                .as_ref()
+                .and_then(|binding| binding.runtime_turn_id.as_deref()),
+            Some("runtime-turn-1")
+        );
     }
 
     #[test]
