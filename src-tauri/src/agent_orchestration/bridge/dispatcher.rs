@@ -19,7 +19,7 @@ use crate::state::AppState;
 
 use super::models::{
     DelegationContextPolicy, DelegationDispatchBinding, DelegationExecutionScope, DelegationResult,
-    DelegationRun,
+    DelegationRun, DelegationRunStatus,
 };
 use super::service::AgentBridgeService;
 
@@ -88,9 +88,9 @@ async fn dispatch_claimed_run(
             false,
             json!({
                 "kind": "agent-bridge-delegation",
-                "runId": run.id,
-                "rootRunId": run.root_run_id,
-                "parentRunId": run.parent_run_id,
+                "runId": run.id.clone(),
+                "rootRunId": run.root_run_id.clone(),
+                "parentRunId": run.parent_run_id.clone(),
                 "contextPolicy": "explicit",
             }),
             attempt_id.clone(),
@@ -99,16 +99,16 @@ async fn dispatch_claimed_run(
         match outcome.status {
             BeginTurnStatus::Creating => outcome.binding_key,
             BeginTurnStatus::RecoveryRequired => {
-                return Err(format!(
-                    "delegated backing turn requires recovery: {}",
-                    outcome.reason.unwrap_or_else(|| outcome.binding_key.clone())
-                ));
+                let reason = outcome
+                    .reason
+                    .unwrap_or_else(|| outcome.binding_key.clone());
+                return Err(format!("delegated backing turn requires recovery: {reason}"));
             }
             BeginTurnStatus::TargetUnavailable => {
-                return Err(format!(
-                    "delegated target unavailable at Tx1: {}",
-                    outcome.reason.unwrap_or_else(|| "unknown target error".to_string())
-                ));
+                let reason = outcome
+                    .reason
+                    .unwrap_or_else(|| "unknown target error".to_string());
+                return Err(format!("delegated target unavailable at Tx1: {reason}"));
             }
         }
     };
@@ -208,7 +208,7 @@ async fn dispatch_claimed_run(
 }
 
 async fn create_backing_thread(run: &DelegationRun, app: &AppHandle) -> Result<String, String> {
-    let selected_target = shared_selected_target(&run.target_execution)?;
+    let selected_target = shared_selected_target(&run.target_execution);
     let started = start_shared_session(
         run.workspace_id.clone(),
         Some(selected_target),
@@ -221,16 +221,18 @@ async fn create_backing_thread(run: &DelegationRun, app: &AppHandle) -> Result<S
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "Agent Bridge backing Shared Session did not return thread identity".to_string())
+        .ok_or_else(|| {
+            "Agent Bridge backing Shared Session did not return thread identity".to_string()
+        })
 }
 
-fn shared_selected_target(target: &ExecutionTargetInput) -> Result<SharedSelectedTarget, String> {
+fn shared_selected_target(target: &ExecutionTargetInput) -> SharedSelectedTarget {
     let provider_profile_source = match target.provider_profile_source {
         Some(CanonicalProviderProfileSource::Local) => Some("disk".to_string()),
         Some(CanonicalProviderProfileSource::Managed) => Some("managed".to_string()),
         None => None,
     };
-    Ok(SharedSelectedTarget {
+    SharedSelectedTarget {
         engine: target.engine,
         provider_profile_id: target.provider_profile_id.clone(),
         model_catalog_entry_id: target.model_catalog_entry_id.clone(),
@@ -243,7 +245,7 @@ fn shared_selected_target(target: &ExecutionTargetInput) -> Result<SharedSelecte
             }),
         provider_profile_name_snapshot: target.provider_profile_name_snapshot.clone(),
         provider_profile_source,
-    })
+    }
 }
 
 fn ensure_dispatch_policy_supported(run: &DelegationRun) -> Result<(), String> {
@@ -327,7 +329,9 @@ async fn await_and_settle(
         let writer = state
             .shared_event_writer
             .as_ref()
-            .ok_or_else(|| "shared event log unavailable during Agent Bridge settlement".to_string())?;
+            .ok_or_else(|| {
+                "shared event log unavailable during Agent Bridge settlement".to_string()
+            })?;
         let event = writer
             .events_for_session(&shared_session_id)
             .map_err(|error| error.to_string())?
@@ -428,7 +432,7 @@ mod tests {
             file_refs: vec!["src/auth.rs".to_string(), "  ".to_string()],
             context_policy: DelegationContextPolicy::Explicit,
             execution_scope: scope,
-            status: super::super::DelegationRunStatus::Queued,
+            status: DelegationRunStatus::Queued,
             dispatch_binding: None,
             result: None,
             error: None,
