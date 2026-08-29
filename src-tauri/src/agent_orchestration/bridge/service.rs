@@ -1,7 +1,5 @@
 use crate::engine::adapter_registry::engine_id;
-use crate::engine::{
-    engine_enabled_in_settings, EngineManager, EngineStatus, EngineType,
-};
+use crate::engine::{engine_enabled_in_settings, EngineManager, EngineStatus, EngineType};
 use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
 use crate::shared_session_v2::{validate_resolved_execution_target, ExecutionTargetInput};
 use crate::types::AppSettings;
@@ -75,12 +73,60 @@ impl AgentBridgeService {
         self.runs.create(request)
     }
 
+    /// Create a fresh logical run for a follow-up turn while preserving the target native session.
+    /// The previous run remains terminal and immutable.
+    pub async fn continue_run(
+        &self,
+        previous_run_id: &str,
+        task: String,
+        engine_manager: &EngineManager,
+        settings: &AppSettings,
+    ) -> Result<DelegationRun, String> {
+        let previous = self
+            .runs
+            .get(previous_run_id)?
+            .ok_or_else(|| format!("continuation source run not found: {previous_run_id}"))?;
+        let source_engine = resolve_builtin_engine(&previous.source.engine_id).ok_or_else(|| {
+            format!(
+                "continuation source engine is not registered for Agent Bridge: {}",
+                previous.source.engine_id
+            )
+        })?;
+        let target_engine = resolve_builtin_engine(&previous.target.engine_id).ok_or_else(|| {
+            format!(
+                "continuation target engine is not registered for Agent Bridge: {}",
+                previous.target.engine_id
+            )
+        })?;
+
+        ensure_engine_enabled(settings, source_engine, "source")?;
+        ensure_engine_enabled(settings, target_engine, "target")?;
+        ensure_delegated_dispatch_supported(target_engine)?;
+        ensure_target_available(engine_manager, settings, target_engine).await?;
+        if previous.target_execution.engine != target_engine {
+            return Err(format!(
+                "continuation target execution engine mismatch for {previous_run_id}"
+            ));
+        }
+        validate_resolved_execution_target(&previous.target_execution)
+            .map_err(|error| format!("continuation target is no longer executable: {error}"))?;
+
+        self.runs.create_continuation(previous_run_id, task)
+    }
+
     pub fn get_run(&self, run_id: &str) -> Result<Option<DelegationRun>, String> {
         self.runs.get(run_id)
     }
 
     pub fn list_runs(&self) -> Result<Vec<DelegationRun>, String> {
         self.runs.list()
+    }
+
+    pub fn backing_thread_ids_for_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<String>, String> {
+        self.runs.backing_thread_ids_for_workspace(workspace_id)
     }
 
     pub(crate) fn claim_dispatch(&self, run_id: &str) -> Result<DelegationRun, String> {
@@ -102,12 +148,8 @@ impl AgentBridgeService {
         native_session_id: &str,
         runtime_turn_id: &str,
     ) -> Result<DelegationRun, String> {
-        self.runs.record_runtime_ack(
-            run_id,
-            attempt_id,
-            native_session_id,
-            runtime_turn_id,
-        )
+        self.runs
+            .record_runtime_ack(run_id, attempt_id, native_session_id, runtime_turn_id)
     }
 
     pub fn transition(
@@ -265,8 +307,7 @@ fn default_local_execution_target(
     let model = preferred
         .and_then(|preferred| {
             status.models.iter().find(|model| {
-                model.id == preferred
-                    || (!model.model.trim().is_empty() && model.model == preferred)
+                model.id == preferred || (!model.model.trim().is_empty() && model.model == preferred)
             })
         })
         .or_else(|| status.models.iter().find(|model| model.default))
@@ -308,7 +349,8 @@ fn default_local_execution_target(
 mod tests {
     use super::*;
     use crate::agent_orchestration::bridge::{
-        AgentEndpoint, DelegationContextPolicy, DelegationExecutionScope,
+        AgentEndpoint, DelegationContextPolicy, DelegationDispatchBinding,
+        DelegationExecutionScope, DelegationResult,
     };
     use crate::engine::ModelInfo;
 
@@ -339,17 +381,15 @@ mod tests {
         status.installed = true;
         status.error = None;
         if engine == EngineType::Codex {
-            status.models = vec![
-                ModelInfo::new("gpt-5.3-codex-spark", "gpt-5.3-codex-spark").as_default(),
-            ];
-            status.default_model = Some("gpt-5.3-codex-spark".to_string());
+            status.models = vec![ModelInfo::new("gpt-5.6-sol", "gpt-5.6-sol").as_default()];
+            status.default_model = Some("gpt-5.6-sol".to_string());
         }
         manager.cache_engine_status(status).await;
     }
 
     #[tokio::test]
     async fn create_run_rejects_unknown_target_before_registry_mutation() {
-        let service = AgentBridgeService::default();
+        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
         let manager = EngineManager::new();
         let error = service
             .create_run(
@@ -366,7 +406,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_run_accepts_cached_installed_target_and_freezes_execution_snapshot() {
-        let service = AgentBridgeService::default();
+        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
         let manager = EngineManager::new();
         cache_installed(&manager, EngineType::Codex).await;
 
@@ -382,16 +422,75 @@ mod tests {
         assert_eq!(run.source.engine_id, "claude");
         assert_eq!(run.target.engine_id, "codex");
         assert_eq!(run.target_execution.engine, EngineType::Codex);
-        assert_eq!(
-            run.target_execution.model.as_deref(),
-            Some("gpt-5.3-codex-spark")
-        );
+        assert_eq!(run.target_execution.model.as_deref(), Some("gpt-5.6-sol"));
         assert_eq!(run.status, DelegationRunStatus::Queued);
     }
 
     #[tokio::test]
+    async fn continuation_keeps_frozen_target_and_new_run_identity() {
+        let registry = DelegationRunRegistry::new(Default::default());
+        let service = AgentBridgeService::new(registry);
+        let manager = EngineManager::new();
+        cache_installed(&manager, EngineType::Codex).await;
+        let run = service
+            .create_run(
+                request("claude", "codex"),
+                &manager,
+                &AppSettings::default(),
+            )
+            .await
+            .expect("create");
+        service.claim_dispatch(&run.id).expect("claim");
+        service
+            .set_dispatch_binding(
+                &run.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:backing".to_string(),
+                    attempt_id: "attempt-1".to_string(),
+                    logical_turn_id: "turn-1".to_string(),
+                    binding_key: "squad:root:delegate:codex:default".to_string(),
+                    native_session_id: Some("native-1".to_string()),
+                    runtime_turn_id: Some("runtime-1".to_string()),
+                },
+            )
+            .expect("bind");
+        service
+            .settle_completed(
+                &run.id,
+                DelegationResult {
+                    summary: Some("done".to_string()),
+                    changed_files: Vec::new(),
+                    branch: None,
+                    artifact_path: None,
+                },
+            )
+            .expect("complete");
+
+        let continuation = service
+            .continue_run(
+                &run.id,
+                "review the follow-up".to_string(),
+                &manager,
+                &AppSettings::default(),
+            )
+            .await
+            .expect("continue");
+
+        assert_ne!(continuation.id, run.id);
+        assert_eq!(
+            continuation.continuation_of_run_id.as_deref(),
+            Some(run.id.as_str())
+        );
+        assert_eq!(continuation.target_execution, run.target_execution);
+        assert_eq!(
+            continuation.target.native_session_id.as_deref(),
+            Some("native-1")
+        );
+    }
+
+    #[tokio::test]
     async fn child_source_must_match_parent_target() {
-        let service = AgentBridgeService::default();
+        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
         let manager = EngineManager::new();
         cache_installed(&manager, EngineType::Codex).await;
 
@@ -415,7 +514,7 @@ mod tests {
 
     #[tokio::test]
     async fn disabled_engine_is_rejected_without_creating_a_run() {
-        let service = AgentBridgeService::default();
+        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
         let manager = EngineManager::new();
         let error = service
             .create_run(
@@ -432,7 +531,7 @@ mod tests {
 
     #[tokio::test]
     async fn unsupported_shared_dispatch_target_fails_before_run_creation() {
-        let service = AgentBridgeService::default();
+        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
         let manager = EngineManager::new();
         let error = service
             .create_run(
