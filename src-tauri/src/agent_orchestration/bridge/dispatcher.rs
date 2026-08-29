@@ -27,6 +27,7 @@ use super::models::{
     DelegationContextPolicy, DelegationDispatchBinding, DelegationExecutionScope, DelegationResult,
     DelegationRun, DelegationRunStatus,
 };
+use super::presentation::ensure_backing_session_hidden;
 use super::service::AgentBridgeService;
 
 const BRIDGE_NODE_ID: &str = "delegate";
@@ -77,6 +78,17 @@ async fn dispatch_claimed_run(
     // original lane and scoped binding owner, so the existing native CLI session is reused.
     let lane = resolve_dispatch_lane(&service, &run, &app).await?;
     let backing_thread_id = lane.backing_thread_id.clone();
+    {
+        // Presentation hiding is a canonical Shared fact, not an in-memory/UI-only convention.
+        // Mark before any runtime dispatch so an internal backing lane never behaves like an
+        // ordinary user-created Shared session after the Bridge starts using it.
+        let state = app.state::<AppState>();
+        let writer = state
+            .shared_event_writer
+            .as_ref()
+            .ok_or_else(|| "shared event log unavailable for Agent Bridge presentation marker".to_string())?;
+        ensure_backing_session_hidden(writer, &backing_thread_id, &lane.binding_owner_run_id)?;
+    }
     let shared_session_id = parse_shared_session_id(&backing_thread_id)?;
     let attempt_id = Uuid::new_v4().to_string();
     let logical_turn_id = Uuid::new_v4().to_string();
