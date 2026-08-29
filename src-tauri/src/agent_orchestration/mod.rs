@@ -4,11 +4,12 @@
 //! 复用 Shared Session ordinary turns + scoped binding；现有 V1 行为保持兼容。
 //!
 //! `bridge` 子域承载跨 engine Agent-to-Agent delegation control plane；
-//! `graph` 提供 Bridge-backed Parallel / DAG orchestration 的纯计划模型，实际 runtime
-//! side effect 仍必须由后续 scheduler 通过 Agent Bridge 发起。
+//! `graph` + `scheduler` 提供 Bridge-backed Parallel / DAG orchestration。所有 runtime
+//! side effect 都必须经 Agent Bridge，禁止在 scheduler 内新增 CLI send/runtime owner。
 
 pub mod bridge;
 pub(crate) mod graph;
+pub(crate) mod scheduler;
 mod commands;
 mod projection;
 mod support;
