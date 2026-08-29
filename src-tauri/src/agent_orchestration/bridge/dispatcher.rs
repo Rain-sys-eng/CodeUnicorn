@@ -4,6 +4,11 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
+use crate::engine::agent_event_bus::{
+    AgentEventBus, AgentEventSubscription, MossxAgentEvent, RunSettlementStatus,
+};
+use crate::engine::events::EngineEvent;
+use crate::engine::EngineType;
 use crate::shared_event_log::canonical::types::{
     CanonicalBlock, CanonicalFact, CanonicalProviderProfileSource, OutcomeStatus,
 };
@@ -25,6 +30,7 @@ use super::service::AgentBridgeService;
 
 const BRIDGE_NODE_ID: &str = "delegate";
 const BRIDGE_WORKER_ROLE: &str = "delegated-agent";
+const BRIDGE_EVENT_SUBSCRIPTION_CAPACITY: usize = 256;
 
 /// Dispatch one already-created delegated run into the existing Shared V2 runtime path.
 ///
@@ -68,6 +74,13 @@ async fn dispatch_claimed_run(
     let logical_turn_id = Uuid::new_v4().to_string();
     let permission_class = permission_class(run.execution_scope)?;
     let prompt = explicit_delegation_prompt(&run);
+
+    // Subscribe before the target runtime can emit. The existing Shared event sink publishes
+    // native runtime ownership into this same bus; after dispatch ACK we replay the buffered
+    // scoped events with DelegationRun.id as the logical run id. No engine-specific parser or
+    // second streaming bus is introduced.
+    let event_bus = app.state::<AppState>().engine_manager.agent_event_bus();
+    let event_subscription = event_bus.subscribe(BRIDGE_EVENT_SUBSCRIPTION_CAPACITY);
 
     let binding_key = {
         let state = app.state::<AppState>();
@@ -176,6 +189,14 @@ async fn dispatch_claimed_run(
         }
     }
 
+    spawn_bridge_event_reattribution(
+        event_bus,
+        event_subscription,
+        backing_thread_id.clone(),
+        run.id.clone(),
+        run.target_execution.engine,
+    );
+
     let waiter_service = Arc::clone(&service);
     let waiter_run_id = run.id.clone();
     let waiter_workspace_id = run.workspace_id.clone();
@@ -205,6 +226,88 @@ async fn dispatch_claimed_run(
     service
         .get_run(&run.id)?
         .ok_or_else(|| format!("delegated run disappeared after dispatch: {}", run.id))
+}
+
+fn spawn_bridge_event_reattribution(
+    bus: AgentEventBus,
+    mut subscription: AgentEventSubscription,
+    backing_thread_id: String,
+    delegated_run_id: String,
+    engine: EngineType,
+) {
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = subscription.recv().await {
+            if event.logical_session_id != backing_thread_id
+                || event.engine != engine
+                || event.run_id == delegated_run_id
+            {
+                continue;
+            }
+            let is_terminal = event.kind == "run.settled";
+            if let Err(error) = reattribute_bridge_event(
+                &bus,
+                &event,
+                &backing_thread_id,
+                &delegated_run_id,
+                engine,
+            ) {
+                log::warn!(
+                    "[agent-bridge] event re-attribution failed (run={} kind={}): {}",
+                    delegated_run_id,
+                    event.kind,
+                    error
+                );
+            }
+            if is_terminal {
+                break;
+            }
+        }
+    });
+}
+
+fn reattribute_bridge_event(
+    bus: &AgentEventBus,
+    event: &MossxAgentEvent,
+    backing_thread_id: &str,
+    delegated_run_id: &str,
+    engine: EngineType,
+) -> Result<(), String> {
+    if event.kind == "run.settled" {
+        let status_value = event
+            .payload
+            .get("status")
+            .cloned()
+            .ok_or_else(|| "delegated settlement event is missing status".to_string())?;
+        let status = serde_json::from_value::<RunSettlementStatus>(status_value)
+            .map_err(|error| format!("parse delegated settlement status: {error}"))?;
+        let evidence = event
+            .payload
+            .get("evidence")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let _ = bus.publish_settlement(
+            engine,
+            backing_thread_id,
+            event.native_session_id.as_deref(),
+            delegated_run_id,
+            event.turn_id.as_deref(),
+            status,
+            evidence,
+        );
+        return Ok(());
+    }
+
+    let engine_event = serde_json::from_value::<EngineEvent>(event.payload.clone())
+        .map_err(|error| format!("parse delegated EngineEvent payload: {error}"))?;
+    let _ = bus.publish_engine_event(
+        engine,
+        backing_thread_id,
+        event.native_session_id.as_deref(),
+        delegated_run_id,
+        event.turn_id.as_deref(),
+        &engine_event,
+    );
+    Ok(())
 }
 
 async fn create_backing_thread(run: &DelegationRun, app: &AppHandle) -> Result<String, String> {
@@ -399,7 +502,6 @@ async fn await_and_settle(
 mod tests {
     use super::*;
     use crate::agent_orchestration::bridge::AgentEndpoint;
-    use crate::engine::EngineType;
 
     fn run_with_scope(scope: DelegationExecutionScope) -> DelegationRun {
         DelegationRun {
@@ -420,9 +522,9 @@ mod tests {
             target_execution: ExecutionTargetInput {
                 engine: EngineType::Codex,
                 provider_profile_id: None,
-                model_catalog_entry_id: Some("gpt-5.3-codex-spark".to_string()),
-                model: Some("gpt-5.3-codex-spark".to_string()),
-                reasoning_effort: None,
+                model_catalog_entry_id: Some("gpt-5.6-sol".to_string()),
+                model: Some("gpt-5.6-sol".to_string()),
+                reasoning_effort: Some("low".to_string()),
                 provider_profile_name_snapshot: Some("Local".to_string()),
                 provider_profile_source: Some(CanonicalProviderProfileSource::Local),
                 runtime_capability_fingerprint: None,
@@ -462,5 +564,48 @@ mod tests {
             "current-workspace"
         );
         assert!(permission_class(DelegationExecutionScope::IsolatedWorktree).is_err());
+    }
+
+    #[tokio::test]
+    async fn reattributes_engine_event_to_delegated_run_without_looping() {
+        let bus = AgentEventBus::new();
+        let mut sink = bus.subscribe(8);
+        let source_event = EngineEvent::TextDelta {
+            workspace_id: "workspace-1".to_string(),
+            text: "hello".to_string(),
+        };
+        let source = MossxAgentEvent {
+            schema_version: "1.0".to_string(),
+            event_id: "source-1".to_string(),
+            sequence: 1,
+            timestamp_ms: 1,
+            engine: EngineType::Codex,
+            workspace_id: "workspace-1".to_string(),
+            logical_session_id: "shared:backing".to_string(),
+            native_session_id: Some("native-1".to_string()),
+            run_id: "native-turn-1".to_string(),
+            turn_id: Some("native-turn-1".to_string()),
+            item_id: None,
+            kind: "message.delta".to_string(),
+            lane: crate::engine::agent_event_bus::AgentEventLane::Delta,
+            payload: serde_json::to_value(source_event).expect("serialize event"),
+            provenance: crate::engine::agent_event_bus::AgentEventProvenance {
+                source: "test".to_string(),
+                raw_event_type: "message.delta".to_string(),
+            },
+        };
+
+        reattribute_bridge_event(
+            &bus,
+            &source,
+            "shared:backing",
+            "delegation-1",
+            EngineType::Codex,
+        )
+        .expect("reattribute");
+
+        let attributed = sink.recv().await.expect("attributed event");
+        assert_eq!(attributed.run_id, "delegation-1");
+        assert_eq!(attributed.logical_session_id, "shared:backing");
     }
 }
