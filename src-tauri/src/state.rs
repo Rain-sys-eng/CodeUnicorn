@@ -314,6 +314,25 @@ impl AppState {
                         .await;
                 });
             })));
+        let agent_bridge = Arc::new(
+            crate::agent_orchestration::bridge::AgentBridgeService::default(),
+        );
+        if let Some(writer) = shared_event_writer.as_ref() {
+            match crate::agent_orchestration::bridge::presentation::reconcile_backing_session_markers(
+                agent_bridge.as_ref(),
+                writer,
+            ) {
+                Ok(repaired) if repaired > 0 => log::info!(
+                    "[agent-bridge] repaired {} internal backing-session marker(s) on startup",
+                    repaired
+                ),
+                Ok(_) => {}
+                Err(error) => log::warn!(
+                    "[agent-bridge] backing-session marker reconciliation failed: {}",
+                    error
+                ),
+            }
+        }
         Self {
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
@@ -346,9 +365,7 @@ impl AppState {
                 crate::code_intel_lsp::cache_root_for_channel(&data_dir, cfg!(debug_assertions)),
             ),
             engine_manager,
-            agent_bridge: Arc::new(
-                crate::agent_orchestration::bridge::AgentBridgeService::default(),
-            ),
+            agent_bridge,
         }
     }
 }
