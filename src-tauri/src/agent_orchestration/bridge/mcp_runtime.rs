@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use tauri::AppHandle;
 
 use super::mcp_gateway;
-use super::models::AgentEndpoint;
+use super::mcp_source::ResolvedMcpSource;
 
 static MCP_APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
@@ -24,7 +24,7 @@ pub(crate) fn is_initialized() -> bool {
 
 pub(crate) async fn call_tool(
     workspace_id: &str,
-    source: AgentEndpoint,
+    source: ResolvedMcpSource,
     tool_name: &str,
     arguments: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
