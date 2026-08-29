@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
+
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
 use crate::state::AppState;
 
-use super::bridge::AgentEndpoint;
+use super::bridge::{AgentEndpoint, DelegationRun, DelegationRunStatus};
 use super::graph::AgentGraphPlan;
 use super::graph_store::{AgentGraphRegistry, DurableAgentGraphRun};
 use super::scheduler::{
@@ -57,7 +59,10 @@ impl AgentGraphCoordinator {
         self.advance_record(&validated, durable, state, app).await
     }
 
-    /// Advance one previously-created graph after one or more node runs changed state.
+    /// Advance one previously-created graph after one or more node runs changed state or after app
+    /// restart. Any node mapping that already points at a clean Queued Bridge run is dispatched
+    /// before new ready nodes are created, closing the crash window between mapping persistence and
+    /// target runtime start.
     pub(crate) async fn tick(
         &self,
         graph_id: &str,
@@ -80,7 +85,19 @@ impl AgentGraphCoordinator {
         state: &AppState,
         app: &AppHandle,
     ) -> Result<AgentGraphDispatchBatch, String> {
-        let prepared = prepare_ready_batch(validated, durable.execution, state).await?;
+        let graph_id = durable.plan.id.clone();
+        let mut execution = durable.execution;
+
+        // Recovery phase: mapping is already durable, therefore it is safe to start any Bridge run
+        // that was created before a crash but never claimed by the runtime dispatcher.
+        let mut dispatched = self
+            .dispatch_mapped_queued_runs(&execution, state, app)
+            .await?;
+        execution.reconcile(state)?;
+        self.registry
+            .update_execution(&graph_id, execution.clone())?;
+
+        let prepared = prepare_ready_batch(validated, execution, state).await?;
 
         // Critical ordering guarantee: the graph's mapping to each freshly-created Bridge run is
         // durable before any target runtime side effect occurs.
@@ -88,7 +105,11 @@ impl AgentGraphCoordinator {
             .update_execution(&prepared.graph_id, prepared.execution.clone())?;
 
         match dispatch_prepared_batch(validated, prepared, state, app).await {
-            Ok(batch) => {
+            Ok(mut batch) => {
+                if !dispatched.is_empty() {
+                    dispatched.append(&mut batch.dispatched);
+                    batch.dispatched = dispatched;
+                }
                 self.registry
                     .update_execution(&batch.graph_id, batch.execution.clone())?;
                 Ok(batch)
@@ -96,12 +117,9 @@ impl AgentGraphCoordinator {
             Err(error) => {
                 let current = self
                     .registry
-                    .get(&durable.plan.id)?
+                    .get(&graph_id)?
                     .ok_or_else(|| {
-                        format!(
-                            "orchestration graph disappeared during recovery: {}",
-                            durable.plan.id
-                        )
+                        format!("orchestration graph disappeared during recovery: {graph_id}")
                     })?;
                 let mut recovered = current.execution;
                 let _ = recovered.reconcile(state);
@@ -111,6 +129,47 @@ impl AgentGraphCoordinator {
                 Err(error)
             }
         }
+    }
+
+    async fn dispatch_mapped_queued_runs(
+        &self,
+        execution: &AgentGraphExecution,
+        state: &AppState,
+        app: &AppHandle,
+    ) -> Result<Vec<DelegationRun>, String> {
+        let mut seen = BTreeSet::new();
+        let run_ids = execution
+            .nodes
+            .values()
+            .filter_map(|node| node.delegation_run_id.as_deref())
+            .filter(|run_id| seen.insert((*run_id).to_string()))
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        let mut dispatched = Vec::new();
+
+        for run_id in run_ids {
+            let Some(run) = state.agent_bridge.get_run(&run_id)? else {
+                continue;
+            };
+            if run.status != DelegationRunStatus::Queued {
+                continue;
+            }
+            match state.dispatch_delegation_run(&run_id, app).await {
+                Ok(run) => dispatched.push(run),
+                Err(error) => {
+                    // Dispatcher owns fail-closed settlement. Do not create a replacement run; the
+                    // graph remains mapped to this immutable Bridge identity and reconcile below
+                    // observes whichever durable status won the race.
+                    log::warn!(
+                        "[agent-orchestration] queued DAG run recovery dispatch failed (graph={} run={}): {}",
+                        execution.graph_id,
+                        run_id,
+                        error
+                    );
+                }
+            }
+        }
+        Ok(dispatched)
     }
 }
 
