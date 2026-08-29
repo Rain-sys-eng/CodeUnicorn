@@ -58,6 +58,7 @@ impl AgentBridgeService {
         // Persist only canonical registry ids so lineage comparisons are deterministic.
         request.source.engine_id = engine_id(source_engine).to_string();
         request.target.engine_id = engine_id(target_engine).to_string();
+        self.validate_parent_lineage(&request)?;
         self.runs.create(request)
     }
 
@@ -91,6 +92,28 @@ impl AgentBridgeService {
 
     pub fn cancel(&self, run_id: &str) -> Result<DelegationRun, String> {
         self.runs.cancel(run_id)
+    }
+
+    fn validate_parent_lineage(&self, request: &CreateDelegationRun) -> Result<(), String> {
+        let Some(parent_run_id) = request.parent_run_id.as_deref() else {
+            return Ok(());
+        };
+        let parent = self
+            .runs
+            .get(parent_run_id)?
+            .ok_or_else(|| format!("parent delegated run not found: {parent_run_id}"))?;
+        if parent.workspace_id != request.workspace_id {
+            return Err(format!(
+                "delegated child workspace does not match parent {parent_run_id}"
+            ));
+        }
+        if parent.target.engine_id != request.source.engine_id {
+            return Err(format!(
+                "delegated child source must match parent target for {parent_run_id}: expected {}, got {}",
+                parent.target.engine_id, request.source.engine_id
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -161,10 +184,10 @@ mod tests {
         AgentEndpoint, DelegationContextPolicy, DelegationExecutionScope,
     };
 
-    fn request(target_engine_id: &str) -> CreateDelegationRun {
+    fn request(source_engine_id: &str, target_engine_id: &str) -> CreateDelegationRun {
         CreateDelegationRun {
             source: AgentEndpoint {
-                engine_id: "claude".to_string(),
+                engine_id: source_engine_id.to_string(),
                 logical_session_id: Some("source-session".to_string()),
                 native_session_id: None,
             },
@@ -182,12 +205,23 @@ mod tests {
         }
     }
 
+    async fn cache_installed(manager: &EngineManager, engine: EngineType) {
+        let mut status = crate::engine::disabled_engine_status(engine);
+        status.installed = true;
+        status.error = None;
+        manager.cache_engine_status(status).await;
+    }
+
     #[tokio::test]
     async fn create_run_rejects_unknown_target_before_registry_mutation() {
         let service = AgentBridgeService::default();
         let manager = EngineManager::new();
         let error = service
-            .create_run(request("unknown-engine"), &manager, &AppSettings::default())
+            .create_run(
+                request("claude", "unknown-engine"),
+                &manager,
+                &AppSettings::default(),
+            )
             .await
             .expect_err("unknown target must fail");
 
@@ -199,13 +233,14 @@ mod tests {
     async fn create_run_accepts_cached_installed_target_and_canonicalizes_ids() {
         let service = AgentBridgeService::default();
         let manager = EngineManager::new();
-        let mut status = crate::engine::disabled_engine_status(EngineType::Codex);
-        status.installed = true;
-        status.error = None;
-        manager.cache_engine_status(status).await;
+        cache_installed(&manager, EngineType::Codex).await;
 
         let run = service
-            .create_run(request("CODEX"), &manager, &AppSettings::default())
+            .create_run(
+                request("CLAUDE", "CODEX"),
+                &manager,
+                &AppSettings::default(),
+            )
             .await
             .expect("cached installed target should be accepted");
 
@@ -215,11 +250,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn child_source_must_match_parent_target() {
+        let service = AgentBridgeService::default();
+        let manager = EngineManager::new();
+        cache_installed(&manager, EngineType::Codex).await;
+        cache_installed(&manager, EngineType::Pi).await;
+
+        let parent = service
+            .create_run(
+                request("claude", "codex"),
+                &manager,
+                &AppSettings::default(),
+            )
+            .await
+            .expect("create parent");
+        let mut child = request("pi", "codex");
+        child.parent_run_id = Some(parent.id.clone());
+        let error = service
+            .create_run(child, &manager, &AppSettings::default())
+            .await
+            .expect_err("unrelated source must not attach to parent");
+
+        assert!(error.contains("source must match parent target"));
+    }
+
+    #[tokio::test]
     async fn disabled_engine_is_rejected_without_creating_a_run() {
         let service = AgentBridgeService::default();
         let manager = EngineManager::new();
         let error = service
-            .create_run(request("gemini"), &manager, &AppSettings::default())
+            .create_run(
+                request("claude", "gemini"),
+                &manager,
+                &AppSettings::default(),
+            )
             .await
             .expect_err("disabled engine must fail closed");
 
