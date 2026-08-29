@@ -51,6 +51,13 @@ pub struct AgentGraphExecution {
     pub nodes: BTreeMap<String, AgentGraphNodeExecution>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PreparedAgentGraphBatch {
+    pub(crate) graph_id: String,
+    pub(crate) runs: Vec<DelegationRun>,
+    pub(crate) execution: AgentGraphExecution,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentGraphDispatchBatch {
@@ -60,7 +67,7 @@ pub struct AgentGraphDispatchBatch {
 }
 
 impl AgentGraphExecution {
-    pub fn new(
+    pub(crate) fn new(
         graph: &AgentGraphPlan,
         workspace_id: String,
         source: AgentEndpoint,
@@ -168,22 +175,17 @@ impl AgentGraphExecution {
     }
 }
 
-/// Reconcile the current graph projection and dispatch every newly-ready node through Agent Bridge.
-///
-/// Fan-out nodes are created/dispatched independently so the underlying target runtimes can run in
-/// parallel. This function does not implement a second engine runtime or a direct CLI send path.
-/// Graph-level durable persistence and automatic wake-up are intentionally left to the next layer;
-/// callers must persist the returned `AgentGraphExecution` before treating it as durable state.
-pub(crate) async fn dispatch_ready_batch(
+/// Phase 1: create durable Bridge run identities for every newly-ready node without starting any
+/// target runtime. Callers MUST persist the returned graph execution before invoking phase 2.
+pub(crate) async fn prepare_ready_batch(
     graph: &ValidatedAgentGraph,
     mut execution: AgentGraphExecution,
     state: &AppState,
-    app: &AppHandle,
-) -> Result<AgentGraphDispatchBatch, String> {
+) -> Result<PreparedAgentGraphBatch, String> {
     execution.reconcile(state)?;
     execution.block_failed_dependencies(graph);
     let ready = execution.ready_node_ids(graph);
-    let mut dispatched = Vec::with_capacity(ready.len());
+    let mut runs = Vec::with_capacity(ready.len());
 
     for node_id in ready {
         let node = graph
@@ -207,40 +209,60 @@ pub(crate) async fn dispatch_ready_batch(
             parent_run_id: None,
         };
 
-        let run = match state.create_delegation_run(request).await {
-            Ok(run) => run,
+        match state.create_delegation_run(request).await {
+            Ok(run) => {
+                if let Some(node_execution) = execution.nodes.get_mut(&node_id) {
+                    // The Bridge run itself is durable, but no runtime side effect has happened yet.
+                    node_execution.status = AgentGraphNodeStatus::Running;
+                    node_execution.delegation_run_id = Some(run.id.clone());
+                    node_execution.error = None;
+                }
+                runs.push(run);
+            }
             Err(error) => {
                 if let Some(node_execution) = execution.nodes.get_mut(&node_id) {
                     node_execution.status = AgentGraphNodeStatus::Failed;
-                    node_execution.error = Some(error.clone());
-                }
-                continue;
-            }
-        };
-        if let Some(node_execution) = execution.nodes.get_mut(&node_id) {
-            node_execution.status = AgentGraphNodeStatus::Running;
-            node_execution.delegation_run_id = Some(run.id.clone());
-            node_execution.error = None;
-        }
-
-        match state.dispatch_delegation_run(&run.id, app).await {
-            Ok(dispatched_run) => dispatched.push(dispatched_run),
-            Err(error) => {
-                // dispatcher is responsible for settling the delegated run fail-closed; mirror its
-                // durable fact back into the graph projection on the next reconcile.
-                if let Some(node_execution) = execution.nodes.get_mut(&node_id) {
                     node_execution.error = Some(error);
                 }
             }
         }
     }
 
-    execution.reconcile(state)?;
     execution.block_failed_dependencies(graph);
-    Ok(AgentGraphDispatchBatch {
+    Ok(PreparedAgentGraphBatch {
         graph_id: execution.graph_id.clone(),
-        dispatched,
+        runs,
         execution,
+    })
+}
+
+/// Phase 2: start only Bridge runs whose graph mapping was already durably persisted by the
+/// coordinator. This preserves graph-owner-before-runtime-side-effect ordering.
+pub(crate) async fn dispatch_prepared_batch(
+    graph: &ValidatedAgentGraph,
+    mut prepared: PreparedAgentGraphBatch,
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<AgentGraphDispatchBatch, String> {
+    let mut dispatched = Vec::with_capacity(prepared.runs.len());
+    for run in prepared.runs {
+        match state.dispatch_delegation_run(&run.id, app).await {
+            Ok(dispatched_run) => dispatched.push(dispatched_run),
+            Err(error) => {
+                if let Some(node_execution) = prepared.execution.nodes.values_mut().find(|node| {
+                    node.delegation_run_id.as_deref() == Some(run.id.as_str())
+                }) {
+                    node_execution.error = Some(error);
+                }
+            }
+        }
+    }
+    prepared.execution.reconcile(state)?;
+    prepared.execution.block_failed_dependencies(graph);
+    Ok(AgentGraphDispatchBatch {
+        graph_id: prepared.graph_id,
+        dispatched,
+        execution: prepared.execution,
     })
 }
 
