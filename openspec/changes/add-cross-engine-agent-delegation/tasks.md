@@ -26,9 +26,9 @@
 ## 4. Result / Continuation / Cancellation
 
 - [x] 4.1 复用 `conversation.turnCommitted` 生成 normalized delegated result：assistant text summary + terminal status + artifact locator；changed-files/diff 后续由 worktree/result 层补齐。
-- [x] 4.2 continuation 使用新的 immutable `DelegationRun` identity + `continuationOfRunId`，不重开 terminal run；dispatcher 沿 continuation chain 回溯原 backing Shared lane 与 stable scoped binding owner，复用同一 native CLI session，同时与 nested `parentRunId/depth` 语义分离。AppState 已提供 continue boundary，后续 `agent_send` MCP 仅需调用该层。
-- [ ] 4.3 实现 `agent_cancel` 与 cancellation propagation；**propagation core 已完成**：Queued 本地取消；durable attempt 先走 Shared V2 live interrupt，无 runtime owner 时仅允许 existing pre-dispatch cancel；控制失败保留 run/binding owner。MCP tool 尚未暴露，因此本项不提前打勾。
-- [ ] 4.4 approval request 不自动放行，沿现有 approval contract 转发。
+- [x] 4.2 continuation 使用新的 immutable `DelegationRun` identity + `continuationOfRunId`，不重开 terminal run；dispatcher 沿 continuation chain 回溯原 backing Shared lane 与 stable scoped binding owner，复用同一 native CLI session，同时与 nested `parentRunId/depth` 语义分离。AppState 已提供 continue boundary，`agent_send` MCP 复用该层。
+- [x] 4.3 实现 `agent_cancel` 与 cancellation propagation：Queued 本地取消；durable attempt 先走 Shared V2 live interrupt，无 runtime owner 时仅允许 existing pre-dispatch cancel；控制失败保留 run/binding owner；当前 Claude managed MCP ingress 已暴露 `agent_cancel`，不做 workspace-wide fallback。
+- [x] 4.4 approval request 不自动放行，沿现有 approval contract 转发；process-wide Bridge approval observer 只消费 re-attributed AgentEventBus 事件，`ApprovalRequest` 将 durable run 置为 `WaitingApproval`，真实 text/reasoning/tool progress 才恢复 `Running`，heartbeat/usage 不作为批准证据。
 
 ## 5. Persistence / Recovery
 
@@ -39,10 +39,10 @@
 
 ## 6. Agent-facing MCP Gateway
 
-- [ ] 6.1 新增 bridge MCP transport adapter。
-- [ ] 6.2 暴露 `agent_list` / `agent_delegate` / `agent_status` / `agent_wait` / `agent_result` / `agent_send` / `agent_cancel`。
-- [ ] 6.3 source identity 从 runtime/tool session binding 解析，禁止由 prompt 参数伪造。
-- [ ] 6.4 将 bridge MCP 提供给支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。
+- [x] 6.1 新增 bridge MCP transport adapter：复用现有 bearer-authenticated、runtime-bound Claude managed HTTP MCP server；Bridge handler 保持独立于 MCP transport，不直接 spawn CLI。
+- [x] 6.2 暴露 `agent_list` / `agent_delegate` / `agent_status` / `agent_wait` / `agent_result` / `agent_send` / `agent_cancel`；`agent_wait` 单次调用 hard cap 30 秒，所有 run control 均做 workspace/source ownership 校验。
+- [x] 6.3 source identity 不进入 tool schema；当前 Claude ingress 从 CodeUnicorn-minted runtime locator + live active turn + native session 解析可信 source，legacy workspace-only route 对 Bridge fail closed。其他 engine 在接入 6.4 前必须实现等价 runtime-bound resolver。
+- [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**当前首个 ingress 已完成：Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools；Codex/Kimi/OpenCode 等 caller ingress 仍待接。**
 
 ## 7. Context Policy
 
