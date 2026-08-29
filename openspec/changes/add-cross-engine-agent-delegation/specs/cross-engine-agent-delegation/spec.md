@@ -18,6 +18,14 @@
 - **THEN** 两个方向 MUST 使用同一个 delegation contract
 - **AND** 系统 MUST NOT 写死 Claude 为 supervisor
 
+#### Scenario: Execution target is frozen before runtime side effects
+
+- **WHEN** delegated run 创建成功
+- **THEN** run MUST 保存 fully-resolved engine/provider/model/reasoning/provenance snapshot
+- **AND** caller 未显式指定模型时 MUST 在 run creation 阶段解析当前 target 默认模型
+- **AND** 后续用户切换模型或 Provider MUST NOT 改变该 run 已冻结的 target
+- **AND** invalid/unresolved target MUST 在 runtime side effect 前 fail closed
+
 ### Requirement: Delegated Runs SHALL Have Explicit Lifecycle And Idempotent Settlement
 
 每个 delegated run SHALL 使用明确状态机：`queued`、`running`、`waitingApproval`、`completed`、`failed`、`cancelled`。Terminal run MUST NOT 回退到 non-terminal 状态；重复相同 terminal settlement MUST 幂等。
@@ -36,6 +44,12 @@
 - **THEN** registry MUST 拒绝该 transition
 - **AND** terminal evidence MUST 保持不变
 
+#### Scenario: Concurrent dispatch has one owner
+
+- **WHEN** 两个 caller 同时尝试 dispatch 同一 `queued` delegated run
+- **THEN** 只有一个 caller MUST 原子取得 dispatch ownership
+- **AND** 第二个 caller MUST NOT 再次启动 target runtime turn
+
 ### Requirement: Delegation SHALL Preserve Parent And Root Lineage
 
 系统 SHALL 为 nested delegation 持久记录 `rootRunId`、`parentRunId` 与 `depth`，并对深度、循环和并发实施保护。
@@ -46,6 +60,7 @@
 - **THEN** Gemini run MUST 指向 Codex run 作为 parent
 - **AND** Gemini 与 Codex MUST 共享同一 root run
 - **AND** Gemini depth MUST 比 Codex depth 大 1
+- **AND** child source MUST 与 parent target identity 一致
 
 #### Scenario: Depth limit blocks recursive explosion
 
@@ -62,6 +77,7 @@ Delegation SHALL 支持 `Explicit`、`Portable`、`Inherited` context policy，�
 - **WHEN** caller 未指定 context policy
 - **THEN** target prompt MUST 仅包含 task、显式 file refs 和显式 context
 - **AND** source Agent 完整 transcript MUST NOT 自动注入
+- **AND** runtime backing lane MUST NOT accidentally inherit ordinary source-session history
 
 ### Requirement: Delegated Execution SHALL Expose Workspace Scope
 
@@ -73,6 +89,12 @@ Delegated run SHALL 声明 `Observe`、`SharedWorkspace` 或 `IsolatedWorktree` 
 - **THEN** 系统 MUST 为其提供不同 worktree/branch ownership
 - **AND** 一个 run 的文件写入 MUST NOT 直接覆盖另一个 run 的 working tree
 - **AND** result MUST 可返回 branch/diff/changed-files metadata
+
+#### Scenario: Unprovisioned isolated scope fails closed
+
+- **WHEN** delegated run 请求 `IsolatedWorktree`
+- **AND** worktree 尚未完成 provision
+- **THEN** dispatcher MUST NOT 将其降级成 shared working tree 执行
 
 ### Requirement: Delegation SHALL Reuse Existing AgentEventBus
 
@@ -101,6 +123,30 @@ Target Agent 的 text/tool/approval/terminal events SHALL 通过现有 AgentEven
 - **WHEN** caller 在 tool arguments 中伪造另一个 source engine/session id
 - **THEN** gateway MUST 以 runtime/tool binding 的 authenticated source identity 为准
 - **AND** MUST NOT 信任 prompt-provided source identity
+
+#### Scenario: Internal backing session is not user-visible
+
+- **WHEN** Agent Bridge 使用 Shared V2 session 作为 delegated runtime backing lane
+- **THEN** backing session MUST 保留 Shared ownership/native-session hiding 语义
+- **AND** backing session MUST NOT 出现在普通用户 Shared Session 列表
+- **AND** MCP/UI gateway MUST NOT 对外开放，直到该 hidden presentation contract 已实现
+
+### Requirement: Delegated Terminal Result SHALL Come From Canonical Settlement
+
+Bridge SHALL 使用 existing Shared V2 terminal settlement / `conversation.turnCommitted` 作为 delegated result 的事实源，而不是重新解析 CLI stdout。
+
+#### Scenario: Target completes successfully
+
+- **WHEN** matching delegated attempt 产生 `conversation.turnCommitted` 且 outcome 为 completed
+- **THEN** Bridge MUST 从 canonical assistant text 生成 result summary
+- **AND** artifact metadata MAY 从 canonical artifact refs 生成
+- **AND** changed-files/diff MUST NOT 在没有可靠 worktree/result evidence 时伪造
+
+#### Scenario: Target terminal error is normalized
+
+- **WHEN** canonical outcome 为 failed、cancelled 或 replaced
+- **THEN** Bridge MUST 将其映射到对应 delegated terminal state
+- **AND** MUST NOT 把 failed/cancelled target 伪报为 completed
 
 ### Requirement: Delegated Run Facts SHALL Survive Renderer Or App Restart
 
