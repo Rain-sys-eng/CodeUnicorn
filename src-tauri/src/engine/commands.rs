@@ -1717,7 +1717,7 @@ fn build_provider_engine_dispatch_receipt(
     })
 }
 
-fn fan_out_provider_engine_event(
+pub(crate) fn fan_out_provider_engine_event(
     app: &AppHandle,
     provider_runtime_key: &str,
     engine: EngineType,
@@ -3848,6 +3848,8 @@ pub async fn engine_send_message(
                     .ok_or_else(|| "Workspace not found".to_string())?
             };
             let runtime = crate::engine::dsh::runtime_settings_from_app(&settings);
+            let provider_runtime_key =
+                crate::engine::dsh_provider_profile::dsh_runtime_key(&workspace_id);
             let resume_id = session_id.as_deref().or(thread_id.as_deref());
             let outcome = crate::engine::dsh::send_user_turn(
                 &runtime,
@@ -3864,6 +3866,13 @@ pub async fn engine_send_message(
                 access_mode.as_deref(),
             )
             .await?;
+            let dispatch_receipt = build_provider_engine_dispatch_receipt(
+                EngineType::Dsh,
+                provider_profile_id.as_deref(),
+                &provider_runtime_key,
+                model.as_deref(),
+                effort.as_deref(),
+            );
             record_auto_session_metadata_if_present(
                 &state,
                 &workspace_id,
@@ -3881,6 +3890,7 @@ pub async fn engine_send_message(
                         "status": "started"
                     },
                 },
+                "mossxDispatchReceipt": dispatch_receipt,
                 "turn": {
                     "id": outcome.turn_id,
                     "status": "started"

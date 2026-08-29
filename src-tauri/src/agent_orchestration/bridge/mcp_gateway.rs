@@ -49,6 +49,7 @@ fn delegated_dispatch_supported(engine: EngineType) -> bool {
             | EngineType::Grok
             | EngineType::OpenCode
             | EngineType::Pi
+            | EngineType::Dsh
             | EngineType::Qoder
     )
 }
@@ -70,7 +71,7 @@ pub fn tool_definitions() -> Vec<Value> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "targetEngine": { "type": "string", "description": "Target engine id such as codex, claude, kimi, grok, opencode, pi, or qoder." },
+                    "targetEngine": { "type": "string", "description": "Target engine id such as codex, claude, kimi, grok, opencode, pi, dsh, or qoder." },
                     "task": { "type": "string" },
                     "fileRefs": { "type": "array", "items": { "type": "string" } },
                     "contextPolicy": { "type": "string", "enum": ["explicit"] },
@@ -511,6 +512,12 @@ mod tests {
             assert!(properties.get("sourceSessionId").is_none());
             assert!(properties.get("workspaceId").is_none());
         }
+    }
+
+    #[test]
+    fn engine_listing_marks_dsh_worker_dispatch_supported() {
+        assert!(delegated_dispatch_supported(EngineType::Dsh));
+        assert!(!delegated_dispatch_supported(EngineType::Gemini));
     }
 
     #[test]

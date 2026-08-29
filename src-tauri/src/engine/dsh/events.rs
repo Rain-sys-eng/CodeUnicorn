@@ -589,7 +589,7 @@ fn project_dsh_goal_injection(
     }]
 }
 
-fn emit_dsh_engine_event(
+pub(super) fn emit_dsh_engine_event(
     app: &AppHandle,
     event: EngineEvent,
     thread_id: &str,
@@ -602,7 +602,22 @@ fn emit_dsh_engine_event(
         &item_id,
         turn_id.as_deref(),
     ) {
-        let _ = app.emit("app-server-event", payload);
+        if let Some(runtime_turn_id) = turn_id.as_deref() {
+            let provider_runtime_key = super::super::dsh_provider_profile::dsh_runtime_key(
+                event.workspace_id(),
+            );
+            super::super::commands::fan_out_provider_engine_event(
+                app,
+                &provider_runtime_key,
+                EngineType::Dsh,
+                runtime_turn_id,
+                Some(thread_id),
+                &event,
+                vec![payload],
+            );
+        } else {
+            let _ = app.emit("app-server-event", payload);
+        }
     }
 }
 

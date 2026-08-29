@@ -21,7 +21,8 @@
 - [x] 3.4 将 backing logical thread / attempt / binding / native session / runtime turn identity 写回 delegated run，并以 atomic dispatch claim 防止重复发送。
 - [x] 3.5 复用 `EngineManager.agent_event_bus()` 与现有 Shared runtime event sink；Bridge 对自身 backing thread 做 scoped re-attribution，将 live EngineEvent / settlement 以 delegated `run_id` 再发布，同时保留 native session/turn identity，且不创建第二套 event bus。
 - [x] 3.6 Bridge backing Shared Session 在 runtime side effect 前写入 canonical `agent-bridge.internal-backing-session` control marker；App 启动时按 durable `backingThreadId` 补齐缺失 marker；普通 Shared Session 列表按 projection marker 过滤，而底层 Shared/native binding ownership 与 visibility seed 保持完整。注意 `start_shared_session` 返回到 marker append 之间仍存在极窄 orphan crash window，后续如需完全原子化应下沉到 Shared create transaction/专用 orphan sweep，不在 presentation 层伪装解决。
-- [ ] 3.7 补齐最终目标 engine parity：Gemini 当前受 runtime policy 禁用、Dsh 当前不在 Shared V2 dispatch set；在最终验收前接入 Shared V2 或等价 existing-runtime dispatch，不为它们新建第二套 CLI parser。
+- [x] 3.7a DSH parity：只对 scoped Shared worker lifecycle 开放 DSH，复用 existing Host RPC runtime、request-response ACK、mux EngineEvent、approval control 与 exact-turn cancel；普通 Shared Session target 集合保持不变，不新建第二套 CLI parser。
+- [ ] 3.7b Gemini parity：当前 `GEMINI_RUNTIME_ENABLED=false`，Bridge 保持 run-creation fail closed；只有既有 runtime policy 正式解除后才能接 worker dispatch，不允许 Bridge 绕开编译期 gate。
 
 ## 4. Result / Continuation / Cancellation
 

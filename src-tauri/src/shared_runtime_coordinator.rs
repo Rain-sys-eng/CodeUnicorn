@@ -566,17 +566,17 @@ impl SharedRuntimeCoordinator {
         Ok(())
     }
 
-    /// Codex `thread/start` 在 response 返回 exact thread id 前可能先发
-    /// `thread/started`。仅在同 workspace/engine/provider scope 暂存该启动事件，
-    /// 防止隐藏 Shared Binding 先进入普通 Session catalog。
+    /// Codex `thread/start` and DSH `session.prompt` may emit before their request-response ACK
+    /// returns the exact native identity. Hold the provider scope until the dispatcher binds the
+    /// exact runtime turn so internal worker events cannot leak into the Native session surface.
     pub(crate) fn hold_native_provisioning(&self, attempt_id: &str) -> Result<(), String> {
         let mut state = self.lock();
         let attempt = state
             .attempts
             .get(attempt_id)
             .ok_or_else(|| format!("shared runtime attempt not registered: {attempt_id}"))?;
-        if attempt.owner.engine != EngineType::Codex {
-            return Err("native provisioning hold is only valid for Codex".to_string());
+        if !matches!(attempt.owner.engine, EngineType::Codex | EngineType::Dsh) {
+            return Err("native provisioning hold is only valid for Codex or DSH".to_string());
         }
         let scope = runtime_scope_key(&attempt.owner);
         state
@@ -600,16 +600,17 @@ impl SharedRuntimeCoordinator {
             .get(attempt_id)
             .ok_or_else(|| format!("shared runtime attempt not registered: {attempt_id}"))?;
         let scope = runtime_scope_key(&attempt.owner);
+        let release_all_in_scope = attempt.owner.engine == EngineType::Dsh;
         state.remove_provisioning_hold(attempt_id);
 
         let mut remaining = VecDeque::new();
         let mut native_releases = Vec::new();
         while let Some(ingress) = state.unowned_events.pop_front() {
-            let is_unheld_start_in_scope = ingress.is_session_started
+            let is_unheld_ingress_in_scope = (release_all_in_scope || ingress.is_session_started)
                 && runtime_scope_key_for_ingress(&ingress) == scope
                 && !state.is_exact_native_held_ingress(&ingress)
                 && !state.is_provisioning_held_ingress(&ingress);
-            if is_unheld_start_in_scope {
+            if is_unheld_ingress_in_scope {
                 native_releases.extend(ingress.replay_app_server_events);
             } else {
                 remaining.push_back(ingress);
@@ -1025,15 +1026,15 @@ impl CoordinatorState {
     }
 
     fn is_provisioning_held_ingress(&self, ingress: &RuntimeIngress) -> bool {
-        ingress.is_session_started
-            && self
-                .held_provisioning_attempts_by_runtime
-                .get(&runtime_scope_key_for_ingress(ingress))
-                .is_some_and(|attempt_ids| {
-                    attempt_ids
-                        .iter()
-                        .any(|attempt_id| self.attempts.contains_key(attempt_id))
+        self.held_provisioning_attempts_by_runtime
+            .get(&runtime_scope_key_for_ingress(ingress))
+            .is_some_and(|attempt_ids| {
+                attempt_ids.iter().any(|attempt_id| {
+                    self.attempts.get(attempt_id).is_some_and(|attempt| {
+                        ingress.is_session_started || attempt.owner.engine == EngineType::Dsh
+                    })
                 })
+            })
     }
 
     fn is_held_shared_ingress(&self, ingress: &RuntimeIngress) -> bool {
@@ -4636,6 +4637,52 @@ mod tests {
         assert_eq!(
             projected.message["params"]["nativeThreadId"],
             "native-provision"
+        );
+    }
+
+    #[test]
+    fn dsh_provisioning_holds_mux_events_until_request_response_identity_bind() {
+        let coordinator = SharedRuntimeCoordinator::default();
+        let mut dsh_owner = owner("attempt-dsh-provision", None, None);
+        dsh_owner.engine = EngineType::Dsh;
+        dsh_owner.provider_runtime_key = "dsh::ws-1".to_string();
+        dsh_owner.execution_target_snapshot.engine = "dsh".to_string();
+        dsh_owner.binding_key = "squad:bridge:delegate:dsh:default".to_string();
+        coordinator.register_attempt(dsh_owner).expect("register");
+        coordinator
+            .hold_native_provisioning("attempt-dsh-provision")
+            .expect("hold DSH provisioning");
+
+        let early = coordinator.ingest_engine_event_scoped(
+            "dsh::ws-1",
+            EngineType::Dsh,
+            Some("dsh-turn-1"),
+            Some("dsh:session-1"),
+            &EngineEvent::TextDelta {
+                workspace_id: "ws-1".to_string(),
+                text: "early".to_string(),
+            },
+        );
+        assert!(early.ui_fanout_deferred);
+
+        coordinator
+            .bind_runtime_turn(
+                "attempt-dsh-provision",
+                Some("dsh-turn-1"),
+                Some("dsh:session-1"),
+            )
+            .expect("bind request-response identities");
+        let batch = coordinator
+            .drain_replay_barrier("attempt-dsh-provision")
+            .expect("drain replay");
+        assert_eq!(batch.deliveries.len(), 1);
+        assert_eq!(
+            batch.deliveries[0]
+                .observation
+                .owner
+                .as_ref()
+                .map(|owner| owner.attempt_id.as_str()),
+            Some("attempt-dsh-provision"),
         );
     }
 

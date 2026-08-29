@@ -236,22 +236,18 @@ pub async fn send_user_turn(
         let announce_thread = resume_id
             .filter(|value| session::is_pending_thread(value))
             .unwrap_or(thread_id.as_str());
-        if let Some(payload) =
-            crate::engine::events::engine_event_to_app_server_event_with_turn_context(
-                &crate::engine::events::EngineEvent::SessionStarted {
-                    workspace_id: mossx_workspace_id.to_string(),
-                    session_id: native_session_id.clone(),
-                    engine: EngineType::Dsh,
-                    turn_id: Some(turn_id.clone()),
-                },
-                announce_thread,
-                &item_id,
-                Some(turn_id.as_str()),
-            )
-        {
-            use tauri::Emitter;
-            let _ = app.emit("app-server-event", payload);
-        }
+        events::emit_dsh_engine_event(
+            app,
+            crate::engine::events::EngineEvent::SessionStarted {
+                workspace_id: mossx_workspace_id.to_string(),
+                session_id: native_session_id.clone(),
+                engine: EngineType::Dsh,
+                turn_id: Some(turn_id.clone()),
+            },
+            announce_thread,
+            item_id.clone(),
+            Some(turn_id.clone()),
+        );
     }
     events::bind_session(
         &native_session_id,

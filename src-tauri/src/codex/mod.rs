@@ -2050,7 +2050,7 @@ pub(crate) fn resolve_shared_control_response_route(
         return Err("shared control response Provider Profile owner mismatch".to_string());
     }
     let expected_engine =
-        crate::shared_sessions::ensure_supported_shared_session_engine(owner.engine)?.icon();
+        crate::shared_sessions::ensure_supported_shared_worker_engine(owner.engine)?.icon();
     if owner.execution_target_snapshot.engine.trim() != expected_engine {
         return Err("shared control response target engine owner mismatch".to_string());
     }
@@ -2120,6 +2120,14 @@ async fn respond_to_shared_control_request(
                 result,
             )
             .await
+        }
+        EngineType::Dsh => {
+            let request = crate::engine::dsh::parse_control_request(&request_id).ok_or_else(|| {
+                "shared DSH control request has invalid runtime identity".to_string()
+            })?;
+            let settings = state.app_settings.lock().await.clone();
+            let runtime = crate::engine::dsh::runtime_settings_from_app(&settings);
+            crate::engine::dsh::respond_to_control(&runtime, request, &result).await
         }
         _ => Err("shared control response owner uses an unsupported engine".to_string()),
     }

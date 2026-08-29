@@ -1,7 +1,7 @@
 use crate::engine::adapter_registry::engine_id;
 use crate::engine::{engine_enabled_in_settings, EngineManager, EngineStatus, EngineType};
 use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
-use crate::shared_session_v2::{validate_resolved_execution_target, ExecutionTargetInput};
+use crate::shared_session_v2::{validate_resolved_shared_worker_target, ExecutionTargetInput};
 use crate::types::AppSettings;
 
 use super::models::{
@@ -108,7 +108,7 @@ impl AgentBridgeService {
                 "continuation target execution engine mismatch for {previous_run_id}"
             ));
         }
-        validate_resolved_execution_target(&previous.target_execution)
+        validate_resolved_shared_worker_target(&previous.target_execution)
             .map_err(|error| format!("continuation target is no longer executable: {error}"))?;
 
         self.runs.create_continuation(previous_run_id, task)
@@ -235,6 +235,7 @@ fn ensure_delegated_dispatch_supported(engine: EngineType) -> Result<(), String>
             | EngineType::Grok
             | EngineType::OpenCode
             | EngineType::Pi
+            | EngineType::Dsh
             | EngineType::Qoder
     ) {
         return Ok(());
@@ -294,7 +295,7 @@ fn resolve_target_execution(
         }
         None => default_local_execution_target(target_engine, status)?,
     };
-    validate_resolved_execution_target(&target)
+    validate_resolved_shared_worker_target(&target)
         .map_err(|error| format!("delegated target is not executable: {error}"))?;
     Ok(target)
 }
@@ -314,7 +315,11 @@ fn default_local_execution_target(
         .or_else(|| status.models.first());
 
     let (catalog_id, runtime_model, reasoning_effort) = if let Some(model) = model {
-        let runtime_model = if model.model.trim().is_empty() {
+        // DSH's send adapter consumes the provider-qualified catalog id and splits it before
+        // `session.selectModel`; `ModelInfo.model` is only the provider-local model component.
+        let runtime_model = if engine == EngineType::Dsh {
+            model.id.clone()
+        } else if model.model.trim().is_empty() {
             model.id.clone()
         } else {
             model.model.clone()
@@ -529,20 +534,11 @@ mod tests {
         assert!(service.list_runs().expect("list runs").is_empty());
     }
 
-    #[tokio::test]
-    async fn unsupported_shared_dispatch_target_fails_before_run_creation() {
-        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
-        let manager = EngineManager::new();
-        let error = service
-            .create_run(
-                request("claude", "dsh"),
-                &manager,
-                &AppSettings::default(),
-            )
-            .await
-            .expect_err("DSH is not yet on Shared V2 dispatcher");
-
-        assert!(error.contains("current delegated Shared V2 dispatcher"));
-        assert!(service.list_runs().expect("list runs").is_empty());
+    #[test]
+    fn worker_dispatch_supports_dsh_but_keeps_gemini_fail_closed() {
+        assert!(ensure_delegated_dispatch_supported(EngineType::Dsh).is_ok());
+        assert!(ensure_delegated_dispatch_supported(EngineType::Gemini)
+            .expect_err("Gemini runtime policy remains disabled")
+            .contains("current delegated Shared V2 dispatcher"));
     }
 }

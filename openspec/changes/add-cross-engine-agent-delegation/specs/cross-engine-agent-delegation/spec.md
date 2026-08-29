@@ -141,6 +141,20 @@ Target Agent 的 text/tool/approval/terminal events SHALL 通过现有 AgentEven
 - **AND** backing session MUST NOT 出现在普通用户 Shared Session 列表
 - **AND** MCP/UI gateway MUST NOT 对外开放，直到该 hidden presentation contract 已实现
 
+#### Scenario: DSH is available only through the scoped worker runtime boundary
+
+- **WHEN** Agent Bridge delegates a run to an available DSH runtime
+- **THEN** dispatch MUST reuse the existing DSH Host RPC adapter through the Shared V2 worker lifecycle
+- **AND** request-response ACK、mux terminal、approval response 与 cancel MUST retain the exact delegated attempt owner
+- **AND** ordinary Shared Session engine selection MUST remain unsupported for DSH
+- **AND** Bridge MUST NOT parse DSH Host RPC or WebSocket frames itself
+
+#### Scenario: Disabled Gemini policy cannot be bypassed by delegation
+
+- **WHEN** Gemini remains disabled by the existing compile-time runtime policy
+- **THEN** Agent Bridge MUST reject Gemini before durable run creation
+- **AND** MCP engine listing MUST report Gemini delegation as unsupported
+
 ### Requirement: Delegated Terminal Result SHALL Come From Canonical Settlement
 
 Bridge SHALL 使用 existing Shared V2 terminal settlement / `conversation.turnCommitted` 作为 delegated result 的事实源，而不是重新解析 CLI stdout。

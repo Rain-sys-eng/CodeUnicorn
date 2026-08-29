@@ -121,6 +121,14 @@ Bridge 只接受当前 built-in engine registry 的 canonical engine ids。sourc
 
 这一步只做 target validation，不启动 target process；实际 dispatch 仍由后续 dispatcher 通过现有 send/session boundary 完成。
 
+DSH parity 复用同一 Shared V2 worker lifecycle，但不扩大普通 Shared Session 产品集合：
+
+- `begin_squad_worker_turn_core` 使用独立 worker-engine gate 接受 DSH；普通 `begin_turn_core`、前端 Shared picker 与 persisted selected target 仍拒绝 DSH；
+- actual send 继续调用现有 `engine_send_message -> dsh::send_user_turn`，Bridge 不接触 Host RPC/WebSocket parser；
+- DSH 的 request-response ACK 补充 provider/runtime/model receipt，mux events 在 exact native session/turn identity 返回前由既有 coordinator provisioning hold 暂存，随后按 attempt replay；
+- approval response 继续走 `respond_to_server_request -> dsh::respond_to_control`，cancel 继续走 exact `dsh::interrupt_turn`；
+- Gemini 仍受 `GEMINI_RUNTIME_ENABLED=false` 编译期策略约束，Bridge 在 run creation 前显式 fail closed，不通过 parity 工作绕开该 policy。
+
 ### 12. Existing Multi-Agent V1 后续改为 Bridge consumer
 
 现有 Plan/Implement/Review V1 暂不迁移。Bridge 稳定后，可把 V1 每个 stage dispatch 改为通过 `AgentBridgeService` 发起，从而统一 runtime ownership/observability；迁移必须保持 V1 projection 与用户确认行为兼容。
