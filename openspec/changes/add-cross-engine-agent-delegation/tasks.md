@@ -42,7 +42,7 @@
 - [x] 6.1 新增 bridge MCP transport adapter：复用现有 bearer-authenticated、runtime-bound Claude managed HTTP MCP server；Bridge handler 保持独立于 MCP transport，不直接 spawn CLI。
 - [x] 6.2 暴露 `agent_list` / `agent_delegate` / `agent_status` / `agent_wait` / `agent_result` / `agent_send` / `agent_cancel`；`agent_wait` 单次调用 hard cap 30 秒，所有 run control 均做 workspace/source ownership 校验。
 - [x] 6.3 source identity 不进入 tool schema；当前 Claude ingress 从 CodeUnicorn-minted runtime locator + live active turn + native session 解析可信 source，legacy workspace-only route 对 Bridge fail closed。其他 engine 在接入 6.4 前必须实现等价 runtime-bound resolver。
-- [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**当前首个 ingress 已完成：Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools。MCP source 已进一步抽象为 transport-neutral `TrustedMcpRuntimeBinding -> ResolvedMcpSource` fail-closed contract，Codex/Kimi/OpenCode ingress 可复用同一安全边界；下一步优先从 Codex `WorkspaceSession.provider_runtime_key + active_turns` 铸造可信 binding，再接内部 MCP 配置，不从模型 tool args 接收 source/thread/turn identity。**
+- [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**当前首个 ingress 已完成：Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools。MCP source 已进一步抽象为 transport-neutral `TrustedMcpRuntimeBinding -> ResolvedMcpSource` fail-closed contract，Codex/Kimi/OpenCode ingress 可复用同一安全边界；Codex caller 的 remaining gate 是拿到 thread+turn 级可信 runtime locator，禁止退化成 workspace-only source。**
 
 ## 7. Context Policy
 
@@ -59,8 +59,8 @@
 
 ## 9. Orchestration Expansion
 
-- [ ] 9.1 在现有 `agent_orchestration` 上增加 Parallel / DAG plan model，不建第二套 orchestrator。
-- [ ] 9.2 dependency scheduler 仅通过 Agent Bridge 调度 delegated runs。
+- [x] 9.1 在现有 `agent_orchestration` 上增加 Parallel / DAG plan model，不建第二套 orchestrator：新增 `graph` domain，提供 node/dependency model、去重与规范化、unknown/self/cycle fail-closed、deterministic topological order 与 ready-node projection。
+- [ ] 9.2 dependency scheduler 仅通过 Agent Bridge 调度 delegated runs。**scheduler core 已加入：`dispatch_ready_batch` 会 reconcile Bridge run 状态、block failed dependency、将所有 ready nodes 经 `create_delegation_run -> dispatch_delegation_run` 发起；图级 durable ownership、automatic wake-up/reconcile loop 尚未实现，因此本项不提前打勾。**
 - [ ] 9.3 nested delegation 支持 root/parent lineage 与 cycle protection。
 - [ ] 9.4 评估并迁移现有 Plan/Implement/Review V1 stage dispatch 为 Bridge consumer，保持 projection/approval 兼容。
 
