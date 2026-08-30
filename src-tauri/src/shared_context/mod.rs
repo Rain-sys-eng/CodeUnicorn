@@ -13,8 +13,9 @@ pub use artifact_store::{
     write_typed_artifact, ArtifactReadRequest, ArtifactStoreRecord, TypedArtifactStoreRecord,
 };
 pub use compiler::{
-    compile_context, compile_native_context, session_needs_history, CompileContextRequest,
-    CompileNativeContextRequest,
+    compile_context, compile_context_including_squad_attempts, compile_native_context,
+    compile_portable_context, session_needs_history, CompileContextRequest,
+    CompileNativeContextRequest, CompilePortableContextRequest,
 };
 pub use delivery::{
     accept_delivery, commit_delivery, mark_delivery_sent, prepare_delivery,

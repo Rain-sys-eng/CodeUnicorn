@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::models::{
-    CreateDelegationRun, DelegationDispatchBinding, DelegationResult, DelegationRun,
-    DelegationRunStatus,
+    CreateDelegationRun, DelegationContextTransfer, DelegationDispatchBinding, DelegationResult,
+    DelegationRun, DelegationRunStatus,
 };
 use super::persistence::AgentBridgePersistence;
 
@@ -402,6 +402,50 @@ impl DelegationRunRegistry {
         Ok(updated)
     }
 
+    pub fn record_context_transfer(
+        &self,
+        run_id: &str,
+        attempt_id: &str,
+        transfer: DelegationContextTransfer,
+    ) -> Result<DelegationRun, String> {
+        transfer.validate()?;
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
+        let existing = runs
+            .get(run_id)
+            .cloned()
+            .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
+        if existing.status.is_terminal() {
+            return Err(format!("cannot record context for terminal delegated run: {run_id}"));
+        }
+        let mut updated = existing;
+        let binding = updated
+            .dispatch_binding
+            .as_mut()
+            .ok_or_else(|| format!("delegated run {run_id} has no dispatch binding"))?;
+        if binding.attempt_id != attempt_id {
+            return Err(format!(
+                "delegated run {run_id} context attempt mismatch: expected {}, got {attempt_id}",
+                binding.attempt_id
+            ));
+        }
+        if let Some(existing_transfer) = binding.context_transfer.as_ref() {
+            if existing_transfer == &transfer {
+                return Ok(updated);
+            }
+            return Err(format!(
+                "delegated run {run_id} already owns a different context transfer"
+            ));
+        }
+        binding.context_transfer = Some(transfer);
+        let mut candidate = runs.clone();
+        candidate.insert(run_id.to_string(), updated.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(updated)
+    }
+
     pub fn transition(
         &self,
         run_id: &str,
@@ -584,6 +628,18 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
         }
     }
     for run in recovered.values() {
+        if let Some(transfer) = run
+            .dispatch_binding
+            .as_ref()
+            .and_then(|binding| binding.context_transfer.as_ref())
+        {
+            transfer.validate().map_err(|error| {
+                format!(
+                    "Agent Bridge durable store context transfer is invalid for {}: {error}",
+                    run.id
+                )
+            })?;
+        }
         if let Some(previous_run_id) = run.continuation_of_run_id.as_deref() {
             let previous = recovered.get(previous_run_id).ok_or_else(|| {
                 format!(
@@ -727,6 +783,7 @@ mod tests {
                     binding_key: "squad:run:delegate:codex:default".to_string(),
                     native_session_id: None,
                     runtime_turn_id: None,
+                    context_transfer: None,
                 },
             )
             .expect("set binding");
@@ -749,6 +806,54 @@ mod tests {
     }
 
     #[test]
+    fn context_transfer_is_durable_and_attempt_scoped() {
+        let registry = DelegationRunRegistry::default();
+        let run = registry.create(request(None)).expect("create run");
+        registry.claim_dispatch(&run.id).expect("claim dispatch");
+        registry
+            .set_dispatch_binding(
+                &run.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:bridge-session".to_string(),
+                    attempt_id: "attempt-1".to_string(),
+                    logical_turn_id: "turn-1".to_string(),
+                    binding_key: "squad:run:delegate:codex:default".to_string(),
+                    native_session_id: None,
+                    runtime_turn_id: None,
+                    context_transfer: None,
+                },
+            )
+            .expect("set binding");
+        let transfer = DelegationContextTransfer {
+            policy: DelegationContextPolicy::Portable,
+            package_id: "package-1".to_string(),
+            artifact_id: "artifact-1".to_string(),
+            artifact_checksum: "sha256:artifact".to_string(),
+            source_checksum: "sha256:source".to_string(),
+            projection_mode: "portable-transcript".to_string(),
+        };
+
+        assert!(registry
+            .record_context_transfer(&run.id, "other-attempt", transfer.clone())
+            .is_err());
+        let updated = registry
+            .record_context_transfer(&run.id, "attempt-1", transfer.clone())
+            .expect("record context");
+        let repeated = registry
+            .record_context_transfer(&run.id, "attempt-1", transfer.clone())
+            .expect("idempotent context");
+
+        assert_eq!(updated, repeated);
+        assert_eq!(
+            repeated
+                .dispatch_binding
+                .as_ref()
+                .and_then(|binding| binding.context_transfer.as_ref()),
+            Some(&transfer)
+        );
+    }
+
+    #[test]
     fn continuation_gets_new_identity_without_reopening_completed_run() {
         let registry = DelegationRunRegistry::default();
         let run = registry.create(request(None)).expect("create run");
@@ -763,6 +868,7 @@ mod tests {
                     binding_key: "squad:run:delegate:codex:default".to_string(),
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-turn-1".to_string()),
+                    context_transfer: None,
                 },
             )
             .expect("bind");
@@ -875,9 +981,21 @@ mod tests {
                     binding_key: "squad:run:delegate:codex:default".to_string(),
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-turn-1".to_string()),
+                    context_transfer: None,
                 },
             )
             .expect("persist binding");
+        let transfer = DelegationContextTransfer {
+            policy: DelegationContextPolicy::Inherited,
+            package_id: "package-1".to_string(),
+            artifact_id: "artifact-1".to_string(),
+            artifact_checksum: "sha256:artifact".to_string(),
+            source_checksum: "sha256:source".to_string(),
+            projection_mode: "portable-transcript".to_string(),
+        };
+        registry
+            .record_context_transfer(&run.id, "attempt-1", transfer.clone())
+            .expect("persist context transfer");
         drop(registry);
 
         let recovered = DelegationRunRegistry::persistent(
@@ -900,6 +1018,13 @@ mod tests {
                 .as_ref()
                 .and_then(|binding| binding.native_session_id.as_deref()),
             Some("native-1")
+        );
+        assert_eq!(
+            restored
+                .dispatch_binding
+                .as_ref()
+                .and_then(|binding| binding.context_transfer.as_ref()),
+            Some(&transfer)
         );
         std::fs::remove_dir_all(root).ok();
     }

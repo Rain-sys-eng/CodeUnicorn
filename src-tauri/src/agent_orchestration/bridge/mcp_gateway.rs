@@ -74,7 +74,10 @@ pub fn tool_definitions() -> Vec<Value> {
                     "targetEngine": { "type": "string", "description": "Target engine id such as codex, claude, kimi, grok, opencode, pi, dsh, or qoder." },
                     "task": { "type": "string" },
                     "fileRefs": { "type": "array", "items": { "type": "string" } },
-                    "contextPolicy": { "type": "string", "enum": ["explicit"] },
+                    "contextPolicy": {
+                        "type": "string",
+                        "enum": ["explicit", "portable", "inherited"]
+                    },
                     "executionScope": { "type": "string", "enum": ["observe", "sharedWorkspace"] }
                 },
                 "required": ["targetEngine", "task"],
@@ -441,6 +444,8 @@ fn optional_string_array(arguments: &Value, key: &str) -> Result<Vec<String>, St
 fn parse_context_policy(value: Option<&Value>) -> Result<DelegationContextPolicy, String> {
     match value.and_then(Value::as_str).unwrap_or("explicit") {
         "explicit" => Ok(DelegationContextPolicy::Explicit),
+        "portable" => Ok(DelegationContextPolicy::Portable),
+        "inherited" => Ok(DelegationContextPolicy::Inherited),
         other => Err(format!(
             "contextPolicy is not supported by the current Agent Bridge MCP gateway: {other}"
         )),
@@ -506,12 +511,20 @@ mod tests {
     fn tool_schemas_never_accept_source_identity() {
         let definitions = tool_definitions();
         assert_eq!(definitions.len(), 7);
-        for definition in definitions {
+        for definition in &definitions {
             let properties = &definition["inputSchema"]["properties"];
             assert!(properties.get("sourceEngine").is_none());
             assert!(properties.get("sourceSessionId").is_none());
             assert!(properties.get("workspaceId").is_none());
         }
+        let delegate = definitions
+            .iter()
+            .find(|definition| definition["name"].as_str() == Some(AGENT_DELEGATE_TOOL))
+            .expect("agent_delegate definition");
+        assert_eq!(
+            delegate["inputSchema"]["properties"]["contextPolicy"]["enum"],
+            json!(["explicit", "portable", "inherited"])
+        );
     }
 
     #[test]
@@ -521,9 +534,15 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_context_and_scope_fail_closed() {
-        assert!(parse_context_policy(Some(&json!("portable"))).is_err());
-        assert!(parse_context_policy(Some(&json!("inherited"))).is_err());
+    fn portable_context_is_accepted_but_unprovisioned_scope_fails_closed() {
+        assert_eq!(
+            parse_context_policy(Some(&json!("portable"))).expect("portable"),
+            DelegationContextPolicy::Portable
+        );
+        assert_eq!(
+            parse_context_policy(Some(&json!("inherited"))).expect("inherited"),
+            DelegationContextPolicy::Inherited
+        );
         assert!(parse_execution_scope(Some(&json!("isolatedWorktree"))).is_err());
     }
 

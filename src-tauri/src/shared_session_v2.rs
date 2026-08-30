@@ -25,7 +25,7 @@ use crate::shared_context::{
     prepare_delivery, read_artifact, scan_orphan_artifacts, session_needs_history,
     terminal_binding_update, write_artifact, AcceptDeliveryRequest, ArtifactReadRequest,
     CompileContextRequest, MarkDeliverySentRequest, PendingDelivery, PrepareDeliveryRequest,
-    RuntimeContextCapabilities,
+    ContextPackage, RuntimeContextCapabilities,
 };
 use crate::shared_event_log::canonical::assembler::{
     RuntimeFinalSnapshot, RuntimeToolCall, RuntimeToolResult,
@@ -4187,6 +4187,40 @@ pub(crate) async fn shared_session_v2_prepare_delivery(
     attempt_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    shared_session_v2_prepare_delivery_core(
+        workspace_id,
+        thread_id,
+        attempt_id,
+        None,
+        state,
+    )
+    .await
+}
+
+pub(crate) async fn shared_session_v2_prepare_delivery_with_package(
+    workspace_id: String,
+    thread_id: String,
+    attempt_id: String,
+    package: ContextPackage,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    shared_session_v2_prepare_delivery_core(
+        workspace_id,
+        thread_id,
+        attempt_id,
+        Some(package),
+        state,
+    )
+    .await
+}
+
+async fn shared_session_v2_prepare_delivery_core(
+    workspace_id: String,
+    thread_id: String,
+    attempt_id: String,
+    package_override: Option<ContextPackage>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
     let writer = require_writer(&state)?;
     let shared_session_id = parse_shared_session_id(&thread_id)?;
     require_shared_session_workspace_owner(&workspace_id, &shared_session_id)?;
@@ -4210,54 +4244,84 @@ pub(crate) async fn shared_session_v2_prepare_delivery(
         let capabilities = context_capabilities(&owner.target);
         let destination =
             serde_json::to_value(&owner.requested.target).map_err(|error| error.to_string())?;
-        let incremental_request = CompileContextRequest {
-            session_id: shared_session_id.clone(),
-            binding_key: owner.binding_key.clone(),
-            destination: destination.clone(),
-            destination_native_session_id: binding
-                .as_ref()
-                .and_then(|row| row.native_session_id.clone()),
-            from_sequence_exclusive: binding
-                .as_ref()
-                .and_then(|row| row.accepted_through_sequence),
-            through_sequence_inclusive: Some(source_upper),
-            exclude_attempt_id: Some(attempt_id.clone()),
-            capabilities: capabilities.clone(),
-            budget_estimated_tokens: None,
-        };
-        let mut package = compile_context(&events, &incremental_request)?;
         let trust = binding
             .as_ref()
             .map(read_native_context_trust)
             .unwrap_or(NativeContextTrust::Dirty);
-        let mut rematerialized = false;
-        // P0：dirty 时只要 needs_history，一律全量 rematerialize。
-        // 不可仅看 zero-transfer——失败轮「继续」未 turnAccepted 时增量 package
-        // 非空但只有短指令，仍会丢原任务（图1）。
-        let needs_history = session_needs_history(&events, &incremental_request)?;
-        if trust == NativeContextTrust::Dirty && needs_history {
-            package = compile_context(
-                &events,
-                &CompileContextRequest {
-                    session_id: shared_session_id.clone(),
-                    binding_key: owner.binding_key.clone(),
-                    destination,
-                    destination_native_session_id: None,
-                    from_sequence_exclusive: None,
-                    through_sequence_inclusive: Some(source_upper),
-                    exclude_attempt_id: Some(attempt_id.clone()),
-                    capabilities: capabilities.clone(),
-                    budget_estimated_tokens: None,
-                },
-            )?;
-            rematerialized = true;
-            if is_zero_transfer_package(&package) {
+        let (package, rematerialized) = if let Some(package) = package_override {
+            if package.session_id != shared_session_id {
                 return Err(format!(
-                    "empty-context-handoff: needs-history but package empty after rematerialize (binding={}, trust=dirty)",
-                    owner.binding_key
+                    "prepared context session mismatch: expected {}, got {}",
+                    shared_session_id, package.session_id
                 ));
             }
-        }
+            if package.binding_key != owner.binding_key {
+                return Err(format!(
+                    "prepared context binding mismatch: expected {}, got {}",
+                    owner.binding_key, package.binding_key
+                ));
+            }
+            if package.destination != destination {
+                return Err(
+                    "prepared context destination does not match durable target".to_string(),
+                );
+            }
+            if package.manifest.from_sequence_exclusive.is_some()
+                || package.manifest.through_sequence_inclusive != source_upper
+            {
+                return Err(format!(
+                    "prepared context cursor mismatch for backing session {}",
+                    shared_session_id
+                ));
+            }
+            (package, false)
+        } else {
+            let incremental_request = CompileContextRequest {
+                session_id: shared_session_id.clone(),
+                binding_key: owner.binding_key.clone(),
+                destination: destination.clone(),
+                destination_native_session_id: binding
+                    .as_ref()
+                    .and_then(|row| row.native_session_id.clone()),
+                from_sequence_exclusive: binding
+                    .as_ref()
+                    .and_then(|row| row.accepted_through_sequence),
+                through_sequence_inclusive: Some(source_upper),
+                exclude_attempt_id: Some(attempt_id.clone()),
+                capabilities: capabilities.clone(),
+                budget_estimated_tokens: None,
+            };
+            let mut package = compile_context(&events, &incremental_request)?;
+            let mut rematerialized = false;
+            // P0：dirty 时只要 needs_history，一律全量 rematerialize。
+            // 不可仅看 zero-transfer——失败轮「继续」未 turnAccepted 时增量 package
+            // 非空但只有短指令，仍会丢原任务（图1）。
+            let needs_history = session_needs_history(&events, &incremental_request)?;
+            if trust == NativeContextTrust::Dirty && needs_history {
+                package = compile_context(
+                    &events,
+                    &CompileContextRequest {
+                        session_id: shared_session_id.clone(),
+                        binding_key: owner.binding_key.clone(),
+                        destination,
+                        destination_native_session_id: None,
+                        from_sequence_exclusive: None,
+                        through_sequence_inclusive: Some(source_upper),
+                        exclude_attempt_id: Some(attempt_id.clone()),
+                        capabilities: capabilities.clone(),
+                        budget_estimated_tokens: None,
+                    },
+                )?;
+                rematerialized = true;
+                if is_zero_transfer_package(&package) {
+                    return Err(format!(
+                        "empty-context-handoff: needs-history but package empty after rematerialize (binding={}, trust=dirty)",
+                        owner.binding_key
+                    ));
+                }
+            }
+            (package, rematerialized)
+        };
         let prepared_at = now_millis() as i64;
         let artifact = write_artifact(
             context_artifact_root(&state)?,

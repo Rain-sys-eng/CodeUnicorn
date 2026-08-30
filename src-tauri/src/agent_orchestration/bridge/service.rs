@@ -5,8 +5,8 @@ use crate::shared_session_v2::{validate_resolved_shared_worker_target, Execution
 use crate::types::AppSettings;
 
 use super::models::{
-    CreateDelegationRun, DelegationDispatchBinding, DelegationResult, DelegationRun,
-    DelegationRunStatus,
+    CreateDelegationRun, DelegationContextTransfer, DelegationDispatchBinding, DelegationResult,
+    DelegationRun, DelegationRunStatus,
 };
 use super::run_registry::DelegationRunRegistry;
 
@@ -150,6 +150,16 @@ impl AgentBridgeService {
     ) -> Result<DelegationRun, String> {
         self.runs
             .record_runtime_ack(run_id, attempt_id, native_session_id, runtime_turn_id)
+    }
+
+    pub(crate) fn record_context_transfer(
+        &self,
+        run_id: &str,
+        attempt_id: &str,
+        transfer: DelegationContextTransfer,
+    ) -> Result<DelegationRun, String> {
+        self.runs
+            .record_context_transfer(run_id, attempt_id, transfer)
     }
 
     pub fn transition(
@@ -456,6 +466,7 @@ mod tests {
                     binding_key: "squad:root:delegate:codex:default".to_string(),
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-1".to_string()),
+                    context_transfer: None,
                 },
             )
             .expect("bind");

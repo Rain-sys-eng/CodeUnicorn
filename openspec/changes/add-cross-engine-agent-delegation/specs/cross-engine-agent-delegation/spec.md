@@ -79,6 +79,29 @@ Delegation SHALL 支持 `Explicit`、`Portable`、`Inherited` context policy，�
 - **AND** source Agent 完整 transcript MUST NOT 自动注入
 - **AND** runtime backing lane MUST NOT accidentally inherit ordinary source-session history
 
+#### Scenario: Portable context uses the existing bounded compiler
+
+- **WHEN** caller 选择 `Portable`
+- **THEN** Bridge MUST 从可信 source Shared lane 或既有 NativeHistoryReader 取得 allowlisted semantic entries
+- **AND** MUST 通过既有 context compiler、budget、manifest、artifact 与 Shared V2 delivery contract 投递
+- **AND** provider-private wire blocks、unsupported roles 与历史 control MUST NOT 被伪装成 portable transcript
+- **AND** continuation MUST NOT 重复注入已经由同一 native binding 持有的外部 context
+
+#### Scenario: Inherited context retains durable parent provenance
+
+- **WHEN** nested delegated run 选择 `Inherited`
+- **THEN** Bridge MUST 合并直接 source semantic spine 与 parent run durable context package
+- **AND** MUST 对合并结果重新执行同一个 compiler budget/omission contract
+- **AND** run MUST 保存 package/artifact/source checksum、projection mode 与 policy evidence
+- **AND** target backing delivery cursor MUST 使用 backing Tx1 前 sequence，不得使用外部 source entry count
+
+#### Scenario: Degraded context cannot bypass user confirmation
+
+- **WHEN** Portable/Inherited compile 产生需要确认的 omission、超过预算、缺失 stable cursor、无可信 source identity或没有既有 reader
+- **THEN** delegation MUST 在 target runtime side effect 前 fail closed
+- **AND** Bridge MUST NOT 自动批准 degraded context transfer
+- **AND** durable run error MUST 保留可诊断的 package/omission 或 source capability evidence
+
 ### Requirement: Delegated Execution SHALL Expose Workspace Scope
 
 Delegated run SHALL 声明 `Observe`、`SharedWorkspace` 或 `IsolatedWorktree` execution scope。并行写任务 SHOULD 使用 `IsolatedWorktree`，review/research MAY 使用 `Observe`。

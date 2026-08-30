@@ -1,5 +1,6 @@
 pub(crate) mod approval;
 pub(crate) mod control;
+pub(crate) mod context;
 pub(crate) mod dispatcher;
 pub(crate) mod mcp_gateway;
 pub(crate) mod mcp_runtime;
@@ -13,8 +14,9 @@ pub(crate) mod worktree;
 pub(crate) mod worktree_store;
 
 pub use models::{
-    AgentEndpoint, CreateDelegationRun, DelegationContextPolicy, DelegationDispatchBinding,
-    DelegationExecutionScope, DelegationResult, DelegationRun, DelegationRunStatus,
+    AgentEndpoint, CreateDelegationRun, DelegationContextPolicy, DelegationContextTransfer,
+    DelegationDispatchBinding, DelegationExecutionScope, DelegationResult, DelegationRun,
+    DelegationRunStatus,
 };
 pub(crate) use persistence::AgentBridgePersistence;
 pub use run_registry::{DelegationRunLimits, DelegationRunRegistry};

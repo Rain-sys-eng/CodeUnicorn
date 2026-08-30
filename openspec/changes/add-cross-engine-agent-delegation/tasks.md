@@ -48,8 +48,8 @@
 ## 7. Context Policy
 
 - [x] 7.1 默认 Explicit：每个 delegated run 使用 fresh backing lane；仅 target task + explicit file refs 进入当前 prompt，不继承 source transcript。
-- [ ] 7.2 Portable/Inherited 复用现有 context compiler 与 budget/omission contract。
-- [ ] 7.3 增加敏感/超预算/不可迁移 context 的 fail-closed evidence。
+- [x] 7.2 Portable/Inherited 复用现有 context compiler、ContextPackage artifact、Shared V2 delivery cursor 与 typed prompt ACK。Portable 编译直接 source semantic spine；Inherited 合并 parent durable package 后统一重新预算；continuation 不重复注入外部 context，而沿既有 native/binding cursor 续接。
+- [x] 7.3 敏感/超预算/不可迁移 context 在 runtime side effect 前 fail closed：provider-private/unsupported role、checkpoint/omission confirmation、unstable native cursor、缺失可信 native/source provider identity 或无既有 NativeHistoryReader 都返回 durable run error；成功 transfer 保存 package/artifact/source checksum、projection mode 与 policy evidence。
 
 ## 8. Worktree Isolation
 

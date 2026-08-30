@@ -124,6 +124,13 @@ pub enum ContextPackageSource {
         source_fingerprint: String,
         through_cursor: String,
     },
+    DelegationPortable {
+        run_id: String,
+        context_policy: String,
+        source_session_ids: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        inherited_package_ids: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

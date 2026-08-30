@@ -77,6 +77,48 @@ pub struct DelegationDispatchBinding {
     pub native_session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime_turn_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_transfer: Option<DelegationContextTransfer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DelegationContextTransfer {
+    pub policy: DelegationContextPolicy,
+    pub package_id: String,
+    pub artifact_id: String,
+    pub artifact_checksum: String,
+    pub source_checksum: String,
+    pub projection_mode: String,
+}
+
+impl DelegationContextTransfer {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.policy == DelegationContextPolicy::Explicit {
+            return Err("explicit delegation cannot own an external context transfer".to_string());
+        }
+        for (label, value) in [
+            ("package id", self.package_id.as_str()),
+            ("artifact id", self.artifact_id.as_str()),
+            ("artifact checksum", self.artifact_checksum.as_str()),
+            ("source checksum", self.source_checksum.as_str()),
+            ("projection mode", self.projection_mode.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(format!("delegated context transfer {label} is required"));
+            }
+        }
+        if !matches!(
+            self.projection_mode.as_str(),
+            "portable-transcript" | "checkpoint"
+        ) {
+            return Err(format!(
+                "delegated context transfer projection mode is unsupported: {}",
+                self.projection_mode
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

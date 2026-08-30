@@ -15,8 +15,8 @@ use crate::shared_event_log::canonical::types::{
 };
 use crate::shared_session_v2::{
     begin_squad_worker_turn_core, shared_session_v2_await_turn_terminal,
-    shared_session_v2_dispatch_turn, shared_session_v2_prepare_delivery, BeginTurnStatus,
-    ExecutionTargetInput,
+    shared_session_v2_dispatch_turn, shared_session_v2_prepare_delivery,
+    shared_session_v2_prepare_delivery_with_package, BeginTurnStatus, ExecutionTargetInput,
 };
 use crate::shared_sessions::{
     parse_shared_session_id, start_shared_session, SharedSelectedReasoning, SharedSelectedTarget,
@@ -24,8 +24,8 @@ use crate::shared_sessions::{
 use crate::state::AppState;
 
 use super::models::{
-    DelegationContextPolicy, DelegationDispatchBinding, DelegationExecutionScope, DelegationResult,
-    DelegationRun, DelegationRunStatus,
+    DelegationContextPolicy, DelegationContextTransfer, DelegationDispatchBinding,
+    DelegationExecutionScope, DelegationResult, DelegationRun, DelegationRunStatus,
 };
 use super::presentation::ensure_backing_session_hidden;
 use super::service::AgentBridgeService;
@@ -126,7 +126,7 @@ async fn dispatch_claimed_run(
                 "parentRunId": run.parent_run_id.clone(),
                 "continuationOfRunId": run.continuation_of_run_id.clone(),
                 "bindingOwnerRunId": lane.binding_owner_run_id.clone(),
-                "contextPolicy": "explicit",
+                "contextPolicy": run.context_policy,
             }),
             attempt_id.clone(),
             logical_turn_id.clone(),
@@ -154,19 +154,56 @@ async fn dispatch_claimed_run(
             backing_thread_id: backing_thread_id.clone(),
             attempt_id: attempt_id.clone(),
             logical_turn_id: logical_turn_id.clone(),
-            binding_key,
+            binding_key: binding_key.clone(),
             native_session_id: None,
             runtime_turn_id: None,
+            context_transfer: None,
         },
     )?;
 
-    let delivery = shared_session_v2_prepare_delivery(
-        run.workspace_id.clone(),
-        backing_thread_id.clone(),
-        attempt_id.clone(),
-        app.state::<AppState>(),
+    let context_package = super::context::compile_delegation_context(
+        &service,
+        &run,
+        &binding_key,
+        &backing_thread_id,
+        &attempt_id,
+        &app,
     )
     .await?;
+    let delivery = match context_package {
+        Some(package) => {
+            let delivery = shared_session_v2_prepare_delivery_with_package(
+                run.workspace_id.clone(),
+                backing_thread_id.clone(),
+                attempt_id.clone(),
+                package,
+                app.state::<AppState>(),
+            )
+            .await?;
+            service.record_context_transfer(
+                &run.id,
+                &attempt_id,
+                DelegationContextTransfer {
+                    policy: run.context_policy,
+                    package_id: required_json_string(&delivery, "packageId")?,
+                    artifact_id: required_json_string(&delivery, "artifactId")?,
+                    artifact_checksum: required_json_string(&delivery, "artifactChecksum")?,
+                    source_checksum: required_json_string(&delivery, "sourceChecksum")?,
+                    projection_mode: required_json_string(&delivery, "mode")?,
+                },
+            )?;
+            delivery
+        }
+        None => {
+            shared_session_v2_prepare_delivery(
+                run.workspace_id.clone(),
+                backing_thread_id.clone(),
+                attempt_id.clone(),
+                app.state::<AppState>(),
+            )
+            .await?
+        }
+    };
     let artifact_id = required_json_string(&delivery, "artifactId")?;
     let artifact_checksum = required_json_string(&delivery, "artifactChecksum")?;
 
@@ -471,12 +508,6 @@ fn shared_selected_target(target: &ExecutionTargetInput) -> SharedSelectedTarget
 }
 
 fn ensure_dispatch_policy_supported(run: &DelegationRun) -> Result<(), String> {
-    if run.context_policy != DelegationContextPolicy::Explicit {
-        return Err(format!(
-            "delegation context policy is not implemented by the current dispatcher: {:?}",
-            run.context_policy
-        ));
-    }
     if run.execution_scope == DelegationExecutionScope::IsolatedWorktree {
         return Err(
             "isolated worktree delegation is not implemented by the current dispatcher"
@@ -729,6 +760,7 @@ mod tests {
                     binding_key: format!("squad:{}:delegate:codex:default", root.id),
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-1".to_string()),
+                    context_transfer: None,
                 },
             )
             .expect("bind root");

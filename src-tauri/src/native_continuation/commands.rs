@@ -8,7 +8,8 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::engine::{EngineConfig, EngineType};
 use crate::native_history::{
-    probe_history_file, read_history_file, NativeHistoryEngine, NativeHistorySource,
+    probe_history_file, read_history_file, NativeHistoryEngine, NativeHistoryReadResult,
+    NativeHistorySource,
 };
 use crate::shared_context::{
     compile_native_context, read_artifact, read_typed_artifact, write_artifact,
@@ -311,6 +312,27 @@ async fn resolve_source_path(
     }
 }
 
+pub(crate) async fn read_native_history_for_context(
+    state: &AppState,
+    workspace_id: &str,
+    source: &NativeHistorySource,
+) -> Result<NativeHistoryReadResult, String> {
+    let path = resolve_source_path(state, workspace_id, source).await?;
+    let source_for_read = source.clone();
+    tokio::task::spawn_blocking(move || {
+        let capability =
+            probe_history_file(&path, source_for_read.engine).map_err(|error| error.to_string())?;
+        let cursor = capability
+            .stable_cursor
+            .then_some(capability.current_through_cursor)
+            .flatten()
+            .ok_or_else(|| "unsupported-stable-cursor".to_string())?;
+        read_history_file(&path, &source_for_read, &cursor).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("native-history-worker: {error}"))?
+}
+
 fn validate_artifacts(
     root: &Path,
     workspace_id: &str,
@@ -394,20 +416,7 @@ async fn prepare(
         }
     }
 
-    let path = resolve_source_path(state, workspace_id, source).await?;
-    let source_for_read = source.clone();
-    let history = tokio::task::spawn_blocking(move || {
-        let capability =
-            probe_history_file(&path, source_for_read.engine).map_err(|error| error.to_string())?;
-        let cursor = capability
-            .stable_cursor
-            .then_some(capability.current_through_cursor)
-            .flatten()
-            .ok_or_else(|| "unsupported-stable-cursor".to_string())?;
-        read_history_file(&path, &source_for_read, &cursor).map_err(|error| error.to_string())
-    })
-    .await
-    .map_err(|error| format!("native-history-worker: {error}"))??;
+    let history = read_native_history_for_context(state, workspace_id, source).await?;
     emit_progress(
         app,
         workspace_id,

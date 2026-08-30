@@ -85,7 +85,21 @@ Portable
 Inherited
 ```
 
-默认 `Explicit`；Portable/Inherited 后续复用已有 context compiler 与 budget/omission contract。
+默认 `Explicit`。`Portable` 与 `Inherited` 继续复用既有 Shared context compiler、
+`ContextPackage` artifact、delivery cursor 与 typed prompt ACK：
+
+- `Portable` 只编译直接 source Agent 的 allowlisted user/assistant semantic spine；nested
+  source 从 parent 的 canonical backing lane 读取，避免把 runtime locator 或 provider-private
+  wire history当成可移植事实；
+- `Inherited` 在直接 source spine 前合并 parent run 已 durable 记录的 context package，随后由
+  同一个 compiler 重新做全局 budget/checkpoint/omission；不递归复制完整 native transcript；
+- 外部 source package 的 provenance 与 target backing cursor 分离。package 内容记录真实
+  source session/inherited package ids，而 `throughSequenceInclusive` 固定为本次 backing Tx1 前
+  sequence，保证 continuation 仍使用原 Shared V2 incremental cursor；
+- package/artifact/source checksum、projection mode 与 policy 写入 `DelegationDispatchBinding`。
+  任何需要用户确认的 omission、无 stable native cursor、无可信 source identity、无现成
+  NativeHistoryReader 或空 payload 均在 runtime dispatch 前 fail closed；当前不会自动批准
+  degraded context transfer。
 
 ### 7. Execution scope 三态
 
