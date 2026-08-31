@@ -1301,6 +1301,9 @@ mod tests {
             semantic_navigation_runtime: crate::code_intel_lsp::SemanticNavigationRuntime::default(
             ),
             engine_manager: crate::engine::EngineManager::new(),
+            agent_bridge: std::sync::Arc::new(
+                crate::agent_orchestration::bridge::AgentBridgeService::default(),
+            ),
         }
     }
 

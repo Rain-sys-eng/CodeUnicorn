@@ -123,9 +123,10 @@ impl AgentGraphCoordinator {
                     })?;
                 let mut recovered = current.execution;
                 let _ = recovered.reconcile(state);
+                let recovered_graph_id = recovered.graph_id.clone();
                 let _ = self
                     .registry
-                    .update_execution(&recovered.graph_id, recovered);
+                    .update_execution(&recovered_graph_id, recovered);
                 Err(error)
             }
         }
