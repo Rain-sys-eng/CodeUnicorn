@@ -4,11 +4,13 @@ import { useTranslation } from "react-i18next";
 import { pushErrorToast } from "../../../services/toasts";
 import { loadSubagentStyles } from "../../../styles/featureStyleLoaders";
 import { useFeatureStylesReady } from "../../../styles/useFeatureStylesReady";
-import { formatTokenCount } from "../../messages/utils/messagesRenderUtils";
 import { useAgentBridgeRuns } from "../hooks/useAgentBridgeRuns";
 import { requestAgentBridgeThreadOpen } from "../store/navigationStore";
 import { isDelegationTerminal, type DelegationRunStatus } from "../types";
-import { formatDelegationElapsed } from "../utils/delegationProjection";
+import {
+  formatDelegationElapsed,
+  formatDelegationTokenCount,
+} from "../utils/delegationProjection";
 import type { DelegationToolStatus } from "../utils/liveActivity";
 import {
   AgentBridgeRunDetailsDialog,
@@ -161,7 +163,7 @@ export function AgentBridgeConversationSurface({
                   {activity?.totalTokens != null ? (
                     <span className="ab-run-tokens">
                       {t("messages.liveTokenUsage", {
-                        tokens: formatTokenCount(activity.totalTokens),
+                        tokens: formatDelegationTokenCount(activity.totalTokens),
                       })}
                     </span>
                   ) : (

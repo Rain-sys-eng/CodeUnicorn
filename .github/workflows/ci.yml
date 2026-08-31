@@ -71,6 +71,9 @@ jobs:
           mkdir -p dist/assets
           printf '<!doctype html><html><body></body></html>\n' > dist/index.html
           printf 'ci placeholder\n' > dist/assets/ci-placeholder.txt
+      - name: Rust tests
+        run: cargo test
+        working-directory: src-tauri
       - name: Agent Bridge changed-file rustfmt
         run: |
           rustfmt --edition 2021 --check \
@@ -85,9 +88,6 @@ jobs:
             src/agent_orchestration/bridge/worktree.rs \
             src/command_registry.rs \
             src/state.rs
-        working-directory: src-tauri
-      - name: Rust tests
-        run: cargo test
         working-directory: src-tauri
   lint:
     runs-on: ubuntu-latest

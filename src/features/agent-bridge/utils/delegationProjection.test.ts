@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DelegationRun } from "../types";
 import {
   formatDelegationElapsed,
+  formatDelegationTokenCount,
   selectVisibleDelegationRuns,
 } from "./delegationProjection";
 
@@ -103,5 +104,12 @@ describe("Agent Bridge delegation projection", () => {
         99_000,
       ),
     ).toBe("0:02");
+  });
+
+  it("formats token totals without importing the messages private surface", () => {
+    expect(formatDelegationTokenCount(149)).toBe("149");
+    expect(formatDelegationTokenCount(43_000)).toBe("43.0K");
+    expect(formatDelegationTokenCount(1_200_000)).toBe("1.2M");
+    expect(formatDelegationTokenCount(Number.NaN)).toBe("0");
   });
 });
