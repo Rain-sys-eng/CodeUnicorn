@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/cross-engine-agent-delegation]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -75,6 +75,7 @@ jobs:
         run: cargo test
         working-directory: src-tauri
       - name: Agent Bridge changed-file rustfmt
+        if: always()
         run: |
           rustfmt --edition 2021 --check \
             src/agent_orchestration/bridge/commands.rs \
@@ -86,6 +87,8 @@ jobs:
             src/agent_orchestration/bridge/run_registry.rs \
             src/agent_orchestration/bridge/service.rs \
             src/agent_orchestration/bridge/worktree.rs \
+            src/shared_event_log/canonical/validator.rs \
+            src/shared_session_v2.rs \
             src/command_registry.rs \
             src/state.rs
         working-directory: src-tauri

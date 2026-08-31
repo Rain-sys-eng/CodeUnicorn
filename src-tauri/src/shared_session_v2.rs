@@ -2999,6 +2999,14 @@ mod runtime_dispatch_receipt_tests {
             }
         };
         let attempt_id = "attempt-receipt";
+        let requested_extra = if engine == EngineType::Dsh {
+            json!({
+                "bindingOperationId": "operation-receipt",
+                "squadWorkerBindingKey": "squad:receipt:delegate:dsh:default",
+            })
+        } else {
+            Value::Object(Default::default())
+        };
         writer
             .append_canonical_fact(
                 "receipt-session".to_string(),
@@ -3033,7 +3041,7 @@ mod runtime_dispatch_receipt_tests {
                         extra: Value::Object(Default::default()),
                     },
                     requested_at: 1,
-                    extra: Value::Object(Default::default()),
+                    extra: requested_extra,
                 }),
             )
             .expect("append receipt owner");
