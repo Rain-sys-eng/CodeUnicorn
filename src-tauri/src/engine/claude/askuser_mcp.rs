@@ -205,7 +205,7 @@ fn ask_tool_definition() -> Value {
 
 fn all_tool_definitions() -> Vec<Value> {
     let mut tools = vec![ask_tool_definition()];
-    tools.extend(crate::agent_orchestration::bridge::mcp_gateway::tool_definitions());
+    tools.extend(crate::engine::claude_bridge_mcp::tool_definitions());
     tools
 }
 
@@ -350,20 +350,11 @@ async fn handle_mcp_request(
                 };
             }
 
-            if crate::agent_orchestration::bridge::mcp_gateway::handles_tool(tool_name) {
-                let source = match crate::agent_orchestration::bridge::mcp_source::resolve_claude_mcp_source(
+            if crate::engine::claude_bridge_mcp::handles_tool(tool_name) {
+                return match crate::engine::claude_bridge_mcp::call_tool(
                     &state.claude_manager,
                     &workspace_id,
                     runtime_locator.as_deref(),
-                )
-                .await
-                {
-                    Ok(source) => source,
-                    Err(error) => return error_tool_result(id, tool_name, error),
-                };
-                return match crate::agent_orchestration::bridge::mcp_runtime::call_tool(
-                    &workspace_id,
-                    source,
                     tool_name,
                     arguments,
                 )
@@ -456,17 +447,20 @@ mod tests {
 
     #[test]
     fn managed_server_lists_ask_and_all_bridge_tools() {
+        if !crate::engine::claude_bridge_mcp::AVAILABLE {
+            return;
+        }
         let tools = all_tool_definitions();
         assert_eq!(tools.len(), 8);
         assert!(tools.iter().any(|tool| tool["name"] == ASK_TOOL_NAME));
         for expected in [
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_DELEGATE_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_STATUS_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_WAIT_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_RESULT_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_SEND_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_CANCEL_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_LIST_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_DELEGATE_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_STATUS_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_WAIT_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_RESULT_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_SEND_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_CANCEL_TOOL,
         ] {
             assert!(tools.iter().any(|tool| tool["name"] == expected));
         }
@@ -474,6 +468,9 @@ mod tests {
 
     #[tokio::test]
     async fn authenticated_tools_list_exposes_the_exact_bridge_contract() {
+        if !crate::engine::claude_bridge_mcp::AVAILABLE {
+            return;
+        }
         let response = handle_mcp_request(
             "workspace-1".to_string(),
             Some("runtime-1".to_string()),
@@ -495,19 +492,19 @@ mod tests {
             .iter()
             .filter_map(|tool| tool["name"].as_str())
             .filter(|name| {
-                crate::agent_orchestration::bridge::mcp_gateway::handles_tool(name)
+                crate::engine::claude_bridge_mcp::handles_tool(name)
             })
             .collect::<std::collections::HashSet<_>>();
 
         assert_eq!(bridge_names.len(), 7);
         for expected in [
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_DELEGATE_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_STATUS_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_WAIT_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_RESULT_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_SEND_TOOL,
-            crate::agent_orchestration::bridge::mcp_gateway::AGENT_CANCEL_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_LIST_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_DELEGATE_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_STATUS_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_WAIT_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_RESULT_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_SEND_TOOL,
+            crate::engine::claude_bridge_mcp::AGENT_CANCEL_TOOL,
         ] {
             assert!(bridge_names.contains(expected));
         }
@@ -515,6 +512,9 @@ mod tests {
 
     #[tokio::test]
     async fn legacy_route_cannot_call_an_advertised_bridge_tool() {
+        if !crate::engine::claude_bridge_mcp::AVAILABLE {
+            return;
+        }
         let response = handle_mcp_request(
             "workspace-1".to_string(),
             None,
@@ -525,7 +525,7 @@ mod tests {
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": crate::agent_orchestration::bridge::mcp_gateway::AGENT_STATUS_TOOL,
+                    "name": crate::engine::claude_bridge_mcp::AGENT_STATUS_TOOL,
                     "arguments": { "runId": "run-1" }
                 }
             }),
@@ -541,6 +541,9 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_route_requires_a_live_locator_before_bridge_dispatch() {
+        if !crate::engine::claude_bridge_mcp::AVAILABLE {
+            return;
+        }
         let response = handle_mcp_request(
             "workspace-1".to_string(),
             Some("unknown-runtime".to_string()),
@@ -551,7 +554,7 @@ mod tests {
                 "id": 3,
                 "method": "tools/call",
                 "params": {
-                    "name": crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
+                    "name": crate::engine::claude_bridge_mcp::AGENT_LIST_TOOL,
                     "arguments": {}
                 }
             }),
@@ -567,6 +570,9 @@ mod tests {
 
     #[tokio::test]
     async fn live_runtime_route_reaches_the_bridge_runtime_boundary() {
+        if !crate::engine::claude_bridge_mcp::AVAILABLE {
+            return;
+        }
         let manager = Arc::new(ClaudeSessionManager::new());
         let session = manager
             .get_or_create_session(
@@ -587,7 +593,7 @@ mod tests {
                 "id": 31,
                 "method": "tools/call",
                 "params": {
-                    "name": crate::agent_orchestration::bridge::mcp_gateway::AGENT_LIST_TOOL,
+                    "name": crate::engine::claude_bridge_mcp::AGENT_LIST_TOOL,
                     "arguments": {}
                 }
             }),

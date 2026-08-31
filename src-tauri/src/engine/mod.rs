@@ -12,6 +12,7 @@ pub(crate) mod agent_event_bus;
 #[cfg(test)]
 mod capability_matrix;
 pub mod claude;
+pub(crate) mod claude_bridge_mcp;
 pub mod claude_history;
 #[cfg(test)]
 mod claude_history_delete_tests;
