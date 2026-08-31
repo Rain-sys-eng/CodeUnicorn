@@ -207,17 +207,20 @@ impl DelegationRunRegistry {
         let previous_binding = previous.dispatch_binding.as_ref().ok_or_else(|| {
             format!("completed delegated run has no dispatch binding: {previous_run_id}")
         })?;
-        if previous_binding
+        let native_session_id = previous_binding
             .native_session_id
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .is_none()
-        {
-            return Err(format!(
-                "completed delegated run has no reusable native session: {previous_run_id}"
-            ));
-        }
+            .ok_or_else(|| {
+                format!(
+                    "completed delegated run has no reusable native session: {previous_run_id}"
+                )
+            })?
+            .to_string();
+
+        let mut target = previous.target.clone();
+        target.native_session_id = Some(native_session_id);
 
         let id = self.next_run_id(&runs);
         let run = DelegationRun {
@@ -228,7 +231,7 @@ impl DelegationRunRegistry {
             retry_of_run_id: None,
             depth: previous.depth,
             source: previous.source.clone(),
-            target: previous.target.clone(),
+            target,
             target_execution: previous.target_execution.clone(),
             workspace_id: previous.workspace_id.clone(),
             task: task.to_string(),

@@ -433,7 +433,15 @@ fn validate_turn_execution_snapshot(
 ) -> Result<(), FactValidationError> {
     if !matches!(
         snapshot.engine.as_str(),
-        "claude" | "codex" | "gemini" | "kimi" | "grok" | "opencode" | "pi" | "qoder"
+        "claude"
+            | "codex"
+            | "gemini"
+            | "kimi"
+            | "grok"
+            | "opencode"
+            | "pi"
+            | "dsh"
+            | "qoder"
     ) {
         return Err(FactValidationError::new(
             ctx,
@@ -533,7 +541,15 @@ fn validate_provider_private_ref(
     require_non_empty(&pref.ref_id, "refId", ctx)?;
     if !matches!(
         pref.engine.as_str(),
-        "claude" | "codex" | "gemini" | "kimi" | "grok" | "opencode" | "pi" | "qoder"
+        "claude"
+            | "codex"
+            | "gemini"
+            | "kimi"
+            | "grok"
+            | "opencode"
+            | "pi"
+            | "dsh"
+            | "qoder"
     ) {
         return Err(FactValidationError::new(
             ctx,
@@ -739,10 +755,32 @@ mod tests {
     }
 
     #[test]
+    fn turn_requested_accepts_dsh_engine() {
+        let mut fact = valid_turn_requested();
+        fact.target.engine = "dsh".to_string();
+        assert!(validate_fact(&CanonicalFact::TurnRequested(fact)).is_ok());
+    }
+
+    #[test]
     fn provider_private_ref_accepts_pi_engine() {
         let pref = ProviderPrivateRef {
             ref_id: "ref-1".to_string(),
             engine: "pi".to_string(),
+            kind: super::super::types::ProviderPrivateRefKind::ProviderRaw,
+            provider_profile_id: None,
+            model: None,
+            opaque_ref: None,
+            artifact_ref: None,
+            extra: serde_json::Value::Object(Default::default()),
+        };
+        assert!(validate_provider_private_ref(&pref, "test").is_ok());
+    }
+
+    #[test]
+    fn provider_private_ref_accepts_dsh_engine() {
+        let pref = ProviderPrivateRef {
+            ref_id: "ref-1".to_string(),
+            engine: "dsh".to_string(),
             kind: super::super::types::ProviderPrivateRefKind::ProviderRaw,
             provider_profile_id: None,
             model: None,
