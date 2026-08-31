@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -69,6 +71,21 @@ jobs:
           mkdir -p dist/assets
           printf '<!doctype html><html><body></body></html>\n' > dist/index.html
           printf 'ci placeholder\n' > dist/assets/ci-placeholder.txt
+      - name: Agent Bridge changed-file rustfmt
+        run: |
+          rustfmt --edition 2021 --check \
+            src/agent_orchestration/bridge/commands.rs \
+            src/agent_orchestration/bridge/dispatcher.rs \
+            src/agent_orchestration/bridge/mcp_gateway.rs \
+            src/agent_orchestration/bridge/mcp_gateway_integration_tests.rs \
+            src/agent_orchestration/bridge/models.rs \
+            src/agent_orchestration/bridge/persistence.rs \
+            src/agent_orchestration/bridge/run_registry.rs \
+            src/agent_orchestration/bridge/service.rs \
+            src/agent_orchestration/bridge/worktree.rs \
+            src/command_registry.rs \
+            src/state.rs
+        working-directory: src-tauri
       - name: Rust tests
         run: cargo test
         working-directory: src-tauri
