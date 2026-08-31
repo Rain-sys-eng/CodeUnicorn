@@ -34,6 +34,36 @@ pub(crate) fn ensure_observer_started(app: &AppHandle) -> Result<(), String> {
         .set(())
         .map_err(|_| "DAG wake observer was initialized concurrently".to_string())?;
 
+    // Subscribe before scanning durable graphs so settlements racing with startup are buffered.
+    // Recovery and live wake handling may contend, but the coordinator serializes every advance
+    // and immutable Bridge run mappings prevent duplicate node creation.
+    let recovery_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let graph_ids = match all_graph_ids(coordinator().as_ref()) {
+            Ok(graph_ids) => graph_ids,
+            Err(error) => {
+                log::warn!(
+                    "[agent-orchestration] failed to enumerate durable DAGs for startup recovery: {}",
+                    error
+                );
+                return;
+            }
+        };
+        for graph_id in graph_ids {
+            let state = recovery_app.state::<AppState>();
+            if let Err(error) = coordinator()
+                .tick(&graph_id, state.inner(), &recovery_app)
+                .await
+            {
+                log::warn!(
+                    "[agent-orchestration] startup DAG recovery tick failed (graph={}): {}",
+                    graph_id,
+                    error
+                );
+            }
+        }
+    });
+
     tauri::async_runtime::spawn(async move {
         while let Some(event) = subscription.recv().await {
             if event.kind != "run.settled" {
@@ -67,6 +97,17 @@ pub(crate) fn ensure_observer_started(app: &AppHandle) -> Result<(), String> {
         }
     });
     Ok(())
+}
+
+fn all_graph_ids(coordinator: &AgentGraphCoordinator) -> Result<Vec<String>, String> {
+    let mut graph_ids = coordinator
+        .list()?
+        .into_iter()
+        .map(|record| record.plan.id)
+        .collect::<Vec<_>>();
+    graph_ids.sort();
+    graph_ids.dedup();
+    Ok(graph_ids)
 }
 
 fn graphs_referencing_run(
@@ -145,5 +186,18 @@ mod tests {
         assert!(graphs_referencing_run(&coordinator, "ordinary-run")
             .expect("ordinary")
             .is_empty());
+    }
+
+    #[test]
+    fn startup_recovery_enumerates_every_durable_graph_deterministically() {
+        let registry = AgentGraphRegistry::volatile();
+        registry.create(record("graph-b", Some("run-2"))).expect("b");
+        registry.create(record("graph-a", None)).expect("a");
+        let coordinator = AgentGraphCoordinator::new(registry);
+
+        assert_eq!(
+            all_graph_ids(&coordinator).expect("startup graphs"),
+            vec!["graph-a", "graph-b"]
+        );
     }
 }

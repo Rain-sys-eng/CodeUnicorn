@@ -78,7 +78,10 @@ pub fn tool_definitions() -> Vec<Value> {
                         "type": "string",
                         "enum": ["explicit", "portable", "inherited"]
                     },
-                    "executionScope": { "type": "string", "enum": ["observe", "sharedWorkspace"] }
+                    "executionScope": {
+                        "type": "string",
+                        "enum": ["observe", "sharedWorkspace", "isolatedWorktree"]
+                    }
                 },
                 "required": ["targetEngine", "task"],
                 "additionalProperties": false
@@ -280,11 +283,25 @@ fn infer_active_parent_run_id(
     workspace_id: &str,
     source: &ResolvedMcpSource,
 ) -> Result<Option<String>, String> {
-    let mut owners = state
-        .agent_bridge
-        .list_runs()?
+    infer_active_parent_from_runs(state.agent_bridge.list_runs()?, workspace_id, source)
+}
+
+fn infer_active_parent_from_runs(
+    runs: Vec<DelegationRun>,
+    workspace_id: &str,
+    source: &ResolvedMcpSource,
+) -> Result<Option<String>, String> {
+    let mut owners = runs
         .into_iter()
-        .filter(|run| run.workspace_id == workspace_id)
+        .filter(|run| {
+            run.dispatch_binding
+                .as_ref()
+                .and_then(|binding| binding.runtime_workspace_id.as_deref())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or(run.workspace_id.as_str())
+                == workspace_id
+        })
         .filter(|run| !run.status.is_terminal())
         .filter(|run| run.target.engine_id == source.endpoint.engine_id)
         .filter(|run| {
@@ -456,6 +473,7 @@ fn parse_execution_scope(value: Option<&Value>) -> Result<DelegationExecutionSco
     match value.and_then(Value::as_str).unwrap_or("observe") {
         "observe" => Ok(DelegationExecutionScope::Observe),
         "sharedWorkspace" => Ok(DelegationExecutionScope::SharedWorkspace),
+        "isolatedWorktree" => Ok(DelegationExecutionScope::IsolatedWorktree),
         other => Err(format!(
             "executionScope is not supported by the current Agent Bridge MCP gateway: {other}"
         )),
@@ -534,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn portable_context_is_accepted_but_unprovisioned_scope_fails_closed() {
+    fn portable_context_and_isolated_scope_are_accepted() {
         assert_eq!(
             parse_context_policy(Some(&json!("portable"))).expect("portable"),
             DelegationContextPolicy::Portable
@@ -543,7 +561,18 @@ mod tests {
             parse_context_policy(Some(&json!("inherited"))).expect("inherited"),
             DelegationContextPolicy::Inherited
         );
-        assert!(parse_execution_scope(Some(&json!("isolatedWorktree"))).is_err());
+        assert_eq!(
+            parse_execution_scope(Some(&json!("isolatedWorktree"))).expect("isolated"),
+            DelegationExecutionScope::IsolatedWorktree
+        );
+        let delegate = tool_definitions()
+            .into_iter()
+            .find(|definition| definition["name"] == AGENT_DELEGATE_TOOL)
+            .expect("agent_delegate definition");
+        assert_eq!(
+            delegate["inputSchema"]["properties"]["executionScope"]["enum"],
+            json!(["observe", "sharedWorkspace", "isolatedWorktree"])
+        );
     }
 
     #[test]
@@ -612,5 +641,52 @@ mod tests {
         .expect_err("non-terminal dispatch failure must remain an MCP error");
 
         assert!(error.contains(&format!("runId={run_id}")));
+    }
+
+    #[test]
+    fn nested_parent_is_inferred_from_exact_runtime_turn_and_runtime_workspace() {
+        let (service, run_id) = created_service();
+        service.claim_dispatch(&run_id).expect("claim");
+        service
+            .set_dispatch_binding(
+                &run_id,
+                crate::agent_orchestration::bridge::DelegationDispatchBinding {
+                    backing_thread_id: "shared:parent".to_string(),
+                    attempt_id: "attempt-parent".to_string(),
+                    logical_turn_id: "logical-parent".to_string(),
+                    binding_key: "squad:parent:delegate:codex:default".to_string(),
+                    runtime_workspace_id: Some("workspace-1".to_string()),
+                    native_session_id: Some("codex-native".to_string()),
+                    runtime_turn_id: Some("codex-turn".to_string()),
+                    context_transfer: None,
+                },
+            )
+            .expect("binding");
+        service
+            .record_runtime_ack(&run_id, "attempt-parent", "codex-native", "codex-turn")
+            .expect("ack");
+        let source = ResolvedMcpSource {
+            endpoint: endpoint("codex", Some("runtime-codex"), Some("codex-native")),
+            runtime_turn_id: "codex-turn".to_string(),
+        };
+
+        assert_eq!(
+            infer_active_parent_from_runs(
+                service.list_runs().expect("runs"),
+                "workspace-1",
+                &source,
+            )
+            .expect("parent"),
+            Some(run_id)
+        );
+        assert_eq!(
+            infer_active_parent_from_runs(
+                service.list_runs().expect("runs"),
+                "another-workspace",
+                &source,
+            )
+            .expect("no cross-workspace parent"),
+            None
+        );
     }
 }

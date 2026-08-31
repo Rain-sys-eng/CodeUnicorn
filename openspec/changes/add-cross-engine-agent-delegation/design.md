@@ -68,10 +68,13 @@ source Agent 可以继续 delegate 其他任务；`agent_wait` / `agent_result` 
 
 Nested child 进入 registry 前必须满足：
 
-- child workspace 与 parent workspace 相同；
+- child workspace 与 parent 的 actual runtime workspace 相同；non-isolated parent 即 source workspace，`IsolatedWorktree` parent 则使用 dispatch binding 中的 durable isolated workspace；
 - child source engine 必须等于 parent target engine；
+- Agent-facing ingress 不接受 tool argument 提供 parent/source identity；managed MCP route 以 live runtime turn、native session 与 runtime workspace 唯一反查 active parent，zero match 表示 root delegation，ambiguous match fail closed；
 - parent 指向只允许 existing older run，新 child 使用全新 run identity，因此 run graph 不提供回指 ancestor 的结构入口；
 - recursive explosion 继续由 max depth、per-parent child 与 global active limit 控制。
+
+Durable store 恢复时再次校验 parent existence、root identity、严格递增 depth、source=parent target 与 runtime-workspace ownership；结构被篡改、parent 缺失或 lineage 不一致时整个 registry fail closed，不以不可信 parent graph 继续 dispatch。
 
 ### 5. 第一批 Core 使用明确 state machine 与幂等 settlement
 
@@ -110,6 +113,24 @@ IsolatedWorktree
 ```
 
 Bridge 只保存 scope fact；Git provisioning/cleanup 在独立 integration 中完成。
+
+`IsolatedWorktree` integration 不直接执行 Git CLI，而是复用既有 `workspaces::add_worktree`
+lifecycle（包括 remote forwarding、workspace catalog persistence 与 runtime session setup）。Bridge 在任何
+workspace side effect 前，将 deterministic `codeunicorn/delegate/<run>` branch reservation 以 disk-first
+方式写入 `agent-bridge-worktrees.json`；provision 后再补齐 workspace/path owner。若进程停在 reservation 与
+completion 之间，只允许从 existing workspace catalog 按 exact parent + branch 恢复；任何歧义、path/branch/
+parent 漂移都 fail closed。
+
+source workspace identity 与 runtime workspace identity 分开持久化。isolated backing Shared session、context
+artifact delivery、native runtime、await 与 exact-attempt cancel 全部使用 `runtimeWorkspaceId`；continuation
+必须复用 original binding/worktree owner，禁止回退到 source workspace。nested target 从 isolated runtime
+发起 child 时，以该 runtime workspace 作为可信 parent ownership。
+
+terminal result 通过 existing Git status/worktree-against-ref service，以 provision 时冻结的 exact base commit
+收集 committed + uncommitted change，并生成 owned branch、sorted changed files 与受更严格 durable-result
+budget 限制的 text diff preview；binary/oversized 文件不会伪造 text diff。Bridge 不自动 merge，也不在 completed/failed/
+cancelled 时自动删除 worktree：成功现场留给用户检查/显式 merge，失败/取消现场和 durable owner 留作恢复
+与诊断。后续显式删除仍由 existing workspace lifecycle 负责。
 
 ### 8. MCP Gateway 只做 transport adapter
 
@@ -150,6 +171,20 @@ DSH parity 复用同一 Shared V2 worker lifecycle，但不扩大普通 Shared S
 ### 13. Durable facts 与 live deltas 分离
 
 持久化 identity、lineage、target、scope、status、session binding、result/artifact metadata；不持久化全部 token/tool deltas。
+
+### 14. Parallel / DAG 只编排 durable Bridge identity
+
+Parallel / DAG 继续位于既有 `agent_orchestration` domain。graph registry 只持久化 validated plan、node state 与 node→immutable Bridge run mapping；target process/session/result 仍由 Agent Bridge 和 existing runtime owner 管理。coordinator 必须先创建 Bridge run、磁盘优先保存 mapping，再允许 dispatch runtime，并以单一 advance lock 串行化并发 settlement 触发的 downstream fan-out。
+
+图推进复用 existing `AgentEventBus` 的 `run.settled`，不增加第二套 completion bus。应用启动时在订阅 live settlement 后扫描全部 durable graph：已映射且仍为 clean `Queued` 的 Bridge run 继续 exact dispatch；stale/missing/terminal run 由 Bridge durable facts reconcile 为 failed/cancelled/completed，再确定 downstream ready 或 blocked。普通非 DAG delegation 不会触发图创建或图推进。
+
+### 15. Collaboration UI 使用 workspace projection + existing event bus adapter
+
+Renderer 不直接读取 hidden backing Shared Session。Backend 提供 workspace-scoped durable run list/get/cancel commands：source workspace 可查看同一 root lineage 下的 isolated descendants，isolated runtime workspace 也只能查看自身 runtime-owned lineage；其他 workspace fail closed。UI cancel 继续进入 `AppState::cancel_delegation_run`，不新增 control path。
+
+Live presentation 由 process-wide observer 订阅 existing `AgentEventBus`，仅在 `runId` 能被 durable Agent Bridge registry 确认时转发 `agent-bridge-event`。该 adapter 不是第二套 event bus，也不持久化 delta；frontend event hub 只在存在局部 subscriber 时监听。Queued/local cancellation 也通过 existing bus 发布一次 deduplicated `run.settled(cancelled)`，从而同时唤醒 DAG 与 UI。
+
+聊天列中的 Bridge surface 使用 feature-local hook：先通过 workspace list command hydrate durable runs，再用当前 canvas 的 logical thread + active native thread identities 匹配 root source ownership；descendant 不自行声明可见性，而是随已匹配 root lineage 展示，因此 isolated runtime workspace 不会把 child 从 source 对话中割裂。renderer 收到 known run 的 lifecycle/control fact 后只做去重的 exact get refresh；unknown critical run（包括刚启动的 isolated child）触发一次 bounded workspace re-list。canonical `usage.updated` / `tool.started` / `tool.completed` 只归并到 card-local、最多 64-run 的 token totals + latest tool state；heartbeat 不触发 durable read。`delta` lane 不写 React state，elapsed 的低频本地 timer 与 event listener 都由卡片 effect cleanup。WaitingApproval 只显示 durable 状态，不复制 Approve/Reject control owner；Stop 继续调用 backend workspace-scoped cancel command。
 
 ## Safety Guards
 

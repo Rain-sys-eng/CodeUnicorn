@@ -6,6 +6,7 @@ import { dispatchAppServerEvent } from "../features/app/hooks/useAppServerEvents
 import {
   getAppServerEventBackpressureForTests,
   resetAppServerEventBackpressureForTests,
+  subscribeAgentBridgeEvents,
   subscribeAppServerEvents,
   subscribeCliInstallerEvents,
   subscribeMenuCycleCollaborationMode,
@@ -56,6 +57,36 @@ describe("events subscriptions", () => {
     cleanup();
     await Promise.resolve();
     expect(unlisten).toHaveBeenCalledTimes(2);
+  });
+
+  it("forwards Agent Bridge events through a dedicated subscription", async () => {
+    let listener: EventCallback<unknown> = () => {};
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<unknown>;
+      return Promise.resolve(unlisten);
+    });
+    const onEvent = vi.fn();
+    const cleanup = subscribeAgentBridgeEvents(onEvent);
+    const payload = {
+      schemaVersion: "1.0",
+      eventId: "delegate-1:1",
+      sequence: 1,
+      timestampMs: 10,
+      engine: "codex",
+      workspaceId: "workspace-1",
+      logicalSessionId: "shared:backing",
+      runId: "delegate-1",
+      kind: "run.started",
+      lane: "critical" as const,
+      payload: {},
+    };
+
+    listener({ event: "agent-bridge-event", id: 1, payload });
+    expect(onEvent).toHaveBeenCalledWith(payload);
+    cleanup();
+    await Promise.resolve();
+    expect(unlisten).toHaveBeenCalledTimes(1);
   });
 
   it("fans out app-server-event-batch predecessors before terminal settlement", async () => {

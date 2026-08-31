@@ -53,23 +53,23 @@
 
 ## 8. Worktree Isolation
 
-- [ ] 8.1 实现 `Observe` / `SharedWorkspace` / `IsolatedWorktree` scope mapping；当前 dispatcher 已将 Observe/SharedWorkspace 映射到既有 squad permission class，IsolatedWorktree 在 provision 前 fail closed。
-- [ ] 8.2 并行写任务 provision 独立 worktree/branch，记录 ownership。
-- [ ] 8.3 result 返回 changed files/diff/branch/artifact metadata；默认不自动 merge。
-- [ ] 8.4 cleanup 遵循 owner-retention-on-failure contract。
+- [x] 8.1 实现 `Observe` / `SharedWorkspace` / `IsolatedWorktree` scope mapping：Observe 继续映射 existing read-only squad permission；SharedWorkspace 使用 caller workspace；IsolatedWorktree 只有在 distinct durable runtime workspace 完成 provision 后才映射 existing current-workspace permission，禁止降级到 source workspace。
+- [x] 8.2 并行写任务通过既有 `workspaces::add_worktree` lifecycle provision 独立 deterministic branch/worktree；Bridge 先把 run/branch/source reservation 磁盘优先写入 `agent-bridge-worktrees.json`，再创建 workspace 并补全 workspace/path owner，reserved crash window 可从现有 workspace catalog 精确恢复，path/branch/parent ownership 不一致 fail closed。
+- [x] 8.3 isolated result 复用现有 Git status 与 worktree-against-ref diff API，以 provision 时冻结的 exact base commit 同时覆盖 committed/uncommitted change，返回 sorted changed files、owned branch 与受更严格 durable-result budget 限制的 text diff；binary/oversized change 仍由 changed-files 表达，不伪造 diff。canonical runtime artifact locator 继续独立保留，默认不 merge。
+- [x] 8.4 terminal settlement/cancel/error 不自动删除 delegated worktree 或 branch，也不释放 durable owner；成功保留供检查/显式 merge，失败/取消保留现场供诊断。显式 workspace cleanup 仍由既有 workspace lifecycle 负责，Bridge 不直接执行 `git worktree remove`。
 
 ## 9. Orchestration Expansion
 
 - [x] 9.1 在现有 `agent_orchestration` 上增加 Parallel / DAG plan model，不建第二套 orchestrator：新增 `graph` domain，提供 node/dependency model、去重与规范化、unknown/self/cycle fail-closed、deterministic topological order 与 ready-node projection。
-- [ ] 9.2 dependency scheduler 仅通过 Agent Bridge 调度 delegated runs。**scheduler core 已加入：`dispatch_ready_batch` 会 reconcile Bridge run 状态、block failed dependency、将所有 ready nodes 经 `create_delegation_run -> dispatch_delegation_run` 发起；图级 durable ownership、automatic wake-up/reconcile loop 尚未实现，因此本项不提前打勾。**
-- [ ] 9.3 nested delegation 支持 root/parent lineage 与 cycle protection。
+- [x] 9.2 dependency scheduler 仅通过 Agent Bridge 调度 delegated runs。图级 plan/execution 与 node→Bridge run mapping 写入 versioned durable store；coordinator 在任何 runtime side effect 前持久化 mapping，并串行化 fan-out settlement 推进。process-wide observer 复用 existing `AgentEventBus` 的 `run.settled` 唤醒相关图；应用启动时先订阅事件，再主动 reconcile 全部 durable graph，恢复已映射 Queued run、推进已完成依赖并 fail closed 处理缺失/stale Bridge identity。scheduler/coordinator 不直接创建 engine runtime。
+- [x] 9.3 nested delegation 支持 root/parent lineage 与 cycle protection。Managed MCP ingress 只从 live runtime turn/native identity 推断 active parent，tool arguments 不接受 source/parent；isolated parent 以 durable runtime workspace 作为 child workspace owner。service/registry 强制 parent existing、non-terminal、child source engine=parent target、root/depth 单调、depth/child/global limits；新 immutable child id 与严格递增 depth 排除 parent cycle。durable recovery 重新验证 parent existence、root/depth/source/runtime-workspace ownership，tampered lineage fail closed。
 - [ ] 9.4 评估并迁移现有 Plan/Implement/Review V1 stage dispatch 为 Bridge consumer，保持 projection/approval 兼容。
 
 ## 10. Collaboration UI
 
-- [ ] 10.1 新增 delegation tree/card：agent、task、status、elapsed、tokens/tool activity。
-- [ ] 10.2 支持 approval、Stop、Retry、Open Session、View Result、View Diff。
-- [ ] 10.3 不把 live delta 高频 state 挂到 AppShell root；复用现有 event/live channel 性能契约。
+- [x] 10.1 新增 delegation tree/card：agent、task、status、elapsed、tokens/tool activity。**workspace-scoped durable projection 按当前 source logical/native session 过滤 root lineage，isolated descendants 随 root 展示；sticky tree/card 显示 target、task、durable status、elapsed。card-local bounded activity map 只消费 canonical `usage.updated` / `tool.started` / `tool.completed` normal events，每 run 仅保存 token totals + latest tool state，并设 64-run 上限；不保存 tool/text delta。**
+- [ ] 10.2 支持 approval、Stop、Retry、Open Session、View Result、View Diff。**已接入 Stop，继续复用 workspace-scoped cancel command；`waitingApproval` 只投影 durable 状态，用户决策仍由 existing native approval UI 持有。Retry/Open Session/View Result/View Diff 尚未实现。**
+- [x] 10.3 不把 live delta 高频 state 挂到 AppShell root；复用现有 event/live channel 性能契约。**existing `AgentEventBus` → `agent-bridge-event` adapter 只转发 registry 已确认 run；feature-local hook 在聊天卡片挂载期订阅，直接丢弃 delta lane，仅用 critical/normal fact 触发去重的 workspace/run durable refresh，并在 scope change/unmount 清理 listener/timer。AppShell root 未新增 Bridge state。**
 - [ ] 10.4 Single Agent Mode 与 Multi-Agent V1 视觉/行为保持兼容。
 
 ## 11. Validation / Closure

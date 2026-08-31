@@ -273,11 +273,16 @@ impl DelegationRunRegistry {
             .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
         let mut ids = runs
             .values()
-            .filter(|run| run.workspace_id == workspace_id)
             .filter_map(|run| {
-                run.dispatch_binding
-                    .as_ref()
-                    .map(|binding| binding.backing_thread_id.clone())
+                let binding = run.dispatch_binding.as_ref()?;
+                let runtime_workspace_id = binding
+                    .runtime_workspace_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or(run.workspace_id.as_str());
+                (runtime_workspace_id == workspace_id)
+                    .then(|| binding.backing_thread_id.clone())
             })
             .collect::<Vec<_>>();
         ids.sort();
@@ -324,6 +329,7 @@ impl DelegationRunRegistry {
             .get(run_id)
             .cloned()
             .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
+        validate_dispatch_binding(&existing, &binding)?;
         if existing.status.is_terminal() {
             return Err(format!("cannot bind terminal delegated run: {run_id}"));
         }
@@ -628,6 +634,15 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
         }
     }
     for run in recovered.values() {
+        validate_recovered_lineage(run, &recovered)?;
+        if let Some(binding) = run.dispatch_binding.as_ref() {
+            validate_dispatch_binding(run, binding).map_err(|error| {
+                format!(
+                    "Agent Bridge durable store dispatch binding is invalid for {}: {error}",
+                    run.id
+                )
+            })?;
+        }
         if let Some(transfer) = run
             .dispatch_binding
             .as_ref()
@@ -649,6 +664,9 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
             })?;
             if previous.workspace_id != run.workspace_id
                 || previous.target.engine_id != run.target.engine_id
+                || previous.parent_run_id != run.parent_run_id
+                || previous.root_run_id != run.root_run_id
+                || previous.depth != run.depth
             {
                 return Err(format!(
                     "Agent Bridge durable store continuation owner mismatch: {} -> {previous_run_id}",
@@ -658,6 +676,101 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
         }
     }
     Ok(recovered)
+}
+
+fn validate_recovered_lineage(
+    run: &DelegationRun,
+    recovered: &HashMap<String, DelegationRun>,
+) -> Result<(), String> {
+    let Some(parent_run_id) = run.parent_run_id.as_deref() else {
+        // A root continuation intentionally retains the original root identity while keeping no
+        // nested parent. Its continuation owner is validated separately below.
+        if run.continuation_of_run_id.is_some() {
+            return Ok(());
+        }
+        if run.depth != 0 || run.root_run_id != run.id {
+            return Err(format!(
+                "Agent Bridge durable store root lineage is invalid for {}",
+                run.id
+            ));
+        }
+        return Ok(());
+    };
+
+    let parent = recovered.get(parent_run_id).ok_or_else(|| {
+        format!(
+            "Agent Bridge durable store parent is missing: {} -> {parent_run_id}",
+            run.id
+        )
+    })?;
+    let expected_depth = parent.depth.checked_add(1).ok_or_else(|| {
+        format!(
+            "Agent Bridge durable store parent depth overflow: {} -> {parent_run_id}",
+            run.id
+        )
+    })?;
+    let parent_runtime_workspace_id = parent
+        .dispatch_binding
+        .as_ref()
+        .and_then(|binding| binding.runtime_workspace_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(parent.workspace_id.as_str());
+    if run.id == parent_run_id
+        || run.root_run_id != parent.root_run_id
+        || run.depth != expected_depth
+        || run.source.engine_id != parent.target.engine_id
+        || run.workspace_id != parent_runtime_workspace_id
+    {
+        return Err(format!(
+            "Agent Bridge durable store parent lineage ownership is invalid: {} -> {parent_run_id}",
+            run.id
+        ));
+    }
+    Ok(())
+}
+
+fn validate_dispatch_binding(
+    run: &DelegationRun,
+    binding: &DelegationDispatchBinding,
+) -> Result<(), String> {
+    for (label, value) in [
+        ("backing thread id", binding.backing_thread_id.as_str()),
+        ("attempt id", binding.attempt_id.as_str()),
+        ("logical turn id", binding.logical_turn_id.as_str()),
+        ("binding key", binding.binding_key.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("delegated dispatch {label} is required"));
+        }
+    }
+    let runtime_workspace_id = binding
+        .runtime_workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    match run.execution_scope {
+        super::models::DelegationExecutionScope::IsolatedWorktree => {
+            let runtime_workspace_id = runtime_workspace_id.ok_or_else(|| {
+                "isolated delegated dispatch requires a durable runtime workspace".to_string()
+            })?;
+            if runtime_workspace_id == run.workspace_id {
+                return Err(
+                    "isolated delegated dispatch cannot use the source workspace as runtime owner"
+                        .to_string(),
+                );
+            }
+        }
+        _ => {
+            if runtime_workspace_id.is_some_and(|workspace_id| workspace_id != run.workspace_id) {
+                return Err(
+                    "non-isolated delegated dispatch runtime workspace does not match source workspace"
+                        .to_string(),
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn recover_stale_runtime_owners(runs: &mut HashMap<String, DelegationRun>) -> bool {
@@ -781,6 +894,7 @@ mod tests {
                     attempt_id: "attempt-1".to_string(),
                     logical_turn_id: "turn-1".to_string(),
                     binding_key: "squad:run:delegate:codex:default".to_string(),
+                    runtime_workspace_id: None,
                     native_session_id: None,
                     runtime_turn_id: None,
                     context_transfer: None,
@@ -806,6 +920,47 @@ mod tests {
     }
 
     #[test]
+    fn isolated_dispatch_binding_requires_distinct_durable_runtime_workspace() {
+        let registry = DelegationRunRegistry::default();
+        let mut isolated_request = request(None);
+        isolated_request.execution_scope = DelegationExecutionScope::IsolatedWorktree;
+        let run = registry.create(isolated_request).expect("create isolated run");
+        registry.claim_dispatch(&run.id).expect("claim isolated run");
+        let binding = |runtime_workspace_id: Option<&str>| DelegationDispatchBinding {
+            backing_thread_id: "shared:bridge-session".to_string(),
+            attempt_id: "attempt-1".to_string(),
+            logical_turn_id: "turn-1".to_string(),
+            binding_key: "squad:run:delegate:codex:default".to_string(),
+            runtime_workspace_id: runtime_workspace_id.map(str::to_string),
+            native_session_id: None,
+            runtime_turn_id: None,
+            context_transfer: None,
+        };
+
+        assert!(registry
+            .set_dispatch_binding(&run.id, binding(None))
+            .expect_err("missing isolated owner")
+            .contains("durable runtime workspace"));
+        assert!(registry
+            .set_dispatch_binding(&run.id, binding(Some("workspace-1")))
+            .expect_err("source workspace is unsafe")
+            .contains("source workspace"));
+        assert!(registry
+            .set_dispatch_binding(&run.id, binding(Some("workspace-isolated")))
+            .is_ok());
+        assert_eq!(
+            registry
+                .backing_thread_ids_for_workspace("workspace-isolated")
+                .expect("runtime workspace backing lanes"),
+            vec!["shared:bridge-session".to_string()]
+        );
+        assert!(registry
+            .backing_thread_ids_for_workspace("workspace-1")
+            .expect("source workspace lanes")
+            .is_empty());
+    }
+
+    #[test]
     fn context_transfer_is_durable_and_attempt_scoped() {
         let registry = DelegationRunRegistry::default();
         let run = registry.create(request(None)).expect("create run");
@@ -818,6 +973,7 @@ mod tests {
                     attempt_id: "attempt-1".to_string(),
                     logical_turn_id: "turn-1".to_string(),
                     binding_key: "squad:run:delegate:codex:default".to_string(),
+                    runtime_workspace_id: None,
                     native_session_id: None,
                     runtime_turn_id: None,
                     context_transfer: None,
@@ -866,6 +1022,7 @@ mod tests {
                     attempt_id: "attempt-1".to_string(),
                     logical_turn_id: "turn-1".to_string(),
                     binding_key: "squad:run:delegate:codex:default".to_string(),
+                    runtime_workspace_id: None,
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-turn-1".to_string()),
                     context_transfer: None,
@@ -879,6 +1036,7 @@ mod tests {
                     summary: Some("done".to_string()),
                     changed_files: Vec::new(),
                     branch: None,
+                    diff: None,
                     artifact_path: None,
                 },
             )
@@ -918,6 +1076,7 @@ mod tests {
                     summary: Some("done".to_string()),
                     changed_files: Vec::new(),
                     branch: None,
+                    diff: None,
                     artifact_path: None,
                 },
             )
@@ -929,6 +1088,7 @@ mod tests {
                     summary: Some("different late payload".to_string()),
                     changed_files: Vec::new(),
                     branch: None,
+                    diff: None,
                     artifact_path: None,
                 },
             )
@@ -959,6 +1119,50 @@ mod tests {
         assert_eq!(registry.list().expect("list runs").len(), 2);
     }
 
+    fn valid_recovered_lineage() -> Vec<DelegationRun> {
+        let registry = DelegationRunRegistry::default();
+        let root = registry.create(request(None)).expect("create root");
+        let mut child_request = request(Some(root.id));
+        child_request.source.engine_id = "codex".to_string();
+        registry.create(child_request).expect("create valid child");
+        registry.list().expect("list lineage")
+    }
+
+    #[test]
+    fn durable_recovery_validates_nested_parent_ownership() {
+        let valid = valid_recovered_lineage();
+        recovered_map(valid.clone()).expect("valid lineage");
+
+        let mut wrong_source = valid.clone();
+        wrong_source
+            .iter_mut()
+            .find(|run| run.parent_run_id.is_some())
+            .expect("child")
+            .source
+            .engine_id = "pi".to_string();
+        assert!(recovered_map(wrong_source)
+            .expect_err("source owner mismatch")
+            .contains("parent lineage ownership"));
+
+        let mut wrong_depth = valid.clone();
+        wrong_depth
+            .iter_mut()
+            .find(|run| run.parent_run_id.is_some())
+            .expect("child")
+            .depth = 7;
+        assert!(recovered_map(wrong_depth)
+            .expect_err("depth mismatch")
+            .contains("parent lineage ownership"));
+
+        let child_only = valid
+            .into_iter()
+            .filter(|run| run.parent_run_id.is_some())
+            .collect();
+        assert!(recovered_map(child_only)
+            .expect_err("missing parent")
+            .contains("parent is missing"));
+    }
+
     #[test]
     fn durable_registry_restores_terminal_facts_and_fails_stale_runtime_closed() {
         let root = std::env::temp_dir().join(format!("agent-bridge-registry-{}", Uuid::new_v4()));
@@ -979,6 +1183,7 @@ mod tests {
                     attempt_id: "attempt-1".to_string(),
                     logical_turn_id: "turn-1".to_string(),
                     binding_key: "squad:run:delegate:codex:default".to_string(),
+                    runtime_workspace_id: None,
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-turn-1".to_string()),
                     context_transfer: None,

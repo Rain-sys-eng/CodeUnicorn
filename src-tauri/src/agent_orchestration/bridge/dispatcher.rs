@@ -29,10 +29,17 @@ use super::models::{
 };
 use super::presentation::ensure_backing_session_hidden;
 use super::service::AgentBridgeService;
+use super::worktree::{
+    delegated_branch_name, provision_delegated_worktree, DelegatedWorktreeProvision,
+};
+use super::worktree_store::DelegatedWorktreeOwnershipState;
 
 const BRIDGE_NODE_ID: &str = "delegate";
 const BRIDGE_WORKER_ROLE: &str = "delegated-agent";
 const BRIDGE_EVENT_SUBSCRIPTION_CAPACITY: usize = 256;
+const BRIDGE_RESULT_DIFF_MAX_FILES: usize = 40;
+const BRIDGE_RESULT_DIFF_MAX_BYTES_PER_FILE: usize = 64 * 1024;
+const BRIDGE_RESULT_DIFF_MAX_TOTAL_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BridgeDispatchLane {
@@ -55,8 +62,6 @@ pub async fn dispatch_run(
     let run = service
         .get_run(&run_id)?
         .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
-    ensure_dispatch_policy_supported(&run)?;
-
     // Claim before the first backing-session/runtime side effect so concurrent dispatchers
     // cannot send the same delegated task twice.
     let claimed = service.claim_dispatch(&run_id)?;
@@ -74,9 +79,33 @@ async fn dispatch_claimed_run(
     run: DelegationRun,
     app: AppHandle,
 ) -> Result<DelegationRun, String> {
+    // Resolve continuation ownership before provisioning. Isolated continuations reuse the
+    // original worktree/backing/native owner; a new nested run receives its own owner.
+    let continuation_lane = if run.continuation_of_run_id.is_some() {
+        Some(resolve_continuation_lane(&service, &run)?)
+    } else {
+        None
+    };
+    let worktree_owner_run_id = continuation_lane
+        .as_ref()
+        .map(|lane| lane.binding_owner_run_id.as_str())
+        .unwrap_or(run.id.as_str());
+    let (dispatch_workspace_id, worktree_provision) = resolve_dispatch_workspace(
+        &service,
+        &run,
+        worktree_owner_run_id,
+        &app,
+    )
+    .await?;
     // Root delegations get a fresh durable Shared backing lane. A continuation resolves the
     // original lane and scoped binding owner, so the existing native CLI session is reused.
-    let lane = resolve_dispatch_lane(&service, &run, &app).await?;
+    let lane = match continuation_lane {
+        Some(lane) => lane,
+        None => BridgeDispatchLane {
+            backing_thread_id: create_backing_thread(&run, &dispatch_workspace_id, &app).await?,
+            binding_owner_run_id: run.id.clone(),
+        },
+    };
     let backing_thread_id = lane.backing_thread_id.clone();
     {
         // Presentation hiding is a canonical Shared fact, not an in-memory/UI-only convention.
@@ -92,7 +121,11 @@ async fn dispatch_claimed_run(
     let shared_session_id = parse_shared_session_id(&backing_thread_id)?;
     let attempt_id = Uuid::new_v4().to_string();
     let logical_turn_id = Uuid::new_v4().to_string();
-    let permission_class = permission_class(run.execution_scope)?;
+    let permission_class = permission_class(
+        run.execution_scope,
+        &run.workspace_id,
+        &dispatch_workspace_id,
+    )?;
     let prompt = explicit_delegation_prompt(&run);
 
     // Subscribe before the target runtime can emit. The existing Shared event sink publishes
@@ -155,6 +188,7 @@ async fn dispatch_claimed_run(
             attempt_id: attempt_id.clone(),
             logical_turn_id: logical_turn_id.clone(),
             binding_key: binding_key.clone(),
+            runtime_workspace_id: Some(dispatch_workspace_id.clone()),
             native_session_id: None,
             runtime_turn_id: None,
             context_transfer: None,
@@ -167,13 +201,14 @@ async fn dispatch_claimed_run(
         &binding_key,
         &backing_thread_id,
         &attempt_id,
+        &dispatch_workspace_id,
         &app,
     )
     .await?;
     let delivery = match context_package {
         Some(package) => {
             let delivery = shared_session_v2_prepare_delivery_with_package(
-                run.workspace_id.clone(),
+                dispatch_workspace_id.clone(),
                 backing_thread_id.clone(),
                 attempt_id.clone(),
                 package,
@@ -196,7 +231,7 @@ async fn dispatch_claimed_run(
         }
         None => {
             shared_session_v2_prepare_delivery(
-                run.workspace_id.clone(),
+                dispatch_workspace_id.clone(),
                 backing_thread_id.clone(),
                 attempt_id.clone(),
                 app.state::<AppState>(),
@@ -208,7 +243,7 @@ async fn dispatch_claimed_run(
     let artifact_checksum = required_json_string(&delivery, "artifactChecksum")?;
 
     let dispatch = shared_session_v2_dispatch_turn(
-        run.workspace_id.clone(),
+        dispatch_workspace_id.clone(),
         backing_thread_id.clone(),
         attempt_id.clone(),
         artifact_id,
@@ -258,9 +293,10 @@ async fn dispatch_claimed_run(
 
     let waiter_service = Arc::clone(&service);
     let waiter_run_id = run.id.clone();
-    let waiter_workspace_id = run.workspace_id.clone();
+    let waiter_workspace_id = dispatch_workspace_id;
     let waiter_thread_id = backing_thread_id;
     let waiter_attempt_id = attempt_id;
+    let waiter_worktree_provision = worktree_provision;
     let waiter_app = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(error) = await_and_settle(
@@ -269,6 +305,7 @@ async fn dispatch_claimed_run(
             &waiter_workspace_id,
             &waiter_thread_id,
             &waiter_attempt_id,
+            waiter_worktree_provision.as_ref(),
             &waiter_app,
         )
         .await
@@ -287,18 +324,189 @@ async fn dispatch_claimed_run(
         .ok_or_else(|| format!("delegated run disappeared after dispatch: {}", run.id))
 }
 
-async fn resolve_dispatch_lane(
+async fn resolve_dispatch_workspace(
     service: &AgentBridgeService,
     run: &DelegationRun,
+    owner_run_id: &str,
     app: &AppHandle,
-) -> Result<BridgeDispatchLane, String> {
-    if run.continuation_of_run_id.is_some() {
-        return resolve_continuation_lane(service, run);
+) -> Result<(String, Option<DelegatedWorktreeProvision>), String> {
+    if run.execution_scope != DelegationExecutionScope::IsolatedWorktree {
+        return Ok((run.workspace_id.clone(), None));
     }
-    Ok(BridgeDispatchLane {
-        backing_thread_id: create_backing_thread(run, app).await?,
-        binding_owner_run_id: run.id.clone(),
-    })
+
+    let owner = service
+        .get_run(owner_run_id)?
+        .ok_or_else(|| format!("isolated worktree owner run not found: {owner_run_id}"))?;
+    if owner.execution_scope != DelegationExecutionScope::IsolatedWorktree {
+        return Err(format!(
+            "isolated worktree owner scope mismatch: {} is {:?}",
+            owner.id, owner.execution_scope
+        ));
+    }
+    let branch = delegated_branch_name(&owner.id)?;
+    let ownership = service.reserve_worktree(&owner.id, &owner.workspace_id, &branch)?;
+    let provision = match ownership.state {
+        DelegatedWorktreeOwnershipState::Provisioned => ownership.as_provision()?,
+        DelegatedWorktreeOwnershipState::Reserved => {
+            let provision = match recover_reserved_worktree(&owner, &branch, app).await? {
+                Some(provision) => provision,
+                None => provision_delegated_worktree(&owner, &branch, app).await?,
+            };
+            service.complete_worktree(&provision)?.as_provision()?
+        }
+    };
+    validate_worktree_provision(&owner, &provision, app).await?;
+
+    if owner.id != run.id {
+        let binding = owner.dispatch_binding.as_ref().ok_or_else(|| {
+            format!("isolated continuation owner has no dispatch binding: {}", owner.id)
+        })?;
+        let runtime_workspace_id = binding
+            .runtime_workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "isolated continuation owner has no durable runtime workspace: {}",
+                    owner.id
+                )
+            })?;
+        if runtime_workspace_id != provision.workspace_id {
+            return Err(format!(
+                "isolated continuation runtime workspace does not match worktree owner: {}",
+                owner.id
+            ));
+        }
+    }
+
+    Ok((provision.workspace_id.clone(), Some(provision)))
+}
+
+async fn recover_reserved_worktree(
+    owner: &DelegationRun,
+    branch: &str,
+    app: &AppHandle,
+) -> Result<Option<DelegatedWorktreeProvision>, String> {
+    let state = app.state::<AppState>();
+    let workspaces = state.workspaces.lock().await;
+    let source = workspaces.get(&owner.workspace_id).ok_or_else(|| {
+        format!(
+            "source workspace not found while recovering delegated worktree: {}",
+            owner.workspace_id
+        )
+    })?;
+    let expected_parent_id = if source.kind.is_worktree() {
+        source.parent_id.as_deref().ok_or_else(|| {
+            format!(
+                "source worktree is missing parent identity: {}",
+                source.id
+            )
+        })?
+    } else {
+        source.id.as_str()
+    };
+    let matches = workspaces
+        .values()
+        .filter(|workspace| workspace.kind.is_worktree())
+        .filter(|workspace| workspace.parent_id.as_deref() == Some(expected_parent_id))
+        .filter(|workspace| {
+            workspace
+                .worktree
+                .as_ref()
+                .map(|worktree| worktree.branch.trim())
+                == Some(branch)
+        })
+        .collect::<Vec<_>>();
+    if matches.len() > 1 {
+        return Err(format!(
+            "delegated worktree reservation resolves to multiple workspace owners: {}",
+            owner.id
+        ));
+    }
+    let Some(workspace) = matches.first() else {
+        return Ok(None);
+    };
+    let base_commit = workspace
+        .worktree
+        .as_ref()
+        .and_then(|worktree| worktree.base_commit.clone())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            format!(
+                "reserved delegated worktree is missing base commit: {}",
+                workspace.id
+            )
+        })?;
+    Ok(Some(DelegatedWorktreeProvision {
+        owner_run_id: owner.id.clone(),
+        source_workspace_id: owner.workspace_id.clone(),
+        workspace_id: workspace.id.clone(),
+        branch: branch.to_string(),
+        base_commit,
+        path: workspace.path.clone(),
+    }))
+}
+
+async fn validate_worktree_provision(
+    owner: &DelegationRun,
+    provision: &DelegatedWorktreeProvision,
+    app: &AppHandle,
+) -> Result<(), String> {
+    if provision.owner_run_id != owner.id
+        || provision.source_workspace_id != owner.workspace_id
+        || provision.branch != delegated_branch_name(&owner.id)?
+    {
+        return Err(format!(
+            "delegated worktree provision ownership mismatch for run {}",
+            owner.id
+        ));
+    }
+    let state = app.state::<AppState>();
+    let workspaces = state.workspaces.lock().await;
+    let source = workspaces.get(&owner.workspace_id).ok_or_else(|| {
+        format!(
+            "delegated worktree source workspace is no longer registered: {}",
+            owner.workspace_id
+        )
+    })?;
+    let expected_parent_id = if source.kind.is_worktree() {
+        source.parent_id.as_deref().ok_or_else(|| {
+            format!(
+                "delegated worktree source is missing parent identity: {}",
+                source.id
+            )
+        })?
+    } else {
+        source.id.as_str()
+    };
+    let workspace = workspaces.get(&provision.workspace_id).ok_or_else(|| {
+        format!(
+            "delegated worktree workspace is no longer registered: {}",
+            provision.workspace_id
+        )
+    })?;
+    if !workspace.kind.is_worktree()
+        || workspace.parent_id.as_deref() != Some(expected_parent_id)
+        || workspace.path != provision.path
+        || workspace
+            .worktree
+            .as_ref()
+            .map(|worktree| worktree.branch.trim())
+            != Some(provision.branch.as_str())
+        || workspace
+            .worktree
+            .as_ref()
+            .and_then(|worktree| worktree.base_commit.as_deref())
+            .map(str::trim)
+            != Some(provision.base_commit.as_str())
+    {
+        return Err(format!(
+            "delegated worktree path/branch ownership validation failed: {}",
+            provision.workspace_id
+        ));
+    }
+    Ok(())
 }
 
 fn resolve_continuation_lane(
@@ -311,6 +519,7 @@ fn resolve_continuation_lane(
         .ok_or_else(|| format!("delegated run {} is not a continuation", run.id))?;
     let mut seen = HashSet::new();
     let mut backing_thread_id: Option<String> = None;
+    let mut runtime_workspace_id: Option<String> = None;
 
     loop {
         if !seen.insert(cursor_id.clone()) {
@@ -341,6 +550,22 @@ fn resolve_continuation_lane(
         let binding = previous.dispatch_binding.as_ref().ok_or_else(|| {
             format!("continuation source run has no dispatch binding: {}", previous.id)
         })?;
+        let previous_runtime_workspace_id = binding
+            .runtime_workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(previous.workspace_id.as_str());
+        match runtime_workspace_id.as_deref() {
+            Some(expected) if expected != previous_runtime_workspace_id => {
+                return Err(format!(
+                    "continuation chain changed runtime workspace: {} -> {}",
+                    run.id, previous.id
+                ));
+            }
+            None => runtime_workspace_id = Some(previous_runtime_workspace_id.to_string()),
+            _ => {}
+        }
         let previous_backing = binding.backing_thread_id.trim();
         if previous_backing.is_empty() {
             return Err(format!(
@@ -466,10 +691,14 @@ fn reattribute_bridge_event(
     Ok(())
 }
 
-async fn create_backing_thread(run: &DelegationRun, app: &AppHandle) -> Result<String, String> {
+async fn create_backing_thread(
+    run: &DelegationRun,
+    workspace_id: &str,
+    app: &AppHandle,
+) -> Result<String, String> {
     let selected_target = shared_selected_target(&run.target_execution);
     let started = start_shared_session(
-        run.workspace_id.clone(),
+        workspace_id.to_string(),
         Some(selected_target),
         app.state::<AppState>(),
     )
@@ -507,23 +736,32 @@ fn shared_selected_target(target: &ExecutionTargetInput) -> SharedSelectedTarget
     }
 }
 
-fn ensure_dispatch_policy_supported(run: &DelegationRun) -> Result<(), String> {
-    if run.execution_scope == DelegationExecutionScope::IsolatedWorktree {
-        return Err(
-            "isolated worktree delegation is not implemented by the current dispatcher"
-                .to_string(),
-        );
-    }
-    Ok(())
-}
-
-fn permission_class(scope: DelegationExecutionScope) -> Result<&'static str, String> {
+fn permission_class(
+    scope: DelegationExecutionScope,
+    source_workspace_id: &str,
+    dispatch_workspace_id: &str,
+) -> Result<&'static str, String> {
     match scope {
+        DelegationExecutionScope::Observe | DelegationExecutionScope::SharedWorkspace
+            if dispatch_workspace_id.trim().is_empty()
+                || dispatch_workspace_id != source_workspace_id =>
+        {
+            Err("non-isolated delegation runtime workspace must match its source workspace"
+                .to_string())
+        }
         DelegationExecutionScope::Observe => Ok("read-only"),
         DelegationExecutionScope::SharedWorkspace => Ok("current-workspace"),
-        DelegationExecutionScope::IsolatedWorktree => Err(
-            "isolated worktree delegation must be provisioned before runtime dispatch".to_string(),
-        ),
+        DelegationExecutionScope::IsolatedWorktree => {
+            if dispatch_workspace_id.trim().is_empty()
+                || dispatch_workspace_id == source_workspace_id
+            {
+                return Err(
+                    "isolated worktree delegation must own a distinct provisioned workspace before runtime dispatch"
+                        .to_string(),
+                );
+            }
+            Ok("current-workspace")
+        }
     }
 }
 
@@ -566,6 +804,7 @@ async fn await_and_settle(
     workspace_id: &str,
     backing_thread_id: &str,
     attempt_id: &str,
+    worktree_provision: Option<&DelegatedWorktreeProvision>,
     app: &AppHandle,
 ) -> Result<(), String> {
     shared_session_v2_await_turn_terminal(
@@ -619,12 +858,19 @@ async fn await_and_settle(
                 .filter(|text| !text.is_empty())
                 .collect::<Vec<_>>()
                 .join("\n\n");
+            let (changed_files, branch, diff) = match worktree_provision {
+                Some(provision) => {
+                    collect_worktree_result_evidence(provision, app).await?
+                }
+                None => (Vec::new(), None, None),
+            };
             service.settle_completed(
                 run_id,
                 DelegationResult {
                     summary: (!summary.is_empty()).then_some(summary),
-                    changed_files: Vec::new(),
-                    branch: None,
+                    changed_files,
+                    branch,
+                    diff,
                     artifact_path: committed
                         .artifact_refs
                         .first()
@@ -646,6 +892,111 @@ async fn await_and_settle(
         }
     }
     Ok(())
+}
+
+async fn collect_worktree_result_evidence(
+    provision: &DelegatedWorktreeProvision,
+    app: &AppHandle,
+) -> Result<(Vec<String>, Option<String>, Option<String>), String> {
+    let status = crate::git::get_git_status(
+        provision.workspace_id.clone(),
+        None,
+        app.clone(),
+        app.state::<AppState>(),
+    )
+    .await
+    .map_err(|error| format!("delegated worktree status evidence unavailable: {error}"))?;
+    if status.get("isGitRepository").and_then(Value::as_bool) != Some(true) {
+        return Err(format!(
+            "delegated worktree is no longer a Git repository: {}",
+            provision.workspace_id
+        ));
+    }
+    let branch = required_json_string(&status, "branchName")?;
+    if branch != provision.branch {
+        return Err(format!(
+            "delegated worktree branch changed outside its owner: expected {}, got {branch}",
+            provision.branch
+        ));
+    }
+    let base_diff = crate::git::get_git_worktree_diff_against_branch(
+        provision.workspace_id.clone(),
+        provision.base_commit.clone(),
+        app.clone(),
+        app.state::<AppState>(),
+    )
+    .await
+    .map_err(|error| format!("delegated worktree base diff evidence unavailable: {error}"))?;
+    let mut changed_files = base_diff
+        .iter()
+        .map(|file| file.path.trim())
+        .filter(|path| !path.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    changed_files.sort();
+    changed_files.dedup();
+
+    let mut previews = Vec::new();
+    let mut total_bytes = 0usize;
+    for path in changed_files.iter().take(BRIDGE_RESULT_DIFF_MAX_FILES) {
+        if total_bytes >= BRIDGE_RESULT_DIFF_MAX_TOTAL_BYTES {
+            break;
+        }
+        let file = crate::git::get_git_worktree_file_diff_against_branch(
+            provision.workspace_id.clone(),
+            provision.base_commit.clone(),
+            path.clone(),
+            app.clone(),
+            app.state::<AppState>(),
+        )
+        .await
+        .map_err(|error| {
+            format!("delegated worktree file diff evidence unavailable for {path}: {error}")
+        })?;
+        let remaining = BRIDGE_RESULT_DIFF_MAX_TOTAL_BYTES - total_bytes;
+        let preview = truncate_result_diff(
+            file.diff.trim(),
+            remaining.min(BRIDGE_RESULT_DIFF_MAX_BYTES_PER_FILE),
+        );
+        if preview.is_empty() {
+            continue;
+        }
+        total_bytes += preview.len();
+        previews.push(preview);
+    }
+    if changed_files.len() > BRIDGE_RESULT_DIFF_MAX_FILES {
+        previews.push(format!(
+            "[Agent Bridge diff preview omitted {} additional changed file(s)]",
+            changed_files.len() - BRIDGE_RESULT_DIFF_MAX_FILES
+        ));
+    }
+    let diff = truncate_result_diff(
+        &previews.join("\n\n"),
+        BRIDGE_RESULT_DIFF_MAX_TOTAL_BYTES,
+    );
+    Ok((
+        changed_files,
+        Some(branch),
+        (!diff.is_empty()).then_some(diff),
+    ))
+}
+
+fn truncate_result_diff(value: &str, max_bytes: usize) -> String {
+    if value.is_empty() || max_bytes == 0 {
+        return String::new();
+    }
+    if value.len() <= max_bytes {
+        return value.to_string();
+    }
+    const MARKER: &str = "\n[Agent Bridge diff preview truncated]";
+    if max_bytes <= MARKER.len() {
+        return String::new();
+    }
+    let mut end = max_bytes - MARKER.len();
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{}", &value[..end], MARKER)
 }
 
 #[cfg(test)]
@@ -733,16 +1084,51 @@ mod tests {
     }
 
     #[test]
+    fn result_diff_truncation_preserves_utf8_boundary_and_budget() {
+        let preview = truncate_result_diff(&"甲".repeat(40), 64);
+
+        assert!(preview.len() <= 64);
+        assert!(preview.is_char_boundary(preview.len()));
+        assert!(preview.contains("diff preview truncated"));
+        assert_eq!(truncate_result_diff("small", 24), "small");
+        assert!(truncate_result_diff("large", 1).is_empty());
+    }
+
+    #[test]
     fn scope_maps_to_existing_squad_permission_contract() {
         assert_eq!(
-            permission_class(DelegationExecutionScope::Observe).expect("observe"),
+            permission_class(
+                DelegationExecutionScope::Observe,
+                "workspace-1",
+                "workspace-1"
+            )
+            .expect("observe"),
             "read-only"
         );
         assert_eq!(
-            permission_class(DelegationExecutionScope::SharedWorkspace).expect("shared"),
+            permission_class(
+                DelegationExecutionScope::SharedWorkspace,
+                "workspace-1",
+                "workspace-1"
+            )
+            .expect("shared"),
             "current-workspace"
         );
-        assert!(permission_class(DelegationExecutionScope::IsolatedWorktree).is_err());
+        assert_eq!(
+            permission_class(
+                DelegationExecutionScope::IsolatedWorktree,
+                "workspace-1",
+                "workspace-isolated"
+            )
+            .expect("isolated provisioned"),
+            "current-workspace"
+        );
+        assert!(permission_class(
+            DelegationExecutionScope::IsolatedWorktree,
+            "workspace-1",
+            "workspace-1"
+        )
+        .is_err());
     }
 
     #[test]
@@ -758,6 +1144,7 @@ mod tests {
                     attempt_id: "attempt-1".to_string(),
                     logical_turn_id: "turn-1".to_string(),
                     binding_key: format!("squad:{}:delegate:codex:default", root.id),
+                    runtime_workspace_id: Some("workspace-1".to_string()),
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-1".to_string()),
                     context_transfer: None,
@@ -771,6 +1158,7 @@ mod tests {
                     summary: Some("done".to_string()),
                     changed_files: Vec::new(),
                     branch: None,
+                    diff: None,
                     artifact_path: None,
                 },
             )

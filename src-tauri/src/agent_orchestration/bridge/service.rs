@@ -9,6 +9,8 @@ use super::models::{
     DelegationRun, DelegationRunStatus,
 };
 use super::run_registry::DelegationRunRegistry;
+use super::worktree::DelegatedWorktreeProvision;
+use super::worktree_store::{AgentBridgeWorktreeRegistry, DelegatedWorktreeOwnership};
 
 const BUILTIN_ENGINES: [EngineType; 9] = [
     EngineType::Claude,
@@ -28,11 +30,22 @@ const BUILTIN_ENGINES: [EngineType; 9] = [
 /// in the existing engine/runtime layer.
 pub struct AgentBridgeService {
     runs: DelegationRunRegistry,
+    worktrees: AgentBridgeWorktreeRegistry,
 }
 
 impl AgentBridgeService {
     pub fn new(runs: DelegationRunRegistry) -> Self {
-        Self { runs }
+        Self {
+            runs,
+            worktrees: AgentBridgeWorktreeRegistry::volatile(),
+        }
+    }
+
+    pub(crate) fn with_worktrees(
+        runs: DelegationRunRegistry,
+        worktrees: AgentBridgeWorktreeRegistry,
+    ) -> Self {
+        Self { runs, worktrees }
     }
 
     pub async fn create_run(
@@ -186,6 +199,23 @@ impl AgentBridgeService {
         self.runs.cancel(run_id)
     }
 
+    pub(crate) fn reserve_worktree(
+        &self,
+        run_id: &str,
+        source_workspace_id: &str,
+        branch: &str,
+    ) -> Result<DelegatedWorktreeOwnership, String> {
+        self.worktrees
+            .reserve(run_id, source_workspace_id, branch)
+    }
+
+    pub(crate) fn complete_worktree(
+        &self,
+        provision: &DelegatedWorktreeProvision,
+    ) -> Result<DelegatedWorktreeOwnership, String> {
+        self.worktrees.complete(provision)
+    }
+
     fn validate_parent_lineage(&self, request: &CreateDelegationRun) -> Result<(), String> {
         let Some(parent_run_id) = request.parent_run_id.as_deref() else {
             return Ok(());
@@ -194,9 +224,16 @@ impl AgentBridgeService {
             .runs
             .get(parent_run_id)?
             .ok_or_else(|| format!("parent delegated run not found: {parent_run_id}"))?;
-        if parent.workspace_id != request.workspace_id {
+        let parent_runtime_workspace_id = parent
+            .dispatch_binding
+            .as_ref()
+            .and_then(|binding| binding.runtime_workspace_id.as_deref())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(parent.workspace_id.as_str());
+        if parent_runtime_workspace_id != request.workspace_id {
             return Err(format!(
-                "delegated child workspace does not match parent {parent_run_id}"
+                "delegated child workspace does not match parent runtime {parent_run_id}"
             ));
         }
         if parent.target.engine_id != request.source.engine_id {
@@ -211,7 +248,17 @@ impl AgentBridgeService {
 
 impl Default for AgentBridgeService {
     fn default() -> Self {
-        Self::new(DelegationRunRegistry::default())
+        #[cfg(test)]
+        {
+            Self::new(DelegationRunRegistry::default())
+        }
+        #[cfg(not(test))]
+        {
+            Self::with_worktrees(
+                DelegationRunRegistry::default(),
+                AgentBridgeWorktreeRegistry::default(),
+            )
+        }
     }
 }
 
@@ -464,6 +511,7 @@ mod tests {
                     attempt_id: "attempt-1".to_string(),
                     logical_turn_id: "turn-1".to_string(),
                     binding_key: "squad:root:delegate:codex:default".to_string(),
+                    runtime_workspace_id: Some("workspace-1".to_string()),
                     native_session_id: Some("native-1".to_string()),
                     runtime_turn_id: Some("runtime-1".to_string()),
                     context_transfer: None,
@@ -477,6 +525,7 @@ mod tests {
                     summary: Some("done".to_string()),
                     changed_files: Vec::new(),
                     branch: None,
+                    diff: None,
                     artifact_path: None,
                 },
             )
@@ -526,6 +575,47 @@ mod tests {
             .expect_err("unrelated source must not attach to parent");
 
         assert!(error.contains("source must match parent target"));
+    }
+
+    #[tokio::test]
+    async fn isolated_parent_runtime_workspace_owns_nested_child() {
+        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
+        let manager = EngineManager::new();
+        cache_installed(&manager, EngineType::Codex).await;
+
+        let mut parent_request = request("claude", "codex");
+        parent_request.execution_scope = DelegationExecutionScope::IsolatedWorktree;
+        let parent = service
+            .create_run(parent_request, &manager, &AppSettings::default())
+            .await
+            .expect("create isolated parent");
+        service.claim_dispatch(&parent.id).expect("claim parent");
+        service
+            .set_dispatch_binding(
+                &parent.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:parent".to_string(),
+                    attempt_id: "attempt-parent".to_string(),
+                    logical_turn_id: "turn-parent".to_string(),
+                    binding_key: "squad:parent:delegate:codex:default".to_string(),
+                    runtime_workspace_id: Some("workspace-isolated".to_string()),
+                    native_session_id: Some("native-parent".to_string()),
+                    runtime_turn_id: Some("runtime-parent".to_string()),
+                    context_transfer: None,
+                },
+            )
+            .expect("bind parent runtime workspace");
+
+        let mut child = request("codex", "codex");
+        child.workspace_id = "workspace-isolated".to_string();
+        child.parent_run_id = Some(parent.id.clone());
+        let created = service
+            .create_run(child, &manager, &AppSettings::default())
+            .await
+            .expect("parent runtime workspace owns child");
+
+        assert_eq!(created.parent_run_id.as_deref(), Some(parent.id.as_str()));
+        assert_eq!(created.workspace_id, "workspace-isolated");
     }
 
     #[tokio::test]

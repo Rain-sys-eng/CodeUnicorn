@@ -68,6 +68,20 @@
 - **THEN** 系统 MUST 拒绝创建 child run
 - **AND** MUST NOT 启动 target engine process/session
 
+#### Scenario: Managed target delegates a nested child
+
+- **WHEN** delegated target 在其 active managed runtime turn 中调用 `agent_delegate`
+- **THEN** MCP ingress MUST 从可信 runtime turn/native identity 推断唯一 active parent
+- **AND** tool arguments MUST NOT 提供或覆盖 source/parent identity
+- **AND** isolated parent MUST 以其 durable runtime workspace 作为 child workspace owner
+- **AND** zero owner match MUST 创建 root delegation，ambiguous owner match MUST fail closed
+
+#### Scenario: Durable nested lineage is inconsistent on restart
+
+- **WHEN** persisted child 的 parent 缺失，或 root/depth/source/runtime-workspace ownership 与 parent 不一致
+- **THEN** Agent Bridge registry MUST fail closed
+- **AND** MUST NOT 从不可信 lineage 启动 target runtime
+
 ### Requirement: Delegation SHALL Use Controlled Context Policies
 
 Delegation SHALL 支持 `Explicit`、`Portable`、`Inherited` context policy，默认 MUST 为 `Explicit`。Portable/Inherited MUST 复用已有 context compiler/budget contract，不得默认复制完整 source transcript。
@@ -118,6 +132,27 @@ Delegated run SHALL 声明 `Observe`、`SharedWorkspace` 或 `IsolatedWorktree` 
 - **WHEN** delegated run 请求 `IsolatedWorktree`
 - **AND** worktree 尚未完成 provision
 - **THEN** dispatcher MUST NOT 将其降级成 shared working tree 执行
+
+#### Scenario: Isolated runtime ownership is durable and exact
+
+- **WHEN** isolated delegated run 完成 worktree provision
+- **THEN** run dispatch binding MUST 保存与 source workspace 分离的 runtime workspace identity
+- **AND** backing session、context delivery、runtime dispatch、await 与 cancel MUST 使用该 runtime workspace
+- **AND** path、branch 或 parent workspace ownership 不匹配时 MUST fail closed
+
+#### Scenario: Isolated result uses existing Git evidence
+
+- **WHEN** isolated delegated run canonical outcome 为 completed
+- **THEN** result MUST 通过既有 Git status/worktree-against-ref service，以 provision 时冻结的 exact base commit 返回 owned branch 与 committed/uncommitted changed files
+- **AND** text diff MUST 遵循 durable-result budget；binary/oversized change MAY 只返回 changed-files evidence
+- **AND** 系统 MUST NOT 自动 merge delegated branch
+
+#### Scenario: Terminal worktree owner is retained
+
+- **WHEN** isolated delegated run completed、failed 或 cancelled
+- **THEN** Bridge MUST NOT 自动删除 worktree/branch 或释放 durable owner
+- **AND** failure/cancellation 的现场 MUST 保留供恢复与诊断
+- **AND** 显式删除仍 MUST 经过既有 workspace lifecycle
 
 ### Requirement: Delegation SHALL Reuse Existing AgentEventBus
 
@@ -216,3 +251,53 @@ Bridge SHALL 使用 existing Shared V2 terminal settlement / `conversation.turnC
 - **WHEN** 用户只在普通 Session 中使用单一 engine
 - **THEN** send/session/tool/MCP/permission 行为 MUST 与 change 前保持兼容
 - **AND** Agent Bridge MUST NOT 自动创建 delegated run 或额外 context
+
+### Requirement: Parallel And DAG Scheduling SHALL Use Durable Bridge Runs
+
+Parallel / DAG scheduler SHALL 位于 existing `agent_orchestration` domain，并且只能通过 Agent Bridge 创建与调度 target run。系统 MUST 在 target runtime side effect 前持久化 node→Bridge run mapping，MUST 复用 existing `AgentEventBus` terminal settlement 唤醒 downstream，且 MUST NOT 创建第二套 engine runtime owner 或 completion bus。
+
+#### Scenario: Parallel ready nodes are dispatched exactly once
+
+- **WHEN** 多个 dependency 已满足的 graph node 同时 ready
+- **THEN** scheduler MUST 为每个 node 创建不同 immutable Bridge run
+- **AND** graph mapping MUST 在对应 target runtime 启动前 durable
+- **AND** 并发 settlement wake-up MUST NOT 为同一 node 创建重复 run
+
+#### Scenario: App restarts between graph mapping and runtime dispatch
+
+- **WHEN** graph 已持久化 node→Bridge run mapping，但 app 在 Queued run 被 runtime claim 前重启
+- **THEN** startup reconciliation MUST 恢复并 exact-dispatch 该 mapped Queued run
+- **AND** MUST NOT 创建 replacement run
+- **AND** missing 或 stale Bridge identity MUST fail closed，再按 dependency outcome 将 downstream 标记 ready 或 blocked
+
+### Requirement: Collaboration UI SHALL Project Durable Runs Without Owning Runtime
+
+Collaboration UI SHALL 通过 workspace-scoped Agent Bridge commands 读取 durable run，并通过 existing `AgentEventBus` 的 renderer adapter 接收 live activity。UI MUST NOT 读取 hidden backing session 作为事实源，MUST NOT 建立第二套 event bus，且 MUST NOT 把 high-frequency live delta state 挂到 AppShell root。
+
+#### Scenario: Source workspace lists an isolated delegation tree
+
+- **WHEN** root run 在 source workspace 创建，并在 isolated runtime workspace 产生 nested descendants
+- **THEN** source workspace projection MUST 保留完整 root lineage
+- **AND** isolated workspace MAY 查看其 runtime-owned runs
+- **AND** unrelated workspace MUST NOT list/get/cancel those runs
+
+#### Scenario: A queued delegated run is cancelled before runtime starts
+
+- **WHEN** user 或 owning Agent 取消尚未 dispatch 的 Queued run
+- **THEN** durable run MUST settle 为 cancelled
+- **AND** existing `AgentEventBus` MUST 发布一次 deduplicated cancelled settlement
+- **AND** DAG scheduler 与 subscribed UI MUST 能观察该 terminal fact
+
+#### Scenario: High-frequency runtime delta reaches the collaboration surface
+
+- **WHEN** renderer adapter 转发 delegated run 的 high-frequency delta lane event
+- **THEN** card-local consumer MUST NOT 将该 delta 写入 AppShell root 或 durable run projection state
+- **AND** critical lifecycle/control fact MAY 触发去重的 workspace-scoped durable refresh
+- **AND** listener、refresh timer 与 elapsed timer MUST 在 scope change 或 surface unmount 时清理
+
+#### Scenario: Canonical usage and tool activity reaches a visible delegated run
+
+- **WHEN** existing `AgentEventBus` 为 visible run 发布 `usage.updated`、`tool.started` 或 `tool.completed`
+- **THEN** card-local projection MAY 保存 bounded token totals 与 latest tool state
+- **AND** projection MUST NOT 保存完整 tool input/output delta
+- **AND** activity cache MUST 有显式 cardinality 上限并在 workspace scope change 时清空

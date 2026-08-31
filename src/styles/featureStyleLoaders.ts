@@ -221,6 +221,7 @@ export function loadComposerRunStatusListStyles() {
 export function loadSubagentStyles() {
   return loadStyles([
     () => import("./multi-agent.css"),
+    () => import("./agent-bridge.css"),
   ]);
 }
 

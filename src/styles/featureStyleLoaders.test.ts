@@ -55,6 +55,7 @@ describe("feature style loader contracts", () => {
     expect(loaderSource).toContain('import("./terminal.css")');
     expect(loaderSource).toContain('import("./tool-blocks.css")');
     expect(loaderSource).toContain('import("./status-panel.css")');
+    expect(loaderSource).toContain('import("./agent-bridge.css")');
   });
 
   it("loads run-status todo/plan list slices without the status-panel bundle", () => {
@@ -83,6 +84,7 @@ describe("bootstrap critical CSS surface (P1-1)", () => {
       "tool-call-block.css",
       "status-panel.css",
       "multi-agent.css",
+      "agent-bridge.css",
       "session-activity.css",
       "debug.css",
       "worktree-modal.css",
@@ -104,4 +106,3 @@ describe("bootstrap critical CSS surface (P1-1)", () => {
     }
   });
 });
-

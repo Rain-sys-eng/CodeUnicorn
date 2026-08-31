@@ -17,6 +17,7 @@ static MCP_APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 pub(crate) fn init_app_handle(app: AppHandle) -> Result<(), String> {
     approval::ensure_observer_started(&app)?;
     crate::agent_orchestration::graph_runtime::ensure_observer_started(&app)?;
+    super::ui_runtime::ensure_observer_started(&app)?;
     if MCP_APP_HANDLE.get().is_some() {
         return Ok(());
     }

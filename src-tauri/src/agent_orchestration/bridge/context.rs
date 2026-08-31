@@ -26,6 +26,7 @@ pub(crate) async fn compile_delegation_context(
     binding_key: &str,
     backing_thread_id: &str,
     attempt_id: &str,
+    target_workspace_id: &str,
     app: &AppHandle,
 ) -> Result<Option<ContextPackage>, String> {
     if run.context_policy == DelegationContextPolicy::Explicit
@@ -55,7 +56,9 @@ pub(crate) async fn compile_delegation_context(
             let parent = service
                 .get_run(parent_run_id)?
                 .ok_or_else(|| format!("delegated context parent not found: {parent_run_id}"))?;
-            if let Some(package) = read_parent_context_package(service, run, &parent, app)? {
+            if let Some(package) =
+                read_parent_context_package(service, run, &parent, app)?
+            {
                 inherited_package_ids.push(package.package_id.clone());
                 packages.push((format!("parent:{parent_run_id}"), package));
             }
@@ -82,6 +85,7 @@ pub(crate) async fn compile_delegation_context(
     let destination = target_destination(&run.target_execution)?;
     let (delivery_session_id, delivery_cursor) =
         delivery_cursor(backing_thread_id, attempt_id, app)?;
+    require_shared_session_workspace_owner(target_workspace_id, &delivery_session_id)?;
     let package = compile_portable_context(&CompilePortableContextRequest {
         session_id: delivery_session_id,
         binding_key: binding_key.to_string(),
@@ -119,7 +123,16 @@ async fn compile_immediate_source(
         let parent = service
             .get_run(parent_run_id)?
             .ok_or_else(|| format!("delegated context parent not found: {parent_run_id}"))?;
-        if parent.workspace_id != run.workspace_id
+        let binding = parent.dispatch_binding.as_ref().ok_or_else(|| {
+            format!("delegated context parent has no dispatch binding: {parent_run_id}")
+        })?;
+        let parent_runtime_workspace_id = binding
+            .runtime_workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(parent.workspace_id.as_str());
+        if parent_runtime_workspace_id != run.workspace_id
             || parent.target.engine_id != run.source.engine_id
             || parent
                 .target
@@ -132,15 +145,24 @@ async fn compile_immediate_source(
                 "delegated context source does not own parent runtime: {parent_run_id}"
             ));
         }
-        let binding = parent.dispatch_binding.as_ref().ok_or_else(|| {
-            format!("delegated context parent has no dispatch binding: {parent_run_id}")
-        })?;
         let shared_session_id = parse_shared_session_id(&binding.backing_thread_id)?;
-        return compile_shared_source(run, binding_key, &shared_session_id, app);
+        return compile_shared_source(
+            run,
+            binding_key,
+            parent_runtime_workspace_id,
+            &shared_session_id,
+            app,
+        );
     }
     if let Some(logical_session_id) = run.source.logical_session_id.as_deref() {
         if let Ok(shared_session_id) = parse_shared_session_id(logical_session_id) {
-            return compile_shared_source(run, binding_key, &shared_session_id, app);
+            return compile_shared_source(
+                run,
+                binding_key,
+                &run.workspace_id,
+                &shared_session_id,
+                app,
+            );
         }
     }
     compile_native_source(run, binding_key, app).await
@@ -149,10 +171,11 @@ async fn compile_immediate_source(
 fn compile_shared_source(
     run: &DelegationRun,
     binding_key: &str,
+    source_workspace_id: &str,
     shared_session_id: &str,
     app: &AppHandle,
 ) -> Result<ContextPackage, String> {
-    require_shared_session_workspace_owner(&run.workspace_id, shared_session_id)?;
+    require_shared_session_workspace_owner(source_workspace_id, shared_session_id)?;
     let state = app.state::<AppState>();
     let writer = state
         .shared_event_writer
@@ -284,7 +307,19 @@ fn read_parent_context_package(
     parent: &DelegationRun,
     app: &AppHandle,
 ) -> Result<Option<ContextPackage>, String> {
-    if parent.workspace_id != child.workspace_id
+    let parent_binding = parent.dispatch_binding.as_ref().ok_or_else(|| {
+        format!(
+            "delegated inherited context parent has no dispatch binding: {}",
+            parent.id
+        )
+    })?;
+    let parent_runtime_workspace_id = parent_binding
+        .runtime_workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(parent.workspace_id.as_str());
+    if parent_runtime_workspace_id != child.workspace_id
         || parent.target.engine_id != child.source.engine_id
     {
         return Err(format!(
@@ -294,7 +329,7 @@ fn read_parent_context_package(
     }
     let mut owner = parent.clone();
     let mut seen = HashSet::new();
-    let (binding, transfer) = loop {
+    let (binding, transfer, artifact_workspace_id) = loop {
         if !seen.insert(owner.id.clone()) {
             return Err(format!(
                 "delegated inherited context continuation cycle: {}",
@@ -307,8 +342,24 @@ fn read_parent_context_package(
                 owner.id
             )
         })?;
+        let owner_runtime_workspace_id = binding
+            .runtime_workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(owner.workspace_id.as_str());
+        if owner_runtime_workspace_id != parent_runtime_workspace_id {
+            return Err(format!(
+                "delegated inherited context continuation changed runtime workspace: {}",
+                owner.id
+            ));
+        }
         if let Some(transfer) = binding.context_transfer.as_ref() {
-            break (binding.clone(), transfer.clone());
+            break (
+                binding.clone(),
+                transfer.clone(),
+                owner_runtime_workspace_id.to_string(),
+            );
         }
         let Some(previous_run_id) = owner.continuation_of_run_id.clone() else {
             return Ok(None);
@@ -316,9 +367,7 @@ fn read_parent_context_package(
         owner = service
             .get_run(&previous_run_id)?
             .ok_or_else(|| format!("delegated context continuation missing: {previous_run_id}"))?;
-        if owner.workspace_id != child.workspace_id
-            || owner.target.engine_id != parent.target.engine_id
-        {
+        if owner.target.engine_id != parent.target.engine_id {
             return Err(format!(
                 "delegated inherited context continuation ownership mismatch: {}",
                 owner.id
@@ -326,12 +375,12 @@ fn read_parent_context_package(
         }
     };
     let shared_session_id = parse_shared_session_id(&binding.backing_thread_id)?;
-    require_shared_session_workspace_owner(&child.workspace_id, &shared_session_id)?;
+    require_shared_session_workspace_owner(&artifact_workspace_id, &shared_session_id)?;
     let state = app.state::<AppState>();
     let package = read_artifact(
         context_artifact_root(&state)?,
         &ArtifactReadRequest {
-            workspace_id: child.workspace_id.clone(),
+            workspace_id: artifact_workspace_id,
             session_id: shared_session_id,
             artifact_id: transfer.artifact_id.clone(),
             checksum: transfer.artifact_checksum.clone(),

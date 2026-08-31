@@ -73,6 +73,11 @@ pub struct DelegationDispatchBinding {
     pub attempt_id: String,
     pub logical_turn_id: String,
     pub binding_key: String,
+    /// Workspace that owns the backing Shared session and native runtime. This differs from the
+    /// source workspace for isolated-worktree runs and is durable so cancel/recovery cannot fall
+    /// back to controlling the caller's workspace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_workspace_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub native_session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -130,6 +135,10 @@ pub struct DelegationResult {
     pub changed_files: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    /// Budgeted text diff preview produced by the existing Git diff service. Binary/oversized
+    /// changes remain represented by `changedFiles` even when no text preview is available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artifact_path: Option<String>,
 }
@@ -199,5 +208,24 @@ impl CreateDelegationRun {
             return Err("delegated task is required".to_string());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_result_without_diff_remains_readable() {
+        let result = serde_json::from_value::<DelegationResult>(serde_json::json!({
+            "summary": "done",
+            "changedFiles": ["src/main.rs"],
+            "branch": "feature/test",
+            "artifactPath": null
+        }))
+        .expect("legacy result");
+
+        assert_eq!(result.diff, None);
+        assert_eq!(result.changed_files, vec!["src/main.rs"]);
     }
 }

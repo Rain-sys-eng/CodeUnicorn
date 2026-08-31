@@ -29,6 +29,8 @@ pub(crate) struct DelegatedWorktreeOwnership {
     pub workspace_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit: Option<String>,
 }
 
 impl DelegatedWorktreeOwnership {
@@ -44,6 +46,7 @@ impl DelegatedWorktreeOwnership {
             state: DelegatedWorktreeOwnershipState::Reserved,
             workspace_id: None,
             path: None,
+            base_commit: None,
         }
     }
 
@@ -60,10 +63,30 @@ impl DelegatedWorktreeOwnership {
                 self.owner_run_id
             ));
         }
+        if provision.workspace_id.trim().is_empty()
+            || provision.path.trim().is_empty()
+            || provision.base_commit.trim().is_empty()
+        {
+            return Err(format!(
+                "delegated worktree provision has incomplete runtime evidence: {}",
+                self.owner_run_id
+            ));
+        }
+        if self.state == DelegatedWorktreeOwnershipState::Provisioned {
+            let existing = self.as_provision()?;
+            if &existing == provision {
+                return Ok(self);
+            }
+            return Err(format!(
+                "delegated worktree owner {} already has conflicting provision evidence",
+                self.owner_run_id
+            ));
+        }
         Ok(Self {
             state: DelegatedWorktreeOwnershipState::Provisioned,
             workspace_id: Some(provision.workspace_id.clone()),
             path: Some(provision.path.clone()),
+            base_commit: Some(provision.base_commit.clone()),
             ..self
         })
     }
@@ -83,6 +106,11 @@ impl DelegatedWorktreeOwnership {
                 .clone()
                 .ok_or_else(|| "provisioned worktree is missing workspace id".to_string())?,
             branch: self.branch.clone(),
+            base_commit: self
+                .base_commit
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "provisioned worktree is missing base commit".to_string())?,
             path: self
                 .path
                 .clone()
@@ -362,7 +390,10 @@ fn validate_ownership(
 
         match owner.state {
             DelegatedWorktreeOwnershipState::Reserved => {
-                if owner.workspace_id.is_some() || owner.path.is_some() {
+                if owner.workspace_id.is_some()
+                    || owner.path.is_some()
+                    || owner.base_commit.is_some()
+                {
                     return Err(format!(
                         "reserved Agent Bridge worktree {run_id} unexpectedly has provisioned identity"
                     ));
@@ -384,6 +415,16 @@ fn validate_ownership(
                     .filter(|value| !value.is_empty())
                     .ok_or_else(|| {
                         format!("provisioned Agent Bridge worktree {run_id} has no path")
+                    })?;
+                owner
+                    .base_commit
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        format!(
+                            "provisioned Agent Bridge worktree {run_id} has no base commit"
+                        )
                     })?;
                 if let Some(previous) = workspace_owners.insert(workspace_id, run_id) {
                     return Err(format!(
@@ -407,6 +448,7 @@ mod tests {
             source_workspace_id: "source-workspace".to_string(),
             workspace_id: format!("workspace-{run_id}"),
             branch: format!("codeunicorn/delegate/{run_id}"),
+            base_commit: "0123456789abcdef".to_string(),
             path: format!("/tmp/{run_id}"),
         }
     }
@@ -507,6 +549,17 @@ mod tests {
         assert!(validate_ownership(&ownership)
             .expect_err("reserved owner cannot look provisioned")
             .contains("unexpectedly has provisioned identity"));
+    }
+
+    #[test]
+    fn provisioned_owner_without_base_commit_fails_closed() {
+        let mut owner = provisioned_owner("run-1");
+        owner.base_commit = None;
+        let ownership = BTreeMap::from([("run-1".to_string(), owner)]);
+
+        assert!(validate_ownership(&ownership)
+            .expect_err("base commit is required for result evidence")
+            .contains("no base commit"));
     }
 
     #[test]
