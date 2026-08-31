@@ -213,9 +213,7 @@ impl DelegationRunRegistry {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .ok_or_else(|| {
-                format!(
-                    "completed delegated run has no reusable native session: {previous_run_id}"
-                )
+                format!("completed delegated run has no reusable native session: {previous_run_id}")
             })?
             .to_string();
 
@@ -355,8 +353,7 @@ impl DelegationRunRegistry {
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .unwrap_or(run.workspace_id.as_str());
-                (runtime_workspace_id == workspace_id)
-                    .then(|| binding.backing_thread_id.clone())
+                (runtime_workspace_id == workspace_id).then(|| binding.backing_thread_id.clone())
             })
             .collect::<Vec<_>>();
         ids.sort();
@@ -498,7 +495,9 @@ impl DelegationRunRegistry {
             .cloned()
             .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
         if existing.status.is_terminal() {
-            return Err(format!("cannot record context for terminal delegated run: {run_id}"));
+            return Err(format!(
+                "cannot record context for terminal delegated run: {run_id}"
+            ));
         }
         let mut updated = existing;
         let binding = updated
@@ -630,7 +629,10 @@ impl DelegationRunRegistry {
     }
 
     fn ensure_active_capacity(&self, runs: &HashMap<String, DelegationRun>) -> Result<(), String> {
-        let active_runs = runs.values().filter(|run| !run.status.is_terminal()).count();
+        let active_runs = runs
+            .values()
+            .filter(|run| !run.status.is_terminal())
+            .count();
         if active_runs >= self.limits.max_active_runs {
             return Err(format!(
                 "agent bridge active run limit reached: {}",
@@ -649,12 +651,14 @@ impl DelegationRunRegistry {
             return Err(format!("agent bridge persistence unavailable: {error}"));
         }
         if let Some(persistence) = self.persistence.as_ref() {
-            persistence.save(&sorted_runs(&candidate)).map_err(|error| {
-                format!(
-                    "failed to persist Agent Bridge run facts at {}: {error}",
-                    persistence.path().display()
-                )
-            })?;
+            persistence
+                .save(&sorted_runs(&candidate))
+                .map_err(|error| {
+                    format!(
+                        "failed to persist Agent Bridge run facts at {}: {error}",
+                        persistence.path().display()
+                    )
+                })?;
         }
         *current = candidate;
         Ok(())
@@ -698,7 +702,9 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
     let mut recovered = HashMap::new();
     for run in runs {
         if run.id.trim().is_empty() || run.root_run_id.trim().is_empty() {
-            return Err("Agent Bridge durable store contains an empty run/root identity".to_string());
+            return Err(
+                "Agent Bridge durable store contains an empty run/root identity".to_string(),
+            );
         }
         let id = run.id.clone();
         if recovered.insert(id.clone(), run).is_some() {
@@ -1034,8 +1040,12 @@ mod tests {
         let registry = DelegationRunRegistry::default();
         let mut isolated_request = request(None);
         isolated_request.execution_scope = DelegationExecutionScope::IsolatedWorktree;
-        let run = registry.create(isolated_request).expect("create isolated run");
-        registry.claim_dispatch(&run.id).expect("claim isolated run");
+        let run = registry
+            .create(isolated_request)
+            .expect("create isolated run");
+        registry
+            .claim_dispatch(&run.id)
+            .expect("claim isolated run");
         let binding = |runtime_workspace_id: Option<&str>| DelegationDispatchBinding {
             backing_thread_id: "shared:bridge-session".to_string(),
             attempt_id: "attempt-1".to_string(),
@@ -1342,12 +1352,14 @@ mod tests {
         std::fs::create_dir_all(&root).expect("create temp dir");
         let path = root.join("runs.json");
         let persistence = AgentBridgePersistence::new(path.clone());
-        let registry = DelegationRunRegistry::persistent(
-            persistence.clone(),
-            DelegationRunLimits::default(),
-        );
-        let run = registry.create(request(None)).expect("create persisted run");
-        registry.claim_dispatch(&run.id).expect("claim persisted run");
+        let registry =
+            DelegationRunRegistry::persistent(persistence.clone(), DelegationRunLimits::default());
+        let run = registry
+            .create(request(None))
+            .expect("create persisted run");
+        registry
+            .claim_dispatch(&run.id)
+            .expect("claim persisted run");
         registry
             .set_dispatch_binding(
                 &run.id,

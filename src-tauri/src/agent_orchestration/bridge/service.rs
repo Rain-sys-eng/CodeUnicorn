@@ -72,7 +72,8 @@ impl AgentBridgeService {
         ensure_engine_enabled(settings, source_engine, "source")?;
         ensure_engine_enabled(settings, target_engine, "target")?;
         ensure_delegated_dispatch_supported(target_engine)?;
-        let target_status = ensure_target_available(engine_manager, settings, target_engine).await?;
+        let target_status =
+            ensure_target_available(engine_manager, settings, target_engine).await?;
 
         // Persist only canonical registry ids so lineage comparisons are deterministic.
         request.source.engine_id = engine_id(source_engine).to_string();
@@ -99,18 +100,20 @@ impl AgentBridgeService {
             .runs
             .get(previous_run_id)?
             .ok_or_else(|| format!("continuation source run not found: {previous_run_id}"))?;
-        let source_engine = resolve_builtin_engine(&previous.source.engine_id).ok_or_else(|| {
-            format!(
-                "continuation source engine is not registered for Agent Bridge: {}",
-                previous.source.engine_id
-            )
-        })?;
-        let target_engine = resolve_builtin_engine(&previous.target.engine_id).ok_or_else(|| {
-            format!(
-                "continuation target engine is not registered for Agent Bridge: {}",
-                previous.target.engine_id
-            )
-        })?;
+        let source_engine =
+            resolve_builtin_engine(&previous.source.engine_id).ok_or_else(|| {
+                format!(
+                    "continuation source engine is not registered for Agent Bridge: {}",
+                    previous.source.engine_id
+                )
+            })?;
+        let target_engine =
+            resolve_builtin_engine(&previous.target.engine_id).ok_or_else(|| {
+                format!(
+                    "continuation target engine is not registered for Agent Bridge: {}",
+                    previous.target.engine_id
+                )
+            })?;
 
         ensure_engine_enabled(settings, source_engine, "source")?;
         ensure_engine_enabled(settings, target_engine, "target")?;
@@ -148,18 +151,20 @@ impl AgentBridgeService {
                 previous.status
             ));
         }
-        let source_engine = resolve_builtin_engine(&previous.source.engine_id).ok_or_else(|| {
-            format!(
-                "retry source engine is not registered for Agent Bridge: {}",
-                previous.source.engine_id
-            )
-        })?;
-        let target_engine = resolve_builtin_engine(&previous.target.engine_id).ok_or_else(|| {
-            format!(
-                "retry target engine is not registered for Agent Bridge: {}",
-                previous.target.engine_id
-            )
-        })?;
+        let source_engine =
+            resolve_builtin_engine(&previous.source.engine_id).ok_or_else(|| {
+                format!(
+                    "retry source engine is not registered for Agent Bridge: {}",
+                    previous.source.engine_id
+                )
+            })?;
+        let target_engine =
+            resolve_builtin_engine(&previous.target.engine_id).ok_or_else(|| {
+                format!(
+                    "retry target engine is not registered for Agent Bridge: {}",
+                    previous.target.engine_id
+                )
+            })?;
 
         ensure_engine_enabled(settings, source_engine, "source")?;
         ensure_engine_enabled(settings, target_engine, "target")?;
@@ -254,8 +259,7 @@ impl AgentBridgeService {
         source_workspace_id: &str,
         branch: &str,
     ) -> Result<DelegatedWorktreeOwnership, String> {
-        self.worktrees
-            .reserve(run_id, source_workspace_id, branch)
+        self.worktrees.reserve(run_id, source_workspace_id, branch)
     }
 
     pub(crate) fn complete_worktree(
@@ -414,7 +418,8 @@ fn default_local_execution_target(
     let model = preferred
         .and_then(|preferred| {
             status.models.iter().find(|model| {
-                model.id == preferred || (!model.model.trim().is_empty() && model.model == preferred)
+                model.id == preferred
+                    || (!model.model.trim().is_empty() && model.model == preferred)
             })
         })
         .or_else(|| status.models.iter().find(|model| model.default))
@@ -626,10 +631,7 @@ mod tests {
             .expect("retry");
 
         assert_ne!(retried.id, run.id);
-        assert_eq!(
-            retried.retry_of_run_id.as_deref(),
-            Some(run.id.as_str())
-        );
+        assert_eq!(retried.retry_of_run_id.as_deref(), Some(run.id.as_str()));
         assert_eq!(retried.status, DelegationRunStatus::Queued);
         assert_eq!(retried.target_execution, run.target_execution);
         assert!(retried.dispatch_binding.is_none());

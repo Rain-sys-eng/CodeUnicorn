@@ -29,9 +29,7 @@ use super::models::{
 };
 use super::presentation::ensure_backing_session_hidden;
 use super::service::AgentBridgeService;
-use super::worktree::{
-    delegated_branch_name, provision_delegated_worktree, DelegatedWorktreeProvision,
-};
+use super::worktree::{delegated_branch_name, provision_delegated_worktree, DelegatedWorktreeProvision};
 use super::worktree_store::DelegatedWorktreeOwnershipState;
 
 const BRIDGE_NODE_ID: &str = "delegate";
@@ -90,13 +88,8 @@ async fn dispatch_claimed_run(
         .as_ref()
         .map(|lane| lane.binding_owner_run_id.as_str())
         .unwrap_or(run.id.as_str());
-    let (dispatch_workspace_id, worktree_provision) = resolve_dispatch_workspace(
-        &service,
-        &run,
-        worktree_owner_run_id,
-        &app,
-    )
-    .await?;
+    let (dispatch_workspace_id, worktree_provision) =
+        resolve_dispatch_workspace(&service, &run, worktree_owner_run_id, &app).await?;
     // Root delegations get a fresh durable Shared backing lane. A continuation resolves the
     // original lane and scoped binding owner, so the existing native CLI session is reused.
     let lane = match continuation_lane {
@@ -112,10 +105,9 @@ async fn dispatch_claimed_run(
         // Mark before any runtime dispatch so an internal backing lane never behaves like an
         // ordinary user-created Shared session after the Bridge starts using it.
         let state = app.state::<AppState>();
-        let writer = state
-            .shared_event_writer
-            .as_ref()
-            .ok_or_else(|| "shared event log unavailable for Agent Bridge presentation marker".to_string())?;
+        let writer = state.shared_event_writer.as_ref().ok_or_else(|| {
+            "shared event log unavailable for Agent Bridge presentation marker".to_string()
+        })?;
         ensure_backing_session_hidden(writer, &backing_thread_id, &lane.binding_owner_run_id)?;
     }
     let shared_session_id = parse_shared_session_id(&backing_thread_id)?;
@@ -171,7 +163,9 @@ async fn dispatch_claimed_run(
                 let reason = outcome
                     .reason
                     .unwrap_or_else(|| outcome.binding_key.clone());
-                return Err(format!("delegated backing turn requires recovery: {reason}"));
+                return Err(format!(
+                    "delegated backing turn requires recovery: {reason}"
+                ));
             }
             BeginTurnStatus::TargetUnavailable => {
                 let reason = outcome
@@ -268,12 +262,7 @@ async fn dispatch_claimed_run(
     let runtime_turn_id = optional_json_string(&dispatch, "runtimeTurnId");
     match (native_session_id.as_deref(), runtime_turn_id.as_deref()) {
         (Some(native_session_id), Some(runtime_turn_id)) => {
-            service.record_runtime_ack(
-                &run.id,
-                &attempt_id,
-                native_session_id,
-                runtime_turn_id,
-            )?;
+            service.record_runtime_ack(&run.id, &attempt_id, native_session_id, runtime_turn_id)?;
         }
         _ if already_settled => {}
         _ => {
@@ -360,7 +349,10 @@ async fn resolve_dispatch_workspace(
 
     if owner.id != run.id {
         let binding = owner.dispatch_binding.as_ref().ok_or_else(|| {
-            format!("isolated continuation owner has no dispatch binding: {}", owner.id)
+            format!(
+                "isolated continuation owner has no dispatch binding: {}",
+                owner.id
+            )
         })?;
         let runtime_workspace_id = binding
             .runtime_workspace_id
@@ -398,12 +390,10 @@ async fn recover_reserved_worktree(
         )
     })?;
     let expected_parent_id = if source.kind.is_worktree() {
-        source.parent_id.as_deref().ok_or_else(|| {
-            format!(
-                "source worktree is missing parent identity: {}",
-                source.id
-            )
-        })?
+        source
+            .parent_id
+            .as_deref()
+            .ok_or_else(|| format!("source worktree is missing parent identity: {}", source.id))?
     } else {
         source.id.as_str()
     };
@@ -549,7 +539,10 @@ fn resolve_continuation_lane(
             ));
         }
         let binding = previous.dispatch_binding.as_ref().ok_or_else(|| {
-            format!("continuation source run has no dispatch binding: {}", previous.id)
+            format!(
+                "continuation source run has no dispatch binding: {}",
+                previous.id
+            )
         })?;
         let previous_runtime_workspace_id = binding
             .runtime_workspace_id
@@ -603,7 +596,10 @@ fn resolve_continuation_lane(
         }
         return Ok(BridgeDispatchLane {
             backing_thread_id: backing_thread_id.ok_or_else(|| {
-                format!("continuation lane missing backing thread for run {}", run.id)
+                format!(
+                    "continuation lane missing backing thread for run {}",
+                    run.id
+                )
             })?,
             binding_owner_run_id: previous.id,
         });
@@ -747,8 +743,10 @@ fn permission_class(
             if dispatch_workspace_id.trim().is_empty()
                 || dispatch_workspace_id != source_workspace_id =>
         {
-            Err("non-isolated delegation runtime workspace must match its source workspace"
-                .to_string())
+            Err(
+                "non-isolated delegation runtime workspace must match its source workspace"
+                    .to_string(),
+            )
         }
         DelegationExecutionScope::Observe => Ok("read-only"),
         DelegationExecutionScope::SharedWorkspace => Ok("current-workspace"),
@@ -819,12 +817,9 @@ async fn await_and_settle(
     let shared_session_id = parse_shared_session_id(backing_thread_id)?;
     let committed = {
         let state = app.state::<AppState>();
-        let writer = state
-            .shared_event_writer
-            .as_ref()
-            .ok_or_else(|| {
-                "shared event log unavailable during Agent Bridge settlement".to_string()
-            })?;
+        let writer = state.shared_event_writer.as_ref().ok_or_else(|| {
+            "shared event log unavailable during Agent Bridge settlement".to_string()
+        })?;
         let event = writer
             .events_for_session(&shared_session_id)
             .map_err(|error| error.to_string())?
@@ -834,9 +829,7 @@ async fn await_and_settle(
                     && event.attempt_id.as_deref() == Some(attempt_id)
             })
             .ok_or_else(|| {
-                format!(
-                    "delegated attempt {attempt_id} ended without conversation.turnCommitted"
-                )
+                format!("delegated attempt {attempt_id} ended without conversation.turnCommitted")
             })?;
         let fact = serde_json::from_str::<CanonicalFact>(&event.payload_json)
             .map_err(|error| format!("parse delegated turnCommitted payload: {error}"))?;
@@ -860,9 +853,7 @@ async fn await_and_settle(
                 .collect::<Vec<_>>()
                 .join("\n\n");
             let (changed_files, branch, diff) = match worktree_provision {
-                Some(provision) => {
-                    collect_worktree_result_evidence(provision, app).await?
-                }
+                Some(provision) => collect_worktree_result_evidence(provision, app).await?,
                 None => (Vec::new(), None, None),
             };
             service.settle_completed(
@@ -971,10 +962,7 @@ async fn collect_worktree_result_evidence(
             changed_files.len() - BRIDGE_RESULT_DIFF_MAX_FILES
         ));
     }
-    let diff = truncate_result_diff(
-        &previews.join("\n\n"),
-        BRIDGE_RESULT_DIFF_MAX_TOTAL_BYTES,
-    );
+    let diff = truncate_result_diff(&previews.join("\n\n"), BRIDGE_RESULT_DIFF_MAX_TOTAL_BYTES);
     Ok((
         changed_files,
         Some(branch),

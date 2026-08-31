@@ -106,12 +106,7 @@ impl AppState {
     ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
         let settings = self.app_settings.lock().await.clone();
         self.agent_bridge
-            .continue_run(
-                previous_run_id,
-                task,
-                &self.engine_manager,
-                &settings,
-            )
+            .continue_run(previous_run_id, task, &self.engine_manager, &settings)
             .await
     }
 
@@ -364,9 +359,8 @@ impl AppState {
                         .await;
                 });
             })));
-        let agent_bridge = Arc::new(
-            crate::agent_orchestration::bridge::AgentBridgeService::default(),
-        );
+        let agent_bridge =
+            Arc::new(crate::agent_orchestration::bridge::AgentBridgeService::default());
         if let Some(writer) = shared_event_writer.as_ref() {
             match crate::agent_orchestration::bridge::presentation::reconcile_backing_session_markers(
                 agent_bridge.as_ref(),

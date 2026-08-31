@@ -40,7 +40,10 @@ impl FakeMcpRuntime {
     }
 
     fn record_call(&self, call: impl Into<String>) {
-        self.calls.lock().expect("fake calls lock").push(call.into());
+        self.calls
+            .lock()
+            .expect("fake calls lock")
+            .push(call.into());
     }
 
     fn complete(&self, run_id: &str, summary: &str) -> DelegationRun {
@@ -72,15 +75,10 @@ impl FakeMcpRuntime {
 impl AgentBridgeMcpBackend for FakeMcpRuntime {
     fn list_agents(&self) -> McpBackendFuture<'_, Value> {
         self.record_call("list");
-        Box::pin(async move {
-            agent_list_from_runtime(&self.engine_manager, &self.settings).await
-        })
+        Box::pin(async move { agent_list_from_runtime(&self.engine_manager, &self.settings).await })
     }
 
-    fn create_run(
-        &self,
-        request: CreateDelegationRun,
-    ) -> McpBackendFuture<'_, DelegationRun> {
+    fn create_run(&self, request: CreateDelegationRun) -> McpBackendFuture<'_, DelegationRun> {
         self.record_call("create");
         Box::pin(async move {
             if request.workspace_id != self.workspace_id {
@@ -155,12 +153,7 @@ impl AgentBridgeMcpBackend for FakeMcpRuntime {
         self.record_call(format!("continue:{previous_run_id}"));
         Box::pin(async move {
             self.service
-                .continue_run(
-                    &previous_run_id,
-                    task,
-                    &self.engine_manager,
-                    &self.settings,
-                )
+                .continue_run(&previous_run_id, task, &self.engine_manager, &self.settings)
                 .await
         })
     }
@@ -179,11 +172,7 @@ impl AgentBridgeMcpBackend for FakeMcpRuntime {
     }
 }
 
-async fn cache_installed_engine(
-    manager: &EngineManager,
-    engine: EngineType,
-    model_id: &str,
-) {
+async fn cache_installed_engine(manager: &EngineManager, engine: EngineType, model_id: &str) {
     let mut status = crate::engine::disabled_engine_status(engine);
     status.installed = true;
     status.error = None;
@@ -458,10 +447,7 @@ async fn nested_delegate_uses_exact_runtime_owner_as_parent() {
         .expect("parent delegate"),
     )
     .expect("parent run");
-    let parent_binding = parent
-        .dispatch_binding
-        .as_ref()
-        .expect("parent binding");
+    let parent_binding = parent.dispatch_binding.as_ref().expect("parent binding");
     let child_source = resolved_source(
         "codex",
         Some("runtime-codex"),

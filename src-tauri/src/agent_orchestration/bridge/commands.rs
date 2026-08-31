@@ -77,9 +77,7 @@ fn require_visible_run(
         .into_iter()
         .find(|run| run.id == run_id)
         .ok_or_else(|| {
-            format!(
-                "delegated run is not visible in Agent Bridge UI workspace: {run_id}"
-            )
+            format!("delegated run is not visible in Agent Bridge UI workspace: {run_id}")
         })
 }
 
@@ -125,8 +123,8 @@ fn run_is_visible_in_workspace(
 mod tests {
     use super::*;
     use crate::agent_orchestration::bridge::{
-        AgentEndpoint, CreateDelegationRun, DelegationContextPolicy,
-        DelegationDispatchBinding, DelegationExecutionScope, DelegationRunRegistry,
+        AgentEndpoint, CreateDelegationRun, DelegationContextPolicy, DelegationDispatchBinding,
+        DelegationExecutionScope, DelegationRunRegistry,
     };
     use crate::engine::EngineType;
     use crate::shared_session_v2::ExecutionTargetInput;

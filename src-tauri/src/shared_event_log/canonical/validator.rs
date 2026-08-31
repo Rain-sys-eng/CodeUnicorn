@@ -433,15 +433,7 @@ fn validate_turn_execution_snapshot(
 ) -> Result<(), FactValidationError> {
     if !matches!(
         snapshot.engine.as_str(),
-        "claude"
-            | "codex"
-            | "gemini"
-            | "kimi"
-            | "grok"
-            | "opencode"
-            | "pi"
-            | "dsh"
-            | "qoder"
+        "claude" | "codex" | "gemini" | "kimi" | "grok" | "opencode" | "pi" | "dsh" | "qoder"
     ) {
         return Err(FactValidationError::new(
             ctx,
@@ -541,15 +533,7 @@ fn validate_provider_private_ref(
     require_non_empty(&pref.ref_id, "refId", ctx)?;
     if !matches!(
         pref.engine.as_str(),
-        "claude"
-            | "codex"
-            | "gemini"
-            | "kimi"
-            | "grok"
-            | "opencode"
-            | "pi"
-            | "dsh"
-            | "qoder"
+        "claude" | "codex" | "gemini" | "kimi" | "grok" | "opencode" | "pi" | "dsh" | "qoder"
     ) {
         return Err(FactValidationError::new(
             ctx,

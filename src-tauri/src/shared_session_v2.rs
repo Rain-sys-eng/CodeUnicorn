@@ -4195,14 +4195,7 @@ pub(crate) async fn shared_session_v2_prepare_delivery(
     attempt_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    shared_session_v2_prepare_delivery_core(
-        workspace_id,
-        thread_id,
-        attempt_id,
-        None,
-        state,
-    )
-    .await
+    shared_session_v2_prepare_delivery_core(workspace_id, thread_id, attempt_id, None, state).await
 }
 
 pub(crate) async fn shared_session_v2_prepare_delivery_with_package(
@@ -4271,7 +4264,7 @@ async fn shared_session_v2_prepare_delivery_core(
             }
             if package.destination != destination {
                 return Err(
-                    "prepared context destination does not match durable target".to_string(),
+                    "prepared context destination does not match durable target".to_string()
                 );
             }
             if package.manifest.from_sequence_exclusive.is_some()

@@ -41,15 +41,12 @@ pub(crate) async fn provision_delegated_worktree(
     let state = app.state::<AppState>();
     let source = {
         let workspaces = state.workspaces.lock().await;
-        workspaces
-            .get(&run.workspace_id)
-            .cloned()
-            .ok_or_else(|| {
-                format!(
-                    "source workspace not found for delegated worktree: {}",
-                    run.workspace_id
-                )
-            })?
+        workspaces.get(&run.workspace_id).cloned().ok_or_else(|| {
+            format!(
+                "source workspace not found for delegated worktree: {}",
+                run.workspace_id
+            )
+        })?
     };
     let (parent_id, base_ref) = delegated_worktree_base(&source)?;
     let expected_parent_id = parent_id.clone();
@@ -107,7 +104,9 @@ fn provision_result(
         ));
     }
     if workspace.id.trim().is_empty() || workspace.path.trim().is_empty() {
-        return Err("delegated worktree lifecycle returned incomplete workspace identity".to_string());
+        return Err(
+            "delegated worktree lifecycle returned incomplete workspace identity".to_string(),
+        );
     }
     Ok(DelegatedWorktreeProvision {
         owner_run_id: run.id.clone(),

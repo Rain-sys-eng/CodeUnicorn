@@ -164,7 +164,9 @@ mod tests {
         std::fs::write(&path, r#"{"schemaVersion":99,"runs":[]}"#).expect("write future store");
         let persistence = AgentBridgePersistence::new(path.clone());
 
-        let error = persistence.load().expect_err("future schema must fail closed");
+        let error = persistence
+            .load()
+            .expect_err("future schema must fail closed");
 
         assert!(error.contains("unsupported Agent Bridge run store schema"));
         assert!(path.exists());

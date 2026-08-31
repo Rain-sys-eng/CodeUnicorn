@@ -27,8 +27,7 @@ const WAIT_DEFAULT_MS: u64 = 15_000;
 const WAIT_MAX_MS: u64 = 30_000;
 const WAIT_POLL_MS: u64 = 100;
 
-type McpBackendFuture<'a, T> =
-    Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+type McpBackendFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 
 /// Narrow Agent Bridge application boundary used by the MCP transport adapter.
 ///
@@ -38,10 +37,7 @@ type McpBackendFuture<'a, T> =
 /// runtime or teaching the MCP layer how to spawn/parse any CLI.
 trait AgentBridgeMcpBackend {
     fn list_agents(&self) -> McpBackendFuture<'_, Value>;
-    fn create_run(
-        &self,
-        request: CreateDelegationRun,
-    ) -> McpBackendFuture<'_, DelegationRun>;
+    fn create_run(&self, request: CreateDelegationRun) -> McpBackendFuture<'_, DelegationRun>;
     fn dispatch_run(&self, run_id: String) -> McpBackendFuture<'_, DelegationRun>;
     fn create_continuation(
         &self,
@@ -63,10 +59,7 @@ impl AgentBridgeMcpBackend for AppStateMcpBackend<'_> {
         Box::pin(async move { agent_list(self.state).await })
     }
 
-    fn create_run(
-        &self,
-        request: CreateDelegationRun,
-    ) -> McpBackendFuture<'_, DelegationRun> {
+    fn create_run(&self, request: CreateDelegationRun) -> McpBackendFuture<'_, DelegationRun> {
         Box::pin(async move { self.state.create_delegation_run(request).await })
     }
 
@@ -302,14 +295,7 @@ async fn call_tool_with_backend<B: AgentBridgeMcpBackend + ?Sized>(
                 .and_then(Value::as_u64)
                 .unwrap_or(WAIT_DEFAULT_MS)
                 .min(WAIT_MAX_MS);
-            wait_for_run(
-                backend,
-                workspace_id,
-                &source.endpoint,
-                &run_id,
-                timeout_ms,
-            )
-            .await
+            wait_for_run(backend, workspace_id, &source.endpoint, &run_id, timeout_ms).await
         }
         AGENT_RESULT_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
@@ -564,9 +550,7 @@ mod integration_tests;
 mod tests {
     use super::*;
 
-    use crate::agent_orchestration::bridge::{
-        AgentBridgeService, DelegationRunRegistry,
-    };
+    use crate::agent_orchestration::bridge::{AgentBridgeService, DelegationRunRegistry};
     use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
     use crate::shared_session_v2::ExecutionTargetInput;
 
@@ -578,7 +562,10 @@ mod tests {
         }
     }
 
-    fn created_service() -> (crate::agent_orchestration::bridge::AgentBridgeService, String) {
+    fn created_service() -> (
+        crate::agent_orchestration::bridge::AgentBridgeService,
+        String,
+    ) {
         let registry = DelegationRunRegistry::new(Default::default());
         let run = registry
             .create(CreateDelegationRun {
@@ -613,10 +600,7 @@ mod tests {
             Box::pin(async { Err("not used by this focused backend".to_string()) })
         }
 
-        fn create_run(
-            &self,
-            _request: CreateDelegationRun,
-        ) -> McpBackendFuture<'_, DelegationRun> {
+        fn create_run(&self, _request: CreateDelegationRun) -> McpBackendFuture<'_, DelegationRun> {
             Box::pin(async { Err("not used by this focused backend".to_string()) })
         }
 
@@ -702,8 +686,7 @@ mod tests {
             .find(|definition| definition["name"] == AGENT_WAIT_TOOL)
             .expect("agent_wait definition");
         assert_eq!(
-            definition["inputSchema"]["properties"]["timeoutMs"]["maximum"]
-                .as_u64(),
+            definition["inputSchema"]["properties"]["timeoutMs"]["maximum"].as_u64(),
             Some(WAIT_MAX_MS)
         );
     }
