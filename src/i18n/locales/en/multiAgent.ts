@@ -1,5 +1,22 @@
 export default {
   multiAgent: {
+    bridge: {
+      retry: "Retry",
+      retrying: "Retrying…",
+      retryFailed: "Retry failed",
+      openSession: "Open session",
+      viewResult: "View result",
+      viewDiff: "View diff",
+      resultTitle: "Delegated run result",
+      diffTitle: "Delegated run diff",
+      close: "Close",
+      summary: "Summary",
+      error: "Error",
+      branch: "Branch",
+      artifact: "Artifact",
+      changedFiles: "Changed files",
+      noResultDetails: "No additional result details are available.",
+    },
     entry: {
       label: "Collab",
       pill: "Collab · {{name}}",

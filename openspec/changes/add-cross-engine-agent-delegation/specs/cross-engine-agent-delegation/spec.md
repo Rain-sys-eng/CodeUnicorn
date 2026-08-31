@@ -301,3 +301,23 @@ Collaboration UI SHALL 通过 workspace-scoped Agent Bridge commands 读取 dura
 - **THEN** card-local projection MAY 保存 bounded token totals 与 latest tool state
 - **AND** projection MUST NOT 保存完整 tool input/output delta
 - **AND** activity cache MUST 有显式 cardinality 上限并在 workspace scope change 时清空
+
+#### Scenario: User explicitly retries a failed or cancelled delegated run
+
+- **WHEN** user 在 source workspace 对 visible `Failed` 或 `Cancelled` run 选择 Retry
+- **THEN** Bridge MUST 创建新的 immutable run identity，并通过 `retryOfRunId` 保留 retry lineage
+- **AND** original terminal run MUST 保持不变
+- **AND** new run MUST 复用 frozen request/target snapshot，但 MUST NOT 复用 original backing/native/runtime binding
+- **AND** current workspace、engine enablement、target availability 与 dispatch ownership MUST 重新验证
+
+#### Scenario: User inspects a delegated run
+
+- **WHEN** terminal run 具有 canonical result/error/diff metadata
+- **THEN** collaboration surface MUST 提供 View Result，并在存在 text diff 时提供 View Diff
+- **AND** displayed summary/error/branch/artifact/changed-files/diff MUST 只来自 durable run result
+
+#### Scenario: User explicitly opens a delegated backing session
+
+- **WHEN** run 具有 exact durable backing thread binding，且 user 选择 Open Session
+- **THEN** existing thread-selection path MUST 使用 binding 的 runtime workspace + backing thread identity
+- **AND** ordinary session list filtering MUST 继续隐藏该 internal backing session

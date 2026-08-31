@@ -1,3 +1,5 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 use serde_json::{json, Value};
@@ -24,6 +26,78 @@ pub const AGENT_CANCEL_TOOL: &str = "agent_cancel";
 const WAIT_DEFAULT_MS: u64 = 15_000;
 const WAIT_MAX_MS: u64 = 30_000;
 const WAIT_POLL_MS: u64 = 100;
+
+type McpBackendFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+
+/// Narrow Agent Bridge application boundary used by the MCP transport adapter.
+///
+/// The production implementation delegates to the single `AppState` owner and its existing
+/// dispatcher/control paths. Keeping the gateway orchestration behind this contract lets focused
+/// tests provide deterministic runtime ACK/settlement facts without constructing a second engine
+/// runtime or teaching the MCP layer how to spawn/parse any CLI.
+trait AgentBridgeMcpBackend {
+    fn list_agents(&self) -> McpBackendFuture<'_, Value>;
+    fn create_run(
+        &self,
+        request: CreateDelegationRun,
+    ) -> McpBackendFuture<'_, DelegationRun>;
+    fn dispatch_run(&self, run_id: String) -> McpBackendFuture<'_, DelegationRun>;
+    fn create_continuation(
+        &self,
+        previous_run_id: String,
+        task: String,
+    ) -> McpBackendFuture<'_, DelegationRun>;
+    fn cancel_run(&self, run_id: String) -> McpBackendFuture<'_, DelegationRun>;
+    fn get_run(&self, run_id: &str) -> Result<Option<DelegationRun>, String>;
+    fn list_runs(&self) -> Result<Vec<DelegationRun>, String>;
+}
+
+struct AppStateMcpBackend<'a> {
+    app: &'a AppHandle,
+    state: &'a AppState,
+}
+
+impl AgentBridgeMcpBackend for AppStateMcpBackend<'_> {
+    fn list_agents(&self) -> McpBackendFuture<'_, Value> {
+        Box::pin(async move { agent_list(self.state).await })
+    }
+
+    fn create_run(
+        &self,
+        request: CreateDelegationRun,
+    ) -> McpBackendFuture<'_, DelegationRun> {
+        Box::pin(async move { self.state.create_delegation_run(request).await })
+    }
+
+    fn dispatch_run(&self, run_id: String) -> McpBackendFuture<'_, DelegationRun> {
+        Box::pin(async move { self.state.dispatch_delegation_run(&run_id, self.app).await })
+    }
+
+    fn create_continuation(
+        &self,
+        previous_run_id: String,
+        task: String,
+    ) -> McpBackendFuture<'_, DelegationRun> {
+        Box::pin(async move {
+            self.state
+                .create_delegation_continuation(&previous_run_id, task)
+                .await
+        })
+    }
+
+    fn cancel_run(&self, run_id: String) -> McpBackendFuture<'_, DelegationRun> {
+        Box::pin(async move { self.state.cancel_delegation_run(&run_id, self.app).await })
+    }
+
+    fn get_run(&self, run_id: &str) -> Result<Option<DelegationRun>, String> {
+        self.state.agent_bridge.get_run(run_id)
+    }
+
+    fn list_runs(&self) -> Result<Vec<DelegationRun>, String> {
+        self.state.agent_bridge.list_runs()
+    }
+}
 
 const BUILTIN_ENGINES: [EngineType; 9] = [
     EngineType::Claude,
@@ -167,20 +241,35 @@ pub async fn call_tool(
     }
     source.endpoint.validate("source")?;
     let state = app.state::<AppState>();
+    let backend = AppStateMcpBackend {
+        app,
+        state: state.inner(),
+    };
+    call_tool_with_backend(&backend, workspace_id, source, tool_name, arguments).await
+}
+
+async fn call_tool_with_backend<B: AgentBridgeMcpBackend + ?Sized>(
+    backend: &B,
+    workspace_id: &str,
+    source: ResolvedMcpSource,
+    tool_name: &str,
+    arguments: Value,
+) -> Result<Value, String> {
+    if workspace_id.trim().is_empty() {
+        return Err("Agent Bridge MCP source workspace is required".to_string());
+    }
+    source.endpoint.validate("source")?;
 
     match tool_name {
-        AGENT_LIST_TOOL => agent_list(state.inner()).await,
+        AGENT_LIST_TOOL => backend.list_agents().await,
         AGENT_DELEGATE_TOOL => {
             let target_engine = required_string(&arguments, "targetEngine")?;
             let task = required_string(&arguments, "task")?;
             let file_refs = optional_string_array(&arguments, "fileRefs")?;
             let context_policy = parse_context_policy(arguments.get("contextPolicy"))?;
             let execution_scope = parse_execution_scope(arguments.get("executionScope"))?;
-            let parent_run_id = infer_active_parent_run_id(
-                state.inner(),
-                workspace_id,
-                &source,
-            )?;
+            let parent_run_id =
+                infer_active_parent_from_runs(backend.list_runs()?, workspace_id, &source)?;
             let request = CreateDelegationRun {
                 source: source.endpoint,
                 target: AgentEndpoint {
@@ -196,18 +285,14 @@ pub async fn call_tool(
                 execution_scope,
                 parent_run_id,
             };
-            let run = state.create_delegation_run(request).await?;
-            let dispatch = state.dispatch_delegation_run(&run.id, app).await;
-            let dispatched = preserve_created_run_after_dispatch(
-                state.agent_bridge.as_ref(),
-                &run.id,
-                dispatch,
-            )?;
+            let run = backend.create_run(request).await?;
+            let dispatch = backend.dispatch_run(run.id.clone()).await;
+            let dispatched = preserve_created_run_after_dispatch(backend, &run.id, dispatch)?;
             serde_json::to_value(dispatched).map_err(|error| error.to_string())
         }
         AGENT_STATUS_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
-            let run = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
+            let run = require_source_run(backend, workspace_id, &source.endpoint, &run_id)?;
             serde_json::to_value(run).map_err(|error| error.to_string())
         }
         AGENT_WAIT_TOOL => {
@@ -218,7 +303,7 @@ pub async fn call_tool(
                 .unwrap_or(WAIT_DEFAULT_MS)
                 .min(WAIT_MAX_MS);
             wait_for_run(
-                state.inner(),
+                backend,
                 workspace_id,
                 &source.endpoint,
                 &run_id,
@@ -228,30 +313,23 @@ pub async fn call_tool(
         }
         AGENT_RESULT_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
-            let run = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
+            let run = require_source_run(backend, workspace_id, &source.endpoint, &run_id)?;
             Ok(result_view(&run))
         }
         AGENT_SEND_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
             let task = required_string(&arguments, "task")?;
-            let _ = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
-            let continuation = state
-                .create_delegation_continuation(&run_id, task)
-                .await?;
-            let dispatch = state
-                .dispatch_delegation_run(&continuation.id, app)
-                .await;
-            let dispatched = preserve_created_run_after_dispatch(
-                state.agent_bridge.as_ref(),
-                &continuation.id,
-                dispatch,
-            )?;
+            let _ = require_source_run(backend, workspace_id, &source.endpoint, &run_id)?;
+            let continuation = backend.create_continuation(run_id, task).await?;
+            let dispatch = backend.dispatch_run(continuation.id.clone()).await;
+            let dispatched =
+                preserve_created_run_after_dispatch(backend, &continuation.id, dispatch)?;
             serde_json::to_value(dispatched).map_err(|error| error.to_string())
         }
         AGENT_CANCEL_TOOL => {
             let run_id = required_string(&arguments, "runId")?;
-            let _ = require_source_run(state.inner(), workspace_id, &source.endpoint, &run_id)?;
-            let run = state.cancel_delegation_run(&run_id, app).await?;
+            let _ = require_source_run(backend, workspace_id, &source.endpoint, &run_id)?;
+            let run = backend.cancel_run(run_id).await?;
             serde_json::to_value(run).map_err(|error| error.to_string())
         }
         _ => Err(format!("unknown Agent Bridge MCP tool: {tool_name}")),
@@ -260,9 +338,16 @@ pub async fn call_tool(
 
 async fn agent_list(state: &AppState) -> Result<Value, String> {
     let settings = state.app_settings.lock().await.clone();
+    agent_list_from_runtime(&state.engine_manager, &settings).await
+}
+
+async fn agent_list_from_runtime(
+    engine_manager: &crate::engine::EngineManager,
+    settings: &crate::types::AppSettings,
+) -> Result<Value, String> {
     let mut agents = Vec::with_capacity(BUILTIN_ENGINES.len());
     for engine in BUILTIN_ENGINES {
-        let status = state.engine_manager.get_engine_status(engine).await;
+        let status = engine_manager.get_engine_status(engine).await;
         agents.push(json!({
             "engineId": engine_id(engine),
             "displayName": engine.display_name(),
@@ -278,14 +363,6 @@ async fn agent_list(state: &AppState) -> Result<Value, String> {
 /// A delegated target that calls the managed MCP server must become the parent of its own child
 /// delegation. Runtime turn identity is the strongest available owner proof: it is emitted by the
 /// actual target runtime, persisted in `dispatch_binding`, and cannot be supplied by the model.
-fn infer_active_parent_run_id(
-    state: &AppState,
-    workspace_id: &str,
-    source: &ResolvedMcpSource,
-) -> Result<Option<String>, String> {
-    infer_active_parent_from_runs(state.agent_bridge.list_runs()?, workspace_id, source)
-}
-
 fn infer_active_parent_from_runs(
     runs: Vec<DelegationRun>,
     workspace_id: &str,
@@ -333,14 +410,13 @@ fn infer_active_parent_from_runs(
     }
 }
 
-fn require_source_run(
-    state: &AppState,
+fn require_source_run<B: AgentBridgeMcpBackend + ?Sized>(
+    backend: &B,
     workspace_id: &str,
     source: &AgentEndpoint,
     run_id: &str,
 ) -> Result<DelegationRun, String> {
-    let run = state
-        .agent_bridge
+    let run = backend
         .get_run(run_id)?
         .ok_or_else(|| format!("delegated run not found: {run_id}"))?;
     if run.workspace_id != workspace_id {
@@ -373,8 +449,8 @@ fn source_owns_run(caller: &AgentEndpoint, owner: &AgentEndpoint) -> bool {
     logical_match || native_match
 }
 
-async fn wait_for_run(
-    state: &AppState,
+async fn wait_for_run<B: AgentBridgeMcpBackend + ?Sized>(
+    backend: &B,
     workspace_id: &str,
     source: &AgentEndpoint,
     run_id: &str,
@@ -382,7 +458,7 @@ async fn wait_for_run(
 ) -> Result<Value, String> {
     let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
     loop {
-        let run = require_source_run(state, workspace_id, source, run_id)?;
+        let run = require_source_run(backend, workspace_id, source, run_id)?;
         if run.status.is_terminal() || tokio::time::Instant::now() >= deadline {
             return Ok(json!({
                 "settled": run.status.is_terminal(),
@@ -408,14 +484,14 @@ fn result_view(run: &DelegationRun) -> Value {
     })
 }
 
-fn preserve_created_run_after_dispatch(
-    service: &crate::agent_orchestration::bridge::AgentBridgeService,
+fn preserve_created_run_after_dispatch<B: AgentBridgeMcpBackend + ?Sized>(
+    backend: &B,
     run_id: &str,
     dispatch: Result<DelegationRun, String>,
 ) -> Result<DelegationRun, String> {
     match dispatch {
         Ok(run) => Ok(run),
-        Err(dispatch_error) => match service.get_run(run_id)? {
+        Err(dispatch_error) => match backend.get_run(run_id)? {
             Some(run) if run.status.is_terminal() => Ok(run),
             Some(run) => Err(format!(
                 "Agent Bridge dispatch failed after creating runId={run_id}; durable status={:?}; {dispatch_error}",
@@ -481,9 +557,16 @@ fn parse_execution_scope(value: Option<&Value>) -> Result<DelegationExecutionSco
 }
 
 #[cfg(test)]
+#[path = "mcp_gateway_integration_tests.rs"]
+mod integration_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent_orchestration::bridge::DelegationRunRegistry;
+
+    use crate::agent_orchestration::bridge::{
+        AgentBridgeService, DelegationRunRegistry,
+    };
     use crate::shared_event_log::canonical::types::CanonicalProviderProfileSource;
     use crate::shared_session_v2::ExecutionTargetInput;
 
@@ -523,6 +606,43 @@ mod tests {
             crate::agent_orchestration::bridge::AgentBridgeService::new(registry),
             run.id,
         )
+    }
+
+    impl AgentBridgeMcpBackend for AgentBridgeService {
+        fn list_agents(&self) -> McpBackendFuture<'_, Value> {
+            Box::pin(async { Err("not used by this focused backend".to_string()) })
+        }
+
+        fn create_run(
+            &self,
+            _request: CreateDelegationRun,
+        ) -> McpBackendFuture<'_, DelegationRun> {
+            Box::pin(async { Err("not used by this focused backend".to_string()) })
+        }
+
+        fn dispatch_run(&self, _run_id: String) -> McpBackendFuture<'_, DelegationRun> {
+            Box::pin(async { Err("not used by this focused backend".to_string()) })
+        }
+
+        fn create_continuation(
+            &self,
+            _previous_run_id: String,
+            _task: String,
+        ) -> McpBackendFuture<'_, DelegationRun> {
+            Box::pin(async { Err("not used by this focused backend".to_string()) })
+        }
+
+        fn cancel_run(&self, _run_id: String) -> McpBackendFuture<'_, DelegationRun> {
+            Box::pin(async { Err("not used by this focused backend".to_string()) })
+        }
+
+        fn get_run(&self, run_id: &str) -> Result<Option<DelegationRun>, String> {
+            AgentBridgeService::get_run(self, run_id)
+        }
+
+        fn list_runs(&self) -> Result<Vec<DelegationRun>, String> {
+            AgentBridgeService::list_runs(self)
+        }
     }
 
     #[test]

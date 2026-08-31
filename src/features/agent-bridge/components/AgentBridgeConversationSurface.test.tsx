@@ -6,25 +6,45 @@ import type { DelegationRun } from "../types";
 
 const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
+  retryRun: vi.fn(),
+  requestOpen: vi.fn(),
   pushErrorToast: vi.fn(),
   state: {} as Record<string, unknown>,
 }));
 
 vi.mock("react-i18next", () => ({
+  initReactI18next: null,
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
       if (key === "messages.liveTokenUsage") {
         return `${options?.tokens ?? 0} tokens`;
       }
-      return ({
-        "multiAgent.card.runTitle": "Multi-agent collab",
-        "multiAgent.status.implementing": "Implementing",
-        "multiAgent.status.awaiting-approval": "Awaiting approval",
-        "multiAgent.stageStatus.running": "Streaming…",
-        "multiAgent.actions.stop": "Stop",
-        "multiAgent.actions.stopping": "Stopping…",
-        "multiAgent.errors.stopFailedTitle": "Stop failed",
-      })[key] ?? key;
+      return (
+        {
+          "multiAgent.card.runTitle": "Multi-agent collab",
+          "multiAgent.status.implementing": "Implementing",
+          "multiAgent.status.awaiting-approval": "Awaiting approval",
+          "multiAgent.stageStatus.running": "Streaming…",
+          "multiAgent.actions.stop": "Stop",
+          "multiAgent.actions.stopping": "Stopping…",
+          "multiAgent.errors.stopFailedTitle": "Stop failed",
+          "multiAgent.bridge.retry": "Retry",
+          "multiAgent.bridge.retrying": "Retrying…",
+          "multiAgent.bridge.retryFailed": "Retry failed",
+          "multiAgent.bridge.openSession": "Open session",
+          "multiAgent.bridge.viewResult": "View result",
+          "multiAgent.bridge.viewDiff": "View diff",
+          "multiAgent.bridge.resultTitle": "Delegated run result",
+          "multiAgent.bridge.diffTitle": "Delegated run diff",
+          "multiAgent.bridge.close": "Close",
+          "multiAgent.bridge.summary": "Summary",
+          "multiAgent.bridge.error": "Error",
+          "multiAgent.bridge.branch": "Branch",
+          "multiAgent.bridge.artifact": "Artifact",
+          "multiAgent.bridge.changedFiles": "Changed files",
+          "multiAgent.bridge.noResultDetails": "No result details",
+        }[key] ?? key
+      );
     },
   }),
 }));
@@ -39,6 +59,10 @@ vi.mock("../../../services/toasts", () => ({
 
 vi.mock("../hooks/useAgentBridgeRuns", () => ({
   useAgentBridgeRuns: () => mocks.state,
+}));
+
+vi.mock("../store/navigationStore", () => ({
+  requestAgentBridgeThreadOpen: mocks.requestOpen,
 }));
 
 import { AgentBridgeConversationSurface } from "./AgentBridgeConversationSurface";
@@ -67,12 +91,17 @@ function run(id: string, input: Partial<DelegationRun> = {}): DelegationRun {
 describe("AgentBridgeConversationSurface", () => {
   beforeEach(() => {
     mocks.cancelRun.mockReset();
+    mocks.cancelRun.mockResolvedValue(undefined);
+    mocks.retryRun.mockReset();
+    mocks.retryRun.mockResolvedValue(undefined);
+    mocks.requestOpen.mockReset();
     mocks.pushErrorToast.mockReset();
     mocks.state = {
       runs: [run("root"), run("child", { status: "waitingApproval" })],
       loading: false,
       error: null,
       cancellingRunIds: new Set<string>(),
+      retryingRunIds: new Set<string>(),
       activityByRunId: {
         child: {
           inputTokens: 1_000,
@@ -84,6 +113,7 @@ describe("AgentBridgeConversationSurface", () => {
         },
       },
       cancelRun: mocks.cancelRun,
+      retryRun: mocks.retryRun,
     };
   });
 
@@ -113,14 +143,35 @@ describe("AgentBridgeConversationSurface", () => {
         nativeThreadIds={[]}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Stop: Review bridge" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Stop: Review bridge" }),
+    );
     expect(mocks.cancelRun).toHaveBeenCalledWith("child");
   });
 
-  it("hides the sticky projection after all visible runs settle", () => {
+  it("keeps terminal actions available and opens result and diff details", () => {
     mocks.state = {
       ...mocks.state,
-      runs: [run("root", { status: "completed", completedAtMs: 100 })],
+      runs: [
+        run("root", {
+          status: "completed",
+          completedAtMs: 100,
+          dispatchBinding: {
+            backingThreadId: "shared:backing",
+            attemptId: "attempt-1",
+            logicalTurnId: "turn-1",
+            bindingKey: "binding-1",
+            runtimeWorkspaceId: "workspace-runtime",
+          },
+          result: {
+            summary: "Implemented safely",
+            changedFiles: ["src/main.rs"],
+            branch: "agent/run-1",
+            artifactPath: "/tmp/result.md",
+            diff: "+new line",
+          },
+        }),
+      ],
     };
     const { container } = render(
       <AgentBridgeConversationSurface
@@ -129,6 +180,57 @@ describe("AgentBridgeConversationSurface", () => {
         nativeThreadIds={[]}
       />,
     );
-    expect(container.querySelector(".ab-surface")).toBeNull();
+    expect(container.querySelector(".ab-surface--terminal")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open session" }));
+    expect(mocks.requestOpen).toHaveBeenCalledWith(
+      "workspace-runtime",
+      "shared:backing",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View result" }));
+    expect(
+      screen.getByRole("dialog", { name: "Delegated run result" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Implemented safely")).toBeTruthy();
+    expect(screen.getByText("src/main.rs")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "View diff" }));
+    expect(
+      screen.getByRole("dialog", { name: "Delegated run diff" }),
+    ).toBeTruthy();
+    expect(screen.getByText("+new line")).toBeTruthy();
+  });
+
+  it("routes Retry through the hook action", () => {
+    mocks.state = {
+      ...mocks.state,
+      runs: [run("root", { status: "failed", completedAtMs: 100 })],
+    };
+    render(
+      <AgentBridgeConversationSurface
+        workspaceId="workspace-1"
+        threadId="claude:native-source"
+        nativeThreadIds={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.retryRun).toHaveBeenCalledWith("root");
+  });
+
+  it("renders nothing when the current conversation has no delegated runs", () => {
+    mocks.state = {
+      ...mocks.state,
+      runs: [],
+    };
+    const { container } = render(
+      <AgentBridgeConversationSurface
+        workspaceId="workspace-1"
+        threadId="claude:native-source"
+        nativeThreadIds={[]}
+      />,
+    );
+    expect(container.innerHTML).toBe("");
   });
 });

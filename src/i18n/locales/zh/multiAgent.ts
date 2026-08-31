@@ -1,5 +1,22 @@
 export default {
   multiAgent: {
+    bridge: {
+      retry: "重试",
+      retrying: "正在重试…",
+      retryFailed: "重试失败",
+      openSession: "打开会话",
+      viewResult: "查看结果",
+      viewDiff: "查看差异",
+      resultTitle: "委派运行结果",
+      diffTitle: "委派运行差异",
+      close: "关闭",
+      summary: "摘要",
+      error: "错误",
+      branch: "分支",
+      artifact: "产物",
+      changedFiles: "变更文件",
+      noResultDetails: "没有更多结果详情。",
+    },
     entry: {
       label: "协作",
       pill: "协作 · {{name}}",

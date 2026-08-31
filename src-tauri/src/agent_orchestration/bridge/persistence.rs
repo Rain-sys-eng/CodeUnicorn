@@ -105,6 +105,7 @@ mod tests {
             root_run_id: id.to_string(),
             parent_run_id: None,
             continuation_of_run_id: None,
+            retry_of_run_id: None,
             depth: 0,
             source: AgentEndpoint {
                 engine_id: "claude".to_string(),

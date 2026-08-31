@@ -184,6 +184,7 @@ export function normalizeDelegationRun(value: unknown): DelegationRun | null {
     rootRunId,
     parentRunId: optionalString(run.parentRunId),
     continuationOfRunId: optionalString(run.continuationOfRunId),
+    retryOfRunId: optionalString(run.retryOfRunId),
     depth,
     source,
     target,
@@ -239,6 +240,17 @@ export async function cancelAgentBridgeRun(
   runId: string,
 ): Promise<DelegationRun> {
   const payload = await invoke<unknown>("agent_bridge_cancel_run", {
+    workspaceId,
+    runId,
+  });
+  return requireDelegationRun(payload);
+}
+
+export async function retryAgentBridgeRun(
+  workspaceId: string,
+  runId: string,
+): Promise<DelegationRun> {
+  const payload = await invoke<unknown>("agent_bridge_retry_run", {
     workspaceId,
     runId,
   });

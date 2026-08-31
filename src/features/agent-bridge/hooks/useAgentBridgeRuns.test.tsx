@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   get: vi.fn(),
   list: vi.fn(),
+  retry: vi.fn(),
   subscribe: vi.fn(),
   unsubscribe: vi.fn(),
   listener: null as ((event: AgentBridgeRuntimeEvent) => void) | null,
@@ -18,6 +19,7 @@ vi.mock("../../../services/tauri/agentBridge", () => ({
   cancelAgentBridgeRun: mocks.cancel,
   getAgentBridgeRun: mocks.get,
   listAgentBridgeWorkspaceRuns: mocks.list,
+  retryAgentBridgeRun: mocks.retry,
 }));
 
 vi.mock("../../../services/events", () => ({
@@ -52,7 +54,9 @@ function run(id: string, input: Partial<DelegationRun> = {}): DelegationRun {
   };
 }
 
-function event(input: Partial<AgentBridgeRuntimeEvent>): AgentBridgeRuntimeEvent {
+function event(
+  input: Partial<AgentBridgeRuntimeEvent>,
+): AgentBridgeRuntimeEvent {
   return {
     schemaVersion: "1.0",
     eventId: "event-1",
@@ -74,6 +78,7 @@ describe("useAgentBridgeRuns", () => {
     mocks.cancel.mockReset();
     mocks.get.mockReset();
     mocks.list.mockReset();
+    mocks.retry.mockReset();
     mocks.subscribe.mockReset();
     mocks.unsubscribe.mockReset();
     mocks.listener = null;
@@ -137,7 +142,9 @@ describe("useAgentBridgeRuns", () => {
       depth: 1,
       workspaceId: "workspace-isolated",
     });
-    mocks.list.mockResolvedValueOnce([root]).mockResolvedValueOnce([root, child]);
+    mocks.list
+      .mockResolvedValueOnce([root])
+      .mockResolvedValueOnce([root, child]);
 
     const rendered = renderHook(() =>
       useAgentBridgeRuns({
@@ -194,5 +201,67 @@ describe("useAgentBridgeRuns", () => {
     });
     expect(mocks.cancel).toHaveBeenCalledWith("workspace-1", root.id);
     expect(rendered.result.current.runs[0]?.status).toBe("cancelled");
+  });
+
+  it("adds the fresh immutable run returned by Retry", async () => {
+    const failed = run("root", { status: "failed", completedAtMs: 50 });
+    const retried = run("retry", {
+      rootRunId: failed.rootRunId,
+      retryOfRunId: failed.id,
+      status: "running",
+      createdAtMs: 60,
+    });
+    mocks.list.mockResolvedValue([failed]);
+    mocks.retry.mockResolvedValue(retried);
+    const rendered = renderHook(() =>
+      useAgentBridgeRuns({
+        workspaceId: "workspace-1",
+        threadId: "claude:native-source",
+        nativeThreadIds: [],
+      }),
+    );
+    await waitFor(() => expect(rendered.result.current.runs).toHaveLength(1));
+    await act(async () => {
+      await rendered.result.current.retryRun(failed.id);
+    });
+    expect(mocks.retry).toHaveBeenCalledWith("workspace-1", failed.id);
+    expect(rendered.result.current.runs.map((item) => item.id)).toEqual([
+      failed.id,
+      retried.id,
+    ]);
+  });
+
+  it("re-lists durable identity when Retry dispatch returns an error", async () => {
+    const failed = run("root", { status: "failed", completedAtMs: 50 });
+    const created = run("retry", {
+      rootRunId: failed.rootRunId,
+      retryOfRunId: failed.id,
+      status: "queued",
+      createdAtMs: 60,
+    });
+    mocks.list
+      .mockResolvedValueOnce([failed])
+      .mockResolvedValueOnce([failed, created]);
+    mocks.retry.mockRejectedValue(
+      new Error("dispatch failed after creating runId=retry"),
+    );
+    const rendered = renderHook(() =>
+      useAgentBridgeRuns({
+        workspaceId: "workspace-1",
+        threadId: "claude:native-source",
+        nativeThreadIds: [],
+      }),
+    );
+    await waitFor(() => expect(rendered.result.current.runs).toHaveLength(1));
+
+    await act(async () => {
+      await expect(rendered.result.current.retryRun(failed.id)).rejects.toThrow(
+        "runId=retry",
+      );
+    });
+    expect(rendered.result.current.runs.map((item) => item.id)).toEqual([
+      failed.id,
+      created.id,
+    ]);
   });
 });

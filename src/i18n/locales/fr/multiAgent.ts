@@ -1,5 +1,22 @@
 export default {
   "multiAgent": {
+    "bridge": {
+      "retry": "Réessayer",
+      "retrying": "Nouvelle tentative…",
+      "retryFailed": "Échec de la nouvelle tentative",
+      "openSession": "Ouvrir la session",
+      "viewResult": "Voir le résultat",
+      "viewDiff": "Voir les différences",
+      "resultTitle": "Résultat de l’exécution déléguée",
+      "diffTitle": "Différences de l’exécution déléguée",
+      "close": "Fermer",
+      "summary": "Résumé",
+      "error": "Erreur",
+      "branch": "Branche",
+      "artifact": "Artefact",
+      "changedFiles": "Fichiers modifiés",
+      "noResultDetails": "Aucun détail de résultat supplémentaire n’est disponible."
+    },
     "entry": {
       "label": "Collab",
       "pill": "Collab · {{name}}",

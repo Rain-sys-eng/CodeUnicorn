@@ -155,6 +155,10 @@ pub struct DelegationRun {
     /// session, while parentRunId means the target Agent itself delegated another Agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation_of_run_id: Option<String>,
+    /// A user-requested retry always creates a fresh immutable run. This lineage is separate from
+    /// both nested delegation and same-session continuation, and never reuses runtime ownership.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_of_run_id: Option<String>,
     pub depth: u16,
     pub source: AgentEndpoint,
     pub target: AgentEndpoint,

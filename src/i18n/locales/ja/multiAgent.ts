@@ -1,5 +1,22 @@
 export default {
   "multiAgent": {
+    "bridge": {
+      "retry": "再試行",
+      "retrying": "再試行中…",
+      "retryFailed": "再試行に失敗しました",
+      "openSession": "セッションを開く",
+      "viewResult": "結果を表示",
+      "viewDiff": "差分を表示",
+      "resultTitle": "委任実行の結果",
+      "diffTitle": "委任実行の差分",
+      "close": "閉じる",
+      "summary": "概要",
+      "error": "エラー",
+      "branch": "ブランチ",
+      "artifact": "成果物",
+      "changedFiles": "変更されたファイル",
+      "noResultDetails": "追加の結果詳細はありません。"
+    },
     "entry": {
       "label": "コラボ",
       "pill": "コラボ · {{name}}",

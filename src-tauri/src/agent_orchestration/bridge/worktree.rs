@@ -226,6 +226,7 @@ mod tests {
             root_run_id: "run-1".to_string(),
             parent_run_id: None,
             continuation_of_run_id: None,
+            retry_of_run_id: None,
             depth: 0,
             source: super::super::models::AgentEndpoint {
                 engine_id: "claude".to_string(),

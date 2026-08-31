@@ -38,6 +38,18 @@ pub(crate) async fn agent_bridge_cancel_run(
     state.cancel_delegation_run(&run_id, &app).await
 }
 
+#[tauri::command]
+pub(crate) async fn agent_bridge_retry_run(
+    workspace_id: String,
+    run_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<DelegationRun, String> {
+    require_workspace(&workspace_id, state.inner()).await?;
+    let _ = require_visible_run(state.inner(), &workspace_id, &run_id)?;
+    state.retry_delegation_run(&run_id, &app).await
+}
+
 async fn require_workspace(workspace_id: &str, state: &AppState) -> Result<(), String> {
     let workspace_id = workspace_id.trim();
     if workspace_id.is_empty() {

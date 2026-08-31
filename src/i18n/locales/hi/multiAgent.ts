@@ -1,5 +1,22 @@
 export default {
   "multiAgent": {
+    "bridge": {
+      "retry": "फिर से प्रयास करें",
+      "retrying": "फिर से प्रयास जारी…",
+      "retryFailed": "फिर से प्रयास विफल",
+      "openSession": "सेशन खोलें",
+      "viewResult": "परिणाम देखें",
+      "viewDiff": "अंतर देखें",
+      "resultTitle": "सौंपे गए रन का परिणाम",
+      "diffTitle": "सौंपे गए रन का अंतर",
+      "close": "बंद करें",
+      "summary": "सारांश",
+      "error": "त्रुटि",
+      "branch": "ब्रांच",
+      "artifact": "आर्टिफैक्ट",
+      "changedFiles": "बदली गई फ़ाइलें",
+      "noResultDetails": "कोई अतिरिक्त परिणाम विवरण उपलब्ध नहीं है।"
+    },
     "entry": {
       "label": "Collab",
       "pill": "Collab · {{name}}",

@@ -8,6 +8,7 @@ import {
   cancelAgentBridgeRun,
   getAgentBridgeRun,
   listAgentBridgeWorkspaceRuns,
+  retryAgentBridgeRun,
 } from "../../../services/tauri/agentBridge";
 import type { DelegationRun } from "../types";
 import { selectVisibleDelegationRuns } from "../utils/delegationProjection";
@@ -34,8 +35,10 @@ export type AgentBridgeRunsState = {
   loading: boolean;
   error: string | null;
   cancellingRunIds: ReadonlySet<string>;
+  retryingRunIds: ReadonlySet<string>;
   activityByRunId: Readonly<Record<string, DelegationLiveActivity>>;
   cancelRun: (runId: string) => Promise<void>;
+  retryRun: (runId: string) => Promise<void>;
 };
 
 function errorMessage(error: unknown): string {
@@ -60,6 +63,9 @@ export function useAgentBridgeRuns({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancellingRunIds, setCancellingRunIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [retryingRunIds, setRetryingRunIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   const [activityByRunId, setActivityByRunId] = useState<
@@ -234,13 +240,37 @@ export function useAgentBridgeRuns({
     },
     [cancellingRunIds, commitRun, workspaceId],
   );
+  const retryRun = useCallback(
+    async (runId: string) => {
+      if (!workspaceId || retryingRunIds.has(runId)) {
+        return;
+      }
+      setRetryingRunIds((current) => new Set(current).add(runId));
+      try {
+        const run = await retryAgentBridgeRun(workspaceId, runId);
+        commitRun(run);
+        setError(null);
+      } catch (retryError) {
+        // Dispatch errors still carry a durable created runId. Re-list through the authorized
+        // workspace boundary so a missing settlement cannot make that identity disappear in UI.
+        try {
+          commitRuns(await listAgentBridgeWorkspaceRuns(workspaceId));
+        } catch {
+          // Preserve the original retry error; the normal event/list refresh remains available.
+        }
+        throw new Error(errorMessage(retryError));
+      } finally {
+        setRetryingRunIds((current) => {
+          const next = new Set(current);
+          next.delete(runId);
+          return next;
+        });
+      }
+    },
+    [commitRun, commitRuns, retryingRunIds, workspaceId],
+  );
   const visibleRuns = useMemo(
-    () =>
-      selectVisibleDelegationRuns(
-        workspaceRuns,
-        threadId,
-        nativeThreadIds,
-      ),
+    () => selectVisibleDelegationRuns(workspaceRuns, threadId, nativeThreadIds),
     [nativeThreadIds, threadId, workspaceRuns],
   );
 
@@ -249,7 +279,9 @@ export function useAgentBridgeRuns({
     loading,
     error,
     cancellingRunIds,
+    retryingRunIds,
     activityByRunId,
     cancelRun,
+    retryRun,
   };
 }

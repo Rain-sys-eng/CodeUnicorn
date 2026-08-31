@@ -11,9 +11,7 @@ export type DelegationRunStatus =
 export type DelegationContextPolicy = "explicit" | "portable" | "inherited";
 
 export type DelegationExecutionScope =
-  | "observe"
-  | "sharedWorkspace"
-  | "isolatedWorktree";
+  "observe" | "sharedWorkspace" | "isolatedWorktree";
 
 export type DelegationEndpoint = {
   engineId: string;
@@ -44,6 +42,7 @@ export type DelegationRun = {
   rootRunId: string;
   parentRunId?: string | null;
   continuationOfRunId?: string | null;
+  retryOfRunId?: string | null;
   depth: number;
   source: DelegationEndpoint;
   target: DelegationEndpoint;
@@ -63,5 +62,7 @@ export type DelegationRun = {
 };
 
 export function isDelegationTerminal(status: DelegationRunStatus): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
+  return (
+    status === "completed" || status === "failed" || status === "cancelled"
+  );
 }

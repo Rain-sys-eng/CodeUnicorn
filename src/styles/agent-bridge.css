@@ -3,6 +3,10 @@
   padding-top: 0.35rem;
 }
 
+.ab-surface--terminal {
+  position: relative;
+}
+
 .ab-card {
   margin-bottom: 0;
 }
@@ -13,8 +17,10 @@
 
 .ab-run-row {
   display: grid;
-  grid-template-columns:
-    8px minmax(58px, auto) minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: 8px minmax(58px, auto) minmax(
+      0,
+      1fr
+    ) auto auto auto auto;
   align-items: center;
   gap: 9px;
   min-height: 38px;
@@ -97,11 +103,130 @@
   background: var(--ma-red);
 }
 
-.ab-run-stop {
+.ab-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.ab-run-action {
   min-height: 0;
   padding: 3px 8px;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.ab-dialog-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 48%);
+  backdrop-filter: blur(3px);
+}
+
+.ab-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(760px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid var(--ma-border);
+  border-radius: 12px;
+  background: var(--ma-card, var(--background));
+  box-shadow: 0 24px 70px rgb(0 0 0 / 36%);
+  color: var(--ma-txt);
+}
+
+.ab-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--ma-border);
+}
+
+.ab-dialog-header h2,
+.ab-dialog-header p {
+  margin: 0;
+}
+
+.ab-dialog-header h2 {
+  font-size: 15px;
+}
+
+.ab-dialog-header p {
+  margin-top: 4px;
+  color: var(--ma-muted2);
+  font-size: 12px;
+}
+
+.ab-dialog-close {
+  border: 1px solid var(--ma-border);
+  border-radius: 7px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--ma-txt);
+  cursor: pointer;
+}
+
+.ab-dialog-body {
+  display: grid;
+  gap: 16px;
+  overflow: auto;
+  padding: 18px;
+}
+
+.ab-dialog-body section {
+  display: grid;
+  gap: 6px;
+}
+
+.ab-dialog-body h3,
+.ab-dialog-body p,
+.ab-dialog-body pre,
+.ab-dialog-body ul {
+  margin: 0;
+}
+
+.ab-dialog-body h3 {
+  color: var(--ma-muted2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ab-dialog-summary {
+  white-space: pre-wrap;
+}
+
+.ab-dialog-error,
+.ab-dialog-diff {
+  overflow: auto;
+  font-family: var(--ma-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.ab-dialog-error {
+  color: var(--ma-red);
+}
+
+.ab-dialog-diff {
+  margin: 0;
+  padding: 18px;
+  background: color-mix(in srgb, var(--ma-txt) 4%, transparent);
+  white-space: pre;
+}
+
+.ab-dialog-empty {
+  color: var(--ma-muted2);
 }
 
 @media (max-width: 620px) {
@@ -117,7 +242,7 @@
     display: none;
   }
 
-  .ab-run-stop {
+  .ab-run-actions {
     grid-column: 4;
   }
 

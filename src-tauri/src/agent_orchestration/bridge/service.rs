@@ -127,6 +127,55 @@ impl AgentBridgeService {
         self.runs.create_continuation(previous_run_id, task)
     }
 
+    /// Re-run the same immutable request after an explicit user action. Runtime/session ownership
+    /// is intentionally not reused; only the frozen request and delegation lineage are retained.
+    pub async fn retry_run(
+        &self,
+        previous_run_id: &str,
+        engine_manager: &EngineManager,
+        settings: &AppSettings,
+    ) -> Result<DelegationRun, String> {
+        let previous = self
+            .runs
+            .get(previous_run_id)?
+            .ok_or_else(|| format!("retry source run not found: {previous_run_id}"))?;
+        if !matches!(
+            previous.status,
+            DelegationRunStatus::Failed | DelegationRunStatus::Cancelled
+        ) {
+            return Err(format!(
+                "delegated retry requires a failed or cancelled run: {previous_run_id} is {:?}",
+                previous.status
+            ));
+        }
+        let source_engine = resolve_builtin_engine(&previous.source.engine_id).ok_or_else(|| {
+            format!(
+                "retry source engine is not registered for Agent Bridge: {}",
+                previous.source.engine_id
+            )
+        })?;
+        let target_engine = resolve_builtin_engine(&previous.target.engine_id).ok_or_else(|| {
+            format!(
+                "retry target engine is not registered for Agent Bridge: {}",
+                previous.target.engine_id
+            )
+        })?;
+
+        ensure_engine_enabled(settings, source_engine, "source")?;
+        ensure_engine_enabled(settings, target_engine, "target")?;
+        ensure_delegated_dispatch_supported(target_engine)?;
+        ensure_target_available(engine_manager, settings, target_engine).await?;
+        if previous.target_execution.engine != target_engine {
+            return Err(format!(
+                "retry target execution engine mismatch for {previous_run_id}"
+            ));
+        }
+        validate_resolved_shared_worker_target(&previous.target_execution)
+            .map_err(|error| format!("retry target is no longer executable: {error}"))?;
+
+        self.runs.create_retry(previous_run_id)
+    }
+
     pub fn get_run(&self, run_id: &str) -> Result<Option<DelegationRun>, String> {
         self.runs.get(run_id)
     }
@@ -551,6 +600,41 @@ mod tests {
             continuation.target.native_session_id.as_deref(),
             Some("native-1")
         );
+    }
+
+    #[tokio::test]
+    async fn retry_revalidates_target_and_creates_a_fresh_non_session_run() {
+        let service = AgentBridgeService::new(DelegationRunRegistry::new(Default::default()));
+        let manager = EngineManager::new();
+        cache_installed(&manager, EngineType::Codex).await;
+        let run = service
+            .create_run(
+                request("claude", "codex"),
+                &manager,
+                &AppSettings::default(),
+            )
+            .await
+            .expect("create");
+        service.claim_dispatch(&run.id).expect("claim");
+        service
+            .settle_failed(&run.id, "runtime failed".to_string())
+            .expect("fail");
+
+        let retried = service
+            .retry_run(&run.id, &manager, &AppSettings::default())
+            .await
+            .expect("retry");
+
+        assert_ne!(retried.id, run.id);
+        assert_eq!(
+            retried.retry_of_run_id.as_deref(),
+            Some(run.id.as_str())
+        );
+        assert_eq!(retried.status, DelegationRunStatus::Queued);
+        assert_eq!(retried.target_execution, run.target_execution);
+        assert!(retried.dispatch_binding.is_none());
+        assert!(retried.target.logical_session_id.is_none());
+        assert!(retried.target.native_session_id.is_none());
     }
 
     #[tokio::test]

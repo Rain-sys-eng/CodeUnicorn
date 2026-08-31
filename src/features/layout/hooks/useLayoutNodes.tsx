@@ -140,6 +140,10 @@ import {
   usePiThreadJumpRequest,
 } from "../../pi-session/store/piSessionStore";
 import {
+  consumeAgentBridgeThreadOpen,
+  useAgentBridgeThreadOpenRequest,
+} from "../../agent-bridge/store/navigationStore";
+import {
   buildCompactEmptyNode,
   buildCompactGitBackNode,
   buildDebugPanelNodes,
@@ -503,6 +507,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
   );
   // 树面板「↪ 跳转」请求消费（store 中转，panel 无布局上下文）。
   const piThreadJumpRequest = usePiThreadJumpRequest();
+  const agentBridgeThreadOpenRequest = useAgentBridgeThreadOpenRequest();
   const onSelectThread = options.onSelectThread;
   useEffect(() => {
     if (piThreadJumpRequest) {
@@ -513,6 +518,15 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       consumePiThreadJump();
     }
   }, [piThreadJumpRequest, onSelectThread]);
+  useEffect(() => {
+    if (agentBridgeThreadOpenRequest) {
+      onSelectThread(
+        agentBridgeThreadOpenRequest.workspaceId,
+        agentBridgeThreadOpenRequest.threadId,
+      );
+      consumeAgentBridgeThreadOpen();
+    }
+  }, [agentBridgeThreadOpenRequest, onSelectThread]);
   const rightToolbarVisibleTabs = useMemo(
     () => ({
       // Kill-switched: never show activity entry even if client UI visibility allows it.

@@ -158,6 +158,7 @@ async fn dispatch_claimed_run(
                 "rootRunId": run.root_run_id.clone(),
                 "parentRunId": run.parent_run_id.clone(),
                 "continuationOfRunId": run.continuation_of_run_id.clone(),
+                "retryOfRunId": run.retry_of_run_id.clone(),
                 "bindingOwnerRunId": lane.binding_owner_run_id.clone(),
                 "contextPolicy": run.context_policy,
             }),
@@ -1025,6 +1026,7 @@ mod tests {
             root_run_id: "run-1".to_string(),
             parent_run_id: None,
             continuation_of_run_id: None,
+            retry_of_run_id: None,
             depth: 0,
             source: AgentEndpoint {
                 engine_id: "claude".to_string(),

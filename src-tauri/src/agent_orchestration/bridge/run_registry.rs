@@ -154,6 +154,7 @@ impl DelegationRunRegistry {
             root_run_id,
             parent_run_id: request.parent_run_id,
             continuation_of_run_id: None,
+            retry_of_run_id: None,
             depth,
             source: request.source,
             target: request.target,
@@ -224,6 +225,7 @@ impl DelegationRunRegistry {
             root_run_id: previous.root_run_id.clone(),
             parent_run_id: previous.parent_run_id.clone(),
             continuation_of_run_id: Some(previous.id.clone()),
+            retry_of_run_id: None,
             depth: previous.depth,
             source: previous.source.clone(),
             target: previous.target.clone(),
@@ -231,6 +233,75 @@ impl DelegationRunRegistry {
             workspace_id: previous.workspace_id.clone(),
             task: task.to_string(),
             file_refs: Vec::new(),
+            context_policy: previous.context_policy,
+            execution_scope: previous.execution_scope,
+            status: DelegationRunStatus::Queued,
+            dispatch_binding: None,
+            result: None,
+            error: None,
+            created_at_ms: now_ms(),
+            started_at_ms: None,
+            completed_at_ms: None,
+        };
+        let mut candidate = runs.clone();
+        candidate.insert(id, run.clone());
+        self.commit_candidate(&mut runs, candidate)?;
+        Ok(run)
+    }
+
+    /// Create a fresh attempt for an explicitly retried terminal run without reopening or
+    /// inheriting the previous runtime binding. Root/parent/depth are retained for UI and durable
+    /// ownership projection, even when the original parent has since settled.
+    pub fn create_retry(&self, previous_run_id: &str) -> Result<DelegationRun, String> {
+        let mut runs = self
+            .runs
+            .lock()
+            .map_err(|_| "agent bridge run registry lock poisoned".to_string())?;
+        self.ensure_active_capacity(&runs)?;
+        let previous = runs
+            .get(previous_run_id)
+            .cloned()
+            .ok_or_else(|| format!("retry source run not found: {previous_run_id}"))?;
+        if !matches!(
+            previous.status,
+            DelegationRunStatus::Failed | DelegationRunStatus::Cancelled
+        ) {
+            return Err(format!(
+                "delegated retry requires a failed or cancelled run: {previous_run_id} is {:?}",
+                previous.status
+            ));
+        }
+        if let Some(parent_run_id) = previous.parent_run_id.as_deref() {
+            let child_count = runs
+                .values()
+                .filter(|run| run.parent_run_id.as_deref() == Some(parent_run_id))
+                .count();
+            if child_count >= self.limits.max_children_per_parent {
+                return Err(format!(
+                    "delegated child limit reached for retry parent {parent_run_id}: {}",
+                    self.limits.max_children_per_parent
+                ));
+            }
+        }
+
+        let id = self.next_run_id(&runs);
+        let run = DelegationRun {
+            id: id.clone(),
+            root_run_id: previous.root_run_id.clone(),
+            parent_run_id: previous.parent_run_id.clone(),
+            continuation_of_run_id: None,
+            retry_of_run_id: Some(previous.id.clone()),
+            depth: previous.depth,
+            source: previous.source.clone(),
+            target: super::models::AgentEndpoint {
+                engine_id: previous.target.engine_id.clone(),
+                logical_session_id: None,
+                native_session_id: None,
+            },
+            target_execution: previous.target_execution.clone(),
+            workspace_id: previous.workspace_id.clone(),
+            task: previous.task.clone(),
+            file_refs: previous.file_refs.clone(),
             context_policy: previous.context_policy,
             execution_scope: previous.execution_scope,
             status: DelegationRunStatus::Queued,
@@ -634,6 +705,12 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
         }
     }
     for run in recovered.values() {
+        if run.continuation_of_run_id.is_some() && run.retry_of_run_id.is_some() {
+            return Err(format!(
+                "Agent Bridge durable store run has conflicting continuation/retry lineage: {}",
+                run.id
+            ));
+        }
         validate_recovered_lineage(run, &recovered)?;
         if let Some(binding) = run.dispatch_binding.as_ref() {
             validate_dispatch_binding(run, binding).map_err(|error| {
@@ -674,6 +751,36 @@ fn recovered_map(runs: Vec<DelegationRun>) -> Result<HashMap<String, DelegationR
                 ));
             }
         }
+        if let Some(previous_run_id) = run.retry_of_run_id.as_deref() {
+            let previous = recovered.get(previous_run_id).ok_or_else(|| {
+                format!(
+                    "Agent Bridge durable store retry source is missing: {} -> {previous_run_id}",
+                    run.id
+                )
+            })?;
+            if !matches!(
+                previous.status,
+                DelegationRunStatus::Failed | DelegationRunStatus::Cancelled
+            ) || previous.workspace_id != run.workspace_id
+                || previous.source != run.source
+                || previous.target.engine_id != run.target.engine_id
+                || previous.target_execution != run.target_execution
+                || previous.parent_run_id != run.parent_run_id
+                || previous.root_run_id != run.root_run_id
+                || previous.depth != run.depth
+                || previous.task != run.task
+                || previous.file_refs != run.file_refs
+                || previous.context_policy != run.context_policy
+                || previous.execution_scope != run.execution_scope
+                || run.target.logical_session_id.is_some()
+                || run.target.native_session_id.is_some()
+            {
+                return Err(format!(
+                    "Agent Bridge durable store retry owner mismatch: {} -> {previous_run_id}",
+                    run.id
+                ));
+            }
+        }
     }
     Ok(recovered)
 }
@@ -683,9 +790,9 @@ fn validate_recovered_lineage(
     recovered: &HashMap<String, DelegationRun>,
 ) -> Result<(), String> {
     let Some(parent_run_id) = run.parent_run_id.as_deref() else {
-        // A root continuation intentionally retains the original root identity while keeping no
-        // nested parent. Its continuation owner is validated separately below.
-        if run.continuation_of_run_id.is_some() {
+        // A root continuation/retry intentionally retains the original root identity while
+        // keeping no nested parent. Its immutable source owner is validated separately above.
+        if run.continuation_of_run_id.is_some() || run.retry_of_run_id.is_some() {
             return Ok(());
         }
         if run.depth != 0 || run.root_run_id != run.id {
@@ -1098,6 +1205,69 @@ mod tests {
         assert!(registry
             .transition(&run.id, DelegationRunStatus::Running)
             .is_err());
+    }
+
+    #[test]
+    fn retry_creates_fresh_immutable_run_without_reusing_runtime_identity() {
+        let registry = DelegationRunRegistry::default();
+        let run = registry.create(request(None)).expect("create run");
+        registry.claim_dispatch(&run.id).expect("claim");
+        registry
+            .set_dispatch_binding(
+                &run.id,
+                DelegationDispatchBinding {
+                    backing_thread_id: "shared:retry-source".to_string(),
+                    attempt_id: "attempt-1".to_string(),
+                    logical_turn_id: "turn-1".to_string(),
+                    binding_key: "squad:retry:delegate:codex:default".to_string(),
+                    runtime_workspace_id: Some("workspace-1".to_string()),
+                    native_session_id: Some("native-1".to_string()),
+                    runtime_turn_id: Some("runtime-1".to_string()),
+                    context_transfer: None,
+                },
+            )
+            .expect("bind");
+        registry
+            .settle_failed(&run.id, "failed".to_string())
+            .expect("fail");
+
+        let retried = registry.create_retry(&run.id).expect("retry");
+        let original = registry.get(&run.id).expect("read").expect("original");
+
+        assert_ne!(retried.id, original.id);
+        assert_eq!(original.status, DelegationRunStatus::Failed);
+        assert_eq!(retried.status, DelegationRunStatus::Queued);
+        assert_eq!(
+            retried.retry_of_run_id.as_deref(),
+            Some(original.id.as_str())
+        );
+        assert_eq!(retried.root_run_id, original.root_run_id);
+        assert_eq!(retried.task, original.task);
+        assert!(retried.dispatch_binding.is_none());
+        assert!(retried.target.logical_session_id.is_none());
+        assert!(retried.target.native_session_id.is_none());
+    }
+
+    #[test]
+    fn retry_rejects_non_retryable_terminal_and_active_states() {
+        let registry = DelegationRunRegistry::default();
+        let queued = registry.create(request(None)).expect("create queued");
+        assert!(registry.create_retry(&queued.id).is_err());
+
+        registry.claim_dispatch(&queued.id).expect("claim");
+        registry
+            .settle_completed(
+                &queued.id,
+                DelegationResult {
+                    summary: Some("done".to_string()),
+                    changed_files: Vec::new(),
+                    branch: None,
+                    diff: None,
+                    artifact_path: None,
+                },
+            )
+            .expect("complete");
+        assert!(registry.create_retry(&queued.id).is_err());
     }
 
     #[test]

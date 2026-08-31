@@ -1,5 +1,22 @@
 export default {
   "multiAgent": {
+    "bridge": {
+      "retry": "다시 시도",
+      "retrying": "다시 시도 중…",
+      "retryFailed": "다시 시도 실패",
+      "openSession": "세션 열기",
+      "viewResult": "결과 보기",
+      "viewDiff": "차이 보기",
+      "resultTitle": "위임 실행 결과",
+      "diffTitle": "위임 실행 차이",
+      "close": "닫기",
+      "summary": "요약",
+      "error": "오류",
+      "branch": "브랜치",
+      "artifact": "산출물",
+      "changedFiles": "변경된 파일",
+      "noResultDetails": "추가 결과 세부 정보가 없습니다."
+    },
     "entry": {
       "label": "협업",
       "pill": "협업 · {{name}}",

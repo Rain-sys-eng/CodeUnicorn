@@ -180,11 +180,15 @@ Parallel / DAG 继续位于既有 `agent_orchestration` domain。graph registry 
 
 ### 15. Collaboration UI 使用 workspace projection + existing event bus adapter
 
-Renderer 不直接读取 hidden backing Shared Session。Backend 提供 workspace-scoped durable run list/get/cancel commands：source workspace 可查看同一 root lineage 下的 isolated descendants，isolated runtime workspace 也只能查看自身 runtime-owned lineage；其他 workspace fail closed。UI cancel 继续进入 `AppState::cancel_delegation_run`，不新增 control path。
+Renderer 不直接读取 hidden backing Shared Session。Backend 提供 workspace-scoped durable run list/get/cancel/retry commands：source workspace 可查看同一 root lineage 下的 isolated descendants，isolated runtime workspace 也只能查看自身 runtime-owned lineage；其他 workspace fail closed。UI cancel 继续进入 `AppState::cancel_delegation_run`，不新增 control path。Retry 仅接受 Failed/Cancelled source，创建带独立 `retryOfRunId` 的 immutable run，复用 frozen request/target snapshot 但清空旧 backing/native/runtime owner；AppState 在重新验证 workspace、engine gate、target availability 后才允许 existing dispatcher claim 新 run。dispatch 已产生 durable terminal settlement 时返回该新 run identity，settlement 缺失时错误显式携带新 runId。
 
 Live presentation 由 process-wide observer 订阅 existing `AgentEventBus`，仅在 `runId` 能被 durable Agent Bridge registry 确认时转发 `agent-bridge-event`。该 adapter 不是第二套 event bus，也不持久化 delta；frontend event hub 只在存在局部 subscriber 时监听。Queued/local cancellation 也通过 existing bus 发布一次 deduplicated `run.settled(cancelled)`，从而同时唤醒 DAG 与 UI。
 
 聊天列中的 Bridge surface 使用 feature-local hook：先通过 workspace list command hydrate durable runs，再用当前 canvas 的 logical thread + active native thread identities 匹配 root source ownership；descendant 不自行声明可见性，而是随已匹配 root lineage 展示，因此 isolated runtime workspace 不会把 child 从 source 对话中割裂。renderer 收到 known run 的 lifecycle/control fact 后只做去重的 exact get refresh；unknown critical run（包括刚启动的 isolated child）触发一次 bounded workspace re-list。canonical `usage.updated` / `tool.started` / `tool.completed` 只归并到 card-local、最多 64-run 的 token totals + latest tool state；heartbeat 不触发 durable read。`delta` lane 不写 React state，elapsed 的低频本地 timer 与 event listener 都由卡片 effect cleanup。WaitingApproval 只显示 durable 状态，不复制 Approve/Reject control owner；Stop 继续调用 backend workspace-scoped cancel command。
+
+Terminal card 保留 Retry/Open Session/View Result/View Diff 操作。Result/Diff dialog 只读取 durable `DelegationResult`/error，不解析 hidden transcript 或 CLI output。Open Session 是显式用户动作：feature-local navigation request 由 existing layout thread-selection owner 消费，使用 exact `runtimeWorkspaceId ?? workspaceId` + `backingThreadId`；不把 handler/state 加进 AppShell root，也不取消 ordinary Shared Session UI 对 backing session 的过滤。
+
+Bridge surface 与 existing Multi-Agent V1 surface 在 ConversationHost 中并列组合，不替换 messages/composer/inspector owner。当前 conversation 没有 visible delegated run 时 Bridge 返回 null，因此 Single Agent 路径不增加卡片、锁或 runtime side effect；V1 surface 的 projection/approval 行为保持原 owner。
 
 ## Safety Guards
 

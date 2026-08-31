@@ -6,6 +6,7 @@ import {
   getAgentBridgeRun,
   listAgentBridgeWorkspaceRuns,
   normalizeDelegationRun,
+  retryAgentBridgeRun,
 } from "./agentBridge";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -45,7 +46,12 @@ describe("Agent Bridge Tauri service", () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce([run])
       .mockResolvedValueOnce(run)
-      .mockResolvedValueOnce({ ...run, status: "cancelled" });
+      .mockResolvedValueOnce({ ...run, status: "cancelled" })
+      .mockResolvedValueOnce({
+        ...run,
+        id: "delegate-2",
+        retryOfRunId: "delegate-1",
+      });
     await listAgentBridgeWorkspaceRuns("workspace-1");
     expect(invoke).toHaveBeenLastCalledWith(
       "agent_bridge_list_workspace_runs",
@@ -60,6 +66,12 @@ describe("Agent Bridge Tauri service", () => {
 
     await cancelAgentBridgeRun("workspace-1", "delegate-1");
     expect(invoke).toHaveBeenLastCalledWith("agent_bridge_cancel_run", {
+      workspaceId: "workspace-1",
+      runId: "delegate-1",
+    });
+
+    await retryAgentBridgeRun("workspace-1", "delegate-1");
+    expect(invoke).toHaveBeenLastCalledWith("agent_bridge_retry_run", {
       workspaceId: "workspace-1",
       runId: "delegate-1",
     });
@@ -79,7 +91,9 @@ describe("Agent Bridge Tauri service", () => {
       }),
     );
     expect(normalizeDelegationRun({ ...run, status: "invented" })).toBeNull();
-    expect(normalizeDelegationRun({ ...run, targetExecution: null })).toBeNull();
+    expect(
+      normalizeDelegationRun({ ...run, targetExecution: null }),
+    ).toBeNull();
   });
 
   it("fails closed when a command returns a malformed run", async () => {

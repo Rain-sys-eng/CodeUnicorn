@@ -115,6 +115,47 @@ impl AppState {
             .await
     }
 
+    pub(crate) async fn retry_delegation_run(
+        &self,
+        previous_run_id: &str,
+        app: &AppHandle,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        let previous = self
+            .agent_bridge
+            .get_run(previous_run_id)?
+            .ok_or_else(|| format!("retry source run not found: {previous_run_id}"))?;
+        if !self
+            .workspaces
+            .lock()
+            .await
+            .contains_key(&previous.workspace_id)
+        {
+            return Err(format!(
+                "workspace not found for Agent Bridge retry: {}",
+                previous.workspace_id
+            ));
+        }
+        let settings = self.app_settings.lock().await.clone();
+        let run = self
+            .agent_bridge
+            .retry_run(previous_run_id, &self.engine_manager, &settings)
+            .await?;
+        match self.dispatch_delegation_run(&run.id, app).await {
+            Ok(dispatched) => Ok(dispatched),
+            Err(dispatch_error) => match self.agent_bridge.get_run(&run.id)? {
+                Some(durable) if durable.status.is_terminal() => Ok(durable),
+                Some(durable) => Err(format!(
+                    "Agent Bridge retry dispatch failed after creating runId={}; durable status={:?}; {dispatch_error}",
+                    run.id, durable.status
+                )),
+                None => Err(format!(
+                    "Agent Bridge retry dispatch failed after creating runId={}, but the durable run disappeared; {dispatch_error}",
+                    run.id
+                )),
+            },
+        }
+    }
+
     pub(crate) async fn cancel_delegation_run(
         &self,
         run_id: &str,
