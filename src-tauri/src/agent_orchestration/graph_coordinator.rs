@@ -9,8 +9,8 @@ use super::bridge::{AgentEndpoint, DelegationRun, DelegationRunStatus};
 use super::graph::AgentGraphPlan;
 use super::graph_store::{AgentGraphRegistry, DurableAgentGraphRun};
 use super::scheduler::{
-    dispatch_prepared_batch, prepare_ready_batch, AgentGraphBridgeBackend,
-    AgentGraphDispatchBatch, AgentGraphExecution, AppStateGraphBackend,
+    dispatch_prepared_batch, prepare_ready_batch, AgentGraphBridgeBackend, AgentGraphDispatchBatch,
+    AgentGraphExecution, AppStateGraphBackend,
 };
 
 /// Durable coordinator for Bridge-backed DAG execution.
@@ -136,12 +136,9 @@ impl AgentGraphCoordinator {
                 Ok(batch)
             }
             Err(error) => {
-                let current = self
-                    .registry
-                    .get(&graph_id)?
-                    .ok_or_else(|| {
-                        format!("orchestration graph disappeared during recovery: {graph_id}")
-                    })?;
+                let current = self.registry.get(&graph_id)?.ok_or_else(|| {
+                    format!("orchestration graph disappeared during recovery: {graph_id}")
+                })?;
                 let mut recovered = current.execution;
                 let _ = recovered.reconcile(backend);
                 let recovered_graph_id = recovered.graph_id.clone();
@@ -247,7 +244,10 @@ mod tests {
         ) -> super::super::scheduler::AgentGraphBackendFuture<'_, DelegationRun> {
             Box::pin(async move {
                 request.validate()?;
-                let mut runs = self.runs.lock().map_err(|_| "runs lock poisoned".to_string())?;
+                let mut runs = self
+                    .runs
+                    .lock()
+                    .map_err(|_| "runs lock poisoned".to_string())?;
                 let run_id = format!("fake-run-{}", runs.len() + 1);
                 let run = DelegationRun {
                     id: run_id.clone(),
@@ -295,7 +295,10 @@ mod tests {
             run_id: String,
         ) -> super::super::scheduler::AgentGraphBackendFuture<'_, DelegationRun> {
             Box::pin(async move {
-                let mut runs = self.runs.lock().map_err(|_| "runs lock poisoned".to_string())?;
+                let mut runs = self
+                    .runs
+                    .lock()
+                    .map_err(|_| "runs lock poisoned".to_string())?;
                 let run = runs
                     .get_mut(&run_id)
                     .ok_or_else(|| format!("run not found: {run_id}"))?;
@@ -369,12 +372,8 @@ mod tests {
     fn coordinator_can_persist_graph_identity_before_runtime_is_available() {
         let coordinator = AgentGraphCoordinator::volatile();
         let plan = plan();
-        let (_, execution) = AgentGraphExecution::new(
-            &plan,
-            "workspace-1".to_string(),
-            source(),
-        )
-        .expect("execution");
+        let (_, execution) = AgentGraphExecution::new(&plan, "workspace-1".to_string(), source())
+            .expect("execution");
         coordinator
             .registry
             .create(DurableAgentGraphRun::new(plan, execution).expect("record"))
@@ -388,12 +387,7 @@ mod tests {
         let backend = FakeGraphBridgeBackend::default();
 
         let initial = coordinator
-            .start_with_backend(
-                fanout_plan(),
-                "workspace-1".to_string(),
-                source(),
-                &backend,
-            )
+            .start_with_backend(fanout_plan(), "workspace-1".to_string(), source(), &backend)
             .await
             .expect("start graph");
         assert_eq!(initial.dispatched.len(), 1);
@@ -423,7 +417,10 @@ mod tests {
             .clone()
             .expect("fan-b run");
         assert_ne!(fan_a, fan_b);
-        assert_eq!(backend.created_tasks(), vec!["task-root", "task-fan-a", "task-fan-b"]);
+        assert_eq!(
+            backend.created_tasks(),
+            vec!["task-root", "task-fan-a", "task-fan-b"]
+        );
 
         backend.settle(&fan_a, DelegationRunStatus::Completed);
         backend.settle(&fan_b, DelegationRunStatus::Completed);

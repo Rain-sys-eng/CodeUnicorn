@@ -644,7 +644,6 @@ pub enum EngineType {
     Qoder,
 }
 
-
 impl EngineType {
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -1034,7 +1033,6 @@ pub struct SendMessageParams {
     pub collaboration_mode: Option<Value>,
     pub custom_spec_root: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

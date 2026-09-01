@@ -52,12 +52,9 @@ pub(crate) async fn call_codex_tool(
         .get()
         .ok_or_else(|| "Agent Bridge MCP runtime is not initialized".to_string())?;
     let state = app.state::<crate::state::AppState>();
-    let source = super::mcp_source::resolve_codex_mcp_source(
-        &state.sessions,
-        workspace_id,
-        runtime_locator,
-    )
-    .await?;
+    let source =
+        super::mcp_source::resolve_codex_mcp_source(&state.sessions, workspace_id, runtime_locator)
+            .await?;
     mcp_gateway::call_tool(app, workspace_id, source, tool_name, arguments).await
 }
 

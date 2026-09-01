@@ -94,14 +94,10 @@ pub async fn resolve_claude_mcp_source(
         .get_session_by_locator(workspace_id, runtime_locator)
         .await
         .ok_or_else(|| {
-            format!(
-                "Agent Bridge MCP source runtime is not active for workspace {workspace_id}"
-            )
+            format!("Agent Bridge MCP source runtime is not active for workspace {workspace_id}")
         })?;
     let runtime_turn_id = session.mcp_active_turn_id().ok_or_else(|| {
-        format!(
-            "Agent Bridge MCP source runtime has no active turn for workspace {workspace_id}"
-        )
+        format!("Agent Bridge MCP source runtime has no active turn for workspace {workspace_id}")
     })?;
 
     resolve_trusted_runtime_binding(TrustedMcpRuntimeBinding {
@@ -152,25 +148,20 @@ pub async fn resolve_codex_mcp_source(
         match matches.as_slice() {
             [] => None,
             [session] => Some(Arc::clone(session)),
-            _ => {
-                return Err(format!(
-                    "Agent Bridge MCP Codex runtime locator is ambiguous for workspace {workspace_id}"
-                ))
-            }
+            _ => return Err(format!(
+                "Agent Bridge MCP Codex runtime locator is ambiguous for workspace {workspace_id}"
+            )),
         }
     }
     .ok_or_else(|| {
         format!("Agent Bridge MCP Codex source runtime is not active for workspace {workspace_id}")
     })?;
 
-    let (thread_id, runtime_turn_id) = session
-        .mcp_active_turn_owner()
-        .await?
-        .ok_or_else(|| {
-            format!(
-                "Agent Bridge MCP Codex source runtime has no active turn for workspace {workspace_id}"
-            )
-        })?;
+    let (thread_id, runtime_turn_id) = session.mcp_active_turn_owner().await?.ok_or_else(|| {
+        format!(
+            "Agent Bridge MCP Codex source runtime has no active turn for workspace {workspace_id}"
+        )
+    })?;
 
     resolve_trusted_runtime_binding(TrustedMcpRuntimeBinding {
         engine_id: "codex".to_string(),
@@ -261,7 +252,10 @@ mod tests {
             source.endpoint.logical_session_id.as_deref(),
             Some("runtime:codex:workspace-1")
         );
-        assert_eq!(source.endpoint.native_session_id.as_deref(), Some("thread-1"));
+        assert_eq!(
+            source.endpoint.native_session_id.as_deref(),
+            Some("thread-1")
+        );
         assert_eq!(source.runtime_turn_id, "turn-1");
     }
 
@@ -289,26 +283,20 @@ mod tests {
     #[tokio::test]
     async fn opaque_runtime_locator_must_resolve_to_live_session() {
         let manager = ClaudeSessionManager::new();
-        let error = resolve_claude_mcp_source(
-            &manager,
-            "workspace-1",
-            Some("attacker-supplied-locator"),
-        )
-        .await
-        .expect_err("unknown locator must fail closed");
+        let error =
+            resolve_claude_mcp_source(&manager, "workspace-1", Some("attacker-supplied-locator"))
+                .await
+                .expect_err("unknown locator must fail closed");
         assert!(error.contains("source runtime is not active"));
     }
 
     #[tokio::test]
     async fn unknown_qoder_runtime_locator_is_rejected() {
         let manager = EngineManager::new();
-        let error = resolve_qoder_mcp_source(
-            &manager,
-            "workspace-1",
-            Some("attacker-supplied-locator"),
-        )
-        .await
-        .expect_err("unknown Qoder locator must fail closed");
+        let error =
+            resolve_qoder_mcp_source(&manager, "workspace-1", Some("attacker-supplied-locator"))
+                .await
+                .expect_err("unknown Qoder locator must fail closed");
         assert!(error.contains("Qoder source runtime is not active"));
     }
 
@@ -319,13 +307,10 @@ mod tests {
         let session = manager
             .get_or_create_session("workspace-1", &workspace_path)
             .await;
-        let error = resolve_claude_mcp_source(
-            &manager,
-            "workspace-1",
-            Some(session.runtime_locator()),
-        )
-        .await
-        .expect_err("idle runtime must not mint a Bridge source");
+        let error =
+            resolve_claude_mcp_source(&manager, "workspace-1", Some(session.runtime_locator()))
+                .await
+                .expect_err("idle runtime must not mint a Bridge source");
         assert!(error.contains("no active turn"));
     }
 
@@ -341,13 +326,10 @@ mod tests {
             .await;
         session.set_mcp_active_turn_for_test(Some("runtime-turn-1"));
 
-        let source = resolve_claude_mcp_source(
-            &manager,
-            "workspace-1",
-            Some(session.runtime_locator()),
-        )
-        .await
-        .expect("live source");
+        let source =
+            resolve_claude_mcp_source(&manager, "workspace-1", Some(session.runtime_locator()))
+                .await
+                .expect("live source");
 
         assert_eq!(source.endpoint.engine_id, "claude");
         assert_eq!(
@@ -366,10 +348,10 @@ mod tests {
         let sessions = Mutex::new(HashMap::new());
         let session = crate::backend::app_server::make_test_workspace_session("workspace-1").await;
         let locator = session.mcp_runtime_locator().to_string();
-        sessions
-            .lock()
-            .await
-            .insert("codex::workspace-1::__disk__".to_string(), Arc::clone(&session));
+        sessions.lock().await.insert(
+            "codex::workspace-1::__disk__".to_string(),
+            Arc::clone(&session),
+        );
 
         let idle_error = resolve_codex_mcp_source(&sessions, "workspace-1", Some(&locator))
             .await
@@ -383,17 +365,22 @@ mod tests {
             .await
             .expect("unique live Codex turn");
         assert_eq!(source.endpoint.engine_id, "codex");
-        assert_eq!(source.endpoint.logical_session_id.as_deref(), Some("thread-1"));
-        assert_eq!(source.endpoint.native_session_id.as_deref(), Some("thread-1"));
+        assert_eq!(
+            source.endpoint.logical_session_id.as_deref(),
+            Some("thread-1")
+        );
+        assert_eq!(
+            source.endpoint.native_session_id.as_deref(),
+            Some("thread-1")
+        );
         assert_eq!(source.runtime_turn_id, "turn-1");
 
         session
             .set_mcp_active_turn_for_test("thread-2", Some("turn-2"))
             .await;
-        let ambiguous_error =
-            resolve_codex_mcp_source(&sessions, "workspace-1", Some(&locator))
-                .await
-                .expect_err("concurrent Codex turns must not guess the caller");
+        let ambiguous_error = resolve_codex_mcp_source(&sessions, "workspace-1", Some(&locator))
+            .await
+            .expect_err("concurrent Codex turns must not guess the caller");
         assert!(ambiguous_error.contains("ambiguous active turn ownership"));
 
         crate::backend::app_server::dispose_test_workspace_session(&session).await;
@@ -406,10 +393,10 @@ mod tests {
         session
             .set_mcp_active_turn_for_test("thread-1", Some("turn-1"))
             .await;
-        sessions
-            .lock()
-            .await
-            .insert("codex::workspace-1::__disk__".to_string(), Arc::clone(&session));
+        sessions.lock().await.insert(
+            "codex::workspace-1::__disk__".to_string(),
+            Arc::clone(&session),
+        );
 
         let error = resolve_codex_mcp_source(
             &sessions,

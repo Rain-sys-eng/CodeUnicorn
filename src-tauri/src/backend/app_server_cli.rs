@@ -1017,7 +1017,9 @@ pub(crate) fn extract_existing_developer_instructions(args: &[String]) -> Option
         let value_after_flag = |next: Option<&&String>| -> Option<String> {
             let v = next?.as_str();
             if v.starts_with("developer_instructions=") || v.starts_with("instructions=") {
-                Some(decode_toml_string(v.split_once('=').map(|x| x.1).unwrap_or("")))
+                Some(decode_toml_string(
+                    v.split_once('=').map(|x| x.1).unwrap_or(""),
+                ))
             } else {
                 None
             }
@@ -1262,13 +1264,15 @@ pub(crate) fn apply_codex_app_server_args_with_settings_and_runtime_overrides(
     codex_home: Option<&Path>,
     runtime_config_overrides: &[String],
 ) -> Result<(), String> {
-    command.args(build_codex_app_server_args_with_settings_and_runtime_overrides(
-        codex_args,
-        options,
-        app_settings,
-        codex_home,
-        runtime_config_overrides,
-    )?);
+    command.args(
+        build_codex_app_server_args_with_settings_and_runtime_overrides(
+            codex_args,
+            options,
+            app_settings,
+            codex_home,
+            runtime_config_overrides,
+        )?,
+    );
     Ok(())
 }
 

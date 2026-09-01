@@ -1388,10 +1388,7 @@ impl QoderSession {
         let mcp_runtime_locator = uuid::Uuid::new_v4().simple().to_string();
         let managed_mcp_servers = crate::engine::claude::askuser_mcp_global()
             .map(|server| {
-                vec![server.qoder_bridge_mcp_server(
-                    &self.workspace_id,
-                    &mcp_runtime_locator,
-                )]
+                vec![server.qoder_bridge_mcp_server(&self.workspace_id, &mcp_runtime_locator)]
             })
             .unwrap_or_default();
         let prompt_blocks = match assemble_prompt_blocks(

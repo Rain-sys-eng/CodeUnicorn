@@ -532,11 +532,7 @@ async fn handle_mcp_request_for_ingress(
                 };
             }
 
-            McpResponse::Json(rpc_error(
-                id,
-                -32602,
-                &format!("unknown tool: {tool_name}"),
-            ))
+            McpResponse::Json(rpc_error(id, -32602, &format!("unknown tool: {tool_name}")))
         }
         other => McpResponse::Json(rpc_error(id, -32601, &format!("method not found: {other}"))),
     }
@@ -596,8 +592,7 @@ mod tests {
 
     #[test]
     fn codex_bridge_registration_is_runtime_only_and_keeps_token_out_of_argv() {
-        let overrides =
-            server_at(4899).codex_bridge_config_overrides("ws-42", "codex-runtime-a");
+        let overrides = server_at(4899).codex_bridge_config_overrides("ws-42", "codex-runtime-a");
         assert_eq!(overrides.len(), 2);
         assert!(overrides.iter().any(|value| {
             value
@@ -685,9 +680,7 @@ mod tests {
         let bridge_names = tools
             .iter()
             .filter_map(|tool| tool["name"].as_str())
-            .filter(|name| {
-                crate::engine::claude_bridge_mcp::handles_tool(name)
-            })
+            .filter(|name| crate::engine::claude_bridge_mcp::handles_tool(name))
             .collect::<std::collections::HashSet<_>>();
 
         assert_eq!(bridge_names.len(), 7);

@@ -163,8 +163,8 @@ impl<E: EventSink> EventSink for DeferredStartupEventSink<E> {
 pub(crate) use crate::backend::app_server_cli::{
     apply_codex_app_server_args, apply_codex_app_server_args_with_settings,
     apply_codex_app_server_args_with_settings_and_runtime_overrides, build_cli_path_env,
-    build_codex_app_server_args, build_codex_command_from_launch_context, build_codex_command_with_bin,
-    build_codex_path_env, build_engine_environment_diagnosis,
+    build_codex_app_server_args, build_codex_command_from_launch_context,
+    build_codex_command_with_bin, build_codex_path_env, build_engine_environment_diagnosis,
     can_retry_wrapper_compatibility_launch, can_retry_wrapper_launch, check_cli_binary,
     check_codex_installation, classify_endpoint_failure, codex_args_override_instructions,
     codex_external_spec_priority_config_arg, probe_codex_app_server, resolve_codex_launch_context,
@@ -1338,9 +1338,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
         None
     };
     let managed_mcp_overrides = managed_mcp_server
-        .map(|server| {
-            server.codex_bridge_config_overrides(&entry.id, mcp_runtime_locator.as_str())
-        })
+        .map(|server| server.codex_bridge_config_overrides(&entry.id, mcp_runtime_locator.as_str()))
         .unwrap_or_default();
     apply_codex_app_server_args_with_settings_and_runtime_overrides(
         &mut command,

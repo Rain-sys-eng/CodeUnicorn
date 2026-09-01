@@ -7,9 +7,7 @@ use tauri::AppHandle;
 
 use crate::state::AppState;
 
-use super::bridge::{
-    AgentEndpoint, CreateDelegationRun, DelegationRun, DelegationRunStatus,
-};
+use super::bridge::{AgentEndpoint, CreateDelegationRun, DelegationRun, DelegationRunStatus};
 use super::graph::{AgentGraphPlan, ValidatedAgentGraph};
 
 pub(crate) type AgentGraphBackendFuture<'a, T> =
@@ -193,9 +191,8 @@ impl AgentGraphExecution {
             if let Some((dependency, status)) = blocker {
                 if let Some(execution) = self.nodes.get_mut(node_id) {
                     execution.status = AgentGraphNodeStatus::Blocked;
-                    execution.error = Some(format!(
-                        "dependency {dependency} settled as {status:?}"
-                    ));
+                    execution.error =
+                        Some(format!("dependency {dependency} settled as {status:?}"));
                 }
             }
         }
@@ -297,9 +294,12 @@ pub(crate) async fn dispatch_prepared_batch(
         match backend.dispatch_run(run.id.clone()).await {
             Ok(dispatched_run) => dispatched.push(dispatched_run),
             Err(error) => {
-                if let Some(node_execution) = prepared.execution.nodes.values_mut().find(|node| {
-                    node.delegation_run_id.as_deref() == Some(run.id.as_str())
-                }) {
+                if let Some(node_execution) = prepared
+                    .execution
+                    .nodes
+                    .values_mut()
+                    .find(|node| node.delegation_run_id.as_deref() == Some(run.id.as_str()))
+                {
                     node_execution.error = Some(error);
                 }
             }
@@ -328,9 +328,7 @@ fn graph_status_from_delegation(status: DelegationRunStatus) -> AgentGraphNodeSt
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent_orchestration::bridge::{
-        DelegationContextPolicy, DelegationExecutionScope,
-    };
+    use crate::agent_orchestration::bridge::{DelegationContextPolicy, DelegationExecutionScope};
     use crate::agent_orchestration::graph::AgentGraphNode;
 
     fn node(id: &str, dependencies: &[&str]) -> AgentGraphNode {
@@ -363,12 +361,9 @@ mod tests {
                 node("review-b", &["root"]),
             ],
         };
-        let (graph, execution) = AgentGraphExecution::new(
-            &plan,
-            "workspace-1".to_string(),
-            source(),
-        )
-        .expect("execution");
+        let (graph, execution) =
+            AgentGraphExecution::new(&plan, "workspace-1".to_string(), source())
+                .expect("execution");
         assert_eq!(execution.ready_node_ids(&graph), vec!["root"]);
     }
 
@@ -382,12 +377,9 @@ mod tests {
                 node("independent", &[]),
             ],
         };
-        let (graph, mut execution) = AgentGraphExecution::new(
-            &plan,
-            "workspace-1".to_string(),
-            source(),
-        )
-        .expect("execution");
+        let (graph, mut execution) =
+            AgentGraphExecution::new(&plan, "workspace-1".to_string(), source())
+                .expect("execution");
         execution.nodes.get_mut("root").expect("root").status = AgentGraphNodeStatus::Failed;
         execution.block_failed_dependencies(&graph);
 
