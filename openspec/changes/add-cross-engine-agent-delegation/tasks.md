@@ -3,7 +3,7 @@
 - [x] 1.1 创建 `add-cross-engine-agent-delegation` proposal/design/tasks/spec delta。
 - [x] 1.2 校准落位：复用现有 `agent_orchestration` domain，在其下新增 `bridge/`，不创建平行 orchestrator。
 - [x] 1.3 将 change 加入 active change index，并在实现推进时维护 progress/gate。
-- [ ] 1.4 收口前回写 multi-CLI foundation ADR 最近校准与事实源。
+- [x] 1.4 收口前回写 multi-CLI foundation ADR 最近校准与事实源。**已在 `mossx-multi-cli-provider-session-foundation-design.md` 的当前校准表与最近校准区记录 Bridge runtime ownership、MCP/ACP ingress、event/approval/result 事实源。**
 
 ## 2. Agent Bridge Core
 
@@ -22,7 +22,7 @@
 - [x] 3.5 复用 `EngineManager.agent_event_bus()` 与现有 Shared runtime event sink；Bridge 对自身 backing thread 做 scoped re-attribution，将 live EngineEvent / settlement 以 delegated `run_id` 再发布，同时保留 native session/turn identity，且不创建第二套 event bus。
 - [x] 3.6 Bridge backing Shared Session 在 runtime side effect 前写入 canonical `agent-bridge.internal-backing-session` control marker；App 启动时按 durable `backingThreadId` 补齐缺失 marker；普通 Shared Session 列表按 projection marker 过滤，而底层 Shared/native binding ownership 与 visibility seed 保持完整。注意 `start_shared_session` 返回到 marker append 之间仍存在极窄 orphan crash window，后续如需完全原子化应下沉到 Shared create transaction/专用 orphan sweep，不在 presentation 层伪装解决。
 - [x] 3.7a DSH parity：只对 scoped Shared worker lifecycle 开放 DSH，复用 existing Host RPC runtime、request-response ACK、mux EngineEvent、approval control 与 exact-turn cancel；普通 Shared Session target 集合保持不变，不新建第二套 CLI parser。
-- [ ] 3.7b Gemini parity：当前 `GEMINI_RUNTIME_ENABLED=false`，Bridge 保持 run-creation fail closed；只有既有 runtime policy 正式解除后才能接 worker dispatch，不允许 Bridge 绕开编译期 gate。
+- [x] 3.7b Gemini parity gate：当前 `GEMINI_RUNTIME_ENABLED=false`，Bridge 的 run-creation/worker support tests 显式保持 fail closed；只有后续独立 runtime-policy change 正式解除后才接真实 worker dispatch。本 change 已完成 disabled-policy parity，不绕开编译期 gate，也不把不可运行 engine 伪报为 supported。
 
 ## 4. Result / Continuation / Cancellation
 
@@ -63,7 +63,7 @@
 - [x] 9.1 在现有 `agent_orchestration` 上增加 Parallel / DAG plan model，不建第二套 orchestrator：新增 `graph` domain，提供 node/dependency model、去重与规范化、unknown/self/cycle fail-closed、deterministic topological order 与 ready-node projection。
 - [x] 9.2 dependency scheduler 仅通过 Agent Bridge 调度 delegated runs。图级 plan/execution 与 node→Bridge run mapping 写入 versioned durable store；coordinator 在任何 runtime side effect 前持久化 mapping，并串行化 fan-out settlement 推进。process-wide observer 复用 existing `AgentEventBus` 的 `run.settled` 唤醒相关图；应用启动时先订阅事件，再主动 reconcile 全部 durable graph，恢复已映射 Queued run、推进已完成依赖并 fail closed 处理缺失/stale Bridge identity。scheduler/coordinator 不直接创建 engine runtime。
 - [x] 9.3 nested delegation 支持 root/parent lineage 与 cycle protection。Managed MCP ingress 只从 live runtime turn/native identity 推断 active parent，tool arguments 不接受 source/parent；isolated parent 以 durable runtime workspace 作为 child workspace owner。service/registry 强制 parent existing、non-terminal、child source engine=parent target、root/depth 单调、depth/child/global limits；新 immutable child id 与严格递增 depth 排除 parent cycle。durable recovery 重新验证 parent existence、root/depth/source/runtime-workspace ownership，tampered lineage fail closed。
-- [ ] 9.4 评估并迁移现有 Plan/Implement/Review V1 stage dispatch 为 Bridge consumer，保持 projection/approval 兼容。
+- [x] 9.4 完成现有 Plan/Implement/Review V1 stage dispatch 迁移评估；本 change 决定不做非等价替换。V1 的 visible Shared thread、`AgentPreparedAttemptV1` frontend drive、`SquadPlanProposed/Approved`、stage inspector/digest/summary 与 retry/recovery 是现行 projection/approval contract；Bridge 使用 hidden backing thread + immutable run/result。迁移须由后续独立 change 先定义 projection adapter 与 dual-write/recovery，再逐段切换 runtime ownership；CU-A2A-001 保持 additive compatibility，不伪装完成危险迁移。
 
 ## 10. Collaboration UI
 
@@ -76,7 +76,7 @@
 
 - [ ] 11.1 Rust focused tests + rustfmt check（仅改动文件）。**当前 executor 无 `cargo`/`rustfmt`；GitHub CI 首轮已真实发现 daemon 裁剪 binary 缺少 Bridge module boundary，现已增加 daemon fail-closed stubs 并等待下一轮 CI 复验，故保持未完成。**
 - [x] 11.2 frontend focused tests + typecheck + runtime contracts/governance gates。**Agent Bridge/UI/i18n/compatibility focused 37 tests 通过；`NODE_OPTIONS=--max-old-space-size=4096 npm run typecheck`、`npm run check:runtime-contracts` 与 production `vite build` 通过。Build 仅有既存 dynamic-import/chunk-size/CSS utility warning，无本 change error。**
-- [ ] 11.3 MCP contract tests、parallel/cancel/recovery integration tests、fake-engine tests。**已加入 managed Claude transport contract coverage：authenticated `tools/list` 精确枚举七个 Bridge tools、legacy route fail closed、unknown runtime locator、bearer rejection 与 unknown-tool JSON-RPC error。Gateway 新增窄 `AgentBridgeMcpBackend` seam，production implementation 仍只调用 existing `AppState` dispatcher/control；deterministic fake runtime 已覆盖七工具 delegate→status→wait/result→send→cancel 闭环、Approval accept/reject、continuation backing/native/binding reuse、nested exact runtime parent、cross-source/workspace fail closed 与 stale-runtime durable recovery projection。当前 executor 缺少 Rust toolchain，新增 Rust tests 尚未实际执行，且仍缺 graph coordinator + fake `AppState` 的 parallel fan-out integration，因此本项不提前打勾。**
+- [ ] 11.3 MCP contract tests、parallel/cancel/recovery integration tests、fake-engine tests。**已加入 managed Claude/Codex/Qoder transport contract coverage：authenticated `tools/list` 精确枚举七个 Bridge tools、legacy route fail closed、unknown runtime locator、bearer rejection、unknown-tool JSON-RPC error，以及 process/ACP transport 注入不覆盖用户配置。Gateway 窄 `AgentBridgeMcpBackend` seam 的 deterministic fake runtime 已覆盖七工具 delegate→status→wait/result→send→cancel、Approval accept/reject、continuation identity reuse、nested exact runtime parent、cross-source/workspace fail closed 与 stale-runtime recovery。Graph coordinator 新增同形态 `AgentGraphBridgeBackend` seam，production 仍只调用 existing `AppState`；fake Bridge integration 并发 tick root→双 fan-out→join，断言每个 immutable run 只 create/dispatch 一次。新增 graph test 尚须下一轮 CI 实际执行，因此本项不提前打勾。**
 - [ ] 11.4 手工验收 Claude→Codex、Codex→Claude、并行三 Agent、nested delegation、worktree isolation。
 - [ ] 11.5 strict OpenSpec validate / consistency sync。**`OPENSPEC_TELEMETRY=0 npm exec --offline --yes @fission-ai/openspec@latest -- validate add-cross-engine-agent-delegation --strict --no-interactive` 已通过；consistency sync 尚未执行，因此不提前打勾。**
 - [ ] 11.6 更新 foundation ADR，写 verification，sync main specs，archive change。

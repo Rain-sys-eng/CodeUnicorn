@@ -168,7 +168,9 @@ DSH parity 复用同一 Shared V2 worker lifecycle，但不扩大普通 Shared S
 
 ### 12. Existing Multi-Agent V1 后续改为 Bridge consumer
 
-现有 Plan/Implement/Review V1 暂不迁移。Bridge 稳定后，可把 V1 每个 stage dispatch 改为通过 `AgentBridgeService` 发起，从而统一 runtime ownership/observability；迁移必须保持 V1 projection 与用户确认行为兼容。
+本 change 已完成迁移评估，但不在 CU-A2A-001 内改写现有 Plan/Implement/Review V1 dispatch。V1 当前向 renderer 返回 `AgentPreparedAttemptV1`，由 frontend `driveAttempt` 驱动同一 visible Shared thread，并以 `SquadPlanProposed/Approved`、stage live inspector、stage outcome digest 与 summary turn 维持既有 projection/approval contract；Bridge 则创建 hidden backing Shared thread、immutable delegation identity 与独立 durable result。直接替换会改变 visible thread、审批 gate、重试/恢复与 inspector ownership，不是内部 dispatch 等价替换。
+
+因此本 change 保持 V1 为现有 `agent_orchestration` 内的兼容 consumer surface，不创建第二个 orchestrator；待后续独立 migration change 先定义 V1 projection adapter 与 dual-write/recovery contract，再把 stage runtime ownership 逐段切到 Bridge。该决定保持本 change 的 additive rollback 与 10.4 compatibility gate，不把未经验证的迁移伪装成收口工作。
 
 ### 13. Durable facts 与 live deltas 分离
 

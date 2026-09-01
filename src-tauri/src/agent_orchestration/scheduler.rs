@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
 
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -9,6 +11,50 @@ use super::bridge::{
     AgentEndpoint, CreateDelegationRun, DelegationRun, DelegationRunStatus,
 };
 use super::graph::{AgentGraphPlan, ValidatedAgentGraph};
+
+pub(crate) type AgentGraphBackendFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+
+/// Narrow Bridge boundary consumed by durable graph orchestration.
+///
+/// Production delegates to the one `AppState` owner. Tests can provide deterministic Bridge
+/// facts without constructing an engine runtime or teaching the graph layer how to spawn one.
+pub(crate) trait AgentGraphBridgeBackend {
+    fn create_run(
+        &self,
+        request: CreateDelegationRun,
+    ) -> AgentGraphBackendFuture<'_, DelegationRun>;
+    fn dispatch_run(&self, run_id: String) -> AgentGraphBackendFuture<'_, DelegationRun>;
+    fn get_run(&self, run_id: &str) -> Result<Option<DelegationRun>, String>;
+}
+
+pub(crate) struct AppStateGraphBackend<'a> {
+    state: &'a AppState,
+    app: &'a AppHandle,
+}
+
+impl<'a> AppStateGraphBackend<'a> {
+    pub(crate) fn new(state: &'a AppState, app: &'a AppHandle) -> Self {
+        Self { state, app }
+    }
+}
+
+impl AgentGraphBridgeBackend for AppStateGraphBackend<'_> {
+    fn create_run(
+        &self,
+        request: CreateDelegationRun,
+    ) -> AgentGraphBackendFuture<'_, DelegationRun> {
+        Box::pin(async move { self.state.create_delegation_run(request).await })
+    }
+
+    fn dispatch_run(&self, run_id: String) -> AgentGraphBackendFuture<'_, DelegationRun> {
+        Box::pin(async move { self.state.dispatch_delegation_run(&run_id, self.app).await })
+    }
+
+    fn get_run(&self, run_id: &str) -> Result<Option<DelegationRun>, String> {
+        self.state.agent_bridge.get_run(run_id)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,12 +150,15 @@ impl AgentGraphExecution {
         ))
     }
 
-    pub(crate) fn reconcile(&mut self, state: &AppState) -> Result<(), String> {
+    pub(crate) fn reconcile(
+        &mut self,
+        backend: &dyn AgentGraphBridgeBackend,
+    ) -> Result<(), String> {
         for execution in self.nodes.values_mut() {
             let Some(run_id) = execution.delegation_run_id.as_deref() else {
                 continue;
             };
-            let Some(run) = state.agent_bridge.get_run(run_id)? else {
+            let Some(run) = backend.get_run(run_id)? else {
                 execution.status = AgentGraphNodeStatus::Failed;
                 execution.error = Some(format!(
                     "delegation run disappeared from Agent Bridge registry: {run_id}"
@@ -180,9 +229,9 @@ impl AgentGraphExecution {
 pub(crate) async fn prepare_ready_batch(
     graph: &ValidatedAgentGraph,
     mut execution: AgentGraphExecution,
-    state: &AppState,
+    backend: &dyn AgentGraphBridgeBackend,
 ) -> Result<PreparedAgentGraphBatch, String> {
-    execution.reconcile(state)?;
+    execution.reconcile(backend)?;
     execution.block_failed_dependencies(graph);
     let ready = execution.ready_node_ids(graph);
     let mut runs = Vec::with_capacity(ready.len());
@@ -209,7 +258,7 @@ pub(crate) async fn prepare_ready_batch(
             parent_run_id: None,
         };
 
-        match state.create_delegation_run(request).await {
+        match backend.create_run(request).await {
             Ok(run) => {
                 if let Some(node_execution) = execution.nodes.get_mut(&node_id) {
                     // The Bridge run itself is durable, but no runtime side effect has happened yet.
@@ -241,12 +290,11 @@ pub(crate) async fn prepare_ready_batch(
 pub(crate) async fn dispatch_prepared_batch(
     graph: &ValidatedAgentGraph,
     mut prepared: PreparedAgentGraphBatch,
-    state: &AppState,
-    app: &AppHandle,
+    backend: &dyn AgentGraphBridgeBackend,
 ) -> Result<AgentGraphDispatchBatch, String> {
     let mut dispatched = Vec::with_capacity(prepared.runs.len());
     for run in prepared.runs {
-        match state.dispatch_delegation_run(&run.id, app).await {
+        match backend.dispatch_run(run.id.clone()).await {
             Ok(dispatched_run) => dispatched.push(dispatched_run),
             Err(error) => {
                 if let Some(node_execution) = prepared.execution.nodes.values_mut().find(|node| {
@@ -257,7 +305,7 @@ pub(crate) async fn dispatch_prepared_batch(
             }
         }
     }
-    prepared.execution.reconcile(state)?;
+    prepared.execution.reconcile(backend)?;
     prepared.execution.block_failed_dependencies(graph);
     Ok(AgentGraphDispatchBatch {
         graph_id: prepared.graph_id,

@@ -89,6 +89,8 @@ jobs:
             src/agent_orchestration/bridge/run_registry.rs \
             src/agent_orchestration/bridge/service.rs \
             src/agent_orchestration/bridge/worktree.rs \
+            src/agent_orchestration/graph_coordinator.rs \
+            src/agent_orchestration/scheduler.rs \
             src/backend/app_server.rs \
             src/backend/app_server_cli.rs \
             src/backend/app_server_tests.rs \
