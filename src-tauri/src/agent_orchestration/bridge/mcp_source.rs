@@ -148,9 +148,11 @@ pub async fn resolve_codex_mcp_source(
         match matches.as_slice() {
             [] => None,
             [session] => Some(Arc::clone(session)),
-            _ => return Err(format!(
-                "Agent Bridge MCP Codex runtime locator is ambiguous for workspace {workspace_id}"
-            )),
+            _ => {
+                return Err(format!(
+                    "Agent Bridge MCP Codex runtime locator is ambiguous for workspace {workspace_id}"
+                ));
+            }
         }
     }
     .ok_or_else(|| {
