@@ -26,7 +26,9 @@
 | strict OpenSpec validate | ✅ `OPENSPEC_TELEMETRY=0 npm exec --offline --yes @fission-ai/openspec@latest -- validate add-cross-engine-agent-delegation --strict --no-interactive` 已通过；当前 executor 无本地 openspec binary，后续离线复跑受连接策略阻断 |
 | GitHub CI run 13 `memory-kind-contract` | ✅ success；真实 Rust 编译确认 daemon fail-closed Bridge stubs 与 Qoder boundary 可编译 |
 | GitHub CI run 14 | ❌ 首轮新增 graph test 编译发现 backend trait object 缺 `Sync`，使 spawned observer future 非 `Send`；已在窄 contract 增加 `Sync` 上界，等待后续 CI 复验 |
-| Next GitHub CI | ⏳ 验证 Qoder/full Rust、changed-file rustfmt 与新增 concurrent DAG fake-Bridge integration test |
+| GitHub CI run 15 `memory-kind-contract` | ✅ success；`Sync` 修复通过真实 Rust 编译 |
+| GitHub CI run 15 full Rust | ⚠️ 2647 passed / 15 failed；Agent Bridge/Qoder/DAG focused tests 全部通过，15 项均在 existing app-server/Claude history/DSH/runtime/session-management baseline；无 change-side test failure |
+| GitHub CI run 15 rustfmt | ❌ 检出本 PR 多批 Rust 文件存在 formatting diff；workflow 已改为 check 失败后上传纯 rustfmt patch artifact，下一轮原样应用后再复验，不降低 check |
 
 ## 3. Contract coverage
 
