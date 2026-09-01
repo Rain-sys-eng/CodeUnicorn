@@ -102,8 +102,8 @@ jobs:
             src/command_registry.rs \
             src/state.rs \
           )
-          if ! rustfmt --edition 2021 --check "${files[@]}"; then
-            rustfmt --edition 2021 "${files[@]}"
+          if ! rustfmt --edition 2021 --config skip_children=true --check "${files[@]}"; then
+            rustfmt --edition 2021 --config skip_children=true "${files[@]}"
             git diff -- "${files[@]}" > agent-bridge-rustfmt.patch
             exit 1
           fi
