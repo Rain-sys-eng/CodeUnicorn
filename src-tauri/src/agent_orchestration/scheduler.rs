@@ -19,7 +19,7 @@ pub(crate) type AgentGraphBackendFuture<'a, T> =
 ///
 /// Production delegates to the one `AppState` owner. Tests can provide deterministic Bridge
 /// facts without constructing an engine runtime or teaching the graph layer how to spawn one.
-pub(crate) trait AgentGraphBridgeBackend {
+pub(crate) trait AgentGraphBridgeBackend: Sync {
     fn create_run(
         &self,
         request: CreateDelegationRun,
