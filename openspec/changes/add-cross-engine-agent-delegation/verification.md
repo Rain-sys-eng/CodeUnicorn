@@ -1,6 +1,6 @@
 # CU-A2A-001 Verification
 
-> 状态：Automated closure in progress；PR 保持 Draft。真实 runtime 手工闭环按用户安排作为最后一项执行。
+> 状态：Automated verification complete；PR 保持 Draft。真实 runtime 手工闭环按用户安排作为最后一项执行。
 > Change：`add-cross-engine-agent-delegation`
 > Branch：`feat/cross-engine-agent-delegation`
 
@@ -28,7 +28,9 @@
 | GitHub CI run 14 | ❌ 首轮新增 graph test 编译发现 backend trait object 缺 `Sync`，使 spawned observer future 非 `Send`；已在窄 contract 增加 `Sync` 上界，等待后续 CI 复验 |
 | GitHub CI run 15 `memory-kind-contract` | ✅ success；`Sync` 修复通过真实 Rust 编译 |
 | GitHub CI run 15 full Rust | ⚠️ 2647 passed / 15 failed；Agent Bridge/Qoder/DAG focused tests 全部通过，15 项均在 existing app-server/Claude history/DSH/runtime/session-management baseline；无 change-side test failure |
-| GitHub CI run 15 rustfmt | ❌ 检出本 PR 多批 Rust 文件存在 formatting diff；workflow 已改为 check 失败后上传纯 rustfmt patch artifact，下一轮原样应用后再复验，不降低 check |
+| GitHub CI run 15 rustfmt | ❌ 检出本 PR 多批 Rust 文件存在 formatting diff；后续由 CI artifact 导出并原样应用 |
+| GitHub CI run 20 changed-file rustfmt | ✅ 声明的 27 个 Rust changed files 以 `skip_children=true` 隔离 existing unlisted-module baseline 后全部通过；未降低 `--check`，无 patch artifact |
+| GitHub CI run 20 `memory-kind-contract` | ✅ success；最新 Bridge/Qoder/DAG/daemon 边界在格式化与稳定 match arm 后完成真实 Rust 编译复验 |
 
 ## 3. Contract coverage
 
