@@ -1241,13 +1241,66 @@ pub(crate) fn apply_codex_app_server_args_with_settings(
     app_settings: &crate::types::AppSettings,
     codex_home: Option<&Path>,
 ) -> Result<(), String> {
-    command.args(build_codex_app_server_args_with_settings_and_profile(
+    apply_codex_app_server_args_with_settings_and_runtime_overrides(
+        command,
+        codex_args,
+        options,
+        app_settings,
+        codex_home,
+        &[],
+    )
+}
+
+/// Apply process-scoped config overrides without writing the user's Codex config. Runtime
+/// overrides are inserted immediately before the `app-server` subcommand so they remain global
+/// Codex CLI config flags and preserve every unrelated user-supplied MCP server.
+pub(crate) fn apply_codex_app_server_args_with_settings_and_runtime_overrides(
+    command: &mut Command,
+    codex_args: Option<&str>,
+    options: CodexAppServerLaunchOptions,
+    app_settings: &crate::types::AppSettings,
+    codex_home: Option<&Path>,
+    runtime_config_overrides: &[String],
+) -> Result<(), String> {
+    command.args(build_codex_app_server_args_with_settings_and_runtime_overrides(
+        codex_args,
+        options,
+        app_settings,
+        codex_home,
+        runtime_config_overrides,
+    )?);
+    Ok(())
+}
+
+pub(crate) fn build_codex_app_server_args_with_settings_and_runtime_overrides(
+    codex_args: Option<&str>,
+    options: CodexAppServerLaunchOptions,
+    app_settings: &crate::types::AppSettings,
+    codex_home: Option<&Path>,
+    runtime_config_overrides: &[String],
+) -> Result<Vec<String>, String> {
+    let mut args = build_codex_app_server_args_with_settings_and_profile(
         codex_args,
         options,
         Some(app_settings),
         codex_home,
-    )?);
-    Ok(())
+    )?;
+    let subcommand = args
+        .pop()
+        .ok_or_else(|| "Codex app-server arguments are unexpectedly empty".to_string())?;
+    if subcommand != "app-server" {
+        return Err("Codex app-server arguments are missing the final subcommand".to_string());
+    }
+    for config_override in runtime_config_overrides {
+        let config_override = config_override.trim();
+        if config_override.is_empty() {
+            continue;
+        }
+        args.push("-c".to_string());
+        args.push(config_override.to_string());
+    }
+    args.push(subcommand);
+    Ok(args)
 }
 
 const PROXY_ENV_KEYS: [&str; 8] = [
@@ -2083,6 +2136,41 @@ mod curated_skill_injection_tests {
         assert!(out.contains("authoritative state"));
         assert!(out.contains("Enabled: none."));
         assert!(!out.contains("<skill id="));
+    }
+
+    #[test]
+    fn managed_runtime_overrides_stay_before_app_server_and_preserve_user_args() {
+        let settings = settings_with(vec![]);
+        let args = build_codex_app_server_args_with_settings_and_runtime_overrides(
+            Some("--profile work -c mcp_servers.user.command=\"node\""),
+            primary_no_hint(),
+            &settings,
+            None,
+            &[
+                "mcp_servers.codeunicorn_agent_bridge.url=\"http://127.0.0.1:4899/mcp/codex/ws/runtime\""
+                    .to_string(),
+                "mcp_servers.codeunicorn_agent_bridge.bearer_token_env_var=\"CODEUNICORN_AGENT_BRIDGE_MCP_TOKEN\""
+                    .to_string(),
+            ],
+        )
+        .expect("managed runtime args");
+
+        assert_eq!(args.last().map(String::as_str), Some("app-server"));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-c"
+                && (pair[1] == "mcp_servers.user.command=node"
+                    || pair[1] == "mcp_servers.user.command=\"node\"")
+        }));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-c"
+                && pair[1]
+                    == "mcp_servers.codeunicorn_agent_bridge.url=\"http://127.0.0.1:4899/mcp/codex/ws/runtime\""
+        }));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-c"
+                && pair[1]
+                    == "mcp_servers.codeunicorn_agent_bridge.bearer_token_env_var=\"CODEUNICORN_AGENT_BRIDGE_MCP_TOKEN\""
+        }));
     }
 
     #[test]

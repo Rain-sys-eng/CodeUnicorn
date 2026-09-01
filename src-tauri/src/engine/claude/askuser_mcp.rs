@@ -1,4 +1,4 @@
-//! In-process HTTP MCP server for CodeUnicorn-managed Claude tools.
+//! In-process HTTP MCP server for CodeUnicorn-managed agent tools.
 //!
 //! # Why this exists
 //! The `claude` CLI only offers the native `AskUserQuestion` tool to the model in
@@ -9,8 +9,9 @@
 //!
 //! # Transport
 //! Streamable-HTTP: provider-aware sessions use
-//! `POST /mcp/:workspace_id/:runtime_locator`; the workspace-only endpoint remains
-//! for local AskUserQuestion compatibility. Both speak JSON-RPC (`initialize`,
+//! `POST /mcp/:workspace_id/:runtime_locator`; Codex app-server runtimes use the
+//! separate `POST /mcp/codex/:workspace_id/:runtime_locator` route. The workspace-only endpoint
+//! remains for local Claude AskUserQuestion compatibility. All routes speak JSON-RPC (`initialize`,
 //! `tools/list`, `tools/call`) and respond `application/json`. No SSE stream is
 //! needed for request/response. Verified against CLI v2.1.201.
 //!
@@ -59,6 +60,8 @@ impl super::ClaudeSession {
 /// The MCP server name used by Claude (`mcp__ccgui__<tool>`).
 pub const MCP_SERVER_NAME: &str = "ccgui";
 pub const ASK_TOOL_NAME: &str = "AskUserQuestion";
+pub const CODEX_BRIDGE_MCP_SERVER_NAME: &str = "codeunicorn_agent_bridge";
+pub const CODEX_BRIDGE_MCP_BEARER_TOKEN_ENV: &str = "CODEUNICORN_AGENT_BRIDGE_MCP_TOKEN";
 
 /// Process-global handle to the running server, set once at app startup.
 /// The CLI spawn wiring reads this to build the per-workspace `--mcp-config`.
@@ -119,6 +122,10 @@ impl AskUserMcpServer {
         };
         let router = Router::new()
             .route(
+                "/mcp/codex/:workspace_id/:runtime_locator",
+                post(handle_codex_runtime_mcp),
+            )
+            .route(
                 "/mcp/:workspace_id/:runtime_locator",
                 post(handle_runtime_mcp),
             )
@@ -160,6 +167,37 @@ impl AskUserMcpServer {
     /// execution scope and target runtime permission/approval contracts.
     pub fn allowed_tool_name() -> String {
         format!("mcp__{MCP_SERVER_NAME}__*")
+    }
+
+    /// Runtime-only Codex config overrides for the managed Agent Bridge server.
+    ///
+    /// These values are appended as `-c` CLI overrides immediately before `app-server`; they do
+    /// not mutate the user's `config.toml` and affect only CodeUnicorn's managed process. The
+    /// bearer secret itself stays in the child environment rather than the process argument list.
+    pub fn codex_bridge_config_overrides(
+        &self,
+        workspace_id: &str,
+        runtime_locator: &str,
+    ) -> Vec<String> {
+        let url = format!(
+            "http://127.0.0.1:{}/mcp/codex/{}/{}",
+            self.port, workspace_id, runtime_locator
+        );
+        vec![
+            format!(
+                "mcp_servers.{CODEX_BRIDGE_MCP_SERVER_NAME}.url={}",
+                serde_json::to_string(&url).expect("managed MCP URL must serialize")
+            ),
+            format!(
+                "mcp_servers.{CODEX_BRIDGE_MCP_SERVER_NAME}.bearer_token_env_var={}",
+                serde_json::to_string(CODEX_BRIDGE_MCP_BEARER_TOKEN_ENV)
+                    .expect("managed MCP env key must serialize")
+            ),
+        ]
+    }
+
+    pub fn apply_codex_bridge_bearer_token(&self, command: &mut tokio::process::Command) {
+        command.env(CODEX_BRIDGE_MCP_BEARER_TOKEN_ENV, self.token.as_ref());
     }
 }
 
@@ -207,6 +245,19 @@ fn all_tool_definitions() -> Vec<Value> {
     let mut tools = vec![ask_tool_definition()];
     tools.extend(crate::engine::claude_bridge_mcp::tool_definitions());
     tools
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum McpIngress {
+    Claude,
+    Codex,
+}
+
+fn tool_definitions_for_ingress(ingress: McpIngress) -> Vec<Value> {
+    match ingress {
+        McpIngress::Claude => all_tool_definitions(),
+        McpIngress::Codex => crate::engine::codex_bridge_mcp::tool_definitions(),
+    }
 }
 
 fn rpc_result(id: Value, result: Value) -> Value {
@@ -270,6 +321,23 @@ async fn handle_runtime_mcp(
     handle_mcp_request(workspace_id, Some(runtime_locator), state, headers, msg).await
 }
 
+async fn handle_codex_runtime_mcp(
+    Path((workspace_id, runtime_locator)): Path<(String, String)>,
+    State(state): State<McpServerState>,
+    headers: HeaderMap,
+    Json(msg): Json<Value>,
+) -> McpResponse {
+    handle_mcp_request_for_ingress(
+        workspace_id,
+        Some(runtime_locator),
+        McpIngress::Codex,
+        state,
+        headers,
+        msg,
+    )
+    .await
+}
+
 async fn handle_legacy_mcp(
     Path(workspace_id): Path<String>,
     State(state): State<McpServerState>,
@@ -282,6 +350,25 @@ async fn handle_legacy_mcp(
 async fn handle_mcp_request(
     workspace_id: String,
     runtime_locator: Option<String>,
+    state: McpServerState,
+    headers: HeaderMap,
+    msg: Value,
+) -> McpResponse {
+    handle_mcp_request_for_ingress(
+        workspace_id,
+        runtime_locator,
+        McpIngress::Claude,
+        state,
+        headers,
+        msg,
+    )
+    .await
+}
+
+async fn handle_mcp_request_for_ingress(
+    workspace_id: String,
+    runtime_locator: Option<String>,
+    ingress: McpIngress,
     state: McpServerState,
     headers: HeaderMap,
     msg: Value,
@@ -313,7 +400,10 @@ async fn handle_mcp_request(
         }
         // Notifications (no `id`) get no response body.
         "notifications/initialized" | "notifications/cancelled" => McpResponse::Accepted,
-        "tools/list" => McpResponse::Json(rpc_result(id, json!({ "tools": all_tool_definitions() }))),
+        "tools/list" => McpResponse::Json(rpc_result(
+            id,
+            json!({ "tools": tool_definitions_for_ingress(ingress) }),
+        )),
         "tools/call" => {
             let tool_name = msg
                 .get("params")
@@ -326,7 +416,7 @@ async fn handle_mcp_request(
                 .cloned()
                 .unwrap_or_else(|| json!({}));
 
-            if tool_name == ASK_TOOL_NAME {
+            if ingress == McpIngress::Claude && tool_name == ASK_TOOL_NAME {
                 let session = match runtime_locator.as_deref() {
                     Some(locator) => {
                         state
@@ -350,16 +440,29 @@ async fn handle_mcp_request(
                 };
             }
 
-            if crate::engine::claude_bridge_mcp::handles_tool(tool_name) {
-                return match crate::engine::claude_bridge_mcp::call_tool(
-                    &state.claude_manager,
-                    &workspace_id,
-                    runtime_locator.as_deref(),
-                    tool_name,
-                    arguments,
-                )
-                .await
-                {
+            if crate::agent_orchestration::bridge::mcp_gateway::handles_tool(tool_name) {
+                let result = match ingress {
+                    McpIngress::Claude => {
+                        crate::engine::claude_bridge_mcp::call_tool(
+                            &state.claude_manager,
+                            &workspace_id,
+                            runtime_locator.as_deref(),
+                            tool_name,
+                            arguments,
+                        )
+                        .await
+                    }
+                    McpIngress::Codex => {
+                        crate::engine::codex_bridge_mcp::call_tool(
+                            &workspace_id,
+                            runtime_locator.as_deref(),
+                            tool_name,
+                            arguments,
+                        )
+                        .await
+                    }
+                };
+                return match result {
                     Ok(result) => match serde_json::to_string(&result) {
                         Ok(text) => text_tool_result(id, text),
                         Err(error) => error_tool_result(id, tool_name, error),
@@ -428,6 +531,22 @@ mod tests {
     #[test]
     fn allowed_tool_name_covers_private_ccgui_server_tools() {
         assert_eq!(AskUserMcpServer::allowed_tool_name(), "mcp__ccgui__*");
+    }
+
+    #[test]
+    fn codex_bridge_registration_is_runtime_only_and_keeps_token_out_of_argv() {
+        let overrides =
+            server_at(4899).codex_bridge_config_overrides("ws-42", "codex-runtime-a");
+        assert_eq!(overrides.len(), 2);
+        assert!(overrides.iter().any(|value| {
+            value
+                == "mcp_servers.codeunicorn_agent_bridge.url=\"http://127.0.0.1:4899/mcp/codex/ws-42/codex-runtime-a\""
+        }));
+        assert!(overrides.iter().any(|value| {
+            value
+                == "mcp_servers.codeunicorn_agent_bridge.bearer_token_env_var=\"CODEUNICORN_AGENT_BRIDGE_MCP_TOKEN\""
+        }));
+        assert!(overrides.iter().all(|value| !value.contains("test-token")));
     }
 
     #[test]
@@ -508,6 +627,67 @@ mod tests {
         ] {
             assert!(bridge_names.contains(expected));
         }
+    }
+
+    #[tokio::test]
+    async fn codex_tools_list_exposes_only_the_seven_bridge_tools() {
+        if !crate::engine::codex_bridge_mcp::AVAILABLE {
+            return;
+        }
+        let response = handle_mcp_request_for_ingress(
+            "workspace-1".to_string(),
+            Some("runtime-1".to_string()),
+            McpIngress::Codex,
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": "tools/list",
+                "params": {}
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+        let tools = payload["result"]["tools"]
+            .as_array()
+            .expect("Codex tools/list result");
+        assert_eq!(tools.len(), 7);
+        assert!(!tools.iter().any(|tool| tool["name"] == ASK_TOOL_NAME));
+        for expected in [
+            crate::engine::codex_bridge_mcp::AGENT_LIST_TOOL,
+            crate::engine::codex_bridge_mcp::AGENT_DELEGATE_TOOL,
+            crate::engine::codex_bridge_mcp::AGENT_STATUS_TOOL,
+            crate::engine::codex_bridge_mcp::AGENT_WAIT_TOOL,
+            crate::engine::codex_bridge_mcp::AGENT_RESULT_TOOL,
+            crate::engine::codex_bridge_mcp::AGENT_SEND_TOOL,
+            crate::engine::codex_bridge_mcp::AGENT_CANCEL_TOOL,
+        ] {
+            assert!(tools.iter().any(|tool| tool["name"] == expected));
+        }
+    }
+
+    #[tokio::test]
+    async fn codex_route_does_not_expose_claude_ask_tool() {
+        let response = handle_mcp_request_for_ingress(
+            "workspace-1".to_string(),
+            Some("runtime-1".to_string()),
+            McpIngress::Codex,
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": "tools/call",
+                "params": { "name": ASK_TOOL_NAME, "arguments": { "questions": [] } }
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+        assert_eq!(payload["error"]["code"], -32602);
+        assert!(payload["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("unknown tool")));
     }
 
     #[tokio::test]

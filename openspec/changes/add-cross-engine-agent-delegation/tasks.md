@@ -43,7 +43,7 @@
 - [x] 6.1 新增 bridge MCP transport adapter：复用现有 bearer-authenticated、runtime-bound Claude managed HTTP MCP server；Bridge handler 保持独立于 MCP transport，不直接 spawn CLI。
 - [x] 6.2 暴露 `agent_list` / `agent_delegate` / `agent_status` / `agent_wait` / `agent_result` / `agent_send` / `agent_cancel`；`agent_wait` 单次调用 hard cap 30 秒，所有 run control 均做 workspace/source ownership 校验。`agent_delegate/agent_send` 在 durable run 已创建后即使 dispatch 失败也返回该 terminal run；若 settlement 本身缺失，MCP error 必须显式携带已创建 `runId`。
 - [x] 6.3 source identity 不进入 tool schema；当前 Claude ingress 从 CodeUnicorn-minted runtime locator + live active turn + native session 解析可信 source，legacy workspace-only route 对 Bridge fail closed。其他 engine 在接入 6.4 前必须实现等价 runtime-bound resolver。
-- [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**当前首个 ingress 已完成：Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools。MCP source 已进一步抽象为 transport-neutral `TrustedMcpRuntimeBinding -> ResolvedMcpSource` fail-closed contract，Codex/Kimi/OpenCode ingress 可复用同一安全边界；Codex caller 的 remaining gate 是拿到 thread+turn 级可信 runtime locator，禁止退化成 workspace-only source。**
+- [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools。Codex managed app-server 现通过 process-scoped `-c` overlay 接同一 bearer-authenticated loopback server，不写用户 config；CodeUnicorn-minted runtime locator 只在唯一 live `threadId + turnId` 时解析 source，idle/incomplete/concurrent turns 均 fail closed，Codex route 不暴露 Claude-only AskUserQuestion。对应 transport/source/config tests 已加入但当前 executor 无 Rust toolchain，须以 CI 编译结果为准；Kimi/OpenCode 等剩余 ingress 仍待逐一证明等价 runtime-bound identity。**
 
 ## 7. Context Policy
 

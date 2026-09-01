@@ -266,6 +266,21 @@ async fn ensure_codex_session_with_mode(
     recovery_source: &str,
     ensure_mode: CodexSessionEnsureMode,
 ) -> Result<(), String> {
+    if ensure_mode == CodexSessionEnsureMode::Normal
+        && crate::engine::claude::askuser_mcp_global().is_none()
+    {
+        if let Err(error) = crate::engine::claude::init_askuser_mcp_global(
+            state.engine_manager.claude_manager.clone(),
+        )
+        .await
+        {
+            // Preserve ordinary Codex availability if the additive loopback MCP transport cannot
+            // bind. This runtime will simply omit Agent Bridge caller tools and report the cause.
+            log::warn!(
+                "[codex] failed to initialize managed Agent Bridge MCP server before runtime launch: {error}"
+            );
+        }
+    }
     let profile = resolve_codex_provider_profile(Some(provider_profile_id))?;
     let session_key = match &profile {
         CodexProviderProfile::Disk => legacy_codex_runtime_key(workspace_id),

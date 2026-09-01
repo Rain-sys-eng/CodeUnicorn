@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use super::approval;
 use super::mcp_gateway;
@@ -39,6 +39,25 @@ pub(crate) async fn call_tool(
     let app = MCP_APP_HANDLE
         .get()
         .ok_or_else(|| "Agent Bridge MCP runtime is not initialized".to_string())?;
+    mcp_gateway::call_tool(app, workspace_id, source, tool_name, arguments).await
+}
+
+pub(crate) async fn call_codex_tool(
+    workspace_id: &str,
+    runtime_locator: Option<&str>,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let app = MCP_APP_HANDLE
+        .get()
+        .ok_or_else(|| "Agent Bridge MCP runtime is not initialized".to_string())?;
+    let state = app.state::<crate::state::AppState>();
+    let source = super::mcp_source::resolve_codex_mcp_source(
+        &state.sessions,
+        workspace_id,
+        runtime_locator,
+    )
+    .await?;
     mcp_gateway::call_tool(app, workspace_id, source, tool_name, arguments).await
 }
 

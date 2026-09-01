@@ -192,6 +192,22 @@ Target Agent 的 text/tool/approval/terminal events SHALL 通过现有 AgentEven
 - **THEN** gateway MUST 以 runtime/tool binding 的 authenticated source identity 为准
 - **AND** MUST NOT 信任 prompt-provided source identity
 
+#### Scenario: Codex caller requires one exact live thread and turn
+
+- **WHEN** CodeUnicorn-managed Codex app-server 通过 authenticated runtime route 调用 Bridge tool
+- **THEN** gateway MUST 以 CodeUnicorn-minted process locator 解析 live provider runtime
+- **AND** runtime MUST 恰有一个 active `threadId + turnId` owner，作为 source logical/native/turn identity
+- **AND** zero active turn、缺失 turn identity 或 concurrent active turns MUST fail closed
+- **AND** gateway MUST NOT 仅凭 workspace、model output 或 tool arguments 猜测 Codex caller
+
+#### Scenario: Managed Codex MCP registration preserves user configuration
+
+- **WHEN** CodeUnicorn 启动 managed Codex app-server runtime
+- **THEN** built-in Bridge MCP server MUST 通过 process-scoped `-c` overlay 注册
+- **AND** bearer secret MUST 通过 child-only environment 注入，不得写进 argv 或用户配置文件
+- **AND** unrelated user-defined MCP servers MUST remain available
+- **AND** helper runtimes with session hooks disabled MUST NOT receive Agent Bridge caller tools
+
 #### Scenario: Internal backing session is not user-visible
 
 - **WHEN** Agent Bridge 使用 Shared V2 session 作为 delegated runtime backing lane

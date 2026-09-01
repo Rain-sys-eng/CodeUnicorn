@@ -1,3 +1,9 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
+
+use crate::backend::app_server::WorkspaceSession;
 use crate::engine::claude::ClaudeSessionManager;
 
 use super::models::AgentEndpoint;
@@ -102,6 +108,73 @@ pub async fn resolve_claude_mcp_source(
         // This opaque locator is process-scoped and was minted by CodeUnicorn, not by the model.
         logical_session_id: runtime_locator.to_string(),
         native_session_id: session.get_session_id().await,
+        runtime_turn_id,
+    })
+}
+
+/// Resolve a Codex caller from CodeUnicorn's process-scoped runtime locator and the runtime's
+/// authoritative live active-turn table.
+///
+/// Codex app-server can host multiple threads in one provider-scoped process. Because its MCP HTTP
+/// request does not carry a trustworthy thread id, exactly one active `threadId + turnId` owner is
+/// required. Zero active turns and concurrent active turns both fail closed; the Bridge never
+/// guesses source ownership from workspace, model output or tool arguments.
+pub async fn resolve_codex_mcp_source(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: &str,
+    runtime_locator: Option<&str>,
+) -> Result<ResolvedMcpSource, String> {
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() {
+        return Err("Agent Bridge MCP source workspace is required".to_string());
+    }
+    let runtime_locator = runtime_locator
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "Agent Bridge tools require the Codex runtime-bound MCP endpoint".to_string()
+        })?;
+
+    let session = {
+        let sessions = sessions.lock().await;
+        let mut matches = Vec::<Arc<WorkspaceSession>>::new();
+        for session in sessions.values() {
+            if session.entry.id == workspace_id
+                && session.mcp_runtime_locator() == runtime_locator
+                && !matches
+                    .iter()
+                    .any(|existing| Arc::ptr_eq(existing, session))
+            {
+                matches.push(Arc::clone(session));
+            }
+        }
+        match matches.as_slice() {
+            [] => None,
+            [session] => Some(Arc::clone(session)),
+            _ => {
+                return Err(format!(
+                    "Agent Bridge MCP Codex runtime locator is ambiguous for workspace {workspace_id}"
+                ))
+            }
+        }
+    }
+    .ok_or_else(|| {
+        format!("Agent Bridge MCP Codex source runtime is not active for workspace {workspace_id}")
+    })?;
+
+    let (thread_id, runtime_turn_id) = session
+        .mcp_active_turn_owner()
+        .await?
+        .ok_or_else(|| {
+            format!(
+                "Agent Bridge MCP Codex source runtime has no active turn for workspace {workspace_id}"
+            )
+        })?;
+
+    resolve_trusted_runtime_binding(TrustedMcpRuntimeBinding {
+        engine_id: "codex".to_string(),
+        logical_session_id: thread_id.clone(),
+        native_session_id: Some(thread_id),
         runtime_turn_id,
     })
 }
@@ -211,5 +284,76 @@ mod tests {
             Some("claude-native-session-1")
         );
         assert_eq!(source.runtime_turn_id, "runtime-turn-1");
+    }
+
+    #[tokio::test]
+    async fn codex_runtime_locator_requires_one_exact_live_turn() {
+        let sessions = Mutex::new(HashMap::new());
+        let session = crate::backend::app_server::make_test_workspace_session("workspace-1").await;
+        let locator = session.mcp_runtime_locator().to_string();
+        sessions
+            .lock()
+            .await
+            .insert("codex::workspace-1::__disk__".to_string(), Arc::clone(&session));
+
+        let idle_error = resolve_codex_mcp_source(&sessions, "workspace-1", Some(&locator))
+            .await
+            .expect_err("idle Codex runtime must fail closed");
+        assert!(idle_error.contains("no active turn"));
+
+        session
+            .set_mcp_active_turn_for_test("thread-1", Some("turn-1"))
+            .await;
+        let source = resolve_codex_mcp_source(&sessions, "workspace-1", Some(&locator))
+            .await
+            .expect("unique live Codex turn");
+        assert_eq!(source.endpoint.engine_id, "codex");
+        assert_eq!(source.endpoint.logical_session_id.as_deref(), Some("thread-1"));
+        assert_eq!(source.endpoint.native_session_id.as_deref(), Some("thread-1"));
+        assert_eq!(source.runtime_turn_id, "turn-1");
+
+        session
+            .set_mcp_active_turn_for_test("thread-2", Some("turn-2"))
+            .await;
+        let ambiguous_error =
+            resolve_codex_mcp_source(&sessions, "workspace-1", Some(&locator))
+                .await
+                .expect_err("concurrent Codex turns must not guess the caller");
+        assert!(ambiguous_error.contains("ambiguous active turn ownership"));
+
+        crate::backend::app_server::dispose_test_workspace_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn codex_runtime_locator_is_workspace_bound_and_unforgeable() {
+        let sessions = Mutex::new(HashMap::new());
+        let session = crate::backend::app_server::make_test_workspace_session("workspace-1").await;
+        session
+            .set_mcp_active_turn_for_test("thread-1", Some("turn-1"))
+            .await;
+        sessions
+            .lock()
+            .await
+            .insert("codex::workspace-1::__disk__".to_string(), Arc::clone(&session));
+
+        let error = resolve_codex_mcp_source(
+            &sessions,
+            "workspace-2",
+            Some(session.mcp_runtime_locator()),
+        )
+        .await
+        .expect_err("another workspace must not reuse the locator");
+        assert!(error.contains("source runtime is not active"));
+
+        let forged = resolve_codex_mcp_source(
+            &sessions,
+            "workspace-1",
+            Some("attacker-controlled-locator"),
+        )
+        .await
+        .expect_err("unknown locator must fail closed");
+        assert!(forged.contains("source runtime is not active"));
+
+        crate::backend::app_server::dispose_test_workspace_session(&session).await;
     }
 }

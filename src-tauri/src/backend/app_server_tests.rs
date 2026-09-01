@@ -168,6 +168,7 @@ async fn make_workspace_session_with_runtime_key(
     Arc::new(WorkspaceSession {
         entry: workspace_entry(id),
         provider_runtime_key: provider_runtime_key.to_string(),
+        mcp_runtime_locator: format!("test-runtime-{provider_runtime_key}"),
         child: Mutex::new(child),
         stdin: Mutex::new(stdin),
         wrapper_kind: "direct".to_string(),

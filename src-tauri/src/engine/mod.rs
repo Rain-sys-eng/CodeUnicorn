@@ -30,6 +30,7 @@ pub(crate) mod claude_history_subagents;
 pub(crate) mod claude_message_content;
 pub(crate) mod cli_image_input;
 pub(crate) mod codex_adapter;
+pub(crate) mod codex_bridge_mcp;
 pub(crate) mod codex_prompt_service;
 pub mod commands;
 pub mod dsh;
