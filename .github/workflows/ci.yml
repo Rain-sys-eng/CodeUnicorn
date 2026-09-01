@@ -71,11 +71,7 @@ jobs:
           mkdir -p dist/assets
           printf '<!doctype html><html><body></body></html>\n' > dist/index.html
           printf 'ci placeholder\n' > dist/assets/ci-placeholder.txt
-      - name: Rust tests
-        run: cargo test
-        working-directory: src-tauri
       - name: Agent Bridge changed-file rustfmt
-        if: always()
         run: |
           files=( \
             src/agent_orchestration/bridge/commands.rs \
@@ -119,6 +115,10 @@ jobs:
           name: agent-bridge-rustfmt-patch
           path: src-tauri/agent-bridge-rustfmt.patch
           if-no-files-found: error
+      - name: Rust tests
+        if: success()
+        run: cargo test
+        working-directory: src-tauri
   lint:
     runs-on: ubuntu-latest
     steps:
