@@ -46,9 +46,124 @@ pub(crate) struct AppState {
     pub(crate) renderer_heartbeats: Mutex<crate::renderer_stability::RendererHeartbeatStore>,
     pub(crate) semantic_navigation_runtime: crate::code_intel_lsp::SemanticNavigationRuntime,
     pub(crate) engine_manager: EngineManager,
+    pub(crate) agent_bridge: Arc<crate::agent_orchestration::bridge::AgentBridgeService>,
 }
 
 impl AppState {
+    pub(crate) async fn create_delegation_run(
+        &self,
+        request: crate::agent_orchestration::bridge::CreateDelegationRun,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        {
+            let workspaces = self.workspaces.lock().await;
+            if !workspaces.contains_key(&request.workspace_id) {
+                return Err(format!(
+                    "workspace not found for Agent Bridge delegation: {}",
+                    request.workspace_id
+                ));
+            }
+        }
+        let settings = self.app_settings.lock().await.clone();
+        self.agent_bridge
+            .create_run(request, &self.engine_manager, &settings)
+            .await
+    }
+
+    pub(crate) async fn dispatch_delegation_run(
+        &self,
+        run_id: &str,
+        app: &AppHandle,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        crate::agent_orchestration::bridge::dispatcher::dispatch_run(
+            Arc::clone(&self.agent_bridge),
+            run_id.to_string(),
+            app.clone(),
+        )
+        .await
+    }
+
+    pub(crate) async fn continue_delegation_run(
+        &self,
+        previous_run_id: &str,
+        task: String,
+        app: &AppHandle,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        let run = self
+            .create_delegation_continuation(previous_run_id, task)
+            .await?;
+        crate::agent_orchestration::bridge::dispatcher::dispatch_run(
+            Arc::clone(&self.agent_bridge),
+            run.id.clone(),
+            app.clone(),
+        )
+        .await
+    }
+
+    pub(crate) async fn create_delegation_continuation(
+        &self,
+        previous_run_id: &str,
+        task: String,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        let settings = self.app_settings.lock().await.clone();
+        self.agent_bridge
+            .continue_run(previous_run_id, task, &self.engine_manager, &settings)
+            .await
+    }
+
+    pub(crate) async fn retry_delegation_run(
+        &self,
+        previous_run_id: &str,
+        app: &AppHandle,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        let previous = self
+            .agent_bridge
+            .get_run(previous_run_id)?
+            .ok_or_else(|| format!("retry source run not found: {previous_run_id}"))?;
+        if !self
+            .workspaces
+            .lock()
+            .await
+            .contains_key(&previous.workspace_id)
+        {
+            return Err(format!(
+                "workspace not found for Agent Bridge retry: {}",
+                previous.workspace_id
+            ));
+        }
+        let settings = self.app_settings.lock().await.clone();
+        let run = self
+            .agent_bridge
+            .retry_run(previous_run_id, &self.engine_manager, &settings)
+            .await?;
+        match self.dispatch_delegation_run(&run.id, app).await {
+            Ok(dispatched) => Ok(dispatched),
+            Err(dispatch_error) => match self.agent_bridge.get_run(&run.id)? {
+                Some(durable) if durable.status.is_terminal() => Ok(durable),
+                Some(durable) => Err(format!(
+                    "Agent Bridge retry dispatch failed after creating runId={}; durable status={:?}; {dispatch_error}",
+                    run.id, durable.status
+                )),
+                None => Err(format!(
+                    "Agent Bridge retry dispatch failed after creating runId={}, but the durable run disappeared; {dispatch_error}",
+                    run.id
+                )),
+            },
+        }
+    }
+
+    pub(crate) async fn cancel_delegation_run(
+        &self,
+        run_id: &str,
+        app: &AppHandle,
+    ) -> Result<crate::agent_orchestration::bridge::DelegationRun, String> {
+        crate::agent_orchestration::bridge::control::cancel_run(
+            Arc::clone(&self.agent_bridge),
+            run_id.to_string(),
+            app.clone(),
+        )
+        .await
+    }
+
     /// Push current app_settings binary paths into the EngineManager so that
     /// new engine sessions pick up user-configured CLI paths (e.g. reclaude).
     /// Also drops cached Claude sessions whose bin_path is stale so the next
@@ -244,6 +359,24 @@ impl AppState {
                         .await;
                 });
             })));
+        let agent_bridge =
+            Arc::new(crate::agent_orchestration::bridge::AgentBridgeService::default());
+        if let Some(writer) = shared_event_writer.as_ref() {
+            match crate::agent_orchestration::bridge::presentation::reconcile_backing_session_markers(
+                agent_bridge.as_ref(),
+                writer,
+            ) {
+                Ok(repaired) if repaired > 0 => log::info!(
+                    "[agent-bridge] repaired {} internal backing-session marker(s) on startup",
+                    repaired
+                ),
+                Ok(_) => {}
+                Err(error) => log::warn!(
+                    "[agent-bridge] backing-session marker reconciliation failed: {}",
+                    error
+                ),
+            }
+        }
         Self {
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
@@ -276,6 +409,7 @@ impl AppState {
                 crate::code_intel_lsp::cache_root_for_channel(&data_dir, cfg!(debug_assertions)),
             ),
             engine_manager,
+            agent_bridge,
         }
     }
 }

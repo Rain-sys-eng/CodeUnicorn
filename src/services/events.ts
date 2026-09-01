@@ -61,6 +61,23 @@ export type DetachedExternalFileChangeEvent = {
   fallbackReason?: string | null;
 };
 
+export type AgentBridgeRuntimeEvent = {
+  schemaVersion: string;
+  eventId: string;
+  sequence: number;
+  timestampMs: number;
+  engine: string;
+  workspaceId: string;
+  logicalSessionId: string;
+  nativeSessionId?: string | null;
+  runId: string;
+  turnId?: string | null;
+  itemId?: string | null;
+  kind: string;
+  lane: "critical" | "delta" | "normal";
+  payload: unknown;
+};
+
 type SubscriptionOptions = {
   onError?: (error: unknown) => void;
 };
@@ -377,6 +394,9 @@ const detachedExternalFileChangeHub =
   createEventHub<DetachedExternalFileChangeEvent>(
     "detached-external-file-change",
   );
+const agentBridgeEventHub = createEventHub<AgentBridgeRuntimeEvent>(
+  "agent-bridge-event",
+);
 
 /**
  * Batch channel emitted by the Rust `DebouncedExternalChangeEmitter`.
@@ -588,6 +608,13 @@ export function subscribeDetachedExternalFileChanges(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return detachedExternalFileChangeHub.subscribe(onEvent, options);
+}
+
+export function subscribeAgentBridgeEvents(
+  onEvent: (event: AgentBridgeRuntimeEvent) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return agentBridgeEventHub.subscribe(onEvent, options);
 }
 
 /**

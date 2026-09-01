@@ -142,6 +142,14 @@ pub enum EngineEvent {
         message: Option<String>,
     },
 
+    /// User-owned approval decision accepted by the native runtime control path.
+    #[serde(rename = "approval:resolved")]
+    ApprovalResolved {
+        workspace_id: String,
+        request_id: Value,
+        approved: bool,
+    },
+
     /// User input request (AskUserQuestion tool)
     #[serde(rename = "userInput:request")]
     RequestUserInput {
@@ -243,6 +251,7 @@ impl EngineEvent {
             EngineEvent::BackgroundTaskStarted { workspace_id, .. } => workspace_id,
             EngineEvent::BackgroundTaskUpdated { workspace_id, .. } => workspace_id,
             EngineEvent::ApprovalRequest { workspace_id, .. } => workspace_id,
+            EngineEvent::ApprovalResolved { workspace_id, .. } => workspace_id,
             EngineEvent::RequestUserInput { workspace_id, .. } => workspace_id,
             EngineEvent::TurnCompleted { workspace_id, .. } => workspace_id,
             EngineEvent::TurnError { workspace_id, .. } => workspace_id,
@@ -862,6 +871,19 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                 "id": request_id,
             })
         }
+        EngineEvent::ApprovalResolved {
+            request_id,
+            approved,
+            ..
+        } => json!({
+            "method": "approval/resolved",
+            "params": {
+                "threadId": thread_id,
+                "requestId": request_id,
+                "approved": approved,
+            },
+            "id": request_id,
+        }),
         EngineEvent::RequestUserInput {
             request_id,
             questions,

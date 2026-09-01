@@ -43,6 +43,20 @@ pub struct CompileNativeContextRequest {
     pub budget_estimated_tokens: Option<u64>,
 }
 
+#[derive(Debug, Clone)]
+pub struct CompilePortableContextRequest {
+    pub session_id: String,
+    pub binding_key: String,
+    pub destination: Value,
+    pub source: ContextPackageSource,
+    pub entries: Vec<PortableContextEntry>,
+    pub omissions: Vec<ProjectionOmission>,
+    pub capabilities: RuntimeContextCapabilities,
+    pub budget_estimated_tokens: Option<u64>,
+    pub scope: Option<Value>,
+    pub through_sequence_inclusive: i64,
+}
+
 fn estimated_tokens(text: &str) -> u64 {
     text.chars().count().div_ceil(4) as u64
 }
@@ -724,6 +738,21 @@ pub fn compile_context(
     events: &[StoredEvent],
     request: &CompileContextRequest,
 ) -> Result<ContextPackage, String> {
+    compile_context_core(events, request, false)
+}
+
+pub fn compile_context_including_squad_attempts(
+    events: &[StoredEvent],
+    request: &CompileContextRequest,
+) -> Result<ContextPackage, String> {
+    compile_context_core(events, request, true)
+}
+
+fn compile_context_core(
+    events: &[StoredEvent],
+    request: &CompileContextRequest,
+    include_squad_attempts: bool,
+) -> Result<ContextPackage, String> {
     let upper = request
         .through_sequence_inclusive
         .or_else(|| events.last().map(|event| event.sequence))
@@ -761,7 +790,8 @@ pub fn compile_context(
                 && event.attempt_id.as_deref() != request.exclude_attempt_id.as_deref()
                 // collab stage digest 必须进入 ordinary turn context：
                 // 不因 squad worker attempt 集合被整段剔除。
-                && (is_collab_stage_outcome
+                && (include_squad_attempts
+                    || is_collab_stage_outcome
                     || event
                         .attempt_id
                         .as_ref()
@@ -1048,6 +1078,163 @@ pub fn compile_native_context(
         session_id: request.session_id.clone(),
         binding_key: request.binding_key.clone(),
         source: source_identity,
+        destination: request.destination.clone(),
+        stable_prefix,
+        delta: entries,
+        prompt_prefix,
+        manifest,
+        compression: ContextCompressionReport {
+            estimator: "deterministic-char-div-4".to_string(),
+            source_estimated_tokens,
+            package_estimated_tokens,
+            per_category: compression_categories,
+        },
+    })
+}
+
+/// Re-budget already normalized portable entries for a new destination.
+///
+/// Agent Bridge uses this boundary to combine an immediate source package with an inherited
+/// parent package without replaying provider-private wire history or introducing another context
+/// compiler. The same checkpoint and omission contract as ordinary Shared context remains
+/// authoritative.
+pub fn compile_portable_context(
+    request: &CompilePortableContextRequest,
+) -> Result<ContextPackage, String> {
+    if request.through_sequence_inclusive < 0 {
+        return Err("portable context delivery cursor cannot be negative".to_string());
+    }
+    if let ContextPackageSource::DelegationPortable {
+        run_id,
+        context_policy,
+        source_session_ids,
+        ..
+    } = &request.source
+    {
+        if run_id.trim().is_empty()
+            || source_session_ids.iter().any(|value| value.trim().is_empty())
+            || source_session_ids.is_empty()
+            || !matches!(context_policy.as_str(), "portable" | "inherited")
+        {
+            return Err("delegation portable context source identity is invalid".to_string());
+        }
+    }
+    let mut seen = HashSet::new();
+    for entry in &request.entries {
+        if entry.entry_id.trim().is_empty() || !seen.insert(entry.entry_id.as_str()) {
+            return Err("portable context entries require unique non-empty identities".to_string());
+        }
+        if !matches!(entry.role.as_str(), "user" | "assistant") {
+            return Err(format!(
+                "portable context entry has unsupported role: {}",
+                entry.role
+            ));
+        }
+    }
+    if request.entries.is_empty() {
+        return Err("portable context has no transferable entries".to_string());
+    }
+
+    let source_value = json!({
+        "source": &request.source,
+        "entries": &request.entries,
+        "omissions": &request.omissions,
+    });
+    let source_checksum =
+        sha256(&deterministic_json_bytes(&source_value).map_err(|error| error.to_string())?);
+    let mut entries = request.entries.clone();
+    let mut omissions = request.omissions.clone();
+    let source_estimated_tokens = estimated_tokens(&transcript(&entries, false));
+    let budget = request
+        .budget_estimated_tokens
+        .unwrap_or(DEFAULT_TRANSCRIPT_BUDGET);
+    let (mode, mode_reason) = select_mode(
+        &request.capabilities,
+        false,
+        source_estimated_tokens,
+        budget,
+    );
+    let requires_checkpoint = source_estimated_tokens > budget;
+    let mut compression_categories = if requires_checkpoint {
+        fold_checkpoint_entries(&mut entries, &mut omissions)
+    } else {
+        Vec::new()
+    };
+    if requires_checkpoint {
+        if let Some(category) =
+            trim_checkpoint_entries_to_budget(&mut entries, &mut omissions, budget)
+        {
+            compression_categories.push(category);
+        }
+    }
+
+    let included_entry_ids = entries
+        .iter()
+        .map(|entry| entry.entry_id.clone())
+        .collect::<Vec<_>>();
+    let stable_prefix = format!(
+        "MOSSX_DELEGATION_CONTEXT_V1\nsession:{}\nbinding:{}\n",
+        request.session_id, request.binding_key
+    );
+    let projected_text = transcript(&entries, requires_checkpoint);
+    let package_estimated_tokens = estimated_tokens(&projected_text);
+    if package_estimated_tokens == 0 {
+        return Err("portable context projection is empty".to_string());
+    }
+    if requires_checkpoint && package_estimated_tokens > budget {
+        return Err(format!(
+            "portable context projection exceeds budget: {package_estimated_tokens} > {budget}"
+        ));
+    }
+
+    let manifest = ProjectionManifest {
+        compiler_version: COMPILER_VERSION.to_string(),
+        mode,
+        mode_reason,
+        included_entry_ids,
+        omitted: omissions,
+        from_sequence_exclusive: None,
+        through_sequence_inclusive: request.through_sequence_inclusive,
+        source_checksum: source_checksum.clone(),
+        scope: request.scope.clone(),
+    };
+    let identity = json!({
+        "compilerVersion": COMPILER_VERSION,
+        "source": &request.source,
+        "bindingKey": request.binding_key,
+        "destination": &request.destination,
+        "capabilities": &request.capabilities,
+        "budgetEstimatedTokens": budget,
+        "sourceChecksum": source_checksum,
+        "scope": &request.scope,
+        "throughSequenceInclusive": request.through_sequence_inclusive,
+    });
+    let package_id =
+        sha256(&deterministic_json_bytes(&identity).map_err(|error| error.to_string())?);
+    let marker = format!("MOSSX_CONTEXT_PACKAGE:{package_id}:{source_checksum}");
+    let prompt_prefix = match mode {
+        ProjectionMode::PortableTranscript | ProjectionMode::Checkpoint => {
+            format!("{marker}\n{stable_prefix}\n{projected_text}\n{marker}\n")
+        }
+        _ => String::new(),
+    };
+    compression_categories.push(CompressionCategory {
+        category: "portable-turns".to_string(),
+        strategy: if requires_checkpoint {
+            "bounded-checkpoint".to_string()
+        } else {
+            "portable-transcript".to_string()
+        },
+        source_estimated_tokens,
+        package_estimated_tokens,
+    });
+
+    Ok(ContextPackage {
+        schema_version: 1,
+        package_id,
+        session_id: request.session_id.clone(),
+        binding_key: request.binding_key.clone(),
+        source: request.source.clone(),
         destination: request.destination.clone(),
         stable_prefix,
         delta: entries,
@@ -1717,5 +1904,92 @@ mod tests {
         assert_ne!(first.package_id, destination_changed.package_id);
         assert_ne!(first.package_id, capability_changed.package_id);
         assert_ne!(first.package_id, budget_changed.package_id);
+    }
+
+    #[test]
+    fn delegation_portable_entries_use_existing_budget_and_manifest_contract() {
+        let package = compile_portable_context(&CompilePortableContextRequest {
+            session_id: "source-session".to_string(),
+            binding_key: "squad:run-1:delegate:codex:default".to_string(),
+            destination: json!({"engine": "codex", "model": "gpt-5.6-sol"}),
+            source: ContextPackageSource::DelegationPortable {
+                run_id: "run-1".to_string(),
+                context_policy: "inherited".to_string(),
+                source_session_ids: vec!["source-session".to_string()],
+                inherited_package_ids: vec!["package-parent".to_string()],
+            },
+            entries: vec![PortableContextEntry {
+                entry_id: "source:user-1".to_string(),
+                sequence: 1,
+                role: "user".to_string(),
+                blocks: vec![json!({"kind": "text", "text": "review the auth flow"})],
+                outcome: None,
+            }],
+            omissions: Vec::new(),
+            capabilities: RuntimeContextCapabilities {
+                native_delta: false,
+                structured_history_import: false,
+                native_clone: false,
+                user_channel_transcript: true,
+                tool_history: false,
+                image_history: false,
+                strong_context_ack: false,
+            },
+            budget_estimated_tokens: None,
+            scope: Some(json!({"kind": "agent-bridge-context", "runId": "run-1"})),
+            through_sequence_inclusive: 7,
+        })
+        .expect("compile delegated portable context");
+
+        assert_eq!(package.manifest.mode, ProjectionMode::PortableTranscript);
+        assert_eq!(package.manifest.through_sequence_inclusive, 7);
+        assert!(package.prompt_prefix.contains("review the auth flow"));
+        assert_eq!(
+            package.manifest.scope,
+            Some(json!({"kind": "agent-bridge-context", "runId": "run-1"}))
+        );
+        assert!(matches!(
+            package.source,
+            ContextPackageSource::DelegationPortable { .. }
+        ));
+    }
+
+    #[test]
+    fn delegation_portable_entries_reject_ambiguous_identity() {
+        let entry = PortableContextEntry {
+            entry_id: "duplicate".to_string(),
+            sequence: 1,
+            role: "user".to_string(),
+            blocks: vec![json!({"kind": "text", "text": "hello"})],
+            outcome: None,
+        };
+        let error = compile_portable_context(&CompilePortableContextRequest {
+            session_id: "source-session".to_string(),
+            binding_key: "binding".to_string(),
+            destination: json!({"engine": "codex"}),
+            source: ContextPackageSource::DelegationPortable {
+                run_id: "run-1".to_string(),
+                context_policy: "portable".to_string(),
+                source_session_ids: vec!["source-session".to_string()],
+                inherited_package_ids: Vec::new(),
+            },
+            entries: vec![entry.clone(), entry],
+            omissions: Vec::new(),
+            capabilities: RuntimeContextCapabilities {
+                native_delta: false,
+                structured_history_import: false,
+                native_clone: false,
+                user_channel_transcript: true,
+                tool_history: false,
+                image_history: false,
+                strong_context_ack: false,
+            },
+            budget_estimated_tokens: None,
+            scope: None,
+            through_sequence_inclusive: 0,
+        })
+        .expect_err("duplicate portable identity must fail closed");
+
+        assert!(error.contains("unique non-empty identities"));
     }
 }

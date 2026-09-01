@@ -1,5 +1,22 @@
 export default {
   "multiAgent": {
+    "bridge": {
+      "retry": "Повторить",
+      "retrying": "Повтор…",
+      "retryFailed": "Не удалось повторить",
+      "openSession": "Открыть сеанс",
+      "viewResult": "Показать результат",
+      "viewDiff": "Показать различия",
+      "resultTitle": "Результат делегированного запуска",
+      "diffTitle": "Различия делегированного запуска",
+      "close": "Закрыть",
+      "summary": "Сводка",
+      "error": "Ошибка",
+      "branch": "Ветка",
+      "artifact": "Артефакт",
+      "changedFiles": "Изменённые файлы",
+      "noResultDetails": "Дополнительные сведения о результате отсутствуют."
+    },
     "entry": {
       "label": "Коллаб",
       "pill": "Коллаб · {{name}}",

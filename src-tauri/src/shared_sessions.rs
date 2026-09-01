@@ -64,6 +64,25 @@ pub(crate) fn ensure_supported_shared_session_engine(
     }
 }
 
+/// Runtime engines accepted by the internal Shared V2 worker lifecycle.
+///
+/// DSH remains intentionally absent from the user-facing Shared Session target set, but its
+/// existing Host RPC adapter has the ACK/terminal/cancel evidence required by Agent Bridge worker
+/// turns. Keeping this boundary separate prevents a Bridge-only parity change from silently
+/// enabling DSH in the ordinary Shared picker or `begin_turn_core` path.
+pub(crate) fn ensure_supported_shared_worker_engine(
+    engine: EngineType,
+) -> Result<EngineType, String> {
+    if is_supported_shared_session_engine(engine) || engine == EngineType::Dsh {
+        Ok(engine)
+    } else {
+        Err(format!(
+            "Unsupported shared worker engine: {}",
+            engine.icon()
+        ))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SharedEngineBinding {
@@ -519,7 +538,8 @@ pub(crate) fn is_pending_shared_binding_thread_id(engine: EngineType, thread_id:
         EngineType::Grok => normalized.starts_with("grok-pending-shared-"),
         EngineType::OpenCode => normalized.starts_with("opencode-pending-shared-"),
         EngineType::Qoder => normalized.starts_with("qoder-pending-shared-"),
-        EngineType::Gemini | EngineType::Dsh => false,
+        EngineType::Dsh => normalized.starts_with("dsh-pending-shared-"),
+        EngineType::Gemini => false,
     }
 }
 
@@ -555,8 +575,9 @@ pub(crate) fn binding_uses_established_native_thread(engine: EngineType, thread_
         | EngineType::Pi
         | EngineType::Grok
         | EngineType::OpenCode
+        | EngineType::Dsh
         | EngineType::Qoder => true,
-        EngineType::Gemini | EngineType::Dsh => false,
+        EngineType::Gemini => false,
     }
 }
 
@@ -2202,6 +2223,7 @@ mod tests {
             EngineType::Grok,
             EngineType::OpenCode,
             EngineType::Pi,
+            EngineType::Dsh,
             EngineType::Qoder,
         ] {
             assert!(is_pending_shared_binding_thread_id(
@@ -2246,6 +2268,7 @@ mod tests {
             EngineType::Grok,
             EngineType::OpenCode,
             EngineType::Pi,
+            EngineType::Dsh,
             EngineType::Qoder,
         ] {
             assert!(!binding_uses_established_native_thread(

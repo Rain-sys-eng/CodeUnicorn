@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AgentBridgeConversationSurface } from "../../agent-bridge";
 import {
   shallowEqual,
   useActiveCanvasSelector,
@@ -30,6 +31,8 @@ type MultiAgentConversationHostProps = {
   workspacePath?: string | null;
 };
 
+const EMPTY_NATIVE_THREAD_IDS: readonly string[] = [];
+
 /**
  * 聊天列宿主：
  * - Multi-Agent 活跃时优先左右分屏展示协作 Inspector（直播），不被原生子代理抢走。
@@ -46,6 +49,7 @@ export function MultiAgentConversationHost({
     (state) => ({
       threadId: state.threadId,
       workspaceId: state.workspaceId,
+      activeNativeThreadIds: state.activeNativeThreadIds,
     }),
     shallowEqual,
   );
@@ -109,10 +113,19 @@ export function MultiAgentConversationHost({
     <ConversationInspectorSplit
       messagesNode={messagesNode}
       conversationSurface={
-        <MultiAgentConversationSurface
-          workspaceId={agentWorkspaceId}
-          threadId={parentScope.threadId}
-        />
+        <>
+          <MultiAgentConversationSurface
+            workspaceId={agentWorkspaceId}
+            threadId={parentScope.threadId}
+          />
+          <AgentBridgeConversationSurface
+            workspaceId={agentWorkspaceId}
+            threadId={parentScope.threadId}
+            nativeThreadIds={
+              parentScope.activeNativeThreadIds ?? EMPTY_NATIVE_THREAD_IDS
+            }
+          />
+        </>
       }
       composerNode={composerNode}
       open={open}

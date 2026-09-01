@@ -267,6 +267,11 @@ pub fn run() {
             app.manage(baidu_tongji::BaiduTongjiState::load());
             let state = state::AppState::load(&app.handle());
             app.manage(state);
+            if let Err(error) =
+                crate::agent_orchestration::bridge::mcp_runtime::init_app_handle(app.handle().clone())
+            {
+                log::warn!("Failed to bind Agent Bridge MCP runtime: {error}");
+            }
             renderer_stability::spawn_renderer_heartbeat_watchdog(app.handle().clone());
             session_index::importer::spawn_session_index_importer(app.handle().clone());
             {

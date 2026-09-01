@@ -81,6 +81,99 @@ pub mod status;
 
 pub use manager::EngineManager;
 
+pub(crate) mod claude_bridge_mcp {
+    use serde_json::Value;
+
+    use super::claude::ClaudeSessionManager;
+
+    pub(crate) const AVAILABLE: bool = false;
+    pub(crate) const AGENT_LIST_TOOL: &str = "agent_list";
+    pub(crate) const AGENT_DELEGATE_TOOL: &str = "agent_delegate";
+    pub(crate) const AGENT_STATUS_TOOL: &str = "agent_status";
+    pub(crate) const AGENT_WAIT_TOOL: &str = "agent_wait";
+    pub(crate) const AGENT_RESULT_TOOL: &str = "agent_result";
+    pub(crate) const AGENT_SEND_TOOL: &str = "agent_send";
+    pub(crate) const AGENT_CANCEL_TOOL: &str = "agent_cancel";
+
+    pub(crate) fn tool_definitions() -> Vec<Value> {
+        Vec::new()
+    }
+
+    pub(crate) fn handles_tool(_tool_name: &str) -> bool {
+        false
+    }
+
+    pub(crate) async fn call_tool(
+        _manager: &ClaudeSessionManager,
+        _workspace_id: &str,
+        _runtime_locator: Option<&str>,
+        _tool_name: &str,
+        _arguments: Value,
+    ) -> Result<Value, String> {
+        Err("Agent Bridge MCP is unavailable in cc_gui_daemon".to_string())
+    }
+}
+
+pub(crate) mod codex_bridge_mcp {
+    use serde_json::Value;
+
+    pub(crate) const AVAILABLE: bool = false;
+    pub(crate) const AGENT_LIST_TOOL: &str = "agent_list";
+    pub(crate) const AGENT_DELEGATE_TOOL: &str = "agent_delegate";
+    pub(crate) const AGENT_STATUS_TOOL: &str = "agent_status";
+    pub(crate) const AGENT_WAIT_TOOL: &str = "agent_wait";
+    pub(crate) const AGENT_RESULT_TOOL: &str = "agent_result";
+    pub(crate) const AGENT_SEND_TOOL: &str = "agent_send";
+    pub(crate) const AGENT_CANCEL_TOOL: &str = "agent_cancel";
+
+    pub(crate) fn tool_definitions() -> Vec<Value> {
+        Vec::new()
+    }
+
+    pub(crate) fn handles_tool(_tool_name: &str) -> bool {
+        false
+    }
+
+    pub(crate) async fn call_tool(
+        _workspace_id: &str,
+        _runtime_locator: Option<&str>,
+        _tool_name: &str,
+        _arguments: Value,
+    ) -> Result<Value, String> {
+        Err("Agent Bridge MCP is unavailable in cc_gui_daemon".to_string())
+    }
+}
+
+pub(crate) mod qoder_bridge_mcp {
+    use serde_json::Value;
+
+    pub(crate) const AVAILABLE: bool = false;
+    pub(crate) const AGENT_LIST_TOOL: &str = "agent_list";
+    pub(crate) const AGENT_DELEGATE_TOOL: &str = "agent_delegate";
+    pub(crate) const AGENT_STATUS_TOOL: &str = "agent_status";
+    pub(crate) const AGENT_WAIT_TOOL: &str = "agent_wait";
+    pub(crate) const AGENT_RESULT_TOOL: &str = "agent_result";
+    pub(crate) const AGENT_SEND_TOOL: &str = "agent_send";
+    pub(crate) const AGENT_CANCEL_TOOL: &str = "agent_cancel";
+
+    pub(crate) fn tool_definitions() -> Vec<Value> {
+        Vec::new()
+    }
+
+    pub(crate) fn handles_tool(_tool_name: &str) -> bool {
+        false
+    }
+
+    pub(crate) async fn call_tool(
+        _workspace_id: &str,
+        _runtime_locator: Option<&str>,
+        _tool_name: &str,
+        _arguments: Value,
+    ) -> Result<Value, String> {
+        Err("Agent Bridge MCP is unavailable in cc_gui_daemon".to_string())
+    }
+}
+
 pub mod commands {
     use std::collections::HashMap;
     use std::fs;
@@ -93,6 +186,22 @@ pub mod commands {
     use crate::types::WorkspaceEntry;
 
     use super::{manager::EngineManager, EngineConfig, EngineType};
+
+    pub(crate) fn fan_out_provider_engine_event(
+        app: &tauri::AppHandle,
+        _provider_runtime_key: &str,
+        _engine: EngineType,
+        _runtime_turn_id: &str,
+        _native_session_id: Option<&str>,
+        _event: &super::events::EngineEvent,
+        app_server_events: Vec<crate::backend::events::AppServerEvent>,
+    ) {
+        use tauri::Emitter;
+
+        for payload in app_server_events {
+            let _ = app.emit("app-server-event", payload);
+        }
+    }
 
     #[derive(Debug, Clone, Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -535,7 +644,6 @@ pub enum EngineType {
     Qoder,
 }
 
-
 impl EngineType {
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -925,7 +1033,6 @@ pub struct SendMessageParams {
     pub collaboration_mode: Option<Value>,
     pub custom_spec_root: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

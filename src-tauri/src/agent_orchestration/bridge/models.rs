@@ -1,0 +1,235 @@
+use serde::{Deserialize, Serialize};
+
+use crate::shared_session_v2::ExecutionTargetInput;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DelegationContextPolicy {
+    Explicit,
+    Portable,
+    Inherited,
+}
+
+impl Default for DelegationContextPolicy {
+    fn default() -> Self {
+        Self::Explicit
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DelegationExecutionScope {
+    Observe,
+    SharedWorkspace,
+    IsolatedWorktree,
+}
+
+impl Default for DelegationExecutionScope {
+    fn default() -> Self {
+        Self::Observe
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DelegationRunStatus {
+    Queued,
+    Running,
+    WaitingApproval,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl DelegationRunStatus {
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEndpoint {
+    pub engine_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logical_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_session_id: Option<String>,
+}
+
+impl AgentEndpoint {
+    pub fn validate(&self, label: &str) -> Result<(), String> {
+        if self.engine_id.trim().is_empty() {
+            return Err(format!("{label} engine id is required"));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DelegationDispatchBinding {
+    pub backing_thread_id: String,
+    pub attempt_id: String,
+    pub logical_turn_id: String,
+    pub binding_key: String,
+    /// Workspace that owns the backing Shared session and native runtime. This differs from the
+    /// source workspace for isolated-worktree runs and is durable so cancel/recovery cannot fall
+    /// back to controlling the caller's workspace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_workspace_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime_turn_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_transfer: Option<DelegationContextTransfer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DelegationContextTransfer {
+    pub policy: DelegationContextPolicy,
+    pub package_id: String,
+    pub artifact_id: String,
+    pub artifact_checksum: String,
+    pub source_checksum: String,
+    pub projection_mode: String,
+}
+
+impl DelegationContextTransfer {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.policy == DelegationContextPolicy::Explicit {
+            return Err("explicit delegation cannot own an external context transfer".to_string());
+        }
+        for (label, value) in [
+            ("package id", self.package_id.as_str()),
+            ("artifact id", self.artifact_id.as_str()),
+            ("artifact checksum", self.artifact_checksum.as_str()),
+            ("source checksum", self.source_checksum.as_str()),
+            ("projection mode", self.projection_mode.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(format!("delegated context transfer {label} is required"));
+            }
+        }
+        if !matches!(
+            self.projection_mode.as_str(),
+            "portable-transcript" | "checkpoint"
+        ) {
+            return Err(format!(
+                "delegated context transfer projection mode is unsupported: {}",
+                self.projection_mode
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DelegationResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changed_files: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// Budgeted text diff preview produced by the existing Git diff service. Binary/oversized
+    /// changes remain represented by `changedFiles` even when no text preview is available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DelegationRun {
+    pub id: String,
+    pub root_run_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_run_id: Option<String>,
+    /// Multi-turn continuation lineage is intentionally separate from nested delegation.
+    /// A continuation keeps the same delegation depth and reuses the previous backing/native
+    /// session, while parentRunId means the target Agent itself delegated another Agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_of_run_id: Option<String>,
+    /// A user-requested retry always creates a fresh immutable run. This lineage is separate from
+    /// both nested delegation and same-session continuation, and never reuses runtime ownership.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_of_run_id: Option<String>,
+    pub depth: u16,
+    pub source: AgentEndpoint,
+    pub target: AgentEndpoint,
+    /// Fully-resolved target snapshot frozen before any runtime side effect.
+    pub target_execution: ExecutionTargetInput,
+    pub workspace_id: String,
+    pub task: String,
+    #[serde(default)]
+    pub file_refs: Vec<String>,
+    #[serde(default)]
+    pub context_policy: DelegationContextPolicy,
+    #[serde(default)]
+    pub execution_scope: DelegationExecutionScope,
+    pub status: DelegationRunStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dispatch_binding: Option<DelegationDispatchBinding>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<DelegationResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub created_at_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateDelegationRun {
+    pub source: AgentEndpoint,
+    pub target: AgentEndpoint,
+    /// Optional caller-selected target. AgentBridgeService resolves and freezes a local
+    /// default when omitted, then the registry requires this field to be populated.
+    pub target_execution: Option<ExecutionTargetInput>,
+    pub workspace_id: String,
+    pub task: String,
+    pub file_refs: Vec<String>,
+    pub context_policy: DelegationContextPolicy,
+    pub execution_scope: DelegationExecutionScope,
+    pub parent_run_id: Option<String>,
+}
+
+impl CreateDelegationRun {
+    pub fn validate(&self) -> Result<(), String> {
+        self.source.validate("source")?;
+        self.target.validate("target")?;
+        if self.workspace_id.trim().is_empty() {
+            return Err("workspace id is required".to_string());
+        }
+        if self.task.trim().is_empty() {
+            return Err("delegated task is required".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_result_without_diff_remains_readable() {
+        let result = serde_json::from_value::<DelegationResult>(serde_json::json!({
+            "summary": "done",
+            "changedFiles": ["src/main.rs"],
+            "branch": "feature/test",
+            "artifactPath": null
+        }))
+        .expect("legacy result");
+
+        assert_eq!(result.diff, None);
+        assert_eq!(result.changed_files, vec!["src/main.rs"]);
+    }
+}

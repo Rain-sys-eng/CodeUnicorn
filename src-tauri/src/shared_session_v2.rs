@@ -25,7 +25,7 @@ use crate::shared_context::{
     prepare_delivery, read_artifact, scan_orphan_artifacts, session_needs_history,
     terminal_binding_update, write_artifact, AcceptDeliveryRequest, ArtifactReadRequest,
     CompileContextRequest, MarkDeliverySentRequest, PendingDelivery, PrepareDeliveryRequest,
-    RuntimeContextCapabilities,
+    ContextPackage, RuntimeContextCapabilities,
 };
 use crate::shared_event_log::canonical::assembler::{
     RuntimeFinalSnapshot, RuntimeToolCall, RuntimeToolResult,
@@ -40,8 +40,8 @@ use crate::shared_event_log::{
     SharedEventWriter, StoreError, StoredBindingState,
 };
 use crate::shared_sessions::{
-    ensure_supported_shared_session_engine, now_millis, parse_shared_session_id,
-    read_latest_shared_session_snapshot, read_shared_session_meta,
+    ensure_supported_shared_session_engine, ensure_supported_shared_worker_engine, now_millis,
+    parse_shared_session_id, read_latest_shared_session_snapshot, read_shared_session_meta,
     shared_session_projection_source, shared_target_binding_key, SharedSelectedTarget,
 };
 use crate::state::AppState;
@@ -99,6 +99,7 @@ pub(crate) fn context_capabilities(target: &ExecutionTargetInput) -> RuntimeCont
         | EngineType::Grok
         | EngineType::OpenCode
         | EngineType::Pi
+        | EngineType::Dsh
         | EngineType::Qoder => {
             // Qoder（2026-08-22 黄金 turn 实测，spike §13/§14）：user-channel prompt
             // prefix 投递，inputAck "first-event" 弱语义；structured import 待 ACP
@@ -134,6 +135,17 @@ fn raw_engine_session_id(engine: EngineType, value: &str) -> Option<&str> {
     let prefix = format!("{}:", engine.icon());
     let raw = value.strip_prefix(prefix.as_str()).unwrap_or(value).trim();
     (!raw.is_empty()).then_some(raw)
+}
+
+fn ensure_binding_runtime_engine(
+    binding_key: &str,
+    engine: EngineType,
+) -> Result<EngineType, String> {
+    if binding_key.starts_with("squad:") {
+        ensure_supported_shared_worker_engine(engine)
+    } else {
+        ensure_supported_shared_session_engine(engine)
+    }
 }
 
 fn raw_qoder_session_id(
@@ -553,6 +565,7 @@ mod execution_target_contract_tests {
             EngineType::Grok,
             EngineType::OpenCode,
             EngineType::Pi,
+            EngineType::Dsh,
             EngineType::Qoder,
         ] {
             let target = ExecutionTargetInput {
@@ -615,6 +628,28 @@ mod execution_target_contract_tests {
             provider_runtime_key_for_target("workspace-1", EngineType::Pi, Some("custom"))
                 .expect("pi named runtime key"),
             "workspace-1::pi::custom",
+        );
+    }
+
+    #[test]
+    fn dsh_is_worker_only_with_workspace_scoped_runtime_ownership() {
+        let target = ExecutionTargetInput {
+            engine: EngineType::Dsh,
+            provider_profile_id: None,
+            model_catalog_entry_id: Some("deepseek-official/deepseek-v4-flash".to_string()),
+            model: Some("deepseek-official/deepseek-v4-flash".to_string()),
+            reasoning_effort: Some("high".to_string()),
+            provider_profile_name_snapshot: Some("DSH Host Catalog".to_string()),
+            provider_profile_source: Some(CanonicalProviderProfileSource::Local),
+            runtime_capability_fingerprint: Some("dsh-host-rpc:0.0.1".to_string()),
+        };
+
+        assert!(validate_resolved_shared_worker_target(&target).is_ok());
+        assert!(validate_resolved_execution_target(&target).is_err());
+        assert_eq!(
+            provider_runtime_key_for_target("workspace-1", EngineType::Dsh, None)
+                .expect("dsh worker runtime key"),
+            "dsh::workspace-1",
         );
     }
 
@@ -878,7 +913,7 @@ fn set_native_context_trust(
                 existing.engine
             )
         })
-        .and_then(ensure_supported_shared_session_engine)?;
+        .and_then(|engine| ensure_binding_runtime_engine(binding_key, engine))?;
     let state = provisioning_state_of(&existing);
     upsert_binding_row(
         writer,
@@ -1029,8 +1064,10 @@ pub enum BeginTurnStatus {
     TargetUnavailable,
 }
 
-fn validate_execution_target(target: &ExecutionTargetInput) -> Result<EngineType, String> {
-    let engine = ensure_supported_shared_session_engine(target.engine)?;
+fn validate_execution_target_for_engine(
+    target: &ExecutionTargetInput,
+    engine: EngineType,
+) -> Result<EngineType, String> {
     let provider_profile_id = target.normalized_provider();
     let models = match provider_profile_id.as_deref() {
         Some(provider_profile_id) => crate::engine::status::get_provider_scoped_engine_models(
@@ -1043,7 +1080,10 @@ fn validate_execution_target(target: &ExecutionTargetInput) -> Result<EngineType
     // 禁止现场 probe（Session Switch Catalog Fetch Gate）：catalog 不可得时按空
     // 目录 + Allow 策略放行，catalog 可用时仍交叉校验 entry/model pair。
     let models = match (engine, models) {
-        (EngineType::Qoder, None) => Vec::new(),
+        // DSH and Qoder catalogs are runtime-only. Availability was checked by the Bridge service
+        // before Tx1; this validation still rejects catalog-id/runtime-model inversions when a
+        // catalog exists, but does not invent a static fallback catalog.
+        (EngineType::Dsh | EngineType::Qoder, None) => Vec::new(),
         (_, Some(models)) => models,
         (_, None) => {
             return Err(format!(
@@ -1061,6 +1101,11 @@ fn validate_execution_target(target: &ExecutionTargetInput) -> Result<EngineType
         crate::engine::status::UnlistedRuntimeModelPolicy::Allow,
     )?;
     Ok(engine)
+}
+
+fn validate_execution_target(target: &ExecutionTargetInput) -> Result<EngineType, String> {
+    let engine = ensure_supported_shared_session_engine(target.engine)?;
+    validate_execution_target_for_engine(target, engine)
 }
 
 /// Qoder 的 provider profile 是 distribution identity，不接受普通 provider id。
@@ -1082,6 +1127,22 @@ fn validate_qoder_distribution_identity(
 pub(crate) fn validate_resolved_execution_target(
     target: &ExecutionTargetInput,
 ) -> Result<EngineType, String> {
+    validate_resolved_execution_target_with(target, ensure_supported_shared_session_engine)
+}
+
+/// Validate a worker-owned target without widening the ordinary Shared Session engine set.
+/// Agent Bridge and Squad own these scoped bindings; currently DSH is the sole additional runtime.
+pub(crate) fn validate_resolved_shared_worker_target(
+    target: &ExecutionTargetInput,
+) -> Result<EngineType, String> {
+    validate_resolved_execution_target_with(target, ensure_supported_shared_worker_engine)
+}
+
+fn validate_resolved_execution_target_with(
+    target: &ExecutionTargetInput,
+    ensure_engine: fn(EngineType) -> Result<EngineType, String>,
+) -> Result<EngineType, String> {
+    let engine = ensure_engine(target.engine)?;
     let provider_profile_id = target.normalized_provider();
     let expected_source = if provider_profile_id.is_some() {
         CanonicalProviderProfileSource::Managed
@@ -1127,7 +1188,7 @@ pub(crate) fn validate_resolved_execution_target(
             "invalid-target: modelCatalogEntryId and runtime model are required".to_string(),
         );
     }
-    validate_execution_target(target)
+    validate_execution_target_for_engine(target, engine)
 }
 
 #[derive(Debug)]
@@ -1195,7 +1256,7 @@ fn recover_creating_binding(
                 row.binding_key, row.engine
             )
         })
-        .and_then(ensure_supported_shared_session_engine)?;
+        .and_then(|engine| ensure_binding_runtime_engine(&row.binding_key, engine))?;
     let durable_binding_key = shared_target_binding_key(engine, row.provider_profile_id.as_deref());
     if durable_binding_key != row.binding_key {
         return Err(format!(
@@ -1561,7 +1622,7 @@ pub(crate) fn begin_squad_worker_turn_core(
     attempt_id: String,
     logical_turn_id: String,
 ) -> Result<BeginTurnOutcome, String> {
-    let engine = validate_resolved_execution_target(target)?;
+    let engine = validate_resolved_shared_worker_target(target)?;
     let provider_profile_id = target.normalized_provider();
     let base_binding_key = shared_target_binding_key(engine, provider_profile_id.as_deref());
     let binding_key = format!("squad:{run_id}:{node_id}:{base_binding_key}");
@@ -1963,15 +2024,20 @@ fn durable_attempt_owner(
 ) -> Result<DurableAttemptOwner, String> {
     let requested = requested_fact_for_attempt(writer, session_id, attempt_id)?;
     let target = target_input_from_snapshot(&requested.target)?;
-    let engine = ensure_supported_shared_session_engine(target.engine)
-        .map_err(|error| format!("target-unavailable: {error}"))?;
-    let provider_profile_id = target.normalized_provider();
-    let binding_key = requested
+    let worker_binding_key = requested
         .extra
         .get("squadWorkerBindingKey")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty());
+    let engine = if worker_binding_key.is_some() {
+        ensure_supported_shared_worker_engine(target.engine)
+    } else {
+        ensure_supported_shared_session_engine(target.engine)
+    }
+    .map_err(|error| format!("target-unavailable: {error}"))?;
+    let provider_profile_id = target.normalized_provider();
+    let binding_key = worker_binding_key
         .map(str::to_string)
         .unwrap_or_else(|| shared_target_binding_key(engine, provider_profile_id.as_deref()));
     // Legacy V2 facts 没有 generation。只在 durable row 仍是同一旧 Binding 时
@@ -2022,7 +2088,12 @@ fn scoped_attempt_access_mode(
 }
 
 fn validate_durable_attempt_target(owner: &DurableAttemptOwner) -> Result<(), String> {
-    validate_resolved_execution_target(&owner.target)
+    let validation = if owner.binding_key.starts_with("squad:") {
+        validate_resolved_shared_worker_target(&owner.target)
+    } else {
+        validate_resolved_execution_target(&owner.target)
+    };
+    validation
         .map(|_| ())
         .map_err(|error| format!("target-unavailable: {error}"))
 }
@@ -2531,7 +2602,7 @@ pub fn rebuild_binding_core(
                 existing.engine
             )
         })
-        .and_then(ensure_supported_shared_session_engine)?;
+        .and_then(|engine| ensure_binding_runtime_engine(binding_key, engine))?;
     let provider_profile_id = existing.provider_profile_id.clone();
     // Squad worker binding key is first-class (`squad:{run}:{node}:{engine}:{provider}`).
     // Main durable path still requires key == engine:provider to prevent identity mix-ups.
@@ -2844,6 +2915,9 @@ pub(crate) fn provider_runtime_key_for_target(
             workspace_id,
             provider_profile_id,
         )),
+        EngineType::Dsh => Ok(crate::engine::dsh_provider_profile::dsh_runtime_key(
+            workspace_id,
+        )),
         // qoder_runtime_key 内部兼容 None / legacy sentinel → Qoder Global，并为
         // Global/CN 分配彼此隔离的 runtime key。
         EngineType::Qoder => crate::engine::qoder_provider_profile::qoder_runtime_key(
@@ -2925,6 +2999,14 @@ mod runtime_dispatch_receipt_tests {
             }
         };
         let attempt_id = "attempt-receipt";
+        let requested_extra = if engine == EngineType::Dsh {
+            json!({
+                "bindingOperationId": "operation-receipt",
+                "squadWorkerBindingKey": "squad:receipt:delegate:dsh:default",
+            })
+        } else {
+            Value::Object(Default::default())
+        };
         writer
             .append_canonical_fact(
                 "receipt-session".to_string(),
@@ -2959,7 +3041,7 @@ mod runtime_dispatch_receipt_tests {
                         extra: Value::Object(Default::default()),
                     },
                     requested_at: 1,
-                    extra: Value::Object(Default::default()),
+                    extra: requested_extra,
                 }),
             )
             .expect("append receipt owner");
@@ -3115,6 +3197,31 @@ mod runtime_dispatch_receipt_tests {
             )
             .is_ok());
         }
+    }
+
+    #[test]
+    fn dsh_worker_receipt_preserves_host_runtime_owner_and_catalog_model() {
+        let workspace_id = "workspace-dsh";
+        let model = "deepseek-official/deepseek-v4-flash";
+        let owner = durable_owner_for_receipt_test(EngineType::Dsh, None, model, Some("high"));
+        let runtime_key = provider_runtime_key_for_target(workspace_id, EngineType::Dsh, None)
+            .expect("dsh runtime key");
+
+        assert!(validate_runtime_dispatch_receipt(
+            &json!({
+                "mossxDispatchReceipt": {
+                    "engine": "dsh",
+                    "providerProfileId": null,
+                    "providerProfileSource": "local",
+                    "providerRuntimeKey": runtime_key,
+                    "model": model,
+                    "reasoningEffort": "high",
+                }
+            }),
+            &owner,
+            workspace_id,
+        )
+        .is_ok());
     }
 
     #[test]
@@ -3812,9 +3919,9 @@ async fn materialize_attempt_binding(
                 .unwrap_or_else(|| Uuid::new_v4().to_string());
             format!("grok:{raw_session_id}")
         }
-        // Kimi / OpenCode / Pi 真实 id 由 CLI 事后回写；首轮可暂存 pending，
+        // Kimi / OpenCode / Pi / DSH 真实 id 由 CLI 事后回写；首轮可暂存 pending，
         // settlement 后 rebind 到 `engine:{raw}`。若已有 established 前缀 id 则复用。
-        EngineType::Kimi | EngineType::OpenCode | EngineType::Pi => {
+        EngineType::Kimi | EngineType::OpenCode | EngineType::Pi | EngineType::Dsh => {
             if let Some(existing_id) = existing.as_deref().filter(|value| {
                 crate::shared_sessions::binding_uses_established_native_thread(owner.engine, value)
             }) {
@@ -4088,6 +4195,33 @@ pub(crate) async fn shared_session_v2_prepare_delivery(
     attempt_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    shared_session_v2_prepare_delivery_core(workspace_id, thread_id, attempt_id, None, state).await
+}
+
+pub(crate) async fn shared_session_v2_prepare_delivery_with_package(
+    workspace_id: String,
+    thread_id: String,
+    attempt_id: String,
+    package: ContextPackage,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    shared_session_v2_prepare_delivery_core(
+        workspace_id,
+        thread_id,
+        attempt_id,
+        Some(package),
+        state,
+    )
+    .await
+}
+
+async fn shared_session_v2_prepare_delivery_core(
+    workspace_id: String,
+    thread_id: String,
+    attempt_id: String,
+    package_override: Option<ContextPackage>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
     let writer = require_writer(&state)?;
     let shared_session_id = parse_shared_session_id(&thread_id)?;
     require_shared_session_workspace_owner(&workspace_id, &shared_session_id)?;
@@ -4111,54 +4245,84 @@ pub(crate) async fn shared_session_v2_prepare_delivery(
         let capabilities = context_capabilities(&owner.target);
         let destination =
             serde_json::to_value(&owner.requested.target).map_err(|error| error.to_string())?;
-        let incremental_request = CompileContextRequest {
-            session_id: shared_session_id.clone(),
-            binding_key: owner.binding_key.clone(),
-            destination: destination.clone(),
-            destination_native_session_id: binding
-                .as_ref()
-                .and_then(|row| row.native_session_id.clone()),
-            from_sequence_exclusive: binding
-                .as_ref()
-                .and_then(|row| row.accepted_through_sequence),
-            through_sequence_inclusive: Some(source_upper),
-            exclude_attempt_id: Some(attempt_id.clone()),
-            capabilities: capabilities.clone(),
-            budget_estimated_tokens: None,
-        };
-        let mut package = compile_context(&events, &incremental_request)?;
         let trust = binding
             .as_ref()
             .map(read_native_context_trust)
             .unwrap_or(NativeContextTrust::Dirty);
-        let mut rematerialized = false;
-        // P0：dirty 时只要 needs_history，一律全量 rematerialize。
-        // 不可仅看 zero-transfer——失败轮「继续」未 turnAccepted 时增量 package
-        // 非空但只有短指令，仍会丢原任务（图1）。
-        let needs_history = session_needs_history(&events, &incremental_request)?;
-        if trust == NativeContextTrust::Dirty && needs_history {
-            package = compile_context(
-                &events,
-                &CompileContextRequest {
-                    session_id: shared_session_id.clone(),
-                    binding_key: owner.binding_key.clone(),
-                    destination,
-                    destination_native_session_id: None,
-                    from_sequence_exclusive: None,
-                    through_sequence_inclusive: Some(source_upper),
-                    exclude_attempt_id: Some(attempt_id.clone()),
-                    capabilities: capabilities.clone(),
-                    budget_estimated_tokens: None,
-                },
-            )?;
-            rematerialized = true;
-            if is_zero_transfer_package(&package) {
+        let (package, rematerialized) = if let Some(package) = package_override {
+            if package.session_id != shared_session_id {
                 return Err(format!(
-                    "empty-context-handoff: needs-history but package empty after rematerialize (binding={}, trust=dirty)",
-                    owner.binding_key
+                    "prepared context session mismatch: expected {}, got {}",
+                    shared_session_id, package.session_id
                 ));
             }
-        }
+            if package.binding_key != owner.binding_key {
+                return Err(format!(
+                    "prepared context binding mismatch: expected {}, got {}",
+                    owner.binding_key, package.binding_key
+                ));
+            }
+            if package.destination != destination {
+                return Err(
+                    "prepared context destination does not match durable target".to_string()
+                );
+            }
+            if package.manifest.from_sequence_exclusive.is_some()
+                || package.manifest.through_sequence_inclusive != source_upper
+            {
+                return Err(format!(
+                    "prepared context cursor mismatch for backing session {}",
+                    shared_session_id
+                ));
+            }
+            (package, false)
+        } else {
+            let incremental_request = CompileContextRequest {
+                session_id: shared_session_id.clone(),
+                binding_key: owner.binding_key.clone(),
+                destination: destination.clone(),
+                destination_native_session_id: binding
+                    .as_ref()
+                    .and_then(|row| row.native_session_id.clone()),
+                from_sequence_exclusive: binding
+                    .as_ref()
+                    .and_then(|row| row.accepted_through_sequence),
+                through_sequence_inclusive: Some(source_upper),
+                exclude_attempt_id: Some(attempt_id.clone()),
+                capabilities: capabilities.clone(),
+                budget_estimated_tokens: None,
+            };
+            let mut package = compile_context(&events, &incremental_request)?;
+            let mut rematerialized = false;
+            // P0：dirty 时只要 needs_history，一律全量 rematerialize。
+            // 不可仅看 zero-transfer——失败轮「继续」未 turnAccepted 时增量 package
+            // 非空但只有短指令，仍会丢原任务（图1）。
+            let needs_history = session_needs_history(&events, &incremental_request)?;
+            if trust == NativeContextTrust::Dirty && needs_history {
+                package = compile_context(
+                    &events,
+                    &CompileContextRequest {
+                        session_id: shared_session_id.clone(),
+                        binding_key: owner.binding_key.clone(),
+                        destination,
+                        destination_native_session_id: None,
+                        from_sequence_exclusive: None,
+                        through_sequence_inclusive: Some(source_upper),
+                        exclude_attempt_id: Some(attempt_id.clone()),
+                        capabilities: capabilities.clone(),
+                        budget_estimated_tokens: None,
+                    },
+                )?;
+                rematerialized = true;
+                if is_zero_transfer_package(&package) {
+                    return Err(format!(
+                        "empty-context-handoff: needs-history but package empty after rematerialize (binding={}, trust=dirty)",
+                        owner.binding_key
+                    ));
+                }
+            }
+            (package, rematerialized)
+        };
         let prepared_at = now_millis() as i64;
         let artifact = write_artifact(
             context_artifact_root(&state)?,
@@ -4570,6 +4734,18 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
         user_text
     };
 
+    if owner.engine == EngineType::Dsh && !had_native_binding {
+        // DSH creates the native session inside `session.prompt`; mux events can beat the HTTP
+        // request-response ACK. Hold this workspace/runtime scope until exact turn + session
+        // identities are bound below.
+        state
+            .shared_runtime_coordinator
+            .hold_native_provisioning(&attempt_id)
+            .map_err(|error| {
+                persist_ambiguous_dispatch(writer, &shared_session_id, &owner, &error)
+            })?;
+    }
+
     let response = match owner.engine {
         EngineType::Codex => {
             let (mode_enforcement_enabled, extra_developer_instructions) = {
@@ -4635,7 +4811,12 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
             )
             .await
         }
-        EngineType::Kimi | EngineType::Grok | EngineType::OpenCode | EngineType::Pi | EngineType::Qoder => {
+        EngineType::Kimi
+        | EngineType::Grok
+        | EngineType::OpenCode
+        | EngineType::Pi
+        | EngineType::Dsh
+        | EngineType::Qoder => {
             let runtime_provider_profile_id = owner.provider_profile_id.clone().or_else(|| {
                 Some(
                     match owner.engine {
@@ -4650,6 +4831,9 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
                         }
                         EngineType::Pi => {
                             crate::engine::pi_provider_profile::PI_LOCAL_PROVIDER_PROFILE_ID
+                        }
+                        EngineType::Dsh => {
+                            crate::engine::dsh_provider_profile::DSH_LOCAL_PROVIDER_PROFILE_ID
                         }
                         EngineType::Qoder => {
                             crate::engine::qoder_provider_profile::QODER_GLOBAL_PROVIDER_PROFILE_ID
@@ -4742,6 +4926,24 @@ pub(crate) async fn shared_session_v2_dispatch_turn(
             &error,
         ));
     }
+    let native_session_id = if owner.engine == EngineType::Dsh {
+        let acknowledged = response
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| value.starts_with("dsh:") && value.len() > "dsh:".len())
+            .ok_or_else(|| {
+                persist_ambiguous_dispatch(
+                    writer,
+                    &shared_session_id,
+                    &owner,
+                    "DSH request-response ACK missing canonical native session identity",
+                )
+            })?;
+        acknowledged.to_string()
+    } else {
+        native_session_id
+    };
     let dispatch_receipt = validate_runtime_dispatch_receipt(&response, &owner, &workspace_id)
         .map_err(|error| persist_ambiguous_dispatch(writer, &shared_session_id, &owner, &error))?;
     if owner.engine == EngineType::Claude {
@@ -5399,6 +5601,11 @@ pub(crate) async fn shared_session_v2_interrupt_turn(
                     })?;
                 session.interrupt_turn(&route.runtime_turn_id).await
             }
+            EngineType::Dsh => {
+                let settings = state.app_settings.lock().await.clone();
+                let runtime = crate::engine::dsh::runtime_settings_from_app(&settings);
+                crate::engine::dsh::interrupt_turn(&runtime, &route.runtime_turn_id).await
+            }
             unsupported => Err(format!(
                 "target-unavailable: unsupported Shared interrupt engine {}",
                 unsupported.icon()
@@ -5648,7 +5855,7 @@ fn clear_binding_recovery_if_idle(
                 existing.engine
             )
         })
-        .and_then(ensure_supported_shared_session_engine)?;
+        .and_then(|engine| ensure_binding_runtime_engine(binding_key, engine))?;
     let has_native = existing
         .native_session_id
         .as_deref()

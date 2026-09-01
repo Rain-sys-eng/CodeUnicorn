@@ -15,6 +15,9 @@ import {
   normalizeSharedSessionEngine,
 } from "../utils/sharedSessionEngines";
 
+const BRIDGE_INTERNAL_BACKING_NOTICE =
+  "Control: agent-bridge.internal-backing-session";
+
 export async function startSharedSession(
   workspaceId: string,
   initialTarget: ExecutionTarget,
@@ -108,10 +111,52 @@ export type SharedContextOrphanReport = {
   paths: string[];
 };
 
+function sharedSummaryThreadId(session: Record<string, unknown>): string | null {
+  const threadId = session.threadId;
+  if (typeof threadId === "string" && threadId.trim()) {
+    return threadId.trim();
+  }
+  const id = session.id;
+  if (typeof id === "string" && id.trim()) {
+    return `shared:${id.trim()}`;
+  }
+  return null;
+}
+
+function projectionMarksBridgeBacking(items: SharedProjectionItem[]): boolean {
+  return items.some(
+    (item) =>
+      item.kind === "systemNotice" &&
+      item.content?.text === BRIDGE_INTERNAL_BACKING_NOTICE,
+  );
+}
+
 export async function listSharedSessions(workspaceId: string) {
-  return invoke<Record<string, unknown>[]>("list_shared_sessions", {
+  const sessions = await invoke<Record<string, unknown>[]>("list_shared_sessions", {
     workspaceId,
   });
+  if (sessions.length === 0) {
+    return sessions;
+  }
+
+  const visibility = await Promise.all(
+    sessions.map(async (session) => {
+      const threadId = sharedSummaryThreadId(session);
+      if (!threadId) {
+        return true;
+      }
+      try {
+        const projection = await loadSharedProjection(workspaceId, threadId);
+        return !projectionMarksBridgeBacking(projection);
+      } catch {
+        // A projection read failure is not evidence that an ordinary user session is internal.
+        // Keep it visible; startup reconciliation/backend ownership remain responsible for repair.
+        return true;
+      }
+    }),
+  );
+
+  return sessions.filter((_, index) => visibility[index]);
 }
 
 export async function loadSharedSession(workspaceId: string, threadId: string) {

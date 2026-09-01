@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -69,7 +71,52 @@ jobs:
           mkdir -p dist/assets
           printf '<!doctype html><html><body></body></html>\n' > dist/index.html
           printf 'ci placeholder\n' > dist/assets/ci-placeholder.txt
+      - name: Agent Bridge changed-file rustfmt
+        run: |
+          files=( \
+            src/agent_orchestration/bridge/commands.rs \
+            src/agent_orchestration/bridge/dispatcher.rs \
+            src/agent_orchestration/bridge/mcp_gateway.rs \
+            src/agent_orchestration/bridge/mcp_gateway_integration_tests.rs \
+            src/agent_orchestration/bridge/mcp_runtime.rs \
+            src/agent_orchestration/bridge/mcp_source.rs \
+            src/agent_orchestration/bridge/models.rs \
+            src/agent_orchestration/bridge/persistence.rs \
+            src/agent_orchestration/bridge/run_registry.rs \
+            src/agent_orchestration/bridge/service.rs \
+            src/agent_orchestration/bridge/worktree.rs \
+            src/agent_orchestration/graph_coordinator.rs \
+            src/agent_orchestration/scheduler.rs \
+            src/backend/app_server.rs \
+            src/backend/app_server_cli.rs \
+            src/backend/app_server_tests.rs \
+            src/codex/session_runtime.rs \
+            src/bin/cc_gui_daemon/engine_bridge.rs \
+            src/engine/claude/askuser_mcp.rs \
+            src/engine/codex_bridge_mcp.rs \
+            src/engine/mod.rs \
+            src/engine/qoder.rs \
+            src/engine/qoder_bridge_mcp.rs \
+            src/shared_event_log/canonical/validator.rs \
+            src/shared_session_v2.rs \
+            src/command_registry.rs \
+            src/state.rs \
+          )
+          if ! rustfmt --edition 2021 --config skip_children=true --check "${files[@]}"; then
+            rustfmt --edition 2021 --config skip_children=true "${files[@]}"
+            git diff -- "${files[@]}" > agent-bridge-rustfmt.patch
+            exit 1
+          fi
+        working-directory: src-tauri
+      - name: Upload Agent Bridge rustfmt patch
+        if: always() && hashFiles('src-tauri/agent-bridge-rustfmt.patch') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-bridge-rustfmt-patch
+          path: src-tauri/agent-bridge-rustfmt.patch
+          if-no-files-found: error
       - name: Rust tests
+        if: success()
         run: cargo test
         working-directory: src-tauri
   lint:

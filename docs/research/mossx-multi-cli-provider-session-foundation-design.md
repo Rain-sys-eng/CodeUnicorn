@@ -1,3721 +1,59 @@
----
-type: research
-status: implemented
----
-
-<!-- DOC-LIFECYCLE: active-architecture-reference -->
-> [!IMPORTANT]
-> **Lifecycle: Active architecture reference with historical execution sections.** Foundation decisions ä»è¢« current specs ä½¿ç”¨ï¼›implementation checklist ä¸ wave çŠ¶æ€åªä¿ç•™å†å²è¯æ®ã€‚Current contract ä»¥ [OpenSpec main specs](../../openspec/specs/README.md) ä¸ä»£ç ä¸ºå‡†ã€‚
-
-# mossx å¤š CLI Ã— å¤š Provider ä¼šè¯åŸºçŸ³è®¾è®¡
-
-> å†…å®¹ç±»å‹ï¼šArchitecture Decision Record
-> ç”Ÿå‘½å‘¨æœŸï¼šaccepted / implemented in slicesï¼›åŸå§‹ Aâ€“D è·¯çº¿å·²å½’æ¡£ï¼Œåç»­ä¿®å¤ä¸æ”¶å£ change ç‹¬ç«‹æ¼”è¿›
-> åˆå§‹æ—¥æœŸï¼š2026-07-27
-2026-08-26 Â· PI åå°ä»»åŠ¡ canonical `backgroundTask` item å¥‘çº¦ä¸ä¸‰è·¯çŠ¶æ€è¡¨ï¼ˆ`pi-background-task-experience`ï¼‰ï¼špi æ‰©å±• bg å·¥å…·åœ¨äº‹ä»¶å±‚æŠ•å½±ä¸º backgroundTask itemï¼ˆstartâ†’item/started / receipt+notificationâ†’item/backgroundTask/updatedï¼‰ï¼Œå‰ç«¯ä¼šè¯çº§çŠ¶æ€è¡¨ + BackgroundTaskCard æ´»ä½“å¡/ç»ˆæ€æŠ˜å  + composer åå°ä»»åŠ¡ pill + å†å²é‡è½½åˆå¹¶ï¼›post-settle orphan é€šçŸ¥è¢« per-turn forwarder ä¸¢å¼ƒä¸ºå·²çŸ¥ç¼ºå£ï¼ˆB registry watcher P2 æ ¹æ²»ï¼‰ï¼Œè¯¦è§ä¸‹æ–¹æ ¡å‡†è¡¨ PI background-task è¡Œã€‚
-> æœ€è¿‘æ ¡å‡†ï¼š2026-08-25 Â· Atomic æ€è€ƒå¼ºåº¦è”åŠ¨æ‰©åˆ° PIï¼ˆ`expand-shared-atomic-reasoning-linkage-to-pi`ï¼‰ï¼šnative PI composer æ€è€ƒæ¡£ä½å·²åœ¨ `add-pi-thinking-level-selector`ï¼ˆ2026-08-25ï¼‰è½åœ°ï¼Œä½† Shared / create-session Atomic å¯¹è¯æ¡†èµ°çš„æ˜¯å¦ä¸€æ¡å‰ç«¯é“¾è·¯ï¼ˆ`atomicModelReasoning.ts` + `Composer.tsx` çš„ `atomicModelReasoningRef` + shared target hydrate reconcile effectï¼‰ï¼Œåªæ¥ Codex / Claude / Grokï¼Œå¯¹ PI ç›´æ¥è¿”ç©ºæ¡£ä½ / æ¸…ç©º effortï¼Œå¯¼è‡´ç”¨æˆ·åœ¨ Shared Session é€‰ PI æ¨¡å‹çœ‹ä¸åˆ° `ReasoningSelect`ã€send è¾¹ç•Œ reconcile æŠŠ effort æ¸…æˆ nullã€‚ä¿®å¤æ¥ PI å•å¼•æ“åˆ°è¿™å¥—åŸå­åŒ–è”åŠ¨ï¼ˆDSH / Qoder / Kimi / Grok / OpenCode ç”±å„è‡ª change è¯„ä¼°ï¼‰ï¼šâ‘  `atomicModelReasoning.ts` æ–°å¢ private `enrichModelReasoningForEngine`ï¼ˆPI é€ä¼ ï¼Œä¸å‘æ˜ï¼‰ï¼›`resolveAtomicReasoningOptions` / `reconcileAtomicReasoningEffort` / `resolveAtomicDefaultReasoningEffort` / `resolveAtomicReasoningEffort` å››ä¸ª export æ‰© `engine === "pi"` åˆ†æ”¯ï¼Œä¸ Codex åŒå½¢æ€ï¼ˆå‘½ä¸­ allowlist ä¿ç•™ã€ä¸å‘½ä¸­è½ defaultã€capability-neutral ä¿ç•™ currentï¼‰ï¼›`enrichModelInfoWithAtomicReasoning` ä¿æŒ codex-only æ—©é€€ï¼Œä¸æ±¡æŸ“ `useProviderTargetCatalogOwners.ts` / `ModelSelect.tsx` native è·¯å¾„ï¼›â‘¡ `Composer.tsx atomicModelReasoningRef` é codex åˆ†æ”¯æ‰©ä¸ºï¼šå½“ `target.engine === "pi"` æ—¶æŒ‰ id/model åŒ¹é… `providerModelCatalogs["pi"]`ï¼ŒçŒ `supportedReasoningEfforts` / `defaultReasoningEffort`ï¼›å…¶å®ƒé codex é pi å¼•æ“ä¿æŒã€Œåªå¡« id/modelã€ï¼ˆå‘åå…¼å®¹ï¼‰ï¼›catalog é€‰æ‹©å™¨ç”± `providerModelCatalogs?.codex` æ”¹ä¸º `providerModelCatalogs?.[target.engine]`ï¼ˆcodex è¡Œä¸ºä¸å˜ï¼‰ï¼›â‘¢ shared target hydrate reconcile effect æ—©é€€ç™½åå•æ‰© `codex | claude | grok | pi`ï¼Œè®© Shared Session hydrate æ—¶ PI æ¨¡å‹çš„ effort ä¹ŸæŒ‰ PI allowlist æ”¶æ•›ï¼›â‘£ åç«¯é›¶æ”¹åŠ¨ â€”â€” PI RPC `set_thinking_level` / fallback `--thinking` ä¸ Shared V2 dispatch `engine_send_message` é€ä¼  `owner.target.reasoning_effort`ï¼ˆ`shared_session_v2.rs` ~L4605 çš„ `Kimi | Grok | OpenCode | Pi | Qoder` è‡‚ï¼‰å·²å°±ä½ï¼Œæœ¬æ¬¡çº¯å‰ç«¯è”åŠ¨ï¼›â‘¤ native PI composer 0 å›å½’â€”â€”`useAtomicReasoningProjection = isSharedSessionResolved || createSessionTargetPicker` è®© native è·¯å¾„ä¸èµ° atomicModelReasoningRefï¼Œhydrate effect æ—©é€€æ¡ä»¶ `!isSharedSessionResolved` å±è”½ nativeï¼Œenrich helpers codex-only æ—©é€€ä¸æ±¡æŸ“ native è·¯å¾„ï¼ˆè¯¦è§ proposal.md Â§ã€Œä¸å›å½’ native çº¢çº¿ã€ï¼‰ã€‚äº‹å®æºï¼š`src/features/models/atomicModelReasoning.ts` æ–°å¢ `enrichModelReasoningForEngine` + å››ä¸ª export çš„ pi åˆ†æ”¯ã€`src/features/composer/components/Composer.tsx` atomicModelReasoningRef é codex åˆ†æ”¯ + shared target hydrate reconcile effect ç™½åå•ã€`src/features/models/atomicModelReasoning.test.ts`ï¼ˆ24 cases å« PI ä¸ƒæ¡£ / map holes / unknown-neutral / cross-engine inheritï¼‰ã€`src/features/composer/components/ChatInputBox/selectors/ModelSelect.test.tsx`ï¼ˆæ–°å¢ 4 ä¸ª PI buildProviderExecutionTarget casesï¼‰ã€`src/features/composer/components/Composer.shared-pi-reasoning.test.tsx`ï¼ˆæ–°å»º 5 casesï¼šcatalog allowlist æŠ•å½± / map holes å­é›† / runtime-only capability-neutral / effort è¶Šç•Œ reconcile / native ä¸æ¶ˆè´¹ providerModelCatalogs å›å½’æ–­è¨€ï¼‰ã€OpenSpec `expand-shared-atomic-reasoning-linkage-to-pi`ã€‚æ­¤å‰ 2026-08-24 Â· AskUserQuestion ç»“ç®—å¢“ç¢‘ä¸ completed ACK å¯¹é½ï¼ˆ`fix-askuserquestion-settlement-tombstone`ï¼‰ï¼šç”¨æˆ·å®è¯ã€Œç­”äº†ä¹Ÿæ²¡ç”¨ã€å¼€å§‹æ‰§è¡Œäº†åˆå¼¹æ¡†ã€å¹½çµå¡â€”â€”æˆåŠŸç»“ç®—åª remove é˜Ÿåˆ—ã€æ—  session çº§ tombstoneï¼Œä¸” Claude æˆåŠŸåº”ç­”å‡ ä¹ä¸ emit `completed=true`ï¼Œresume é‡æ”¾/è¿Ÿåˆ° `item/tool/requestUserInput` æŠŠåŒé¢˜å¡é‡æ–°å…¥é˜Ÿã€‚è½åœ°ä¸‰å±‚ï¼šâ‘  FE session çº§æœ‰ç•Œ settlement tombstoneï¼ˆMAX=2048 æº¢å‡º clear+re-markï¼›identity = `requestUserInputIdentityKey`ï¼Œå¸¦ workspace + Shared owner/attempt ç»´åº¦ï¼‰ï¼Œaccepted / stale ç»“ç®—ä¸æ”¶åˆ° `completed=true` æ—¶ markï¼›`useThreadUserInputEvents` å…¥é˜Ÿå‰æ£€æŸ¥ + reducer `addUserInputRequest` åŒé—¸é—¨ fail-closed ä¸¢å¼ƒï¼ˆhistory reopen åŒè¢«æŒ¡ï¼‰ï¼›é stale æäº¤å¤±è´¥ä¸å†™å¢“ç¢‘ã€ä¿ç•™é‡è¯•ã€‚â‘¡ BE Claude `respond_to_user_input` æˆåŠŸï¼ˆMCP oneshot / native notify ä¸¤è·¯å¾„ï¼‰åå†™ session çº§ `settled_user_input_request_ids`ï¼ˆcap 2048 æº¢å‡º clearï¼‰å¹¶ emit `RequestUserInput { completed: true, questions: [] }`ï¼Œä¸è¶…æ—¶ç»“ç®—è·¯å¾„ completed è¯­ä¹‰å¯¹é½ï¼›MCP request_id æ¼‚ç§»æ—¶ fallback sole waiter äº¤ä»˜ï¼ŒåŒ id å‡ mark + emitï¼ˆskip/submit ä¸æŒ‚æ­»ï¼‰ã€‚â‘¢ Native é‡å…¥ guardï¼š`convert_ask_user_question_to_request` å¯¹å·² settled request_idï¼ˆ`ask-<DefaultHasher(tool_id)>`ï¼‰åªå‘ completed=trueã€ä¸æ³¨å†Œ pendingï¼›stream wait æ¡ä»¶æ”¶ç´§ä¸º `matches!(RequestUserInput { completed: false })`ï¼Œcompleted ç”Ÿå‘½å‘¨æœŸäº‹ä»¶ä¸å†è¿› kill+`--resume` ç­‰å¾…ã€‚æ–° tool_id æ´¾ç”Ÿæ–° request_id ä»å¯æ­£å¸¸å¼¹çª—ï¼›ä¸æ”¹ Codex æœ¬åœ° plan å¡åè®®ã€æ— æ–° IPCã€‚äº‹å®æºï¼š`src/utils/userInputSettlementTombstone.ts` `markUserInputRequestSettled` / `isUserInputRequestSettled`ã€`src/features/threads/hooks/{useThreadUserInputEvents.ts,useThreadUserInput.ts,useThreadsReducer.ts}`ï¼ˆ`addUserInputRequest` é—¸é—¨ï¼‰ã€`src/utils/requestUserInputIdentity.ts` `requestUserInputIdentityKey`ã€`src-tauri/src/engine/claude/user_input.rs` `respond_to_user_input` / `emit_user_input_request_completed` / `convert_ask_user_question_to_request` / `mark_user_input_request_settled` / `take_sole_mcp_answer_waiter`ã€`src-tauri/src/engine/claude.rs` stream `is_user_input_request`ï¼ˆ`completed: false`ï¼‰ã€‚æ­¤å‰ 2026-08-24 Â· å¹¶è¡Œ Native è·¨ä¾›åº”å•† model residual æ­¢è¡€ï¼ˆ`fix-native-parallel-provider-model-isolation`ï¼‰ï¼šç”¨æˆ·å®è¯å¹¶è¡Œå¤šä¸ªç»‘å®šä¸åŒ managed provider çš„ native Claude ä¼šè¯åï¼Œå›å†å²ä¼šè¯äºŒæ¬¡å‘é€æŠŠä¸Šä¸€ä¼šè¯äº§å“æ¨¡å‹åï¼ˆ`MiniMax-M3`ï¼‰å½“ freeform é™é»˜ `--model` ä¸Šé€ DeepSeek API è§¦å‘ 400ï¼ˆ`supported API model names are deepseek-v4-pro or deepseek-v4-flash`ï¼‰ã€‚ä¿®å¤ä»¥ send è¾¹ç•Œä¸ºå”¯ä¸€å¼ºåˆ¶é—¸é—¨ï¼šâ‘  managed runtime resolver çš„è·¨ä¾›åº”å•† residual å¯å‘å¼ä»ã€Œä»… `k3`/`kimi-*`ã€æ‰©å±•ä¸º Kimi ç³» + MiniMax ç³» + å¸¸è§ç¬¬ä¸‰æ–¹äº§å“å‰ç¼€ï¼ˆ`deepseek`/`glm-`/`qwen`/`doubao`/`moonshot`/`abab`/`ernie`/`baichuan`/`yi-`/`step-`/`longcat`ï¼‰ï¼Œä¸”ä»…å½“ catalog å°±ç»ªä¸” `!legal.has(value)`ï¼ˆcatalog entry å‘½ä¸­ / runtime åæŸ¥ / profile env åˆæ³•é›†å‡ä¼˜å…ˆäºå¯å‘å¼ï¼‰æ—¶æ‰ repair åˆ° catalog defaultï¼ˆ`repaired=true`ï¼‰ï¼Œæ‹’ç»ã€Œå…¨ unlisted å°æ€ã€ä¿ä½åˆæ³• freeformï¼ˆ`my-org-router-v2`ã€`claude-opus-4-6` ä¸å›å½’ï¼‰ï¼›â‘¡ catalog ç©ºçª—ä»æ”¾è¡Œ freeformï¼Œä¸æ‹¿äº§å“åå¯å‘å¼è¯¯æ€ catalog æœªå°±ç»ªæ—¶çš„åˆæ³•ä¼šè¯ï¼›â‘¢ composer draft é—¸ç»´æŒ `*-pending-*` é™å®šï¼Œfinalized å†å²ä¼šè¯ä¸åƒä¸Šä¸€ä¼šè¯ draft selectionï¼›â‘£ Shared `selectedNextTarget` è·¯å¾„é›¶ä»£ç  diffã€‚design D3 åç«¯ `record_engine_provider_binding_at_path` é˜²é™é»˜è¦†ç›–ä¸ºå¯é€‰ P1ï¼Œæœ¬æ‰¹æœªè½åœ°ï¼ˆè§£æä¼˜å…ˆçº§ä» request > catalogï¼‰ã€‚äº‹å®æºï¼š`src/features/models/claudeManagedRuntimeModel.ts` `FOREIGN_RUNTIME_RESIDUE_HINTS` / `isForeignClaudeRuntimeResidue` / `resolveClaudeManagedRuntimeModel`ã€`src/app-shell/domains/useAppShellComposerModelSection.ts` `resolvedModel`ã€`src/app-shell/domains/selectedComposerSession.ts` `shouldApplyDraftComposerSelectionToThread`ã€ä¸¤ä¸ªåŒå `.test.ts`ã€commit `a98c10dbc`ã€‚æ­¤å‰ 2026-08-24 Â· Shared åˆ›å»ºé»˜è®¤ Provider æ”¹ã€Œæœ‰åºåˆ—è¡¨ç¬¬ä¸€é¡¹ + profile æƒå¨ catalog/mappingã€ï¼ˆ`fix-shared-create-default-provider-catalog`ï¼‰ï¼š`handleStartSharedConversation` å¼ƒç”¨è£¸ `getEngineModels(engine)`ï¼ˆClaude æœ¬åœ°è·¯å¾„åƒ engine status è¿‡æœŸ cacheï¼Œæ¸ é“ chip æ ‡ã€Œæœ¬åœ°é…ç½®ã€å´æ˜¾ç¤ºè¿‡æœŸ MiniMax æ˜ å°„ï¼Œç”¨æˆ·å®è¯å…¨ä¸² MiniMax-M3ï¼‰ï¼Œæ”¹èµ° `resolveSharedSessionCreateInitialTarget`â€”â€”`loadOrderedSharedCreateProviders` å–ä¸ Atomic picker åŒåºçš„ Provider åˆ—è¡¨ï¼ˆæœ¬åœ° sentinel ä¼˜å…ˆï¼›Qoder æ—  provider CRUD å›ºå®š global/cn åŒ profileï¼›PI è½ sentinelï¼‰ï¼Œ`resolveFirstSharedCreateProvider` å®šç¬¬ä¸€é¡¹ï¼ˆdisk/managed source + åç§°å¿«ç…§ï¼Œç¦æ­¢ç¡¬ç¼–ç ã€Œæ°¸è¿œ localã€æˆ–ã€Œæ°¸è¿œç¬¬ä¸€ä¸ª managedã€ï¼‰ï¼Œ`loadAuthoritativeModelsForCreateProvider` æŒ‰ profile æƒå¨å–æ•°ï¼ˆæœ¬åœ° sentinel + `forceRefresh: true` é‡è¯» settingsï¼›managed å¸¦ providerProfileId èµ° provider-scoped å®æ—¶ configï¼‰ï¼›Claude åˆ›å»ºå‰ `syncClaudeModelMappingForProfile(profileId)` ä¸æ¸ é“åˆ‡æ¢åŒæºï¼ˆå¤±è´¥ä¸é˜»æ–­åˆ›å»ºï¼‰ï¼›`buildSharedSessionInitialTarget` ç»Ÿä¸€äº§å‡ºå®Œæ•´ ExecutionTargetï¼ˆé»˜è®¤ model = catalog `isDefault` è¡Œå¦åˆ™é¦–è¡Œã€runtime = `model || id`ã€reasoning æŒ‰ target capability æ’­ç§ inherit:falseã€ç©º catalog fail-closed ä¸å»ºä¼šè¯ï¼‰ã€‚æ‰“å¼€æ—¢æœ‰ä¼šè¯ç¡¬è¾¹ç•Œï¼šcreate/open åˆ†å‰ï¼Œhydrate è·¯å¾„ä¸å¾—è°ƒç”¨åˆ›å»ºé»˜è®¤è§£æ reseed last `selectedTarget`ï¼›é…å¥—å±•ç¤ºå¯¹é½â€”â€”`ChatInputBox` åœ¨å®Œæ•´ executionTarget å˜åŒ–æ—¶å¯¹ Claude è¡¥ sync mappingï¼ˆä¸æŒ¡ ensureï¼‰ï¼Œ`resolveClaudeCatalogModelLabel` / `resolveModelIdForIcon` æ–‡æ¡ˆä¸å›¾æ ‡æ”¹ catalog runtime ä¼˜å…ˆã€ç¦é™ˆæ—§ localStorage mapping ç›–æƒå¨ `model.model`ï¼Œ`providerBrandIcon` è¡¥ Moonshot çŸ­ id `k3`/`k3-256k` â†’ kimiï¼ˆç½®äºå®½æ³›è§„åˆ™å‰ï¼‰ã€‚äº‹å®æºï¼š`src/app-shell/sections/core/useAppShellSections.ts` `handleStartSharedConversation`ã€`src/features/shared-session/target/resolveSharedSessionCreateInitialTarget.ts`ï¼ˆ`loadOrderedSharedCreateProviders` / `resolveFirstSharedCreateProvider` / `loadAuthoritativeModelsForCreateProvider` / `resolveSharedSessionCreateInitialTarget`ï¼‰ã€`src/features/shared-session/target/initialTarget.ts` `buildSharedSessionInitialTarget`ã€`src/features/composer/components/ChatInputBox/ChatInputBox.tsx`ï¼ˆexecutionTarget effectï¼‰ã€`src/features/composer/components/ChatInputBox/selectors/ModelSelect.tsx`ï¼ˆ`resolveClaudeCatalogModelLabel` / `resolveModelIdForIcon`ï¼‰ã€`src/features/vendors/providerBrandIcon.ts`ã€‚æ­¤å‰ 2026-08-24 Â· Shared Codex ä¸Šä¸‹æ–‡æŠ•å½±æ”¹èµ° portable transcriptï¼ˆ`fix-shared-codex-context-projection`ï¼‰ï¼šâ‘  ç¬¬ä¸‰æ–¹ Codex å…¼å®¹ provider ä¼šæ‹’ç»ç¼º provider-private `reasoning` item çš„é‡æ„ message/tool é“¾ï¼Œä¸”ç¡®å®šæ€§å¤±è´¥â€”â€”`thread/inject_items` æ–¹æ³•å­˜åœ¨ä¸å†ä½œä¸º structured import è¯æ®ï¼›`context_capabilities` Codex è‡‚å…³é—­ `structured_history_import` / `tool_history` / `strong_context_ack`ï¼Œcompiler æŒ‰ capability é€‰æ‹© `portable-transcript`ï¼ˆè¶…é¢„ç®—å›é€€ bounded `checkpoint`ï¼‰ï¼Œtool call/result æŒ‰ atomic pair çœç•¥å¹¶ç» manifest omission è®°å½•ï¼ˆcategory `tool-exchange`ã€NotRetrievableï¼‰ï¼Œuser/assistant æ–‡æœ¬ã€transcript budgetã€checkpoint å‹ç¼©ä¸ original-task ä¿ç•™ä¸å˜ï¼›â‘¡ `shared-provider-retry` åˆ†ç±»å™¨æŠŠ `invalid_request_error` ä¸”å« `required reasoning item` åˆ¤ permanent `config`ï¼ŒåŒ Binding ä¸å†è‡ªåŠ¨é‡è¯•ï¼Œ429/timeout ç­‰æš‚æ€åˆ†ç±»ä¸å˜ï¼›â‘¢ è¢«å¦å†³ï¼šä»… omit `function_call`ï¼ˆassistant message ä»ä¾èµ–ç§æœ‰ reasoningï¼Œæ— æ³•é—­åˆåè®®ï¼‰ä¸ provider-specific item-schema probeï¼ˆæ— æ— å‰¯ä½œç”¨æ¢æµ‹ï¼Œè¶…èŒƒå›´ï¼‰ï¼›å­˜é‡å·²æ±¡æŸ“ binding ä¸åšåœ¨ä½ä¿®å¤ï¼Œèµ°æ—¢æœ‰ recovery exit / target actionsã€‚äº‹å®æºï¼š`src-tauri/src/shared_session_v2.rs` `context_capabilities`ï¼ˆCodex è‡‚ + æµ‹è¯• `codex_shared_context_uses_weak_portable_transcript`ï¼‰ã€`src-tauri/src/shared_context/compiler.rs` `select_mode` / tool-exchange omission åˆ†æ”¯ã€`src/features/shared-session/provider-retry/classifySharedProviderRetryError.ts` `classifyPermanent`ã€‚æ­¤å‰ 2026-08-24 Â· Qoder å• engine åŒåˆ†å‘ immutable distribution bindingï¼ˆ`add-qoder-dual-distribution`ï¼‰ï¼šQoder Globalï¼ˆ`__qoder_global__` / `qodercli` / `QODER_CONFIG_DIR` / `QODER_PERSONAL_ACCESS_TOKEN` / `~/.qoder` / `qoder-auth.json`ï¼‰ä¸ Qoder CNï¼ˆ`__qoder_cn__` / `qoderclicn` / `QODERCN_CONFIG_DIR` / `QODERCN_PERSONAL_ACCESS_TOKEN` / `~/.qoder-cn` / `qoder-cn-auth.json`ï¼‰å»ºæ¨¡ä¸ºåŒä¸€ `qoder` engine ä¸‹çš„ä¸¤ä¸ª `QoderDistribution`ï¼Œä¸æ–°å¢é¡¶å±‚ engineï¼›`providerProfileId` è¯­ä¹‰å‡ä¸ºä¸å¯å˜ distribution binding æŒä¹…åŒ–è¿› Native thread ä¸ Shared Bindingï¼Œç©ºå€¼ / `__local_qoder__` / æ—§ `qoder:<raw>` ä»…ä½œ legacy Global å…¼å®¹è¾“å…¥ï¼Œæ–°æŒä¹…åŒ–ä¸€å¾‹ `qoder:<profile>:<raw>`ï¼ˆ`QoderNativeSessionIdentity.canonical_id`ï¼‰ï¼ŒQoder special ids ä¸å¾—è¢«æ™®é€š local sentinel å½’ä¸€åŒ–ä¸º `null`ï¼›spawn / send / fork / interrupt / status / doctor / `get_engine_models` / history list-load-delete ç»Ÿä¸€èµ° `resolve_qoder_provider_launch_profile` äº§å‡ºçš„ `QoderProviderLaunchProfile`ï¼ˆbin / home / runtime key æŒ‰ distribution è§£æï¼Œ`qoder_runtime_key` éš”ç¦» manager ownershipï¼‰ï¼Œhistory ç£ç›˜ primary + ACP fallback å‡é”æ­»å½“å‰ distributionï¼ˆ`distribution_launch_profiles_never_cross_read_disk_history` æ–­è¨€ä¸è·¨ rootï¼‰ï¼›catalog è¡ŒæŒ‰ distribution scopeï¼ˆ`scope_qoder_models_to_distribution`ï¼‰ï¼Œä»…æ‰“å¼€ picker / æ‰‹åŠ¨åˆ·æ–° / å‘é€å‰ç¼ºç›®å½•æ—¶è¯·æ±‚ï¼Œåˆ‡ä¼šè¯é›¶ catalog IPCï¼›Shared Tx1 `validate_qoder_distribution_identity` å¯¹æœªçŸ¥ Qoder profile fail-closedï¼ˆ`invalid-target`ï¼Œä¸å†™ `conversation.turnRequested` / Bindingï¼‰ï¼›UI ä¿æŒå• Qoder ä¾§æ çˆ¶å…¥å£ï¼ˆ`new-session-qoder` children Global/CNï¼‰+ å• Vendor é¡µå†… Global/CN segmented tabsï¼ˆåˆ‡æ¢åªæ¢è§†å›¾ï¼Œä¸è§¦å‘ rebinding / catalog refreshï¼‰ã€‚äº‹å®æºï¼š`src-tauri/src/engine/qoder_provider_profile.rs`ï¼ˆ`QoderDistribution` / `resolve_qoder_provider_launch_profile` / `qoder_canonical_provider_profile_id` / `QoderNativeSessionIdentity`ï¼‰ã€`src-tauri/src/engine/{qoder.rs,qoder_auth.rs,status.rs,manager.rs,qoder_history.rs}`ã€`src-tauri/src/shared_session_v2.rs` `validate_qoder_distribution_identity`ã€`src/features/threads/constants/codexProviderProfiles.ts`ã€`src/features/app/hooks/useSidebarMenus.ts`ã€`src/features/vendors/components/VendorSettingsPanel.tsx`ã€‚æ­¤å‰ 2026-08-24 Â· PI RPC æ”¶å£ä¸é™„ä»¶é“¾è·¯æ‰¹æ¬¡ï¼ˆ`enhance-pi-native-rpc-session` æ”¶å°¾ï¼‰ï¼šâ‘  turn ç»“ç®—æ”¹**çœ‹é—¨ç‹—å¯¹è´¦**â€”â€”typed `agent_settled` è¿Ÿåˆ°æ—¶æŒ‰ã€Œè¿›ç¨‹æ´»æ€§ + äº‹ä»¶æ¨è¿›ã€å¯¹è´¦ç»§ç»­ç­‰ï¼Œå–ä»£å›ºå®š timeoutï¼ˆé•¿ä»»åŠ¡è¯¯æ€å®è¯ï¼‰ï¼›â‘¡ RPC å†…è”å›å½’æ¼ç‚¹æ”¶å£ï¼ˆç»ˆæ€ / é” / å›¾ç‰‡ / daemonï¼‰ï¼›â‘¢ å†å²ç”¨æˆ·é™„å›¾ä» RPC image block è¿˜åŸï¼Œå¸¦å›¾æé—® hydrate åç”¨æˆ·æ°”æ³¡ä¸å†ç²˜è¿åŠ©æ‰‹å°¾å·´ï¼›â‘£ ä¸­æ–‡è·¯å¾„é™„ä»¶åˆ‡ç‰‡ panicã€ä¾§æ æ ‡é¢˜ `<file name>` tag æ³„æ¼ã€fork é™é»˜ no-op è¯¯è—ä¸»çº¿ã€é•¿ä¼šè¯ä¼šè¯æ ‘é€’å½’çˆ†æ ˆã€resident æ¨¡å‹é€‰å‹æ¼‚ç§»ï¼ˆå‘é€å‰å¯¹è´¦ï¼‰ã€compact é“¾è·¯ 500s ç‹¬ç«‹è¶…æ—¶ + æ´»è·ƒ run å®ˆå«æ•´æ‰¹åŠ å›ºã€‚äº‹å®æºï¼š`src-tauri/src/engine/{pi.rs,pi_rpc.rs}`ï¼Œcommits `7f91b7389` / `4e14b02c1` / `cfad29b82` / `0fdcdb27c` / `d38dc9850` / `acf122187` / `3f8946709` / `4c56cefe3` / `f46e46829` / `c66e67970`ã€‚æ­¤å‰ 2026-08-24 Â· PI RPC resident çœŸå¹¶è¡Œï¼ˆ`enhance-pi-native-rpc-session` Â§33ï¼‰ï¼š`PiSession.residents` æŒ‰ session/scratch åˆ†è¿›ç¨‹ï¼Œæ’¤é”€ workspace å•é£ `switch_session` äº’æ–¥ï¼ˆç”¨æˆ·å®è¯ã€Œå¦ä¸€ PI ä¼šè¯çš„ turn ä»åœ¨è¿›è¡Œä¸­ã€è¯¯ä¼¤å¹¶è¡Œï¼‰ã€‚äº‹å®æºï¼š`src-tauri/src/engine/pi.rs` `ensure_resident` / `pi_resident_map_key`ã€‚æ­¤å‰ 2026-08-25 Â· Claude/Gemini turn ç»“ç®—ã€ŒæˆåŠŸ result ä¼˜å…ˆäºè¿›ç¨‹é€€å‡ºç ã€ï¼ˆ`fix-turn-false-failure-retry-storm`ï¼‰ï¼šç”¨æˆ·å®è¯ï¼ˆshared Claude Code + ä¸­è½¬æ¸ é“ï¼ŒWindows CLI 2.1.233ï¼‰å·²å®Œæˆ turnï¼ˆ`stop_reason=end_turn`ã€tool_use é›¶æ‚¬æŒ‚ã€é›¶ API errorï¼‰è¢«è¿›ç¨‹éé›¶é€€å‡ºç¿»æˆ TurnErrorï¼Œç» shared provider-retry æ”¾å¤§ä¸º auto-resume æ­»å¾ªç¯ï¼ˆå• session 106 è¿å‘ã€æ¯æª ~160K tokenï¼‰ã€‚ä¿®å¤å¯¹é½ Â§14.3.2 æ—¢æœ‰è®¾è®¡ï¼ˆã€ŒProcess Exit åªä½œç¼ºå¤± Result çš„é”™è¯¯å…œåº•ã€ï¼‰ï¼š`claude.rs` æ–°å¢ `saw_success_result`ï¼ˆ`is_error != true` ä¸” subtype é `error*`ï¼‰ï¼Œéé›¶é€€å‡ºé™çº§ warn æ—¥å¿—ï¼›`gemini.rs` åŒæ¬¾ inversion ä»¥ `saw_turn_completed` å®ˆå«ï¼›kimi/grok/pi æ— æµå†… terminal æ¦‚å¿µä¸é€‚ç”¨ï¼Œopencode å·²æœ‰ `quiesced_without_terminal` å®ˆå«ï¼Œqoder/dsh æ— é€€å‡ºç å¦å†³è·¯å¾„ã€‚é…å¥—ï¼š`shared-provider-retry` åˆ†ç±»å™¨æ–°å¢ permanent `quota`ï¼ˆé¢„æ‰£è´¹/ä½™é¢ä¸è¶³å…ˆäº pool 401/403 åˆ¤å®šï¼‰+ identical-failure ç†”æ–­ï¼ˆåŒ signature è¿è´¥ 3 æ¬¡å³ exhaustedï¼‰ã€‚äº‹å®æºï¼š`src-tauri/src/engine/claude.rs` `is_success_result_event`ã€`src-tauri/src/engine/gemini.rs`ã€`src/features/shared-session/provider-retry/{classifySharedProviderRetryError.ts,noteSharedProviderRetryTurn.ts}`ã€‚æ­¤å‰ 2026-08-25 Â· Qoder PAT æ³¨å…¥ä¼˜å…ˆçº§æ”¶å£ï¼ˆ`fix-qoder-pat-env-precedence`ï¼‰ï¼šspawn æ³¨å…¥æ”¹ä¸º stored PATï¼ˆ`~/.ccgui/qoder-auth.json` / `qoder-cn-auth.json`ï¼‰**ä¼˜å…ˆäº** mossx è¿›ç¨‹ envï¼ˆæ­¤å‰ env ä¼˜å…ˆå¯¼è‡´ Windows æŒä¹…ç¯å¢ƒå˜é‡é®è”½è®¾ç½®é¡µæ–° PATï¼Œç”¨æˆ·ã€Œæ¢æ–° token ä»è¢«è¦æ±‚é‡æ–°è®¤è¯ã€ï¼‰ï¼›`qoder_auth_status` æ–°å¢ `envPresent` æš´éœ² stored+env å…±å­˜ï¼Œè®¾ç½®é¡µæç¤º env è¢«å¿½ç•¥ï¼›å‡­æ®è§£æé¡ºåºæ–‡æ¡ˆåŒæ­¥åè½¬ã€‚äº‹å®æºï¼š`src-tauri/src/engine/qoder_auth.rs` `select_spawn_pat`ã€‚æ­¤å‰ 2026-08-23 Â· PI è¿ç§» `pi --mode rpc` é•¿é©»è¿›ç¨‹ï¼ˆ`enhance-pi-native-rpc-session`ï¼‰ï¼š`src-tauri/src/engine/pi_rpc.rs` resident clientï¼ˆstrict JSONL / id å…³è” / extension UI auto-cancel / typed `agent_settled` ç»ˆæ€ï¼‰ï¼Œ`pi.rs` ä¸»è·¯å¾„ idleâ†’`prompt` / streamingâ†’`steer`ï¼ˆattached turn éš run åŒç»“ç®—ï¼‰ï¼Œ`abort` + 2s kill å…œåº•ï¼Œspawn/handshake å¤±è´¥å›é€€ print-jsonï¼ˆfallback ä¸‹æ‹’ç»å¹¶å‘å‘é€é˜²åŒè¿›ç¨‹äº¤å‰å†™ session æ–‡ä»¶ï¼‰ï¼›å›¾ç‰‡æ”¹ base64 `images[]` ä¼ è¾“ã€‚capability matrix pi è¡Œï¼š`input.mid-turn` / `session.fork`ï¼ˆfork-to-new-file è¯­ä¹‰ï¼Œéæ ‘å†… laneï¼‰/ `session.tree`ï¼ˆåªè¯» + forkï¼ŒRPC æ—  leaf-moveï¼‰/ `rpc.server` å‡ supportedï¼Œ`session.switch` ä¿æŒ unknownï¼Œ`tool.mcp` ç»´æŒ unsupportedï¼ˆupstream å MCP ç«‹åœºï¼‰ã€‚å‰ç«¯ `src/features/pi-session/**`ï¼šæ°”æ³¡ â‘‚ forkï¼ˆæºæ–‡æœ¬å›å¡« composerDraftStoreï¼‰ã€åªè¯»ä¼šè¯æ ‘ overlayã€tab åˆ†æ”¯ chipã€ä¾§æ  â‘‚N å¾½æ ‡ã€composer /compact å…¥å£ï¼›çŠ¶æ€èµ° feature-local å¤–éƒ¨ storeï¼Œä¸è¿› AppShell domain bagã€‚åŒæ—¥æ”¶å£ï¼ˆç”¨æˆ·å®æµ‹é€šè¿‡å reviewï¼‰ï¼šRPC pending å…ˆæ³¨å†Œåå†™ï¼ˆresponse æ—©åˆ°ç«æ€ï¼‰ï¼›turn è¶…æ—¶æ‘˜ run å…¨ waiter ä¸€æ¬¡ç»“ç®— + `Settled` è‡‚é˜² TurnError é‡å‘ï¼›mismatch/align è‡‚ TurnError åŒå‘æ ¹é™¤ï¼›`interrupt()` ç©ºé—²ä¸å† abort+2s graceï¼›ä¾§æ  live disk list å½’ä¸€åŒ–è¡¥ `parentSessionId`ï¼ˆindex å¿«ç…§åæ–°å»ºæ´¾ç”Ÿä¼šè¯æ³„æ¼ä¿®å¤ï¼‰ï¼›æ ‘é«˜äº®æ”¹æ¿€æ´»è·¯å¾„è·¨ lane è´¯é€šæŸ“è‰² + turn ç»“æŸè‡ªåŠ¨åˆ·æ–°ã€‚æ­¤å‰ 2026-08-22 Â· Shared-owned Native ä¾§æ æ³„æ¼æ”¶å£ï¼ˆ`fix-shared-owned-native-sidebar-leak`ï¼šlive `thread/started` æŒ‰ Execution Target è®¤ pendingï¼›Qoder ç»ˆæ€ `qoder:<profile>:<raw>`ï¼›`ensureThread` è®¤ Shared-owned è€Œä¸é  `parent.startsWith("shared:")`ï¼›hide æœªå°±ç»ªä¸æ”¾å‡ºæ–° grok/pi/qoder Index è¡Œï¼‰ã€‚åŒæ—¥ Â· Qoder è¿› Shared æ”¯æŒé›†åˆï¼ˆ`enable-qoder-shared-target`ï¼šå‰åç«¯åŒé›†åˆ + context/runtime-key/provisioning/send/interrupt è¡¥è‡‚ + canonical fact engine æšä¸¾ + å››çº§ picker ç›®å½•ï¼›runtime-only æ¨¡å‹ç›®å½•å‘é€è·¯å¾„æŒ‰ç©ºç›®å½• + Allow æ”¾è¡Œï¼‰ã€‚åŒæ—¥ Â· Qoder history ä¸»é€šé“åˆ‡æ¢ï¼šç£ç›˜ jsonl primaryï¼ˆ`~/.qoder/projects/<cwd-slug>/*.jsonl`ï¼ŒGrok/PI/Kimi NativeHistoryReader å½¢æ€ï¼‰+ ACP `session/list`/`session/load` fallbackï¼›delete ä»èµ° ACP `session/delete`ï¼ˆçº¢çº¿ 21 ä¸å˜ï¼‰ã€‚åŒæ—¥ Â· Qoder runtime contract æ ¡å‡†ï¼šrequested model/reasoning effort fail-closedï¼›cancel å…ˆå– `stopReason:"cancelled"` typed terminalã€ä»… 2s å kill æœªç»“ç®— childï¼›prompt `usage.inputTokens` / `outputTokens` æŠ•å½± unified usageï¼›`forkSessionId` è·¯ç”± ACP `session/fork`ï¼›status/model probe ä¸ runtime å…±ç”¨ resolved `home_dir`ã€‚åŒæ—¥ Â· Qoder é»„é‡‘ turn è¡¥é‡‡ï¼ˆqodercli 1.1.28 + PAT æ³¨å…¥ï¼Œprobe6/7/8/9ï¼‰ï¼šcapability matrix `streaming.reasoning` / `streaming.tool-output` / `input.mid-turn` / `session.fork` ç”± unknown å‡ supportedï¼›cancel ACK å‡çº§ä¸ºå®æµ‹ï¼ˆ`stopReason:"cancelled"`ï¼‰ï¼›ACP usage shape liveï¼ˆPAT è´¦å·é›¶å€¼ï¼Œéé›¶å€¼ä»å¾…å®æµ‹ï¼‰ï¼›`session.tree` ä¿æŒ unknownï¼›ä»ä¸è¿› Sharedã€‚æ­¤å‰ 2026-08-21 Â· Qoder æˆä¸ºç¬¬ 9 ä¸ª Native Engineï¼ˆç¬¬å››æ¡åè®®æ— `acp-stdio`ï¼Œspawn-per-turn + ACP `session/resume`ï¼‰ï¼›ç¬¬ä¸€æœŸä¸è¿› Sharedï¼›Spike ä¸æ ¡å‡†è¡Œè§ä¸‹è¡¨ Qoder æ¡ç›®ã€‚æ­¤å‰ 2026-08-19 Â· DSH Composer ä»»åŠ¡æ¡ / å ç”¨ç¯æ¥ host `session/projection`ï¼š`todos`ã€`contextPressure`ã€`contextBreakdown` ä¸ billed `tokenUsage` / `sessionStats` ç‹¬ç«‹ last-winsï¼›ç©º `todos` æ¸…ç©º standing planã€‚æ­¤å‰ 2026-08-17ï¼šDSH Goal continuationï¼šcompleted hop `turn/end` ä¸è§£ç»‘ï¼›Goal `active` æŠ‘åˆ¶ `TurnCompleted`ï¼›`source.kind === "goal"` æŠ•å½±ä¸º `dsh-goal` æŠ˜å å¡ã€‚åŒæ—¥ Session Index æœ‰ç•Œ DSH writer å…¥ first-paintã€‚æ­¤å‰ 2026-08-15ï¼šDSH æˆä¸ºç¬¬ 7 ä¸ª Native Engineï¼ˆ`dsh-host-rpc` + å…¨å±€ `dsh web` supervisorï¼‰ï¼›ç¬¬ä¸€æœŸä¸è¿› Sharedï¼›pending æ™‹å‡ / spawned host é€€å‡ºå›æ”¶ / ä¾§æ  workspace æˆå‘˜é›†å·²æŒ‰ L2 æ”¶å£ï¼›æ ¡å‡†è¡Œè§ä¸‹è¡¨ DSH æ¡ç›®
-> é€‚ç”¨èŒƒå›´ï¼šNative Sessionã€Shared Sessionã€Provider Runtimeã€Session Catalogã€Sidebar Projectionã€æœªæ¥ Plugin / Orchestration
-> æ ¸å¿ƒå†³ç­–ï¼šNative Session ä¿æŒåŸç”Ÿèº«ä»½ï¼›Shared Session æ‰¿æ‹…è·¨ CLIã€è·¨ Provider çš„é€ Turn åˆ‡æ¢
-
----
-
-## é›¶ã€å½“å‰å®ç°æ ¡å‡†
-
-æœ¬æ–‡ç»§ç»­ä½œä¸ºå¤š CLI ä¼šè¯çš„ ADRã€‚åŸå§‹ Change A1â€“A3ã€Bã€Cã€D å·²å½’æ¡£ï¼›æˆªè‡³ 2026-08-06ï¼ŒNative/Shared çš„åç»­ä¿®å¤ã€å…¼å®¹ã€Phase 5 Squad ä¸ multi-agent collab ä»¥ [OpenSpec main specs](../../openspec/specs/README.md)ã€å¯¹åº” change ä¸ä»£ç ä¸ºå‡†ï¼Œä¸åº”å›å†™æˆã€ŒåŸè·¯çº¿æœªå®ç°ã€ã€‚
-
-| å¥‘çº¦é¢ | å½“å‰ä»£ç äº‹å® | äº‹å®æº |
-| -------- | -------------- | -------- |
-| Built-in engines | 9ï¼šClaude/Codex/Gemini/Grok/Kimi/OpenCode/PI/DSH/**Qoder** | `src/features/engine/engineIds.json`ã€`src/types/engine.ts` `EngineType`ã€`src-tauri/src/engine/mod.rs` `EngineType::Qoder` |
-| Qoder protocol / runtime | ç¬¬å››æ¡ Builtin åè®®æ— `acp-stdio`ï¼Œ`executionModel: one-shot`ï¼ˆ**spawn-per-turn**ï¼š`qodercli --acp`ï¼ˆGlobalï¼‰/ `qoderclicn --acp`ï¼ˆCNï¼‰åŒåˆ†å‘ï¼Œå…¨éƒ¨è¿è¡Œè·¯å¾„ç» `resolve_qoder_provider_launch_profile` è§£æ per-distribution bin / config env / PAT env / homeï¼Œ`QoderSession.distribution` + `qoder_runtime_key` éš”ç¦» runtime ownershipï¼ˆ2026-08-24 `add-qoder-dual-distribution`ï¼‰â†’ initialize â†’ `session/new` / `session/resume` / `session/fork` â†’ requested `set_model`/`set_config_option` æˆåŠŸå â†’ `set_mode bypassPermissions` â†’ `session/prompt` â†’ JSON-RPC response å³ typed terminalï¼‰ï¼›requested setting error fail-closedï¼›cancel å‘é€ `session/cancel` åä¿ç•™ reader ç­‰ typed responseï¼ˆ2s watchdog åª kill åŸ turn ä» active çš„ childï¼‰ï¼›usage åªæŠ•å½± `inputTokens` / `outputTokens`ï¼Œä¸æŠŠ `_meta.quota` å½“ billingï¼›`inputAck: "first-event"`ï¼›ç¬¬ä¸€æœŸä¸è¿› Sharedï¼ˆpicker disabled + reasonï¼‰ï¼›PAT æ³¨å…¥ä¼˜å…ˆçº§ stored PATï¼ˆGlobal `qoder-auth.json` / CN `qoder-cn-auth.json`ï¼‰> è¿›ç¨‹ envï¼ˆ2026-08-25 `fix-qoder-pat-env-precedence`ï¼‰ | `src-tauri/src/engine/qoder.rs`ã€`src-tauri/src/engine/qoder_provider_profile.rs`ï¼ˆ`QoderDistribution` / `resolve_qoder_provider_launch_profile`ï¼‰ã€`src-tauri/src/engine/adapter_registry.rs` `EngineProtocolFamily::AcpStdio`ã€`src/features/engine/engineIds.json`ã€OpenSpec `harden-qoder-native-runtime-contracts`ã€`docs/research/mossx-qoder-capability-spike.md` |
-| Qoder identity / history / models | thread `qoder:<profile>:<raw>`ï¼ˆ`QoderNativeSessionIdentity.canonical_id`ï¼›ç©ºå€¼ / `__local_qoder__` / æ—§ `qoder:<raw>` ä»…ä½œ legacy Global å…¼å®¹è¾“å…¥ï¼‰/ `qoder-pending-<uuid>`ï¼›`session/new` / `session/fork` å‡ä»¥çœŸå® child sessionId é€šè¿‡ `SessionStarted` æ™‹å‡ï¼ˆç¦æ­¢åŒè¡Œ / ç¦æ­¢ä¼ªé€  idï¼‰ï¼›history èµ°**ç£ç›˜ jsonl primary + ACP fallback**ï¼š`list/load` æŒ‰ distribution åˆ† rootï¼ˆGlobal `~/.qoder` / CN `~/.qoder-cn`ï¼‰å…ˆè¯» `projects/<cwd-slug>/<sessionId>.jsonl`ï¼ˆ`encode_qoder_project_slug`ï¼ŒNativeHistoryReader å½¢æ€ï¼›readable empty JSONL æ˜¯ authoritative soft-emptyï¼›ä»…æœ¬åœ°ç¼ºå¤±ã€ä¸å¯è¯»æˆ–å…¨æŸåæ—¶å›é€€ ACPï¼ˆfallback é”æ­»åŒä¸€ distributionï¼Œä¸è·¨ rootï¼‰ï¼‰ï¼Œdelete ä»èµ° ACP `session/delete`ï¼ˆçº¢çº¿ 21ï¼šåªè¯» vendor æ–‡ä»¶ï¼‰ï¼›ACP æ¶ˆè´¹çºªå¾‹ï¼šJSON-RPC result ä¸ `session/update` äº¤é”™ï¼Œè¯»åˆ° response å¿…é¡»ç»­è¯»è‡³ idle å†æ”¶å£ï¼ˆå°¾åŒ…æˆªæ–­å®è¯ `af9372f78`ï¼‰ï¼›æ¨¡å‹ç›®å½• = ACP `models.availableModels` + `configOptions.reasoning_effort` ä¸”æŒ‰ distribution scopeï¼ˆ`scope_qoder_models_to_distribution`ï¼Œåˆ‡ä¼šè¯é›¶ catalog IPCï¼‰ï¼Œstatus/model/runtime ä½¿ç”¨åŒä¸€ resolved `home_dir`ï¼ˆruntime-onlyï¼Œä¸è¿›é™æ€ fallback rosterï¼‰ï¼›æƒé™ attach å `bypassPermissions` + `session/request_permission` å…œåº• auto-approveï¼Œ`fs/*` é™ workspaceï¼›æœªç™»å½• â†’ not-authenticated è¯Šæ–­æŒ‡å‘ `qodercli login` | `src-tauri/src/engine/{qoder,qoder_history,qoder_provider_profile}.rs`ã€`src-tauri/src/engine/status.rs` `detect_qoder_status_with_home`ã€`src-tauri/src/engine/commands.rs`ã€OpenSpec `harden-qoder-native-runtime-contracts` |
-| PI protocol / runtime | `pi --mode rpc` é•¿é©»è¿›ç¨‹ï¼ˆ**resident per workspace Ã— session**ï¼š`PiSession.residents` mapï¼ŒåŒ workspace å¤š PI æ ‡ç­¾çœŸå¹¶è¡Œï¼›åŒä¼šè¯äºŒæ¬¡å‘é€ `steer`ï¼‰ã€‚idle `prompt` / streaming `steer`ï¼ˆattached steer turn éš run åŒç»“ç®—ã€ç©ºæ–‡æœ¬ï¼‰ï¼›typed `agent_settled` = turn ç»ˆæ€ï¼Œ`response.success` ä»…å—ç†ï¼›settle è¿Ÿåˆ°æ—¶çœ‹é—¨ç‹—æŒ‰ã€Œè¿›ç¨‹æ´»æ€§ + äº‹ä»¶æ¨è¿›ã€å¯¹è´¦ï¼Œç¦å›ºå®š timeout è¯¯æ€é•¿ä»»åŠ¡ï¼ˆ2026-08-24ï¼‰ï¼›`abort` + 2s grace æœª settle æ‰ killï¼›extension UI request ä¸€å¾‹ auto-cancelï¼›spawn/handshake å¤±è´¥å›é€€ `pi --print --mode json` spawn-per-turnï¼ˆfallback æ‹’ç»åŒä¼šè¯å¹¶å‘è¿›ç¨‹äº¤å‰å†™ï¼‰ã€‚tree/stats/compact/fork æŒ‰ session å– residentï¼›fork/compact åªæŒ¡æœ¬ä¼šè¯ runã€‚ç”¨æˆ·é™„å›¾ base64 `images[]` å‘é€ã€å†å²ç» RPC image block è¿˜åŸã€ä¾§æ æ ‡é¢˜å‰¥ç¦»é™„ä»¶åŒ…è£… tagã€ä¸­æ–‡è·¯å¾„æŒ‰å­—ç¬¦è¾¹ç•Œå¤„ç†ï¼ˆ2026-08-24 æ‰¹æ¬¡ï¼‰ã€‚fork = **fork-to-new-file + fork-then-switch-back**ï¼ˆfork åç«‹å³åˆ‡å›æºæ–‡ä»¶ï¼›æœ¬ä¼šè¯ turn è¿›è¡Œä¸­ç¦æ­¢ï¼›RPC æ—  leaf-moveï¼‰ï¼›åˆ é™¤ä¼šè¯ `drop_resident` åªæ€è¯¥è¿›ç¨‹ã€‚**æ´¾ç”Ÿä¼šè¯æ—**ï¼šæ–‡ä»¶å¤´ `parentSession` â†’ catalog `parentSessionId`ï¼ˆsession-index ä¸ live disk list åŒé€šé“å½’ä¸€åŒ–ï¼Œç¼ºä¸€å³æ³„æ¼é¡¶å±‚è¡Œï¼‰â†’ `useThreadRows` ä¾§æ éšè—æ´¾ç”Ÿè¡Œï¼ˆä¸å é¡¶å±‚ä¹Ÿä¸åµŒå¥—ï¼Œä¸ subAgent ä¸‰å¤„è®¡æ•°åˆ†åŸŸï¼‰ï¼Œä¸­é—´å¯¹è¯åŒºã€Œä¸Šä¸‹å³ã€dockï¼ˆ`PiConversationTreeSplit` pi ç‹¬ç«‹å®¹å™¨ï¼‰åˆå¹¶ derived lanesï¼ˆå…±äº«å‰ç¼€ id å»é‡æ¥åˆ†å‰ç‚¹ï¼‰+ æ´¾ç”Ÿ lane ç» store è¯·æ±‚ onSelectThread è·³è½¬ + æ¿€æ´»è·¯å¾„è·¨ lane è´¯é€šæŸ“è‰² + turn ç»“æŸè‡ªåŠ¨åˆ·æ–°ï¼›æ ‘ = `get_tree` åªè¯» + forkï¼›compact äº‹ä»¶ç» Raw æ˜ åˆ° canonical `thread/compacting | compacted | compactionFailed` | `src-tauri/src/engine/{pi.rs,pi_rpc.rs}`ã€`src-tauri/src/engine/events.rs` Raw Pi è‡‚ã€`src/features/pi-session/**`ã€`src/features/layout/components/DesktopLayout.tsx`ã€`src/features/app/hooks/useThreadRows.ts`ã€OpenSpec `enhance-pi-native-rpc-session`ã€`docs/designs/pi-native-features/final-recommended.html` |
-| PI background-task item å¥‘çº¦ï¼ˆ2026-08-26 `pi-background-task-experience`ï¼‰ | pi æ‰©å±•åå°å·¥å…·ï¼ˆ`bg_run`/`bg_delegate`/`bg_run_pi_attested`/`fusion_*`ï¼‰åœ¨ `pi.rs` ä¸‰è‡‚æ‹¦æˆªä¸º **canonical `backgroundTask` item**ï¼Œå–ä»£æ™®é€šå·¥å…·å¡ï¼štool start â†’ `EngineEvent::BackgroundTaskStarted` â†’ AppServer `item/started`ï¼ˆ`item.type=backgroundTask`ï¼Œ`tool/title`=bg å·¥å…·åï¼Œ`input/arguments`=å·¥å…·å‚æ•°ï¼Œ`status=started`ï¼‰ï¼›tool end receiptï¼ˆ`result.details.task` ç»“æ„åŒ–ä¼˜å…ˆ / æ–‡æœ¬å…œåº•ï¼‰ä¸æ‰©å±• `<background-task-notification>`ï¼ˆ`message_start` role=custom `customType=background-task-notification`ï¼Œåªæ‹¦ message_startï¼Œmessage_end å½’ Otherï¼‰â†’ `EngineEvent::BackgroundTaskUpdated{source:receipt | notification}` â†’ AppServer `item/backgroundTask/updated`ï¼ˆ`toolId`+`task`canonical snapshot+`source`ï¼›notification è·¯å¾„`toolId=null` æŒ‰ `task.id`å…³è”ï¼‰ã€‚å‰ç«¯ä¼šè¯çº§çŠ¶æ€è¡¨ï¼ˆmessages feature storeï¼Œ`backgroundTaskStore.ts` æ¨¡å—çº§ Map + äº‹ä»¶é©±åŠ¨ + ç‰ˆæœ¬å·è®¢é˜…ï¼Œ**é AppShell bag**ï¼‰ä¸‰è·¯ç»´æŠ¤ï¼šitem/started å¹‚ç­‰ç™»è®° â†’ `onBackgroundTaskUpdated`(useThreadItemEvents) åˆå¹¶å¿«ç…§ â†’ åˆæˆ item èµ°`item/updated`åŒè·¯ upsertï¼›`ToolBlockRenderer` æŒ‰ `toolType=backgroundTask` åˆ†å‘ `BackgroundTaskCard`ï¼ˆè¿è¡Œä¸­æ´»ä½“ elapsed æœ¬åœ° tickã€ç»ˆæ€åŸåœ°æŠ˜å `message-agent-task-fold`ï¼ŒRender Perf çº¢çº¿åˆè§„ï¼‰ï¼›`ComposerRunStatusStrip`ã€Œåå°ä»»åŠ¡ã€pillï¼ˆ`useBackgroundTaskPill` useSyncExternalStore äº‹ä»¶é©±åŠ¨ï¼Œlive dot + `running/total`ï¼Œæ— ä»»åŠ¡ä¸å ä½ï¼‰+ å°±åœ°å±•å¼€åˆ†ç»„é¢æ¿ï¼ˆrunning åœ¨ä¸Š/ç»ˆæ€åœ¨ä¸‹ + exit code + æŸ¥çœ‹æ—¥å¿— revealï¼‰ã€‚å†å²é‡è½½ï¼š`pi_history.rs` æŠŠ bg call/result æŠ•å½± `backgroundTask`ã€é€šçŸ¥æŠ•å½±`backgroundTaskNotification`ï¼Œå‰ç«¯`piHistoryParser`é¢„æ‰«ææŒ‰ taskId åˆå¹¶ä¸‰ç±»å…¥å£ â†’ å•å¼ æŠ˜å å¡é”šå®š call ä½ç½®ï¼ˆå­¤å„¿ call ä¸æ¸²æŸ“ã€é€šçŸ¥æ°¸ä¸æˆè¡Œï¼‰ã€‚**POST-SETTLE å·²çŸ¥ç¼ºå£**ï¼šä»»åŠ¡é•¿äºæ”¶å°¾ turn æ—¶å…ˆ settleï¼Œé€šçŸ¥è§¦å‘ pi orphan runï¼ˆ`new_orphan` åˆæˆ turn_idï¼‰è¢« per-turn forwarder è¿‡æ»¤ä¸¢å¼ƒï¼Œå®æ—¶æŠ˜å åœ¨ P1 ä¸è¦†ç›–ï¼ŒB é€šé“ï¼ˆregistry watcherï¼ŒP2ï¼‰æ ¹æ²» | `src-tauri/src/engine/{pi.rs,events.rs,pi_history.rs,agent_event_bus.rs}`ã€`src/features/messages/utils/backgroundTaskStore.ts`ã€`src/features/messages/rows/components/BackgroundTaskCard.tsx`ã€`src/features/composer/components/run-status/{ComposerRunStatusStrip.tsx,useBackgroundTaskPill.ts}`ã€`src/features/threads/{hooks/useThreadItemEvents.ts,hooks/useThreadEventHandlers.ts,loaders/piHistoryParser.ts}`ã€`src/features/app/hooks/useAppServerEvents.ts`ã€`src/features/engine-task-output/contracts/agentTaskNotification.ts`ã€OpenSpec `pi-background-task-experience` |
-| DSH protocol / runtime | ç¬¬ä¸‰æ¡ Builtin åè®®è‡‚ `dsh-host-rpc`ï¼Œ`executionModel: persistent`ï¼›å…¨åº”ç”¨ä¸€ä¸ª `dsh web`ï¼ˆadopt å·²æœ‰ 3080ï¼Œå¦åˆ™ spawnï¼›adopted ä¸æ€ï¼‰ | `src-tauri/src/engine/adapter_registry.rs` `BuiltinEngineProtocol`ã€`src-tauri/src/engine/dsh/{host,supervisor,session,events,history}.rs`ã€OpenSpec `add-dsh-engine` |
-| DSH identity / ACK | thread `dsh:<sessionId>` / `dsh-pending-<uuid>`ï¼›`session.create` ç«‹å³è¿”å›çœŸå® sessionIdï¼›é¦–è½®åœ¨ prompt å‰ç”¨ pending thread id å‘ `SessionStarted`ï¼Œmux bind åˆ° `dsh:<native>`ï¼›frontend `thread/started` + ACK cache æ™‹å‡ï¼Œç¦æ­¢åŒè¡Œã€‚**terminal/ACKï¼ˆ2026-08-17ï¼‰**ï¼šcompleted hop åª notify waiterã€ä¸è§£ç»‘ï¼›Goal `active` æŠ‘åˆ¶ `TurnCompleted`ï¼›`paused`/`complete`/clear è¡¥å‘ï¼›`blocked` å‘ TurnCompleted ä½†ä¿æŒç»‘å®šï¼›cancelled/error/interrupt/archive/shutdown æ‰ unbindã€‚`source.kind === "goal"` æŠ•å½±ä¸º `dsh-goal` æŠ˜å å¡ï¼ˆç©ºæ°”æ³¡ã€å¯è§ã€é»˜è®¤å¯æŠ˜å ï¼‰ï¼›å…¶å®ƒ injected kinds ä»éšè— | `src-tauri/src/engine/dsh/{mod,session,events,history}.rs`ã€`src/features/app/hooks/useAppServerEvents.ts`ã€`src/features/threads/hooks/useThreadTurnEvents.ts`ã€`src/features/threads/adapters/dshRealtimeAdapter.ts`ã€`src/features/threads/loaders/dshHistoryParser.ts`ã€`src/features/messages/components/context/DshGoalContextSummaryCard.tsx`ã€OpenSpec `adapt-dsh-goal-continuation`ã€`docs/research/mossx-dsh-capability-spike.md` |
-| DSH host lifecycle / list | `ExitRequested` åª `drop_host()` æ€ spawnedï¼›adopted ä¿ç•™ã€‚ä¾§æ  `list_dsh_sessions` ç”¨ `workspace.create` çš„ `sessionIds - archivedSessionIds`ï¼Œç¦æ­¢ cwd suffix / ç©º cwd å…¨åŒ¹é…ï¼›Session Index æœ‰ç•Œ writerï¼ˆ`sync_dsh_engine` / `rows_from_dsh_summaries`ï¼‰å‚ä¸ first-paint ç´¢å¼•ï¼Œhost ä¸å¯è¾¾ soft-empty | `src-tauri/src/engine/dsh/supervisor.rs` `should_kill_host`ã€`src-tauri/src/lib.rs` `ExitRequested`ã€`src-tauri/src/engine/dsh/history.rs`ã€`src-tauri/src/session_index/{commands,writers}.rs`ã€`src/features/threads/hooks/useThreadActions.ts` |
-| DSH models / config | æ¨¡å‹æ˜¯ DSH `{provider,model}` äºŒå…ƒç»„ï¼Œcatalog æ¥è‡ª `POST /api/llm.models`ï¼›mossx ä¸å†™ `$DSH_HOME` settings/credentials | `src-tauri/src/engine/dsh/mod.rs` `load_dsh_models`ã€`src-tauri/src/engine/dsh_provider_profile.rs`ã€`src-tauri/src/types.rs` `dshBin/dshHost/dshPort/dshAutoStart` |
-| Native rendering projection | ä¸ƒå¼•æ“å„æœ‰ realtime adapter + history loaderï¼ˆDSHï¼š`dshRealtimeAdapter` / `dshHistoryLoader`ï¼‰ã€‚DSH Goal æ³¨å…¥èµ° `presentationMetadata` kind `dsh-goal`ï¼Œä¸æ–°å¢ ConversationItem kindï¼Œä¹Ÿä¸å¤ç”¨ Codex `/goal`ã€‚**DSH Composer æŠ•å½±ï¼ˆ2026-08-19ï¼‰**ï¼šmux / history æ¥ `todos` / `contextPressure` / `contextBreakdown`ï¼›ä»»åŠ¡ pill ä»¥ `dshTodos` ä¸ºæƒå¨ï¼ˆ`[]` æ¸…ç©ºï¼Œ`null` æ‰å›é€€ TodoWrite æ‰«æï¼‰ï¼›å ç”¨ç¯åˆ†å­=`projectedTokens ?? pressureTokens`ï¼Œåˆ†æ¯=`contextWindow`ï¼Œä¸‰åˆ†ç±» heuristic å¸¦ `~`ï¼›billed `tokenUsage` ä¸å¾—å†²æ‰å ç”¨ / todos | `src-tauri/src/engine/dsh/{events,history}.rs`ã€`src/features/app/hooks/useAppServerEvents.ts`ã€`src/features/threads/hooks/{useThreadsReducer,useThreadTurnEvents}.ts`ã€`src/features/threads/loaders/dshHistoryLoader.ts`ã€`src/features/composer/components/{Composer.tsx,ChatInputBox/ClaudeContextCard.tsx}`ã€OpenSpec `wire-dsh-todos-and-context-usage` |
-| Claude turn settlement / terminal | stream-json æˆåŠŸ `result`ï¼ˆ`is_error != true` ä¸” subtype é `error*`ï¼‰ä¸º turn ç»ˆæ€æƒå¨ï¼›è¿›ç¨‹é€€å‡ºç åªåœ¨ç¼ºå¤±æˆåŠŸ result æ—¶ä½œé”™è¯¯å…œåº•ï¼ˆ2026-08-25 å‰ä¸ºå®ç°ä¸ Â§14.3.2 è®¾è®¡ç›¸æ‚–ï¼šéé›¶é€€å‡ºæ— æ¡ä»¶å¦å†³å·²å®Œæˆ turnï¼‰ã€‚Gemini åŒæ„ï¼š`saw_turn_completed` å®ˆå«é€€å‡ºç æ£€æŸ¥ã€‚kimi/grok/pi æ— æµå†… terminalï¼Œé€€å‡ºç ä»æ˜¯å”¯ä¸€ç»ˆæ€ä¿¡å· | `src-tauri/src/engine/claude.rs` `is_success_result_event` / settle guardã€`src-tauri/src/engine/gemini.rs`ã€OpenSpec `fix-turn-false-failure-retry-storm` |
-| Claude AskUserQuestion ACK / settlement tombstone | æˆåŠŸ respond_to_user_inputï¼ˆMCP oneshot / native notify ä¸¤è·¯å¾„ï¼‰MUST emit RequestUserInput { completed: true, questions: [] }ï¼Œä¸è¶…æ—¶ç»“ç®—è·¯å¾„å¯¹é½ï¼›session çº§ settled_user_input_request_idsï¼ˆcap 2048 æº¢å‡º clearï¼‰æŒ¡ native é‡å…¥â€”â€”å·²ç»“ç®— request_id åœ¨ convert æ—¶åªå‘ completed=trueã€ä¸æ³¨å†Œ pendingï¼›stream ä»… completed=false è¿› kill+--resume waitã€‚FE æœ‰ç•Œ settlement tombstoneï¼ˆMAX=2048ï¼‰ï¼šaccepted / stale / completed ç»“ç®—å†™å¢“ç¢‘ï¼Œå…¥é˜Ÿå‰ + addUserInputRequest åŒé—¸é—¨ fail-closed æŠ‘åˆ¶åŒ identityï¼ˆworkspace + Shared owner/attempt + request_idï¼‰è¿Ÿåˆ°/é‡æ”¾/history reopenï¼›é stale æäº¤å¤±è´¥ä¸å†™å¢“ç¢‘ã€å¯é‡è¯•ï¼ˆ2026-08-24 fix-askuserquestion-settlement-tombstoneï¼‰ | `src-tauri/src/engine/claude/user_input.rs` `respond_to_user_input` / `convert_ask_user_question_to_request` / `emit_user_input_request_completed` / `settled_user_input_request_ids`ã€`src-tauri/src/engine/claude.rs` stream `is_user_input_request`ã€`src/utils/userInputSettlementTombstone.ts`ã€`src/features/threads/hooks/{useThreadUserInputEvents.ts,useThreadsReducer.ts}`ã€OpenSpec `fix-askuserquestion-settlement-tombstone` |
-| Shared provider retry åˆ†ç±»ä¸ç†”æ–­ | é…é¢ä¸è¶³ç±»ï¼ˆé¢„æ‰£è´¹/ä½™é¢ä¸è¶³/`insufficient balance | quota`/`quota exceeded`ï¼‰= permanent`quota`ï¼Œå…ˆäº pool 401/403ï¼›åŒä¸€ series è¿ç»­ 3 æ¬¡ identical failure signatureï¼ˆkind + normalized message å‰ç¼€ï¼‰å³ exhausted ç†”æ–­ï¼Œç‹¬ç«‹äº maxAttemptsï¼›Codex ç¼º reasoning item åè®®é”™è¯¯ï¼ˆ`invalid_request_error` ä¸”å« `required reasoning item`ï¼‰= permanent`config`ï¼Œç¦æ­¢åŒ Binding è‡ªåŠ¨é‡è¯•ï¼ˆ2026-08-24`fix-shared-codex-context-projection`ï¼‰ | `src/features/shared-session/provider-retry/{classifySharedProviderRetryError.ts,noteSharedProviderRetryTurn.ts,providerRetryPolicy.ts}`ã€OpenSpec `fix-turn-false-failure-retry-storm` / `fix-shared-codex-context-projection` |
-| Shared target boundary | Claude/Codex/Kimi/Grok/OpenCode/PI/**Qoder**ï¼›Gemini **ä¸ DSH** æ’é™¤ï¼ˆpicker disabled + reasonï¼›ç¦æ­¢ normalize æˆ claude åå†™å…¥ bindingï¼‰ã€‚Qoderï¼ˆ2026-08-22 `enable-qoder-shared-target`ï¼‰ï¼šKimi åŒæ¡£å‡†å…¥ï¼ˆtyped terminal/cancel + è·¨è¿›ç¨‹ resume + `session/list` probe å®æµ‹ï¼Œspike Â§13/Â§14ï¼‰ï¼›`inputAck: "first-event"` å¼±è¯­ä¹‰ï¼›context èµ° user channelï¼ˆ`strong_context_ack: false`ï¼‰ï¼›canonical fact engine æšä¸¾ï¼ˆTurnExecutionSnapshot / ProviderPrivateRefï¼‰åŒæ­¥åŠ  `"qoder"`ã€‚Codex Sharedï¼ˆ2026-08-24 `fix-shared-codex-context-projection`ï¼‰ï¼š`thread/inject_items` æ–¹æ³•å¯ç”¨ â‰  structured import åè®®å®‰å…¨è¯æ®ï¼Œ`structured_history_import` / `tool_history` / `strong_context_ack` å…¨ falseï¼Œè·¨ Binding context ä¸€å¾‹ portable transcript / bounded checkpointï¼Œtool exchange æŒ‰ atomic pair omission è¿› manifestã€‚Qoder Shared target `providerProfileId` å³ immutable distribution bindingï¼ŒTx1 `validate_qoder_distribution_identity` å¯¹æœªçŸ¥ profile fail-closedï¼ˆ`invalid-target`ï¼Œä¸è½ turnRequested / Bindingï¼‰ï¼ˆ2026-08-24 `add-qoder-dual-distribution`ï¼‰ | `sharedSessionEngines.ts`ã€`src-tauri/src/shared_session_v2.rs` `context_capabilities` / `validate_qoder_distribution_identity`ã€`src-tauri/src/shared_context/compiler.rs`ã€`src-tauri/src/shared_sessions.rs`ã€`src-tauri/src/shared_event_log/canonical/validator.rs`ã€OpenSpec `add-dsh-engine` / `add-qoder-engine` / `enable-qoder-shared-target` |
-| Gemini runtime | registry ä¸­å­˜åœ¨ï¼Œä½† runtime policy é»˜è®¤ disabled | `src-tauri/src/engine_policy.rs` |
-| Provider selection | Native åŸå­é€‰æ‹©ï¼›Shared é€ Turn targetã€‚**Shared åˆ›å»ºé»˜è®¤ Providerï¼ˆ2026-08-24 `fix-shared-create-default-provider-catalog`ï¼‰**ï¼šè¯¥ CLI æœ‰åº Provider åˆ—è¡¨ç¬¬ä¸€é¡¹ï¼ˆé¡ºåºåŒ Atomic pickerï¼Œæœ¬åœ° sentinel ä¼˜å…ˆï¼›Qoder å›ºå®š global/cn profileï¼‰ï¼Œå…¶ models/mapping å¿…é¡» profile æƒå¨å–æ•°â€”â€”æœ¬åœ° `forceRefresh` é‡è¯» settingsã€managed provider-scoped å®æ—¶ configï¼Œç¦æ­¢è£¸ `get_engine_models(engine)` åƒå…¨å±€ status cacheï¼›æ‰“å¼€æ—¢æœ‰ä¼šè¯å›æ˜¾ last `selectedTarget`ï¼Œç¦æ­¢ç”¨åˆ›å»ºé»˜è®¤ reseedã€‚managed send è¾¹ç•Œ `resolveClaudeManagedRuntimeModel` å¯¹è·¨ä¾›åº”å•† residualï¼ˆ`!legal` ä¸”å‘½ä¸­äº§å“åå¯å‘å¼ï¼‰repair åˆ° catalog defaultï¼Œfreeform ä¸ Shared target è¯­ä¹‰ä¸å˜ï¼ˆ2026-08-24 `fix-native-parallel-provider-model-isolation`ï¼‰ | `close-native-session-provider-create-binding` ä¸ Shared target contractsã€`src/features/shared-session/target/resolveSharedSessionCreateInitialTarget.ts`ã€`src/app-shell/sections/core/useAppShellSections.ts` `handleStartSharedConversation`ã€`src/features/models/claudeManagedRuntimeModel.ts` |
-| Shared send UI çŠ¶æ€æœº | ä¹æ€ + Recovery Exit Ladderï¼ˆProbe/Stop/åœæ­¢å¹¶é‡å»º/æ”¾å¼ƒæœ¬è½®ï¼‰ | `sendStateMachine.ts`ã€`SharedSendStatusBar.tsx`ã€`shared_session_v2.rs` |
-| Recovery Exit Closure | **è®¾è®¡è§ Â§14.5.7**ï¼›å·²å®ç°å¹¶æ”¶å£ï¼ˆOpenSpec `fix-shared-session-recovery-exit-closure`ï¼‰ | abandon durable + stop-before-rebuild + fuse disabled reasons |
-| Shared ä¸Šä¸‹æ–‡ç»­æ¥ integrity | native ä¸å¯ä¿¡æ—¶ç¦æ­¢å‡è®¾ history å·²åœ¨ native å†…ï¼›zero-transfer ä¸ç­‰äºå¯ rematerializeï¼›`empty-context-handoff` ä¸ºä¸€ç­‰ recovery é”™è¯¯ç±»åˆ« | OpenSpec `fix-shared-context-resume-integrity`ã€`shared_context/compiler.rs`ã€`recoveryErrorMap.ts` |
-| Atomic æ¨¡å‹â†”æ€è€ƒå¼ºåº¦è”åŠ¨ | reasoning options / effort ç”± **target æ¨¡å‹ capability** é©±åŠ¨ï¼Œç¦æ­¢ç”¨å…¨å±€ `activeEngine` æ¡£ä½å†’å……ï¼›Shared åˆå§‹åŒ–ç¦æ­¢å›è½ Native æ€è€ƒæ¡£ä½ï¼›å¼•æ“è¦†ç›– Codex / Claude / Grok / **PI**ï¼ˆDSH / Qoder / Kimi / Grok / OpenCode å¾…å„è‡ª change è¯„ä¼°ï¼‰ | `atomicModelReasoning.ts`ã€`initialTarget.ts`ã€`Composer.tsx atomicModelReasoningRef`ã€OpenSpec `fix-shared-atomic-model-reasoning-linkage` + `expand-shared-atomic-reasoning-linkage-to-pi` |
-| ç”¨æˆ·é™„å›¾ canonical æŠ•å½± | ç”¨æˆ·é™„å›¾å•æ°”æ³¡æŠ•å½±ï¼ŒShared å†å²ä¸ä¸¢å›¾ | `shared_projection/projector.rs`ã€OpenSpec `fix-shared-user-image-bubble-projection` |
-| create-session é»˜è®¤ç›®æ ‡ | create-session Atomic picker ä¸ºå…¨éƒ¨ Atomic å¼•æ“ï¼ˆå« Grok/Kimi/OpenCodeï¼‰seed é»˜è®¤ ExecutionTargetï¼Œä¸ä»… claude/codex | `resolveDefaultCreationExecutionTarget.ts` |
-| Agent Squad V1 å…¥å£ä¸å½¢æ€ | ä»… Shared Session æ˜¾ç¤º send å·¦ä¾§ one-shot `Squad` buttonï¼›plan/run card ç•™åœ¨ conversationï¼Œè¯¦æƒ…å¤ç”¨ SubAgent å³ä¾§ full-height inspector host | `src/features/composer/components/Composer.tsx`ã€`src/features/squad-orchestration/**`ã€`ConversationInspectorSplit.tsx` |
-| Squad control authority | Lead åªæå‡º structured Dynamic DAGï¼›mossx validatorã€Canonical Factã€durable projection ä¸ command boundary å†³å®šå¯å¦æ‰§è¡Œï¼›åŒä¸€ Shared Session æœ€å¤šä¸€ä¸ª active run | `src-tauri/src/squad_orchestration/{types,validator,projection,commands,plan_commands}.rs`ã€OpenSpec `add-shared-squad-control-plane` |
-| Squad execution boundary | V1 ä¸º Parallel Analyze + Single Writerï¼›å…¨éƒ¨ Worker seal åˆ° Composer å½“å‰ exact targetã€‚Codex å¯æ‰§è¡Œå®Œæ•´ DAGï¼›Claude ä»… pure read-only DAGï¼›Kimi/Grok/OpenCode å› ç¼ºå°‘å¯éªŒè¯ hard read-only mode åœ¨ Lead side effect å‰ fail closed | `src-tauri/src/squad_orchestration/{scheduler,support}.rs`ã€`shared_session_v2.rs`ã€OpenSpec `add-shared-squad-worker-execution` |
-| Squad mutation/recovery | workspace UUID + canonical root åŒé‡å½’ä¸€ï¼›durable lease æ—  time-based expiryï¼›Git dirty baseline + Change Fenceï¼›Stop å…ˆå†™ cancel intentï¼Œå† best-effort interrupt exact ownerï¼›ç¦æ­¢è‡ªåŠ¨ rollback/reset/stash | `src-tauri/src/squad_orchestration/{scope,stop_commands}.rs`ã€`shared_event_log/writer.rs`ã€OpenSpec `harden-shared-squad-recovery` |
-| Squad conversation projection | æ‰€æœ‰ Worker turnï¼ˆå« Synthesizeï¼‰ä¿æŒ nested-onlyï¼›åªæœ‰ successful `SquadRunSettled` æŠ•å½±ä¸€æ¬¡ top-level finalï¼›checkpoint incremental replay ä¸æ³„æ¼ Worker message | `src-tauri/src/shared_projection/projector.rs`ã€`src/features/squad-orchestration/runtime/squadConversationBridge.ts` |
-| Multi-agent collab Runtime Context | **ä»…åä½œå­˜åœ¨æ—¶**ï¼š`squad.nodeOutcomeRecorded.outcome.body`ï¼ˆcappedï¼‰ç» Context Compiler æŠ•å½±ä¸º portable assistant æ¡ç›®ï¼›**ç¦æ­¢** destination-owned / squad-worker attempt å‰”é™¤åæ‰ stage digestï¼›collab control briefing user turn å¯ omission | `agent_orchestration/commands.rs`ã€`shared_context/compiler.rs`ã€OpenSpec `fix-shared-collab-context-and-sidebar-spawn` |
-| Multi-agent stage æ‰§è¡Œ target | æ¯ stage `begin_stage_turn(&stage.target)` + squad worker bindingKeyï¼›æœ¬åœ° event log æ ¸å¯¹ plan/claudeã€implement/codexã€review/grok åˆ† binding **çœŸå®æ‰§è¡Œ** | `agent_orchestration/{commands,support}.rs`ã€`shared_session_v2.begin_squad_worker_turn_core`ã€`shared-event-log-v2.sqlite3` |
-| Multi-agent Inspector æµå¼ä¸éš”ç¦» | å³æ  **ç¦æ­¢** `extractRealtimeTextDelta` æ—è·¯ï¼›`agent-canvas:{shared}:{attemptId}` + ä¸»å¹•åŒæº adapter / liveAssistantTextChannelï¼›**å¹•å¸ƒä»…å½“å‰ attempt**ï¼›settle åªä¿¡æœ¬ stage `fullOutcome`ï¼›å¾½ç«  **å¼ºåˆ¶å¯¹é½ stage.target**ï¼›activeTurn æŸ¥è¯¢ç”¨ **shared:** key é agent-canvas key | `useAppServerEvents.ts`ã€`agentCanvasThread.ts`ã€`useAgentStageTranscript.ts` |
-| Composer Run Status Strip æ•°æ®æº | è¾“å…¥æ¡†ä¸Šæ–¹ pillsï¼ˆtodo/subagent/plan/**å·²ç¼–è¾‘**ï¼‰å¯¹ Shared æ™®é€šä¸åä½œå‡ç”Ÿæ•ˆï¼›æº items = å½“å‰ä¼šè¯ä¸»æ—¶é—´çº¿ âˆª `agent-canvas:{shared}:*` âˆª parent=active å­ä¼šè¯ï¼›**ä¸**æŠŠå…¨é‡ items ç»‘å› AppShell æ ¹ propsï¼ˆActiveCanvas éš”ç¦»ä¸å˜ï¼‰ | `collectRunStatusSourceItems.ts`ã€`Composer.tsx`ã€`ComposerRunStatusStrip.tsx`ã€OpenSpec `wire-shared-composer-run-status-strip` |
-| Multi-agent æ¨¡æ¿æ™ºèƒ½ä½“ | ç¯èŠ‚å¯é€‰å®¢æˆ·ç«¯æ™ºèƒ½ä½“ï¼ˆ`agentProvider` åŒæºï¼‰ï¼›persona å­—æ®µè¿› stageBindingsï¼›Inspector å¤´å±•ç¤ºã€ŒÂ· æ™ºèƒ½ä½“ {name}ã€ï¼›æ³¨å…¥ç›®å‰ä¸º rolePrompt å‰ç¼€ï¼ˆé Composer å…¨é‡ AGENT_PROMPT åè®®ï¼‰ | `StageAgentPicker.tsx`ã€`templates/types.ts`ã€`AgentInspectorDrawer` |
-| Shared Sidebar hidden binding | Shared å†…éƒ¨ native binding **æ°¸ä¸**ä½œä¸ºç”¨æˆ·é¡¶å±‚ä¼šè¯å±•ç¤ºã€‚**Live è®¤ä¸»ï¼ˆ2026-08-22ï¼‰**ï¼š`thread/started` æŒ‰ Targetï¼ˆ`engine + providerProfileId`ï¼‰è®¤ pendingï¼Œç¦æ­¢ engine-only æƒå¨ï¼›è®¤ä¸å”¯ä¸€åˆ™ä¸å¼€ Native è¡Œï¼›Qoder ç»ˆæ€ `qoder:<profile>:<raw>`ï¼›`ensureThread` å‘½ä¸­ hide / pending-shared / å·²ç™»è®° binding å³ä¸¢å¼ƒã€‚**List hide**ï¼šhide setï¼ˆfreshâˆªouterï¼‰+ control-plane æ ‡é¢˜é—¸ï¼›hide æœªå°±ç»ªä¿ç•™ last-goodï¼Œä¸ full-show æ–° grok/pi/qoder Index è¡Œã€‚**ä¾§æ  title**ï¼šè¡Œé¦– `MOSSX_*`ï¼ˆå…¼å®¹ `previewThreadName` 50 å­—æˆªæ–­ï¼‰âˆª ä¸¥æ ¼ classify âˆª collab workerï¼›**å¹•å¸ƒ transcript**ï¼šä»ä»…ä¸¥æ ¼ `classifyContextProtocolText`ï¼ˆç¦æ­¢ `includes("MOSSX")`ï¼‰ | `useAppServerEvents.ts` `resolvePendingSharedSessionBindingForTarget`ã€`canonicalQoderThreadId`ã€`isSharedOwnedNativeThreadId`ã€`buildNativeIndexEarlyPaintSummaries`ã€`stripHiddenSharedBindingSummaries`ã€OpenSpec `fix-shared-owned-native-sidebar-leak` / `fix-shared-collab-context-and-sidebar-spawn` |
-
-æœ¬æ–‡ä¸­çš„ `RuntimeDeliveryAdapter`ã€`Canonical Fact`ã€`ContextPackage` ç­‰åç§°æ—¢åŒ…å«å®ç°åˆåŒï¼Œä¹ŸåŒ…å« ADR æ¦‚å¿µå±‚è¯­è¨€ã€‚è¯»è€…éœ€è¦å¤åˆ¶ä»£ç æˆ–æ¥æ–° CLI æ—¶ï¼Œå¿…é¡»åŒæ—¶ä½¿ç”¨ [Engine Onboarding Guide](./mossx-new-cli-onboarding-guide.md) çš„ã€Œå½“å‰æ³¨å†Œé¢ã€æ¸…å•ï¼Œä¸èƒ½åªæŒ‰æ¦‚å¿µæ¥å£çŒœæ–‡ä»¶åã€‚
-
-> **æ›´æ–°è§¦å‘å™¨**ï¼šengine registryã€Shared æ”¯æŒé›†åˆã€provider bindingã€canonical fact schemaã€context compilerã€terminal/ACK contractã€**recovery exit / abandon**ã€Squad exact-owner / mutation lease / settlement projectionã€**collab stage digest â†’ Runtime Context**ã€**Shared sidebar hide / spawn é—¸**ã€**multi-agent Inspector attempt éš”ç¦» / å¾½ç« æƒå¨**ã€**Composer run-status åˆæˆæ•°æ®æº** å˜åŒ–ã€‚
-
-## ä¸€ã€Executive Summary
-
-mossx çš„é•¿æœŸåŸºçŸ³ä¸åº”æ˜¯â€œæŠŠå¤šä¸ª CLI æ”¾è¿›åŒä¸€ä¸ªä¸‹æ‹‰æ¡†â€ï¼Œè€Œåº”æ˜¯ä¸€ä¸ªç¨³å®šçš„å¤š Runtime ä¼šè¯ç³»ç»Ÿï¼š
-
-```text
-Native Session
-  = å›ºå®š CLI
-  + å›ºå®š Provider Binding
-  + åŸç”Ÿ CLI Session Identity
-  + åŸç”Ÿ history / resume / fork / tools è¯­ä¹‰
-
-Shared Session
-  = ä¸€ä¸ª Canonical Shared Thread
-  + æ¯ä¸ª Next Turn å¯é€‰æ‹© Execution Target
-  + Execution Target = CLI + Provider + Model + Reasoning
-  + æ¯ä¸ª CLI + Provider ç»„åˆæ‹¥æœ‰ç‹¬ç«‹éšè— Native Binding
-  + é€šè¿‡ Context Package åœ¨ä¸åŒ Target ä¹‹é—´åŒæ­¥ä¸Šä¸‹æ–‡
-```
-
-æœ€ç»ˆäº§å“è¯­ä¹‰ï¼š
-
-1. Native Session åœ¨åˆ›å»ºæ—¶é€‰æ‹© CLI å’Œ Providerï¼Œåˆ›å»ºåç»‘å®šä¸å¯å˜ã€‚
-2. Native Session æ›´æ¢ Provider æ—¶ï¼Œä¸ä¿®æ”¹åŸä¼šè¯ï¼Œè€Œæ˜¯æ‰§è¡Œâ€œä½¿ç”¨å…¶ä»– Provider ç»§ç»­â€ï¼Œåˆ›å»ºä¸€ä¸ªæ–°çš„ `Provider Continuation`ã€‚
-3. Shared Session åœ¨æ¯ä¸ª Turn å‘é€å‰å…è®¸åˆ‡æ¢ CLIã€Providerã€Model ä¸ Reasoningã€‚
-4. Shared Session å¯¹ç”¨æˆ·å§‹ç»ˆåªæœ‰ä¸€ä¸ªä¼šè¯ï¼›å†…éƒ¨ Native Binding ä¸è¿›å…¥ Sidebarã€‚
-5. Subagentã€User Forkã€Provider Continuationã€Shared Binding æ˜¯å››ç§ä¸åŒå…³ç³»ï¼Œä¸å…±ç”¨ä¸€ç§ Parent/Child è¯­ä¹‰ã€‚
-6. `parentThreadId` åªè¡¨è¾¾ Engine/runtime æƒå¨çš„ Subagent ownershipï¼›ç”¨æˆ·è¡€ç¼˜å…³ç³»ä½¿ç”¨ç‹¬ç«‹çš„ Conversation Family contractã€‚
-7. V1 æŒä¹…åŒ– Conversation Family è¡€ç¼˜ï¼Œä½† Sidebar ä»å¯å…ˆæŒ‰å¸¦æ ‡ç­¾çš„é¡¶å±‚ Session å±•ç¤ºï¼›æ•°æ®æ¨¡å‹ä¸ UI Projection è§£è€¦ã€‚
-8. Shared Session ä½¿ç”¨ Adapter å£°æ˜å¹¶ç» Spike è¯æ˜çš„ authoritative logical terminal evidenceï¼›Provider typed final/result åˆ°è¾¾æ—¶å¿…é¡»ç«‹å³å½’ä¸€ï¼Œprocess exit ä»…åœ¨å®ƒè¢«è¯æ˜æ˜¯è¯¥ CLI å”¯ä¸€é€»è¾‘ç»ˆæ€æ—¶å¯ç”¨ï¼Œstdioã€hookã€MCP child ä¸ usage cleanup ä¸å¾—é˜»å¡ `run.settled`ã€‚
-9. Canonical Fact åªèƒ½é€šè¿‡ç»Ÿä¸€ Writer ç”Ÿæˆ tagged envelopeï¼›ä¸šåŠ¡æ¨¡å—ä¸å¾—æ‰‹å·¥æ„é€ å¦ä¸€å¥— payload serializationã€‚
-10. Shared history recovery ä¸ Native runtime recovery åˆ†å±ä¸åŒ ownerï¼›Shared ä¸å¾—å›é€€åˆ° Native resumeï¼Œä¹Ÿä¸å¾—æ˜¾ç¤º Native recovery cardã€‚
-11. Shared durable identity å›ºå®šä¸º `session UUID`ï¼Œå‰ç«¯ thread key å›ºå®šä¸º `shared:<UUID>`ï¼›æ ‡é¢˜åªå±äº presentation metadataã€‚
-12. æ—§ canonical row å¯ä»¥åœ¨ Projection decode boundary åšæ— æŸå…¼å®¹ï¼Œä½†ä¸å¾—æ”¹å†™ immutable payload æˆ– checksumã€‚
-
-ä¸€å¥è¯æ¦‚æ‹¬ï¼š
-
-> Native Session è´Ÿè´£åŸç”Ÿæ€§ä¸éš”ç¦»ï¼›Shared Session è´Ÿè´£è‡ªç”±åˆ‡æ¢ä¸ç¼–æ’ï¼›Context Compiler è´Ÿè´£æŠŠå®Œæ•´äº‹å®æŠ•å½±ä¸ºç›®æ ‡ CLI å¯æ¶ˆè´¹çš„ä¸Šä¸‹æ–‡ã€‚
-
----
-
-## äºŒã€ä¸ºä»€ä¹ˆå¿…é¡»å…ˆåšâ€œä¼šè¯åŸºçŸ³â€
-
-### 2.1 å››ä¸ªæ¦‚å¿µä¸èƒ½æ··ä¸ºä¸€ä¸ªå­—æ®µ
-
-å¤š CLI å®¢æˆ·ç«¯è‡³å°‘å­˜åœ¨å››ä¸ªç‹¬ç«‹ç»´åº¦ï¼š
-
-| ç»´åº¦ | å›ç­”çš„é—®é¢˜ | ç¤ºä¾‹ |
-| --- | --- | --- |
-| CLI / Engine | è°åœ¨æ‰§è¡Œ Agent Runtime | Claude Codeã€Codex CLIã€Kimi CLI |
-| Provider | CLI é€šè¿‡å“ªä¸ªé…ç½®ä¸æœåŠ¡ç«¯é€šä¿¡ | Officialã€OpenRouterã€Azure-compatibleã€Company Gateway |
-| Model | æœ¬ Turn ä½¿ç”¨å“ªä¸ªæ¨¡å‹ | `claude-opus-*`ã€`gpt-5-*` |
-| Session | å¯¹è¯ã€æ¢å¤ã€å·¥å…·çŠ¶æ€å½’è°æ‰€æœ‰ | Claude native sessionã€Codex threadã€Shared thread |
-
-é”™è¯¯å»ºæ¨¡ï¼š
-
-```text
-selectedEngine = "claude-openrouter-opus"
-```
-
-è¿™ç§åšæ³•ä¼šæŠŠ Runtimeã€è®¤è¯ã€Model Catalog å’Œ Session Identity å‹æˆä¸€ä¸ªå­—ç¬¦ä¸²ï¼Œéšåå‡ºç°ï¼š
-
-- æ¢ Model è¢«è¯¯åˆ¤ä¸ºæ¢ Sessionï¼›
-- åŒä¸€ CLI çš„ä¸åŒ Provider å…±äº«é”™è¯¯ Runtimeï¼›
-- åˆ é™¤ Provider åå†å²æ— æ³•è§£é‡Šï¼›
-- Sidebar æ— æ³•è¡¨è¾¾ä¼šè¯æ¥æºï¼›
-- Usage Attribution æ— æ³•ç¡®å®šå½’å±ï¼›
-- Shared Session åˆ‡å›æ—§ç›®æ ‡æ—¶æ— æ³•æ¢å¤åŸç”Ÿä¸Šä¸‹æ–‡ã€‚
-
-æ­£ç¡®å»ºæ¨¡ï¼š
-
-```text
-Execution Target
-  â”œâ”€ Engine
-  â”œâ”€ Provider Profile
-  â”œâ”€ Model
-  â””â”€ Reasoning
-```
-
-### 2.2 çœŸæ­£å›°éš¾çš„ä¸æ˜¯ Picker
-
-UI Picker åªæ˜¯å…¥å£ã€‚ç³»ç»ŸçœŸæ­£è¦è§£å†³çš„æ˜¯ï¼š
-
-1. **Target Identity**ï¼šä¸€æ¬¡ Turn åˆ°åº•ç”±å“ªä¸ª CLIã€Providerã€Model æ‰§è¡Œã€‚
-2. **Runtime Ownership**ï¼šProcessã€Homeã€envã€pending inputã€approval state å½’è°ã€‚
-3. **Context Ownership**ï¼šå†å²æ˜¯ App æŒæœ‰ï¼Œè¿˜æ˜¯å¤–éƒ¨ CLI æŒæœ‰ã€‚
-4. **Relationship Semantics**ï¼šSubagentã€Forkã€Provider Continuation å¦‚ä½•æŠ•å½±ã€‚
-5. **Recovery**ï¼šé‡å¯åå¦‚ä½•æ¢å¤ç›¸åŒ Targetã€Binding å’ŒåŒæ­¥æ¸¸æ ‡ã€‚
-6. **Provenance**ï¼šå†å²ä¸­æ¯ä¸ªç»“æœæ¥è‡ªå“ªé‡Œã€‚
-
-å¦‚æœè¿™äº›è¾¹ç•Œä¸å…ˆç¨³å®šï¼ŒProvider Picker è¶Šæ—©æ¥å…¥ï¼Œåç»­è¿”å·¥è¶Šå¤§ã€‚
-
----
-
-## ä¸‰ã€ä» pi ä¸ LiveAgent æç‚¼å‡ºçš„æ¶æ„åŸåˆ™
-
-### 3.1 å­¦ piï¼šè–„ Coreï¼Œä¸å¤åˆ¶ Feature
-
-pi çš„å…³é”®ä¸æ˜¯åŠŸèƒ½æ•°é‡ï¼Œè€Œæ˜¯ Core åªè´Ÿè´£ï¼š
-
-- Agent Loopï¼›
-- æ ‡å‡†äº‹ä»¶ï¼›
-- Session Logï¼›
-- æ¶ˆæ¯é˜Ÿåˆ—ï¼›
-- å¯æ³¨å…¥ Hookï¼›
-- Provider/Protocol æŠ½è±¡ã€‚
-
-Permission Gateã€Plan Modeã€Subagentã€Sandbox ç­‰èƒ½åŠ›å»ºç«‹åœ¨è¿™äº›å†³ç­–ç‚¹ä¹‹ä¸Šã€‚
-
-mossx åº”é‡‡ç”¨åŒæ ·åˆ†å¯¸ï¼š
-
-```text
-Core æä¾›ç¨³å®šäº‹å®ä¸å†³ç­–ç‚¹
-Feature å†³å®šç­–ç•¥
-Plugin åªèƒ½æ¶ˆè´¹å—æ§èƒ½åŠ›
-```
-
-Core ä¸è´Ÿè´£çŒœæµ‹â€œå“ªä¸ª CLI æ›´é€‚åˆå½“å‰ Promptâ€ï¼Œä¹Ÿä¸è´Ÿè´£é™é»˜åˆ‡æ¢ Providerã€‚
-
-### 3.2 å­¦ pi-aiï¼šProvider ä¸ Protocol æ­£äº¤
-
-pi-ai å°† Provider ä¸ API/Wire Protocol åˆ†å¼€ï¼š
-
-```text
-Provider
-  = identity + endpoint + auth + model catalog
-
-Protocol
-  = request serialization + stream parsing
-```
-
-æ˜ å°„åˆ° mossxï¼š
-
-```text
-Provider Profile
-  = providerProfileId + endpoint/auth/config + model catalog
-
-Engine Protocol
-  = claude stream-json
-  | codex app-server JSON-RPC
-  | kimi stream-json
-  | future protocol
-```
-
-CLI ä¸æ˜¯ Providerï¼ŒProvider ä¹Ÿä¸æ˜¯ Modelã€‚
-
-### 3.3 å­¦ pi-aiï¼šCross-Provider Handoff å…ˆè½¬æ¢ï¼Œä¸èƒ½é»˜è®¤å…ˆæ‘˜è¦
-
-pi-ai çš„ `packages/ai` å·²ç»å®ç°åŒä¸€ Conversation å†…è·¨ Provider/Model åˆ‡æ¢ã€‚å®ƒä¿ç•™ç»Ÿä¸€ `Message[]`ï¼Œå‘é€å‰æ‰§è¡Œï¼š
-
-```text
-Canonical Message History
-        â†“
-transformMessages(targetModel)
-        â†“
-Provider API Converter
-        â†“
-Target Wire Format
-```
-
-å…¶å…³é”®å…¼å®¹è§„åˆ™åŒ…æ‹¬ï¼š
-
-- è·¨æ¨¡å‹çš„æ™®é€š Thinking è½¬ä¸º textï¼Œredacted/encrypted thinking åœ¨ç›®æ ‡ä¸åŒ¹é…æ—¶åˆ é™¤ï¼›
-- åŒæ¨¡å‹éœ€è¦ replay çš„ thinking signature ä¿ç•™ï¼›
-- Tool Call ID æŒ‰ç›®æ ‡ Provider çº¦æŸå½’ä¸€åŒ–ï¼Œå¹¶åŒæ­¥æ›´æ–° Tool Result å¼•ç”¨ï¼›
-- Tool call/result ä¿æŒåè®®é—­ç¯ï¼Œå­¤ç«‹ Tool Call è¡¥ synthetic error resultï¼›
-- ä¸æ”¯æŒ Vision çš„ç›®æ ‡æŠŠ Image é™çº§ä¸ºæ˜ç¡® placeholderï¼›
-- `error` / `aborted` çš„ä¸å®Œæ•´ Assistant Message ä¸å‚ä¸ replayï¼›
-- æœ€åç”± Anthropicã€OpenAI Responsesã€OpenAI Completionsã€Googleã€Mistralã€Bedrock ç­‰ Adapter è½¬æˆå„è‡ª Wire Formatã€‚
-
-è¿™è¯æ˜ï¼š
-
-> å¯¹ **SDK/API Controlled Runtime**ï¼Œä¸èƒ½ç›´æ¥é‡æ”¾çš„æ˜¯ Provider åŸå§‹ Wire Historyï¼›Canonical Portable History åº”ä¼˜å…ˆå°è¯•å…¼å®¹è½¬æ¢ä¸å®Œæ•´ replayï¼ŒSummary/Checkpoint åªåº”ä½œä¸ºèƒ½åŠ›ä¸å…¼å®¹æˆ– Context è¶…é™åçš„é™çº§è·¯å¾„ã€‚
-
-pi-ai çš„ `cross-provider-handoff.test.ts` è¿˜ä½¿ç”¨çœŸå® Provider ç”ŸæˆåŒ…å« Thinkingã€Tool Call ä¸ Tool Result çš„å†å²ï¼Œå†äº¤ç»™å…¶ä»– Provider æ¶ˆè´¹ã€‚mossx çš„ Compatibility Transformer ä¹Ÿå¿…é¡»å»ºç«‹ç±»ä¼¼çš„ source Ã— target matrixï¼Œä¸èƒ½åªåšå• Provider å•å…ƒæµ‹è¯•ã€‚
-
-ä½†è¿™ä¸ªç»“è®ºä¸èƒ½åŸæ ·å¥—åˆ°æ‰€æœ‰ Native CLIï¼š
-
-- pi-ai è‡ªå·±æ„é€ ç›®æ ‡ Provider çš„ API Requestï¼Œå› æ­¤èƒ½ä¿ç•™ `user` / `assistant` / `tool` role å’Œ Tool Call/Result å…³è”ã€‚
-- mossx å½“å‰ Codex Adapter åªä½¿ç”¨ `turn/start.input` å‘é€æœ¬æ¬¡ user input ä¸ imageï¼›ä½†æœ¬æœº Codex CLI `0.144.6` çš„ App Server å·²æä¾› `thread/inject_items`ï¼Œå¯ä»¥æŠŠ Raw Responses API Items æŒä¹…åŒ–è¿›ç›®æ ‡ Threadã€‚èƒ½åŠ›å·²ç»å­˜åœ¨ï¼Œmossx å°šæœªæ¥å…¥ã€‚
-- Claude CLI å½“å‰é€šè¿‡ stream-json prompt åŠ  `--resume` / `--fork-session` æ¢å¤è‡ªå·±çš„å†å²ï¼Œä¸æä¾›ä»»æ„å¤šè§’è‰²å†å²å¯¼å…¥ã€‚
-- Kimi å½“å‰ prompt Adapter æ”¯æŒ native session resumeï¼Œä¸æä¾›ä»»æ„å†å²å¯¼å…¥ï¼›Kimi CLI å·²æ”¯æŒ ACPï¼Œåç»­åº”ä¼˜å…ˆè¯„ä¼° ACP Adapterï¼Œè€Œä¸æ˜¯ç»§ç»­æ‰©å±•ä¸€æ¬¡æ€§ prompt wrapperã€‚
-
-å› æ­¤ï¼Œmossx å¿…é¡»åŒºåˆ†ä¸¤ç§èƒ½åŠ›ï¼š
-
-```text
-SDK/API Controlled Runtime
-  = å¯ä»¥åšçœŸæ­£çš„ Canonical Message Replay
-
-Native CLI Runtime
-  = å¯ä»¥æ¢å¤è‡ªå·±çš„ Native History
-  = å…ˆæŒ‰ Runtime Capability åˆ¤æ–­ native history import / clone
-  = ä¸æ”¯æŒ import æ—¶æ‰æ¥æ”¶ user-channel portable transcript / checkpoint
-```
-
-`Compatibility Transformer` ä»ç„¶é‡è¦ï¼š
-
-- å¯¹æ”¯æŒ history import çš„ Codexï¼Œäº§ç‰©å¯ä»¥æ˜¯ç»è¿‡éªŒè¯çš„ Responses API Itemsï¼›
-- å¯¹ä¸æ”¯æŒ import çš„ Claude/Kimi prompt Adapterï¼Œäº§ç‰©æ˜¯å®‰å…¨ã€å¸¦ provenance çš„ transcript/checkpointï¼›
-- Import capability ä¸ lossless fidelity æ˜¯ä¸¤ä¸ªç»´åº¦ï¼šç›®æ ‡èƒ½æ¥æ”¶ç»“æ„åŒ– Itemï¼Œä¸ä»£è¡¨ Provider-private reasoning/signature å¯ä»¥æ— æŸè¿ç§»ã€‚
-
-### 3.4 å­¦ pi-chatï¼šExternal Logã€Delta Injectionã€On-demand Retrieval
-
-`pi-chat` ä¸æ˜¯é€šç”¨å¤š Provider Chat SDKã€‚å®ƒæ˜¯ä¸€ä¸ª pi Extensionï¼ŒæŠŠ Discord/Telegram channel è¿æ¥åˆ°éš”ç¦»çš„ pi Sessionï¼Œå¹¶ä¸ºæ¯ä¸ª channel å»ºç«‹ç‹¬ç«‹ Gondolin micro-VMã€‚
-
-å®ƒå¯¹ mossx æœ€æœ‰ä»·å€¼çš„ä¸æ˜¯ Chat Bridgeï¼Œè€Œæ˜¯ Context åˆ†å±‚ï¼š
-
-```text
-channel.jsonl
-  = å®Œæ•´å¤–éƒ¨èŠå¤©äº‹å®æº
-
-Pi Session
-  = å½“å‰ Agent å¯è§ä¸Šä¸‹æ–‡ä¸ Compaction
-
-æ¯æ¬¡è§¦å‘
-  = åªæ³¨å…¥ä¸Šæ¬¡ completed trigger ä¹‹åçš„ transcript delta
-
-chat_history
-  = æ—§å†å²æŒ‰ text/date/limit ä¸»åŠ¨æ£€ç´¢
-
-memory.md
-  = account-wide / channel-specific durable memory
-```
-
-è¿™è¯´æ˜å®Œæ•´å­˜å‚¨ã€å½“å‰çª—å£å’Œé•¿æœŸè®°å¿†åº”è¯¥åˆ†ç¦»ã€‚mossx å¯ä»¥å¯¹åº”ä¸ºï¼š
-
-| pi-chat | mossx |
-| --- | --- |
-| `channel.jsonl` | Canonical Shared Log |
-| completed trigger boundary | target-scoped sync cursor |
-| transcript delta | Native Binding å¢é‡æ³¨å…¥ |
-| `chat_history` | `context_history` / Artifact Retrieval Host Tool |
-| account/channel `memory.md` | Workspace/Conversation durable facts |
-| pi compaction | Binding-local Checkpoint/Compaction |
-
-pi-chat ä¹Ÿæä¾›ä¸€æ¡é‡è¦è¾¹ç•Œï¼šæ£€ç´¢å‡ºæ¥çš„å†å²è¢«æ ‡è®°ä¸º reference contextï¼Œä¸èƒ½æŠŠæ—§å†…å®¹ä¸­çš„ trigger/control command å½“æˆæ–°å‘½ä»¤æ‰§è¡Œã€‚mossx çš„å†å²æ£€ç´¢åŒæ ·å¿…é¡»æºå¸¦ provenanceï¼Œå¹¶éš”ç¦»æ§åˆ¶è¯­ä¹‰ã€‚
-
-### 3.5 å­¦ piï¼šç»Ÿä¸€ AgentEvent
-
-ä¸åŒ CLI çš„äº‹ä»¶åº”å…ˆå½’ä¸€åˆ° mossx è‡ªæœ‰äº‹ä»¶ï¼Œå†ç¿»è¯‘ç»™å‰ç«¯ï¼š
-
-```text
-CLI Native Event
-      â†“
-Engine Protocol Adapter
-      â†“
-MossxAgentEvent
-      â”œâ”€ Frontend Sink
-      â”œâ”€ Session Persistence Sink
-      â”œâ”€ Orchestrator Sink
-      â””â”€ Plugin Hook Sink
-```
-
-æœ€ä½äº‹ä»¶é¢ï¼š
-
-```typescript
-type MossxAgentEvent =
-  | { type: "run:start"; runId: string; target: TurnExecutionSnapshot }
-  | { type: "turn:start"; runId: string; turnId: string }
-  | { type: "message:delta"; turnId: string; delta: unknown; partial: unknown }
-  | { type: "tool:start"; turnId: string; toolCallId: string; toolName: string }
-  | { type: "tool:update"; turnId: string; toolCallId: string; partialResult: unknown }
-  | { type: "tool:end"; turnId: string; toolCallId: string; isError: boolean }
-  | { type: "turn:end"; runId: string; turnId: string }
-  | { type: "run:settled"; runId: string; outcome: RunOutcome };
-```
-
-`run:settled` æ˜¯ç¼–æ’å™¨å”¯ä¸€å¯é çš„â€œå½»åº•ç©ºé—²â€ä¿¡å·ã€‚ä¸èƒ½æŠŠå•ä¸ª `turn:end` å½“ä½œæ²¡æœ‰ Retryã€Compaction æˆ–æ’é˜Ÿæ¶ˆæ¯çš„æœ€ç»ˆå®Œæˆã€‚
-
-### 3.6 å­¦ piï¼šappend-only Log + consumer-side replay
-
-ä¼šè¯å…³ç³»ã€Target é€‰æ‹©ã€Handoffã€Job çŠ¶æ€åº”è®°å½•ä¸º append-only factsï¼š
-
-```text
-äº‹å®åªè¿½åŠ 
-çŠ¶æ€ç”±æ¶ˆè´¹è€…é‡æ”¾è®¡ç®—
-```
-
-ä¼˜ç‚¹ï¼š
-
-- å´©æºƒåå¯ä»¥æ¢å¤ï¼›
-- å†å²å¯å®¡è®¡ï¼›
-- ä¸éœ€è¦ä¾èµ–æ˜“ä¸¢å¤±çš„å†…å­˜é—­åŒ…ï¼›
-- å¤šä¸ªæ¶ˆè´¹è€…å¯æ„å»ºä¸åŒ Projectionï¼›
-- é”™è¯¯ä¿®å¤å¯ä»¥é‡å»º Projectionï¼Œè€Œä¸æ˜¯ä¿®æ”¹å†å²ã€‚
-
-### 3.7 å­¦ LiveAgentï¼Œä½†ä¸å¤åˆ¶ LiveAgent
-
-LiveAgent åˆ‡æ¢ Provider é¡ºæ»‘ï¼Œå› ä¸ºï¼š
-
-- Conversation History ç”±åº”ç”¨ç»Ÿä¸€æŒæœ‰ï¼›
-- Agent Loop ç”±åº”ç”¨æŒæœ‰ï¼›
-- Tool Registry ç”±åº”ç”¨æŒæœ‰ï¼›
-- Provider åªæ˜¯ HTTP Adapterã€‚
-
-mossx ç®¡ç†çš„æ˜¯çœŸå® CLI Runtimeã€‚CLI è‡ªå·±æ‹¥æœ‰éƒ¨åˆ†ï¼š
-
-- Native Historyï¼›
-- Tool Stateï¼›
-- Resume Identityï¼›
-- Provider-specific Runtimeï¼›
-- Approval ä¸ User Input çŠ¶æ€ã€‚
-
-å› æ­¤ mossx ä¸åº”å¤åˆ¶ LiveAgent çš„â€œæ¯æ¬¡æŠŠå®Œæ•´ canonical history é‡æ–°åºåˆ—åŒ–ç»™ APIâ€ã€‚
-
-mossx åº”ä¿ç•™ Native Runtimeï¼Œå¹¶å»ºç«‹ï¼š
-
-```text
-å¤šä¸ªéšè— Native Binding
-        +
-Canonical Shared Thread
-        +
-Context Compiler / Context Package
-```
-
----
-
-## å››ã€åŒè½¨ Session äº§å“æ¨¡å‹
-
-### 4.1 Native Session
-
-å®šä¹‰ï¼š
-
-```text
-Native Session
-  = Engine
-  + Provider Binding
-  + Native Session ID
-```
-
-çº¦æŸï¼š
-
-- Engine åˆ›å»ºåä¸å¯å˜ã€‚
-- Managed Provider Binding åˆ›å»ºåä¸å¯å˜ã€‚
-- Model å¯ä»¥æŒ‰ CLI åŸç”Ÿèƒ½åŠ›åˆ‡æ¢ï¼Œä¸è‡ªåŠ¨æ”¹å˜ Binding Identityã€‚
-- Provider å…¨å±€é»˜è®¤å˜åŒ–ä¸å¾—é‡è·¯ç”±å·²æœ‰ managed-bound Sessionã€‚
-- Resumeã€Forkã€Historyã€Usage ç»§ç»­éµå¾ªå¯¹åº” CLI çš„åŸç”Ÿè¯­ä¹‰ã€‚
-- Provider ç¼ºå¤±æˆ–å¤±æ•ˆæ—¶ fail closedï¼Œä¸é™é»˜å›é€€åˆ° local/defaultã€‚
-
-Native Session çš„ä»·å€¼æ˜¯ï¼š
-
-- åŸç”Ÿæ¢å¤ï¼›
-- åŸç”Ÿå·¥å…·é“¾ï¼›
-- åŸç”Ÿ Forkï¼›
-- Provider Runtime éš”ç¦»ï¼›
-- ç²¾ç¡®æ•…éšœå®šä½ï¼›
-- å†å²èº«ä»½ç¨³å®šã€‚
-
-### 4.2 Native Session æ›´æ¢ Provider
-
-Native Session å†…ä¸æä¾›æ™®é€šçƒ­åˆ‡ Providerã€‚
-
-ç”¨æˆ·å…¥å£ï¼š
-
-```text
-ä½¿ç”¨å…¶ä»– Provider ç»§ç»­
-```
-
-æ‰§è¡Œè¯­ä¹‰ï¼š
-
-```text
-1. ç”¨æˆ·é€‰æ‹©æ–° Providerã€‚
-2. ç³»ç»Ÿå†»ç»“æ¥æº Session çš„ Target Snapshotã€‚
-3. ç³»ç»Ÿç”Ÿæˆ target-aware Context Packageã€‚
-4. åˆ›å»ºä¸€ä¸ªæ–°çš„ Native Sessionã€‚
-5. æ–° Session ç»‘å®šæ–° Providerã€‚
-6. æ³¨å…¥ç›®æ ‡ CLI å¯æ¶ˆè´¹çš„ Model Projectionã€‚
-7. æ–° Session æ˜¾ç¤ºâ€œä¾›åº”å•†ç»­æ¥â€æ ‡ç­¾ã€‚
-8. åŸ Session ä¿ç•™ï¼Œä¸åˆ é™¤ã€ä¸æ”¹å†™ã€ä¸è‡ªåŠ¨å½’æ¡£ã€‚
-```
-
-Provider Continuation çš„æ¥æºæ˜¯ Native Sessionï¼Œå…¶äº‹å®æºä»æ˜¯ vendor history fileï¼Œä¸æ˜¯ Shared Canonical Event Logã€‚æ­¥éª¤ 3 å¿…é¡»é€šè¿‡ Â§9.1.1 çš„ `NativeHistoryReader` è¯»å–æ¥æºå†å²ï¼Œå†äº¤ç»™ `ContextCompiler`ï¼›ä¸å¾—è¦æ±‚ Native Session é¢„å…ˆè¿å…¥ Shared Canonical Pipelineã€‚
-
-è¿™ä¸æ˜¯ Subagentï¼Œä¹Ÿä¸æ˜¯æ™®é€š Forkï¼š
-
-- Subagent æ˜¯ Agent/runtime è‡ªåŠ¨æ´¾ç”Ÿçš„æ‰§è¡Œå•å…ƒã€‚
-- User Fork æ˜¯ç”¨æˆ·ä»æŸä¸ªå†å²èŠ‚ç‚¹åˆ†å‰ã€‚
-- Provider Continuation æ˜¯ç”¨æˆ·ä¸ºäº†æ›´æ¢ Provider è€Œåˆ›å»ºçš„ç»­æ¥ä¼šè¯ã€‚
-
-### 4.3 Shared Session
-
-å®šä¹‰ï¼š
-
-```text
-Shared Session
-  = Canonical Shared Thread
-  + Selected Execution Target
-  + Hidden Native Bindings
-  + Handoff / Sync State
-```
-
-Shared Session çš„ Conversation Type åˆ›å»ºåä¸å¯å˜ã€‚
-
-æ¯ä¸ª Turn å‘é€å‰å…è®¸é€‰æ‹©ï¼š
-
-```text
-Execution Target
-  = Engine
-  + Provider Profile
-  + Model
-  + Reasoning
-```
-
-çº¦æŸï¼š
-
-- ä¸€ä¸ª Turn Attempt åªèƒ½ç»‘å®šä¸€ä¸ª Targetã€‚
-- æ­£åœ¨è¿è¡Œçš„ Turn ä¸å¾—ä¸­é€”æ¢ Targetã€‚
-- Picker å˜åŒ–åªå½±å“ Next Turnã€‚
-- ä¸æ ¹æ® Prompt è‡ªåŠ¨è·¯ç”±ã€‚
-- Target å¤±è´¥æ—¶ä¸å¾—é™é»˜ Fallbackã€‚
-- åˆ‡å›æ—§ Target æ—¶å¤ç”¨æ—§ Hidden Bindingã€‚
-- æ‰€æœ‰ç”¨æˆ·å’Œ Assistant æ¶ˆæ¯ä»è¿›å…¥åŒä¸€ä¸ª Canonical Shared Threadã€‚
-
-### 4.4 Shared Session ä¸ºä»€ä¹ˆä¸ä¼šæ±¡æŸ“ Sidebar
-
-Shared Session å¯¹ç”¨æˆ·åªæ˜¾ç¤ºä¸€æ¡ï¼š
-
-```text
-è·¨æ¨¡å‹å®ç°ç™»å½•                  Shared Â· Codex/OpenAI
-```
-
-å†…éƒ¨å¯èƒ½æœ‰ï¼š
-
-```text
-Shared Session
-â”œâ”€ Claude / Official Binding
-â”œâ”€ Claude / OpenRouter Binding
-â”œâ”€ Codex / OpenAI Binding
-â””â”€ Codex / Azure Binding
-```
-
-è¿™äº› Bindingï¼š
-
-- å±äº Shared Session Runtime Internalï¼›
-- ä¸è¿›å…¥ Native Session Sidebarï¼›
-- ä¸å‚ä¸ Native Folder Assignmentï¼›
-- ä¸ä½œä¸ºç‹¬ç«‹ç”¨æˆ·ä¼šè¯æ‰“å¼€ï¼›
-- åªé€šè¿‡ Shared Session Identity æ¢å¤ã€‚
-
----
-
-## äº”ã€æ ¸å¿ƒé¢†åŸŸæ¨¡å‹
-
-### 5.1 ExecutionTarget
-
-```typescript
-interface ExecutionTarget {
-  engine: EngineType;
-  providerProfileId?: string;
-  modelCatalogEntryId?: string;
-  /** ä¼ ç»™ CLI/API çš„ runtime modelï¼›ä¸å¾—å†™ UI-only catalog idã€‚ */
-  model?: string;
-  reasoning?: ReasoningSelection;
-}
-```
-
-è¿™æ˜¯â€œä¸‹ä¸€ Turn è¦å‘ç»™è°â€çš„å¯å˜é€‰æ‹©ã€‚
-
-å®ƒä¸æ˜¯ Runtime Owner Keyï¼Œä¹Ÿä¸æ˜¯å†å²äº‹å®ã€‚å‘é€æ—¶å¿…é¡»ç”Ÿæˆä¸å¯å˜ Snapshotã€‚
-
-### 5.2 TurnExecutionSnapshot
-
-```typescript
-interface TurnExecutionSnapshot {
-  engine: EngineType;
-  providerProfileId?: string;
-  /** é€‰æ‹©æ—¶çš„ catalog identityï¼›ç”¨äº provenance ä¸ exact pair validationã€‚ */
-  modelCatalogEntryId?: string;
-  providerProfileNameSnapshot?: string;
-  providerProfileSource?: ProviderProfileSource;
-  /** è¯¥ Attempt å®é™…æ‰§è¡Œçš„ runtime modelã€‚ */
-  model?: string;
-  reasoning?: ReasoningSelection;
-  runtimeCapabilityFingerprint?: string;
-}
-```
-
-è§„åˆ™ï¼š
-
-- æ¯ä¸ª Turn Attempt åˆ›å»ºä¸€æ¬¡åä¸å¯å˜ã€‚
-- Provider æ˜¾ç¤ºåä¿å­˜ Snapshotï¼Œé¿å… Provider åˆ é™¤åå†å²ä¸å¯è§£é‡Šã€‚
-- Model catalog entry identity ä¸ runtime model å¿…é¡»åˆ†åŸŸï¼›immutable Turn fact åŒæ—¶å†»ç»“
-  `modelCatalogEntryId` ä¸ runtime `model`ï¼Œç”¨äº provenance ä¸ exact pair validationï¼›
-  CLI/API actual-send åªæ¶ˆè´¹ runtime `model`ã€‚
-- Usageã€Errorã€Retryã€Recovery å…¨éƒ¨ç»‘å®š Snapshotã€‚
-- `nativeSessionId` å±äº `NativeSessionBinding` / `SharedTargetBinding`ï¼Œä¸å±äº Target Snapshotï¼›Lazy Create åœ¨ Tx 2b è·å¾— Identity ååªæ›´æ–° Bindingï¼Œä¸ backfill Snapshotã€‚
-- UI ä¸èƒ½ç”¨â€œå½“å‰ Picker å€¼â€è§£é‡Šå†å² Turnã€‚
-
-Retry/Regenerate ä½¿ç”¨ä¸¤å±‚ Identityï¼š
-
-```text
-logicalTurnId
-  = åŒä¸€æ¬¡ç”¨æˆ·æ„å›¾åŠå…¶å›ç­” variants
-
-attemptId
-  = ä¸€æ¬¡å…·ä½“ Runtime execution
-  = æ°å¥½ä¸€ä¸ª TurnExecutionSnapshot
-```
-
-æ™®é€šå‘é€åˆ›å»ºæ–°çš„ `logicalTurnId + attemptId`ï¼›Retry/Regenerate å¤ç”¨ `logicalTurnId`ï¼Œåˆ›å»ºæ–°çš„ `attemptId`ã€‚
-
-### 5.3 NativeSessionBinding
-
-```typescript
-interface NativeSessionBinding {
-  engine: EngineType;
-  providerProfileId?: string;
-  nativeSessionId: string;
-  ownerWorkspaceId: string;
-  availability: "available" | "unavailable";
-}
-```
-
-Native Session çš„ Binding Identityï¼š
-
-```text
-Engine + Provider Profile + Native Session ID
-```
-
-Native Session ä¸å…è®¸é€šè¿‡ä¿®æ”¹å­—æ®µæŠŠ Binding A å˜æˆ Binding Bã€‚
-
-### 5.4 SharedTargetBinding
-
-```typescript
-interface SharedTargetBinding {
-  bindingKey: string;
-  sharedSessionId: string;
-  engine: EngineType;
-  providerProfileId?: string;
-  nativeSessionId?: string;
-  contextCursor: BindingContextCursor;
-  availability:
-    | "provisioning"
-    | "ready"
-    | "missing-provider"
-    | "missing-runtime"
-    | "degraded"
-    | "recovery-required";
-}
-
-interface BindingContextCursor {
-  acceptedThroughSequence?: number;
-  committedThroughSequence?: number;
-  pendingDelivery?: {
-    packageId: string;
-    sourceChecksum: string;
-    throughSequence: number;
-    startedAt: number;
-  };
-}
-```
-
-æ¨è Binding Keyï¼š
-
-```text
-Engine + Provider Profile
-```
-
-Model é»˜è®¤ä¸è¿›å…¥ Binding Keyã€‚
-
-åŸå› ï¼š
-
-- åŒä¸€ CLI + Provider ä¸‹æ¢ Model é€šå¸¸ä¸è¦æ±‚åˆ›å»ºæ–° Native Sessionã€‚
-- è‹¥æŠŠ Model åŠ å…¥ Keyï¼Œæ¯æ¢ä¸€æ¬¡ Model éƒ½ä¼šåˆ¶é€ æ–° Bindingã€‚
-- ä¸ªåˆ« CLI å¦‚æœè¦æ±‚æ¢ Model å¿…é¡»æ–° Sessionï¼Œåº”é€šè¿‡ Capability ç‰¹åˆ¤ã€‚
-
-### 5.5 SessionOrigin
-
-```typescript
-type SessionOrigin =
-  | { kind: "root" }
-  | {
-      kind: "subagent";
-      parentSessionId: string;
-      agentRole?: string;
-      spawnedByToolCallId?: string;
-    }
-  | {
-      kind: "user-fork";
-      sourceSessionId: string;
-      sourceTurnId?: string;
-    }
-  | {
-      kind: "provider-continuation";
-      sourceSessionId: string;
-      sourceProviderProfileId?: string;
-    }
-  | {
-      kind: "shared-binding";
-      sharedSessionId: string;
-    };
-```
-
-`SessionOrigin` è§£é‡Šå¯¹è±¡å¦‚ä½•äº§ç”Ÿï¼›Conversation Family è§£é‡Šç”¨æˆ·ä¼šè¯è¡€ç¼˜ã€‚ä¸¤è€…ä¸å¯åˆå¹¶ï¼š
-
-```typescript
-interface ConversationFamilyRef {
-  familyId: string;
-  familyRootSessionId: string;
-  lineageParentSessionId?: string;
-  lineageKind: "root" | "user-fork" | "provider-continuation";
-  lineageDepth: number;
-}
-```
-
-æ¨èè¾¹ç•Œï¼š
-
-- Rootã€User Forkã€Provider Continuation å±äºåŒä¸€ä¸ª Conversation Familyã€‚
-- Subagent æ˜¯ runtime-owned execution childï¼Œä¸è¿›å…¥ Conversation Familyã€‚
-- Shared Binding æ˜¯å†…éƒ¨æ‰§è¡Œå¯¹è±¡ï¼Œä¸è¿›å…¥ Conversation Familyã€‚
-- Shared Session è‡ªèº«å¯ä»¥ä½œä¸ºç‹¬ç«‹ Family Rootï¼Œä½†å…¶ Hidden Binding ä¸ç»§æ‰¿ Familyã€‚
-- å†å² Session æ²¡æœ‰ authoritative lineage æ—¶ï¼Œä»¥è‡ªèº« stable session key å»ºç«‹ç‹¬ç«‹ Familyï¼Œç¦æ­¢æŒ‰æ ‡é¢˜ã€æ—¶é—´æˆ–ç›¸ä¼¼å†…å®¹çŒœæµ‹è¡€ç¼˜ã€‚
-
-å…³é”®è¾¹ç•Œï¼š
-
-```text
-parentSessionId
-  = Runtime ownership
-  = Subagent Sidebar tree
-
-lineageParentSessionId
-  = Conversation Family lineage
-  = Fork / Provider Continuation audit
-  = V1 ä¸è§¦å‘ Sidebar nesting
-
-sharedSessionId
-  = Hidden binding ownership
-  = ä¸è¿›å…¥ç”¨æˆ·å¯è§ Sidebar
-```
-
-ç°æœ‰ `sourceSessionId` å¯ä½œä¸º migration input ä¸å…¼å®¹è¯»å–å­—æ®µï¼Œä½†æ–°å†™å…¥ä»¥ `ConversationFamilyRef` ä¸º authoritative contractã€‚å®Œæˆè¿ç§»å‰æ‰§è¡Œ dual-readï¼›ä¸å¾—æŠŠ `sourceSessionId` æ”¹å†™ä¸º `parentThreadId`ã€‚
-
-### 5.6 ContextPackage ä¸ ProjectionManifest
-
-```typescript
-type ContextSourceRef =
-  | {
-      kind: "shared-canonical";
-      sessionId: string;
-      fromEntryId?: string;
-      throughEntryId: string;
-    }
-  | {
-      kind: "native-history";
-      sessionId: string;
-      nativeSessionId: string;
-      readerId: string;
-      fromCursor?: string;
-      throughCursor: string;
-      sourceFingerprint: string;
-    };
-
-interface ContextPackage {
-  schemaVersion: 1;
-  packageId: string;
-  source: ContextSourceRef & {
-    target: TurnExecutionSnapshot;
-  };
-  destination: {
-    sessionId?: string;
-    target: ExecutionTarget;
-    binding?: {
-      bindingKey: string;
-      nativeSessionId?: string;
-    };
-  };
-  checkpoint: {
-    goal: string;
-    constraints: string[];
-    progress: {
-      done: string[];
-      inProgress: string[];
-      blocked: string[];
-    };
-    keyDecisions: string[];
-    nextSteps: string[];
-    criticalContext: string[];
-  };
-  deterministicFacts: ContextFact[];
-  portableTurns: PortableTurn[];
-  atomicToolExchanges: AtomicToolExchange[];
-  artifactRefs: ArtifactRef[];
-  compression: ContextCompressionReport;
-  projection: ProjectionManifest;
-}
-
-// å‹ç¼©å¯è§‚æµ‹æ€§ï¼šä¸º degraded-context UI ä¸ç¼–è¯‘å®¡è®¡æä¾›é‡åŒ–ä¾æ®
-//ï¼ˆå‚è€ƒ Headroom çš„ before/after token ç»Ÿè®¡ï¼›åªè®°å½•å®æµ‹å€¼ï¼Œä¸å¼•å…¥å…¶åäº‹å®ä¼°è®¡æ¨¡å‹ï¼‰ã€‚
-interface ContextCompressionReport {
-  sourceTokens: number;
-  packageTokens: number;
-  perType: Array<{
-    category: string; // tool-outcome | code | log | image | portable-turn | ...
-    sourceTokens: number;
-    packageTokens: number;
-    strategy: "passthrough" | "deterministic-fold" | "artifact-ref" | "omitted";
-  }>;
-}
-
-interface ProjectionManifest {
-  compilerVersion: string;
-  mode:
-    | "native-delta"
-    | "native-history-import"
-    | "native-history-clone"
-    | "portable-transcript"
-    | "checkpoint";
-  includedEntryIds: string[];
-  omitted: Array<{
-    category: string;
-    reason: string;
-    retrievableRef?: string;
-    disposition: "retrievable-on-demand" | "not-retrievable";
-  }>;
-  cursorSemantics: {
-    advancesAcceptedCursorOnAck: true;
-    omittedEntriesWillNotAutoReplay: true;
-  };
-  sourceChecksum: string;
-}
-```
-
-`packageId` å¿…é¡»è¦†ç›– compiler versionã€destination identityã€runtime capabilitiesã€
-effective budgetã€Binding ä¸ source range/checksumï¼›ä»»ä¸€ä¼šæ”¹å˜ projection/delivery è¯­ä¹‰çš„
-è¾“å…¥å˜åŒ–éƒ½å¿…é¡»äº§ç”Ÿæ–° identityã€‚Artifact checksum ç»‘å®š deterministic serialized
-`ContextPackage` payloadï¼Œè¯»å–æ—¶é‡ç®—ï¼Œä¸èƒ½å¤ç”¨ source checksum ä»£æ›¿ payload integrityã€‚
-
-`AtomicToolExchange` å¿…é¡»æŠŠ tool call ä¸å¯¹åº” result å½“æˆä¸å¯æ‹†åˆ†å•å…ƒã€‚`ArtifactRef` æŒ‡å‘æ–‡ä»¶ã€é™„ä»¶ã€é•¿ Tool Result æˆ–å¤–éƒ¨äº§ç‰©ï¼›ä¼˜å…ˆä¼ ç¨³å®šå¼•ç”¨ï¼Œéœ€è¦æ—¶å†æŒ‰æƒé™è¯»å–å†…å®¹ã€‚
-
-`destination.binding` æ˜¯ Compiler/Delivery identityï¼Œä¸æ˜¯ Target Snapshotã€‚`native-delta` å¿…é¡»æä¾› `bindingKey + nativeSessionId`ï¼›æ–° Binding æˆ– Provider Continuation åœ¨ Identity å°šæœªåˆ›å»ºæ—¶å¯ä»¥çœç•¥ï¼Œä½†ä¸å¾—é€‰æ‹© `native-delta`ã€‚ç³»ç»ŸåŒæ—¶ç»´æŠ¤ durable `attemptId â†’ bindingKey â†’ nativeSessionId` lookupï¼Œä¾› provenance ownership åˆ¤å®šä¸ Recovery ä½¿ç”¨ã€‚
-
-Context æ•°æ®åˆ†æˆä¸‰å±‚ï¼š
-
-1. Canonical Logï¼šå®Œæ•´ã€append-only çš„å­˜å‚¨äº‹å®ï¼Œä¸å› æ¨¡å‹çª—å£è£å‰ªã€‚
-2. Context Packageï¼šå¯å®¡è®¡ã€å¯é‡æ”¾ã€å¸¦ source cursor çš„ç»“æ„åŒ–äº¤æ¥åŒ…ã€‚
-3. Model Projectionï¼š`ContextCompiler` é’ˆå¯¹ç›®æ ‡ CLI/Provider/Protocol ç”Ÿæˆçš„æœ‰ç•Œè¾“å…¥ã€‚
-
-`acceptedThroughSequence` ä¸ `committedThroughSequence` ä¸èƒ½åˆå¹¶æˆä¸€ä¸ª `lastSynced`ï¼š
-
-- `accepted`ï¼šç›®æ ‡ CLI å·²ç¡®è®¤æ¥æ”¶è¾“å…¥ï¼›é˜²æ­¢ Retry é‡å¤æ³¨å…¥ã€‚
-- `committed`ï¼šè¯¥è¾“å…¥å¯¹åº”çš„ Terminal Turn Fact å·²è½å…¥ Canonical Logï¼›ç”¨äºæ¢å¤ä¸å®¡è®¡ã€‚
-- `pendingDelivery`ï¼šApp åœ¨ ACK è¾¹ç•Œå´©æºƒæ—¶ä¿å­˜å¹‚ç­‰æ¢å¤è¯æ®ã€‚
-
-ä¸€æ¬¡ Run å¤±è´¥å¹¶ä¸ä»£è¡¨ Prompt æ²¡è¿›å…¥ Native Historyã€‚è‹¥å·²ç»æ”¶åˆ° acceptance ACKï¼Œå¿…é¡»æ¨è¿› `accepted`ï¼›å¦åˆ™ Retry ä¼šæŠŠåŒä¸€ Context Package å†çŒä¸€æ¬¡ã€‚
-
-`checkpoint` æ˜¯æ˜¾å¼ lossy modeï¼šç›®æ ‡ ACK åä»æ¨è¿› `acceptedThroughSequence`ã€‚Manifest ä¸­è¢« omit çš„ Entry ä¸ä¼šåœ¨åç»­æ™®é€š delta ä¸­è‡ªåŠ¨è¡¥å‘ï¼›æ¶ˆè´¹è€…åªèƒ½é€šè¿‡ `retrievableRef` åš progressive retrievalã€‚è‹¥å†…å®¹ä¸å¯æ£€ç´¢ï¼Œå¿…é¡»å†™ `disposition = "not-retrievable"` å¹¶åœ¨ç”¨æˆ·ç¡®è®¤é™çº§å‰å¯è§ã€‚è¿™ä¸ª ceiling æ¢å– exactly-once deliveryï¼Œä¸èƒ½ç”¨å›é€€ Cursor çš„æ–¹å¼è¡¥å¿ã€‚
-
----
-
-## å…­ã€Session Relationship ä¸ç°æœ‰å­ä¼šè¯éš”ç¦»
-
-### 6.1 å››ç§å…³ç³»ä¸æ˜¯åŒä¸€ç§â€œChildâ€
-
-| ç±»å‹ | åˆ›å»ºè€… | Sidebar | Parent å­—æ®µ | ä¸»è¦ç”¨é€” |
-| --- | --- | --- | --- | --- |
-| Subagent | Engine/runtime | åµŒå¥—åœ¨ Parent ä¸‹ | `parentSessionId` | Agent åä½œæ‰§è¡Œ |
-| User Fork | ç”¨æˆ· | é¡¶å±‚ Session | `lineageParentSessionId` | ä»å†å²èŠ‚ç‚¹åˆ†å‰ |
-| Provider Continuation | ç”¨æˆ· | é¡¶å±‚ Session | `lineageParentSessionId` | æ›´æ¢ Provider åç»§ç»­ |
-| Shared Binding | Shared Runtime | ä¸å¯è§ | `sharedSessionId` | Shared å†…éƒ¨æ‰§è¡Œ |
-
-### 6.2 Subagent
-
-ç°æœ‰è¡Œä¸ºä¿æŒä¸å˜ï¼š
-
-- Claude/Codex runtime æä¾› authoritative relationshipã€‚
-- å­ä¼šè¯ä¿ç•™è‡ªå·±çš„ canonical identityã€‚
-- Sidebar åµŒå¥—å±•ç¤ºã€‚
-- æ˜¾ç¤º `å­ä»£ç†` æ ‡ç­¾ä¸ Agent roleã€‚
-- Parent Turn settlement ä¸ Child çŠ¶æ€åˆ†åˆ«å¤„ç†ã€‚
-
-ç¦æ­¢ï¼š
-
-- æŒ‰ç›¸åŒæ ‡é¢˜åˆå¹¶ Subagentã€‚
-- æŠŠ Child canonical id æ”¹å†™æˆ Parent idã€‚
-- æŠŠ User Fork æˆ– Provider Continuation å†™å…¥ Subagent relationship writerã€‚
-
-### 6.3 User Fork
-
-ç°æœ‰è¡Œä¸ºä¿æŒä¸å˜ï¼š
-
-- ç”¨æˆ·ä¸»åŠ¨åˆ›å»ºã€‚
-- é¡¶å±‚ Conversationã€‚
-- Parent ä¿ç•™ã€‚
-- Child é¦–æ¬¡å‘é€åè¿ç§»åˆ° canonical identityã€‚
-- ä¸æ˜¾ç¤º `å­ä»£ç†` æ ‡ç­¾ã€‚
-
-ç¬¬ä¸€é˜¶æ®µ User Fork çš„ source ä»…å…è®¸ Native Sessionã€‚Shared Session ä¿æŒ strictly linearï¼Œä¸æ”¯æŒä»å†å² Turn forkï¼›å¦åˆ™å¿…é¡»å…ˆå®šä¹‰ Canonical Branchã€Cursor ç»§æ‰¿ã€Hidden Binding clone/replay ä¸ Projection lineageï¼Œä¸èƒ½å¤ç”¨ Native Fork è¯­ä¹‰æš—ä¸­å®ç°ã€‚
-
-å»ºè®®å¢åŠ  `Fork` Origin æ ‡ç­¾ï¼Œä½†ä¸æ”¹å˜æ—¢æœ‰ç”Ÿå‘½å‘¨æœŸã€‚
-
-### 6.4 Provider Continuation
-
-Provider Continuationï¼š
-
-- ç”¨æˆ·ä¸»åŠ¨åˆ›å»ºã€‚
-- é¡¶å±‚ Conversationã€‚
-- ä½¿ç”¨æ–°çš„ Provider Bindingã€‚
-- æ¥æº Session ä¿ç•™ã€‚
-- é€šè¿‡ Conversation Family ä¸ Context Package å¯è¿½æº¯ã€‚
-- ç»§æ‰¿æ¥æº Session çš„ `familyId`ï¼Œå¹¶æŠŠæ¥æºå†™å…¥ `lineageParentSessionId`ã€‚
-- ä¸è·å¾— `parentThreadId`ã€‚
-- ä¸è§¦å‘ Parent/Child Sidebar Treeã€‚
-
-ç¡¬çº¦æŸï¼š
-
-> `Provider Continuation` MUST NOT å†™å…¥ Subagent relationship writerï¼ŒMUST NOT ä½¿ç”¨ `parentThreadId` è§¦å‘å­ä»£ç†æ ‘æŠ•å½±ã€‚
-
-### 6.5 Shared Binding
-
-Shared Bindingï¼š
-
-- åªç”± Shared Session åˆ›å»ºã€‚
-- ç¬¬ä¸€æ¬¡å‘ Target å‘é€æ—¶ Lazy Createã€‚
-- åˆ‡å›ç›¸åŒ Target æ—¶å¤ç”¨ã€‚
-- Native Process å¯é‡Šæ”¾ï¼ŒBinding Metadata ä¿ç•™ã€‚
-- ä¸è¿›å…¥ Native Catalog å¯è§æŠ•å½±ã€‚
-- ä¸æ˜¾ç¤º Origin/Provider æ ‡ç­¾ã€‚
-
----
-
-## ä¸ƒã€Sidebar Projection ä¸æ ‡ç­¾ç³»ç»Ÿ
-
-### 7.1 æ ‡ç­¾åˆ†å±‚
-
-Sidebar æ ‡ç­¾åˆ†ä¸‰ç±»ï¼š
-
-1. **Conversation Type**ï¼š`Shared`ã€‚
-2. **Execution Identity**ï¼šCLIã€Providerã€‚
-3. **Origin**ï¼š`å­ä»£ç†`ã€`Fork`ã€`ä¾›åº”å•†ç»­æ¥`ã€‚
-
-ç¤ºä¾‹ï¼š
-
-```text
-é‡æ„ç™»å½•æ¨¡å—                    Claude Â· Official
-éªŒè¯è¾¹ç•Œæ¡ä»¶                    å­ä»£ç† Â· Explore
-é‡æ„ç™»å½•æ¨¡å—                    Fork Â· Claude Â· Official
-é‡æ„ç™»å½•æ¨¡å—                    ä¾›åº”å•†ç»­æ¥ Â· Claude Â· OpenRouter
-è·¨æ¨¡å‹å®ç°ç™»å½•                  Shared Â· Codex/OpenAI
-```
-
-### 7.2 æ ‡ç­¾ä¼˜å…ˆçº§
-
-Sidebar ç©ºé—´æœ‰é™æ—¶ï¼š
-
-```text
-Origin > Conversation Type > Engine > Provider > Model
-```
-
-è§£é‡Šï¼š
-
-- Origin å†³å®šç”¨æˆ·æ˜¯å¦ä¼šè¯¯è§£å…³ç³»ã€‚
-- Shared å¿…é¡»ä¸ Native æ˜ç¡®åŒºåˆ†ã€‚
-- Engine æ˜¯æ‰§è¡Œä¸»ä½“ã€‚
-- Provider ç”¨äºéš”ç¦»ä¸æ’é”™ã€‚
-- Model å˜åŒ–é¢‘ç‡é«˜ï¼Œä¸å»ºè®®é»˜è®¤å  Sidebar ç©ºé—´ã€‚
-
-æ¨èå±•ç¤ºï¼š
-
-| Session | ä¸»æ ‡ç­¾ | æ¬¡æ ‡ç­¾ |
-| --- | --- | --- |
-| Native Root | Engine | Provider |
-| Subagent | å­ä»£ç† + role | Engine |
-| User Fork | Fork | Engine + Provider |
-| Provider Continuation | ä¾›åº”å•†ç»­æ¥ | Engine + Provider |
-| Shared | Shared | å½“å‰ Engine/Provider |
-
-### 7.3 V1 æŒä¹…åŒ– Conversation Familyï¼ŒSidebar Projection å¯å»¶æœŸ
-
-Provider Continuation å¦‚æœå…¨éƒ¨è‡ªåŠ¨åµŒå¥—ï¼Œå®¹æ˜“ä¸ç°æœ‰ Subagent Tree å†²çªã€‚
-
-å› æ­¤ V1 å¿…é¡»åŒºåˆ†â€œæ•°æ® contractâ€ä¸â€œå±•ç¤ºå½¢æ€â€ï¼š
-
-- æ•°æ®å±‚ç«‹å³æŒä¹…åŒ– `familyId`ã€`familyRootSessionId`ã€`lineageParentSessionId`ã€`lineageKind` ä¸ `lineageDepth`ã€‚
-- Provider Continuation ä¸ User Fork ç»§æ‰¿æ¥æº Familyã€‚
-- Sidebar ç¬¬ä¸€é˜¶æ®µä»å¯å°†å®ƒä»¬ä½œä¸ºå¸¦ Origin æ ‡ç­¾çš„é¡¶å±‚ Session å±•ç¤ºã€‚
-- è¯¦æƒ…æˆ– Context Menu æä¾›â€œæŸ¥çœ‹æ¥æºä¼šè¯â€å’Œâ€œæŸ¥çœ‹åŒä¸€ Conversation Familyâ€ã€‚
-- `lineageParentSessionId` ä¸äº§ç”Ÿ Subagent Treeï¼Œä¹Ÿä¸å¤ç”¨ `parentThreadId`ã€‚
-
-åç»­å¯ç‹¬ç«‹å¢åŠ ï¼š
-
-```text
-Conversation Family Projection
-```
-
-è¯¥ Projection åªèƒ½è¯»å– authoritative Family fieldsï¼Œä¸èƒ½å¤ç”¨ Subagent Treeï¼Œä¹Ÿä¸èƒ½æŒ‰æ ‡é¢˜æ¨æ–­å…³ç³»ã€‚è¿™æ ·å³ä½¿ç¬¬ä¸€é˜¶æ®µä¸åšæŠ˜å  UIï¼Œä¹Ÿä¸ä¼šç•™ä¸‹ä¸å¯è¿ç§»çš„æ•°æ®å€ºã€‚
-
-### 7.4 Shared Session çš„åŠ¨æ€æ ‡ç­¾
-
-Shared Sidebar Row å¯ä»¥æ˜¾ç¤ºå½“å‰ Next Turn Targetï¼š
-
-```text
-Shared Â· Claude/OpenRouter
-```
-
-ä½†å†å²è§£é‡Šå¿…é¡»ä½¿ç”¨ Turn Snapshotï¼š
-
-```text
-Turn 1 Â· Claude/Official
-Turn 2 Â· Codex/OpenAI
-Turn 3 Â· Claude/OpenRouter
-```
-
-å½“å‰ Picker å˜åŒ–ä¸å¾—é‡å†™è¿‡å» Turn çš„æ ‡ç­¾ã€‚
-
----
-
-## å…«ã€Shared Session å¤š CLI Ã— Provider æ‰§è¡Œæµç¨‹
-
-### 8.0 å½“å‰å®ç°å®¡è®¡ï¼šå¯ä»¥é‡å»ºï¼Œä¸åº”ç»§ç»­å †è¡¥ä¸
-
-å½“å‰ Shared Session å·²éªŒè¯äº†â€œä¸€ä¸ªé€»è¾‘ä¼šè¯ç»‘å®šå¤šä¸ª Native Sessionâ€çš„äº§å“æ–¹å‘ï¼Œä½†æ•°æ®é¢ä¸è¶³ä»¥æ‰¿è½½å¤š CLI Ã— å¤š Providerï¼š
-
-| å½“å‰å®ç° | äº‹å® | é—®é¢˜ |
-| --- | --- | --- |
-| `SharedSessionMeta.bindings_by_engine` | Binding åªæŒ‰ Engine å»ºç´¢å¼• | åŒä¸€ Engine çš„å¤šä¸ª Provider ä¼šå‘ç”Ÿèº«ä»½ç¢°æ’ |
-| Shared Codex Binding | åˆ›å»ºæ—¶æœªä¼  `provider_profile_id` | å®é™…è½åˆ° disk/default Provider |
-| Shared Claude Send | `provider_profile_id` ä¼  `None` | Shared Turn æ²¡æœ‰ managed Provider routing |
-| `MAX_DELTA_SYNC_TURNS = 8` | åªå–æœ€å¤š 8 ä¸ª Turn | é•¿ä¼šè¯è¿ç»­æ€§ä¾èµ–å¶ç„¶å‘½ä¸­æœ€è¿‘çª—å£ |
-| `MAX_DELTA_SYNC_CHARS = 4000` | åªç”Ÿæˆ bounded text prefix | Toolã€Artifactã€Attachmentã€Decision ç­‰äº‹å®ä¸¢å¤± |
-| `build_delta_sync_prefix` | åªè¯»å– user/assistant message text | æ— æ³•è¡¨è¾¾ Reasoningã€Tool Exchange ä¸ç»“æ„åŒ–é”™è¯¯ |
-| `sync_shared_session_snapshot` | å‰ç«¯æŠŠ `itemsByThread` å±•ç¤ºå¿«ç…§å†™å…¥ JSONL | Presentation Model è¢«è¯¯å½“æˆ Canonical Fact |
-| `ConversationItem` | æ–‡æœ¬å’Œ Tool Output å­˜åœ¨æˆªæ–­ | æ— æ³•æ‰¿æ‹… lossless replay æˆ–å´©æºƒæ¢å¤ |
-| `last_synced_turn_seq` | Send è¿”å›åç›´æ¥æ¨è¿› | æ··æ·†â€œå·²æ¥æ”¶â€å’Œâ€œå·²å®Œæˆ/å·²æŒä¹…åŒ–â€ |
-
-å…³é”®æºç é”šç‚¹ï¼š
-
-- [`shared_sessions.rs`](../../src-tauri/src/shared_sessions.rs)ï¼šShared metadataã€Hidden Bindingã€bounded deltaã€snapshot ä¸ sendã€‚
-- [`useThreads.ts`](../../src/features/threads/hooks/useThreads.ts)ï¼šä»å‰ç«¯ `itemsByThread` è§¦å‘ Shared snapshotã€‚
-- [`conversation.ts`](../../src/types/conversation.ts)ï¼šå½“å‰ Presentation Item contractã€‚
-- [`threadItems.ts`](../../src/utils/threadItems.ts)ï¼šå±•ç¤ºé¡¹æ–‡æœ¬ã€Tool Output ä¸ Image çš„è£å‰ªã€‚
-- [`codex_core.rs`](../../src-tauri/src/shared/codex_core.rs)ï¼šCodex `turn/start.input` çš„è¾“å…¥è¾¹ç•Œã€‚
-- [`claude.rs`](../../src-tauri/src/engine/claude.rs)ï¼šClaude prompt ä¸ native resume/fork è¾¹ç•Œã€‚
-- [`kimi.rs`](../../src-tauri/src/engine/kimi.rs)ï¼šKimi prompt ä¸ native session è¾¹ç•Œã€‚
-
-ç»“è®ºï¼š
-
-> å½“å‰ Shared Session é€‚åˆä¿ç•™äº§å“å…¥å£ä¸ Session Identityï¼Œä¸é€‚åˆä¿ç•™å…¶æŒä¹…åŒ–å’ŒåŒæ­¥å†…æ ¸ã€‚V2 åº”ä»¥ Canonical Event Log ä¸ºåœ°åŸºé‡å»ºï¼›V0 snapshot ä»…ä½œä¸º Legacy Import Sourceã€‚
-
-### 8.1 Picker
-
-å»ºè®® Picker å±‚çº§ï¼š
-
-```text
-CLI
-â””â”€ Provider
-   â””â”€ Model
-      â””â”€ Reasoning
-```
-
-ç”¨æˆ·é€‰æ‹©åªæ›´æ–°ï¼š
-
-```text
-selectedExecutionTarget
-```
-
-ä¸åˆ›å»º Bindingï¼Œä¸å‘é€æ¶ˆæ¯ã€‚
-
-#### 8.1.1 Picker çš„äº§å“å¯è¾¾æ€§ä¸åŠ è½½å¥‘çº¦
-
-å››çº§ Target ä¸èƒ½åªå­˜åœ¨äº domain typeï¼Œå¿…é¡»åœ¨ Shared Composer ä¸­å¯å®é™…æ“ä½œï¼š
-
-```text
-æ‰“å¼€æ¨¡å‹èœå•
-  â†’ æ˜¾ç¤ºæ‰€æœ‰å·²çŸ¥ CLIï¼ˆæ”¯æŒ / ä¸æ”¯æŒéƒ½å¯è§£é‡Šï¼‰
-å±•å¼€æŸä¸ª CLI
-  â†’ æ˜¾ç¤ºè¯¥ CLI çš„ Provider Profiles
-  â†’ æŒ‰ engine + providerProfileId æ‡’åŠ è½½å„è‡ª Model Catalog
-é€‰æ‹© Model
-  â†’ åŸå­å†™å…¥ engine + providerProfileId + model
-  â†’ Reasoning ä»…åœ¨åŒä¸€ Binding ä¸‹ä¿ç•™ï¼Œå¦åˆ™æ¸…ç©º
-```
-
-ç¡¬çº¦æŸï¼š
-
-- æ ¹èœå•æ‰“å¼€ä¸å¾—é¢„å–æ‰€æœ‰ Provider çš„å…¨éƒ¨ Modelï¼›åªå…è®¸ user-drivenã€binding-scoped
-  lazy loadï¼Œå¹¶æŒ‰ `engine + providerProfileId` cache / dedupeã€‚
-- local/disk sentinel åªå±äºé…ç½®æŸ¥è¯¢è¾¹ç•Œï¼›å†™å…¥ `ExecutionTarget` å‰å¿…é¡»å½’ä¸€ä¸º
-  `providerProfileId = null`ï¼Œé¿å…ä¸ canonical `engine:default` å½¢æˆåŒ Bindingã€‚
-- å½“å‰æŒ‰é’®çš„ Model label å¿…é¡»ä»å®Œæ•´ Target å¯¹åº” catalog è§£æï¼Œä¸èƒ½ç»§ç»­è¯»å–åˆ‡æ¢å‰
-  Engine çš„ model listã€‚
-- å·²çŸ¥ä½†æœªéªŒè¯ target acceptance çš„ CLI å¿…é¡»æ˜¾ç¤º disabled reasonï¼›ç¦æ­¢é™é»˜éšè—ï¼Œ
-  ä¹Ÿç¦æ­¢ç‚¹å‡»å fallback åˆ°å…¶ä»– CLIã€‚
-- Provider catalog éƒ¨åˆ†å¤±è´¥åªå½±å“è¯¥ bindingï¼›ä¸èƒ½æ¸…ç©ºå…¶ä»– CLI/Profile çš„å¯ç”¨ç›®å½•ã€‚
-
-### 8.2 Send
-
-```text
-1. è¯»å– selectedExecutionTargetã€‚
-2. è§£æ Provider Availabilityã€‚
-3. è§£æ Provider-scoped Model Catalogã€‚
-4. å›ºåŒ– TurnExecutionSnapshotã€‚
-5. å…ˆ Commit `conversation.turnRequested`ï¼Œç¡®ä¿ User Intent Durableã€‚
-6. æŸ¥æ‰¾ Engine + Provider å¯¹åº” Hidden Bindingï¼›ä¸å­˜åœ¨æ—¶å…ˆ Commit `BindingProvisioningState(prepared)`ï¼Œå†è°ƒç”¨ Runtime åˆ›å»º Native Sessionã€‚
-7. æ”¶åˆ° Native Session Identity ACK åæŠŠ Binding æ›´æ–°ä¸º `ready`ï¼›ACK ä¸ç¡®å®šåˆ™è¿›å…¥ `recovery-required`ï¼Œç¦æ­¢ç›²ç›®å†å»ºã€‚
-8. æ ¹æ® BindingContextCursor ç”± ContextCompiler ç”Ÿæˆ target-aware Context Packageã€‚
-9. Commit `context.deliveryPrepared` ä¸ `pendingDelivery`ã€‚
-10. Runtime-specific Adapter æ‰§è¡Œ History Import / Transcript Prefix / Prompt Sendã€‚
-11. æ”¶åˆ°æ˜ç¡® Context ACK å Commit `context.deliveryAccepted` å¹¶æ¨è¿› `acceptedThroughSequence`ã€‚
-12. æ”¶åˆ°æ˜ç¡® Prompt ACK å Commit `conversation.turnAccepted`ã€‚
-13. Run/Turn Assembler åœ¨ Terminal æ—¶ç”Ÿæˆ authoritative `conversation.turnCommitted`ã€‚
-14. Canonical Commit æˆåŠŸåæ¨è¿› `committedThroughSequence` å¹¶æ¸…ç† pending deliveryã€‚
-```
-
-### 8.3 Switch Back
-
-åœºæ™¯ï¼š
-
-```text
-Claude/Official
-â†’ Codex/OpenAI
-â†’ Claude/Official
-```
-
-ç³»ç»ŸåªæŒæœ‰ä¸¤ä¸ª Hidden Bindingï¼š
-
-```text
-Binding A = Claude/Official
-Binding B = Codex/OpenAI
-```
-
-ç¬¬ä¸‰ä¸ª Turn æ¢å¤ Binding Aï¼Œå¹¶æŠŠ Binding A ç¦»å¼€æœŸé—´çš„ Shared Context ç¼–è¯‘ä¸º `native-delta` æŠ•å½±åæ³¨å…¥ã€‚
-
-ä¸ä¼šåˆ›å»ºç¬¬ä¸‰ä¸ª Native Bindingã€‚
-
-### 8.4 å¤±è´¥è¯­ä¹‰
-
-- Provider ä¸å­˜åœ¨ï¼šé˜»æ­¢å‘é€ï¼Œä¿ç•™ Picker é€‰æ‹©å¹¶æ˜¾ç¤º unavailableã€‚
-- Model ä¸å±äº Provider Catalogï¼šé˜»æ­¢å‘é€ï¼Œä¸æ”¹ç”¨é»˜è®¤ Modelã€‚
-- Model catalog `id != model` æ—¶ï¼ŒTarget å¿…é¡»åŒæ—¶å†»ç»“ä¸¤ç§ identityï¼Œexecution åªä½¿ç”¨
-  runtime `model`ï¼›backend åœ¨ Target side effect å‰ fail closed æ ¡éªŒã€‚
-- Native Binding æ¢å¤å¤±è´¥ï¼šæ˜¾ç¤º recoverable errorï¼Œå…è®¸æ˜¾å¼é‡å»º Bindingã€‚
-- Turn å¤±è´¥ï¼šä¿ç•™åŸ Target Snapshotï¼Œä¸è‡ªåŠ¨é‡è·¯ç”±ã€‚
-- Context compile å¤±è´¥ï¼šä¸å†™ `pendingDelivery`ï¼Œä¸æ¨è¿›ä»»ä½• Cursorï¼›ä»¥ failed outcome Commit å½“å‰ Attemptï¼ŒRetry åˆ›å»ºæ–° Attemptã€‚
-- æŠ•é€’å‰å¤±è´¥ï¼šæ¸…ç† `pendingDelivery`ï¼Œä¸æ¨è¿› `accepted`ã€‚
-- acceptance ACK æ˜ç¡®æˆåŠŸï¼šæ¨è¿› `accepted`ï¼›åç»­ Turn å¤±è´¥ä¹Ÿä¸å›é€€ï¼Œé¿å…é‡å¤ Promptã€‚
-- acceptance ACK ä¸ç¡®å®šï¼šä¿ç•™ `pendingDelivery`ï¼Œå…ˆæ¢æµ‹ Native History/run identityï¼Œå†å†³å®š Retryã€‚
-- Probe å‘ç°ä¸å½“å‰ delivery/bootstrapping å¯¹åº”çš„ç»“æ„åŒ– Provider/API rejection æ—¶ï¼Œå¼ºè´Ÿ
-  evidence å¿…é¡»è¦†ç›– markerã€å·²è½ç›˜ user entryã€process error ä¸æ— å…³ stderr warningï¼›
-  operation ä¸å¾—è¿›å…¥ readyã€‚
-- acceptance ACK ä¸ç¡®å®šæœŸé—´é”å®šæ•´ä¸ª Shared Session Composerï¼›ä¸å¾—é€šè¿‡åˆ‡æ¢ Target ç»•è¿‡çº¿æ€§é¡ºåºã€‚
-- Canonical Commit å¤±è´¥ï¼šä¸æ¨è¿› `committed`ï¼Œè¿›å…¥å¯æ¢å¤çŠ¶æ€ï¼›ä¸å¾—ä¸¢å¼ƒå·²æ¥å—çš„ Native Runã€‚
-- é™çº§ Contextï¼šåªæœ‰ç”¨æˆ·èƒ½çœ‹åˆ° fidelity/omissions æ—¶æ‰å…è®¸å‘é€ï¼Œä¸å¾—å‡è£…å®Œæˆæ— æŸåŒæ­¥ã€‚
-
----
-
-## ä¹ã€Context Ownership ä¸ Context Compilation Protocol
-
-### 9.1 Canonical Shared Thread æ˜¯ç”¨æˆ·äº‹å®æº
-
-Shared Session çš„ç”¨æˆ·å¯è§äº‹å®æºï¼š
-
-```text
-Canonical Shared Thread
-```
-
-Hidden Native Session åªæ˜¯æ‰§è¡Œ Backendï¼Œä¸æ˜¯ç”¨æˆ·ä¼šè¯çœŸç›¸ã€‚
-
-Canonical Thread åº”ä¿å­˜ï¼š
-
-- User Messageï¼›
-- Assistant Messageï¼›
-- Portable Content Blocksï¼›
-- å®Œæ•´ç»“æ„åŒ– Tool Call/Result pairï¼›
-- Provider-private Block çš„åŸå§‹å¼•ç”¨ä¸å¯ç§»æ¤æŠ•å½±ï¼›
-- TurnExecutionSnapshotï¼›
-- Handoff Referenceï¼›
-- Error/Recovery Factï¼›
-- Attachment Referenceï¼›
-- Usage Attribution Factã€‚
-
-ä½†â€œå®Œæ•´â€æ˜¯æŒ‡å®Œæ•´çš„ Canonical Factsï¼Œä¸æ˜¯ä¿å­˜æ¯ä¸ª streaming deltaï¼Œä¹Ÿä¸æ˜¯å¤åˆ¶ Native CLI çš„ vendor history fileã€‚
-
-æ¨èå†™å…¥é“¾è·¯ï¼š
-
-```text
-User Send
-      â†“
-SQLite Event Writer
-      â†“
-conversation.turnRequestedï¼ˆside effect å‰ï¼‰
-      â†“
-Runtime Delivery
-      â†“
-Native CLI Event
-      â†“
-Engine Adapter / MossxAgentEvent Ingress
-      â†“
-Run / Turn Assemblerï¼ˆfan-out/drop ä¹‹å‰ï¼‰
-      â†“
-conversation.turnCommittedï¼ˆcritical authoritative factï¼‰
-      â†“
-ç°æœ‰ MossxAgentEvent Bus Critical Lane
-      â†“
-Shared Canonical Event Log V2 Commit Sink
-      â”œâ”€ UI Projection
-      â”œâ”€ ContextCompiler
-      â”œâ”€ Recovery Projection
-      â””â”€ context_history / Artifact Retrieval
-```
-
-ç°æœ‰ [`agent_event_bus.rs`](../../src-tauri/src/engine/agent_event_bus.rs) åº”å¤ç”¨ï¼Œä¸å†åˆ›å»ºç¬¬äºŒå¥— Event Busã€‚ä½†å®ƒå½“å‰å­˜åœ¨ coalesce/drop delivery è¯­ä¹‰ï¼Œå› æ­¤ä¸èƒ½æŠŠæ™®é€šè®¢é˜…æµç›´æ¥å½“æˆæŒä¹…åŒ–çœŸç›¸ï¼š
-
-- streaming delta å¯ä»¥åˆå¹¶æˆ–ä¸¢å¼ƒï¼›
-- Normal lane æ»¡è½½æ—¶å…è®¸ dropï¼Œå½“å‰ `tool.started` / `tool.completed` ä¹Ÿä½äºè¯¥ laneï¼›
-- Assembler å¿…é¡»ä½äº fan-out/drop ä¹‹å‰ï¼Œæˆ–ä» Runtime Lifecycle Owner çš„ authoritative final snapshot ç»„è£…ï¼›
-- Canonical Persistence åªæ¶ˆè´¹ critical `conversation.turnCommitted` final factï¼›
-- `conversation.turnCommitted` å¿…é¡»åœ¨ç°æœ‰å¹‚ç­‰ `run.settled` è¾¹ç•Œç”Ÿæˆå¹¶ä»¥å¯é è·¯å¾„è½ç›˜ã€‚
-- Event Bus `publish = true` åªè¡¨ç¤ºè¿›ç¨‹å†…æŠ•é€’ï¼Œä¸è¡¨ç¤º Durable Commitï¼›`settling â†’ idle` å¿…é¡»ç­‰å¾… `SharedEventWriter` çš„ SQLite transaction ACKã€‚
-
-Event envelope è‡³å°‘åŒ…å«ï¼š
-
-```typescript
-interface SharedCanonicalEntry<TFact = unknown> {
-  schemaVersion: 2;
-  entryId: string;
-  logicalSessionId: string;
-  sequence: number;
-  occurredAt: number;
-  factType: string;
-  fact: TFact;
-  payloadChecksum: string;
-  provenance: {
-    engine?: EngineType;
-    providerProfileId?: string;
-    bindingKey?: string;
-    nativeSessionId?: string;
-    runId?: string;
-    turnId?: string;
-  };
-  fidelity: "canonical" | "presentation-only";
-}
-
-```
-
-å®Œæ•´ Turn Fact Lifecycle ä¸å­—æ®µ contract è§ Â§14.2ã€‚
-
-`UI Projection` å¯ä»¥è£å‰ªï¼ŒCanonical Commit ä¸å¯ä»¥ã€‚Renderer å¿…é¡»ä» Canonical Fact æ´¾ç”Ÿï¼Œä¸èƒ½åå‘æŠŠ UI Item ä½œä¸ºäº‹å®æºã€‚
-
-#### 9.1.1 NativeHistoryReaderï¼šProvider Continuation çš„åªè¯» Source Adapter
-
-Native Session ä¸å»ºç«‹ Shared Canonical Event Logï¼Œä½† Provider Continuation ä»éœ€è¦ç¨³å®šã€å¯å®¡è®¡çš„ sourceã€‚ä¸ºæ­¤å¢åŠ  read-only anti-corruption layerï¼š
-
-```typescript
-interface NativeHistoryReader {
-  readerId: string;
-  probe(source: NativeHistorySource): Promise<NativeHistoryCapability>;
-  read(request: NativeHistoryReadRequest): Promise<NativeHistoryReadResult>;
-}
-
-interface NativeHistorySource {
-  sessionId: string;
-  nativeSessionId: string;
-  engine: EngineType;
-  providerProfileId?: string;
-}
-
-interface NativeHistoryCapability {
-  readable: boolean;
-  stableCursor: boolean;
-  currentThroughCursor?: string;
-  supportedEntryTypes: string[];
-  unsupportedReason?: string;
-}
-
-interface NativeHistoryReadRequest {
-  source: NativeHistorySource;
-  fromCursor?: string;
-  throughCursor: string;
-}
-
-interface NativeHistoryReadResult {
-  sourceFingerprint: string;
-  fromCursor?: string;
-  throughCursor: string;
-  entries: ContextSourceEntry[];
-  fidelity: "native" | "semantic" | "lossy";
-  omissions: ProjectionManifest["omitted"];
-}
-
-interface ContextSourceEntry {
-  sourceEntryId: string;
-  occurredAt?: number;
-  role: "user" | "assistant" | "tool" | "control";
-  blocks: ContextFact[];
-  provenance: {
-    engine: EngineType;
-    providerProfileId?: string;
-    nativeSessionId: string;
-    nativeTurnId?: string;
-    vendorEntryType?: string;
-  };
-  fidelity: "native" | "semantic" | "lossy";
-}
-
-interface NativeHistoryMaterialization {
-  operationId: string;
-  source: NativeHistorySource;
-  readerId: string;
-  sourceFingerprint: string;
-  throughCursor: string;
-  normalizedEntriesChecksum: string;
-  normalizedEntriesArtifactRef: ArtifactRef;
-  contextPackageId: string;
-  contextPackageChecksum: string;
-  contextPackageArtifactRef: ArtifactRef;
-  preparedAt: number;
-}
-```
-
-Contractï¼š
-
-- Claude Reader è§£æ session JSONLï¼ŒCodex Reader è§£æ rolloutï¼ŒKimi Reader åªè¯»å–å…¶å…¬å¼€/ç¨³å®š History surfaceã€‚
-- è¾“å‡ºæ˜¯ canonical-shaped `ContextSourceEntry`ï¼Œåªç”¨äº `ContextCompiler`ï¼›å®ƒä¸æ˜¯ `SharedCanonicalEntry`ï¼Œä¸åˆ†é… Shared sequenceï¼Œä¹Ÿä¸å†™ Shared Event Logã€‚
-- Reader å¿…é¡»ä¿æŒ source orderã€stable cursorã€source fingerprintã€Tool Call/Result pairing ä¸ provenanceï¼›æ— æ³•ä¿çœŸçš„å†…å®¹è¿›å…¥ omissionsã€‚
-- Provider Continuation åªæ¥å— `stableCursor = true` ä¸”å­˜åœ¨ `currentThroughCursor` çš„ Readerã€‚ç¼ºå°‘ç¨³å®šå¿«ç…§è¾¹ç•Œæ—¶ typed unsupportedã€fail closedï¼›ç¬¬ä¸€é˜¶æ®µä¸åšâ€œè¾¹è¯»è¾¹å¢é•¿â€æˆ–çŒœæµ‹å¼ materializationã€‚
-- Reader å¿…é¡»åœ¨åˆ†é… source-sized buffer å‰æ£€æŸ¥ byte limitï¼›å½“å‰å®ç°å•æ–‡ä»¶ä¸Šé™ä¸º
-  `64 MiB`ï¼Œè¶…é™è¿”å› typed `source-too-large`ã€‚probe/read ä¸ recovery file scan åœ¨
-  blocking worker æ‰§è¡Œï¼Œç¦æ­¢é˜»å¡ async runtime workerã€‚
-- portable projection ä½¿ç”¨ allowlistï¼šåªå…è®¸ text ä¸å®Œæ•´ Tool Call/Result pairã€‚
-  private reasoning/signatureã€encrypted/redactedã€unknown ä¸ä¸å®Œæ•´ Tool exchange è¿›å…¥
-  typed omissionsï¼Œä¸å¾—é€ä¼  vendor private payloadã€‚
-- ç³»ç»Ÿå…ˆä»¥ Probe å¾—åˆ° `currentThroughCursor`ï¼Œå†æŒ‰è¯¥ä¸Šç•Œè¯»å–ã€‚ç¼–è¯‘å®Œæˆåã€åˆ›å»ºç›®æ ‡ Native Session æˆ–å‘é€ä»»ä½• Context å‰ï¼Œå¿…é¡»å…ˆæŠŠ normalized entries ä¸å®Œæ•´ Context Package å†™å…¥ Artifact Storeï¼ˆtemp file + atomic renameï¼‰ï¼Œå†åœ¨åŒä¸€ preparation transaction ä¸­ Durable Commit immutable `NativeHistoryMaterialization` refs/checksumsï¼›Retry ä» Artifact Ref é‡æ”¾ï¼Œä¸é‡æ–°è¯»å–æ¼‚ç§»ä¸­çš„æ¥æºã€‚
-- Materialization åè‹¥æ¥æº History ç»§ç»­å¢é•¿ï¼Œä¸å½±å“æœ¬æ¬¡ Continuationï¼›ç”¨æˆ·éœ€è¦æ›´æ–°å†…å®¹æ—¶åˆ›å»ºæ–°çš„ Continuation operationã€‚
-- æ¥æº Session åˆ é™¤ã€æƒé™å˜åŒ–æˆ– Reader å‡çº§ä¸å½±å“å·² prepared operationã€‚Artifact åœ¨ Continuation terminal settlement ä¸ retention window ç»“æŸå‰ä¸å¾— GCï¼›å¯åŠ¨æ¢å¤å‘ç° ref ç¼ºå¤±/checksum ä¸ç¬¦æ—¶ï¼Œè‹¥ operation å·²è§¦å‘ target side effectï¼Œè¿›å…¥ explicit recovery errorï¼Œç¦æ­¢é‡è¯»æ¥æºåå‡è£…æ˜¯åŒä¸€ operationã€‚ä»…å¯¹ `prepared` ä¸”æ²¡æœ‰ result Session/target side effect çš„æ—§ç‰ˆæœ¬ artifactï¼Œå…è®¸åˆ é™¤è¯¥ prepared recordï¼Œå¹¶ç”¨åŒä¸€ validated request é‡æ–°å†»ç»“ã€‚
-- Reader ä¸ä¿®æ”¹ vendor history fileï¼Œä¸ä¼ªé€  Tool IDã€Reasoning Signature æˆ– Runtime ACKã€‚
-- source ä¸å­˜åœ¨ã€æŸåã€ç‰ˆæœ¬ä¸æ”¯æŒã€æƒé™ä¸è¶³å¿…é¡»è¿”å› typed errorï¼›ä¸å¾—é™é»˜ç”Ÿæˆâ€œçœ‹ä¼¼å®Œæ•´â€çš„ transcriptã€‚
-- `ContextPackage.source.kind = "native-history"` æ—¶ï¼Œchecksum è¦†ç›– Reader identityã€source fingerprintã€cursor range ä¸ normalized entriesã€‚
-- Reader åªè§£å†³ Provider Continuation çš„æºç«¯è¯»å–ï¼Œä¸æ”¹å˜ Native Conversation çš„ History/Event/Projection é“¾è·¯ï¼Œå› æ­¤ä¸è¿å Â§14.6.3 çš„ no-migration redlineã€‚
-
-### 9.2 Native CLI Context ç¼–è¯‘ï¼šNative History ä¼˜å…ˆï¼ŒTranscript æ˜ç¡®é™çº§
-
-Claudeã€Codexã€Kimi çš„ Tool Messageã€Reasoningã€System Prompt ä¸ Native State ä¸åŒã€‚
-
-ç›´æ¥æŠŠ A çš„å®Œæ•´ Wire History å¡ç»™ B ä¼šå¯¼è‡´ï¼š
-
-- Context çˆ†ç‚¸ï¼›
-- Tool Call/Result é…å¯¹å¤±çœŸï¼›
-- System Prompt å†²çªï¼›
-- ä¸å…¼å®¹çš„ Reasoning Blockï¼›
-- Attachment ä¸¢å¤±ï¼›
-- Provider Cache å¤±æ•ˆã€‚
-
-ä½†è¿™ä¸ç­‰äºä¸¢å¼ƒå†å²æˆ–é»˜è®¤åªä¿å­˜æ‘˜è¦ã€‚æ­£ç¡®è¾¹ç•Œæ˜¯ï¼š
-
-```text
-Canonical Logï¼ˆå®Œæ•´äº‹å®ï¼‰
-        â†“
-ContextCompilerï¼ˆç›®æ ‡èƒ½åŠ›ã€Token Budgetã€åŒæ­¥æ¸¸æ ‡ï¼‰
-        â†“
-Compatibility Transformer
-        â†“
-ç›®æ ‡æ˜¯æ—§ Bindingï¼Ÿâ”€â”€ Yes â”€â†’ Native Delta
-        â”‚ No
-ç›®æ ‡æ”¯æŒ History Importï¼Ÿâ”€â”€ Yes â”€â†’ Native History Import
-        â”‚ No
-ç›®æ ‡æ”¯æŒ Native Fork/Cloneï¼Ÿâ”€â”€ Yes â”€â†’ Native History Clone
-        â”‚ No
-å¯å®‰å…¨åºåˆ—åŒ–ä¸”é¢„ç®—å…è®¸ï¼Ÿâ”€â”€ Yes â”€â†’ Portable Transcript
-        â”‚ No
-        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â†’ Structured Checkpoint
-```
-
-`ContextCompiler` å¿…é¡»æ”¯æŒäº”ç§ Projection Modeï¼š
-
-| Mode | é€‚ç”¨åœºæ™¯ | æ³¨å…¥ç­–ç•¥ |
-| --- | --- | --- |
-| `native-delta` | æ¢å¤åŒä¸€ä¸ª Hidden Binding | å¤ç”¨ Native Historyï¼Œåªè¡¥ç¦»å¼€æœŸé—´æ–°å¢çš„ Shared facts/delta |
-| `native-history-import` | ç›®æ ‡ Runtime å®˜æ–¹æ”¯æŒç»“æ„åŒ– History Import | é€šè¿‡å—æ”¯æŒåè®®å†™å…¥å…¼å®¹åçš„ role/tool itemsï¼›Codex å¯è¯„ä¼° `thread/inject_items` |
-| `native-history-clone` | CLI å®˜æ–¹æ”¯æŒ fork/clone/rebindï¼Œä¸”æ¥æº History ä¸ç›®æ ‡ Runtime å…¼å®¹ | ä½¿ç”¨ CLI åŸç”Ÿèƒ½åŠ›å¤åˆ¶/åˆ†å‰å†å²ï¼Œç¦æ­¢æ‰‹æ”¹ vendor history file |
-| `portable-transcript` | æ–° Native Binding æ— æ³•å¯¼å…¥å¤šè§’è‰²å†å²ï¼Œä½†å¯æ¶ˆè´¹ user prompt | æŠŠå…¼å®¹å†å²åºåˆ—åŒ–ä¸ºå¸¦ provenanceã€ä¸å¯æ‰§è¡Œ control block çš„ transcript |
-| `checkpoint` | ç›®æ ‡ CLI æ— å†å²æ³¨å…¥èƒ½åŠ›ã€åè®®ä¸¥é‡ä¸å…¼å®¹æˆ– Context è¶…é™ | Structured checkpoint + current request + recent turns + deterministic facts + artifact refs |
-
-æ¯æ¬¡ç¼–è¯‘éµå®ˆä»¥ä¸‹é¡ºåºï¼š
-
-1. æ ¹æ® `ContextPackage.source.kind` ä» Shared Canonical Log æˆ– `NativeHistoryReader` è¯»å– source entriesï¼›Provider Continuation ä¸å¾—å‡è®¾å­˜åœ¨ Shared Canonical sourceã€‚
-2. source ä¸º `shared-canonical` æ—¶ï¼Œä» target-scoped sync cursor è¯»å–å°šæœªåŒæ­¥çš„ Canonical Entriesï¼›`native-history` ä½¿ç”¨ Reader cursorï¼Œä¸å¥—ç”¨ Shared sequenceã€‚
-3. ç›¸åŒ Binding ç¼–è¯‘ `native-delta` å‰ï¼Œå¿…é¡»ä» `destination.binding` å–å¾—ç›®æ ‡ identityï¼Œå¹¶æ’é™¤è¯¥ Binding åŸç”Ÿæ‹¥æœ‰çš„ Entriesï¼š`provenance.bindingKey == destination.binding.bindingKey`ï¼Œæˆ– durable attempt/binding mappingã€`nativeSessionId` èƒ½è¯æ˜æ¥æºå±äºç›®æ ‡ Bindingã€‚å®ƒä»¬å·²å­˜åœ¨äºè¯¥ Binding çš„ Native Historyï¼Œä¸å¾—é‡çŒï¼›ç¼ºå°‘ destination Binding identity æ—¶ fail closedã€‚
-4. ç›¸åŒ Binding ä¼˜å…ˆ `native-delta`ï¼Œä¸å¾—é‡æ”¾å…¶å·²æœ‰ Native Historyã€‚
-5. ç›®æ ‡æ”¯æŒå®˜æ–¹ History Import æ—¶ä½¿ç”¨ `native-history-import`ï¼›è°ƒç”¨å‰å¿…é¡»å®Œæˆ capability probe ä¸ item validationã€‚
-6. ç›®æ ‡ CLI æ˜ç¡®æ”¯æŒ fork/clone/rebind æ—¶ä½¿ç”¨ `native-history-clone`ï¼Œä¸å¾—ä¿®æ”¹ vendor history file ä¼ªé€ å¯¼å…¥ã€‚
-7. æ–° Binding ä½¿ç”¨ pi-ai å¼ Compatibility Transform æ¸…ç† Thinkingã€Tool IDã€Tool Resultã€Image ä¸ Provider metadataã€‚
-8. ç›®æ ‡ CLI ä¸æ”¯æŒå¤šè§’è‰² history import æ—¶ï¼ŒæŠŠè½¬æ¢ç»“æœåºåˆ—åŒ–ä¸º `portable-transcript`ï¼›å®ƒä»æ˜¯ user-channel inputï¼Œä¸å®£ç§° lossless replayã€‚
-9. Tool call/result åœ¨ import/transcript ä¸­æˆå¯¹ä¿ç•™æˆ–æˆå¯¹çœç•¥ï¼Œç»ä¸æ‹†åˆ†ã€‚
-10. åªæœ‰ç›®æ ‡è¾“å…¥èƒ½åŠ›ä¸è¶³ã€åè®®ä¸¥é‡ä¸å…¼å®¹æˆ– Context è¶…é™æ—¶ï¼Œæ‰ç”Ÿæˆ Structured Checkpointã€‚
-11. é•¿å†…å®¹å†™å…¥ Artifact Storeï¼ŒModel Context åªæºå¸¦ç¨³å®šå¼•ç”¨ä¸å¿…è¦æ‘˜è¦ã€‚
-12. æŒ‰ç›®æ ‡ Capability ä¸ Token Budget ç”Ÿæˆ Projectionï¼Œå¹¶å†™æ˜æ‰€æœ‰ lossy transformation ä¸ omissionsã€‚
-13. ç¼–è¯‘æˆåŠŸä¸æ¨è¿›æ¸¸æ ‡ï¼›å†™å…¥ `pendingDelivery` åå†æŠ•é€’ã€‚
-14. ç›®æ ‡ CLI æ˜ç¡®æ¥å—åæ¨è¿› `acceptedThroughSequence`ï¼Œå³ä½¿ `checkpoint` omit äº†éƒ¨åˆ† Entries æˆ–åç»­ Run å¤±è´¥ä¹Ÿä¸å›é€€ï¼›é—æ¼å†…å®¹åªå…è®¸æŒ‰ Manifest progressive retrievalï¼Œä¸è¿›å…¥åç»­è‡ªåŠ¨ deltaã€‚
-15. Terminal Fact æˆåŠŸ Commit åæ¨è¿› `committedThroughSequence`ã€‚
-16. ACK ä¸ç¡®å®šæ—¶å…ˆæ¢æµ‹ Native History/run identityï¼Œå†å†³å®šé‡è¯•ï¼Œç¦æ­¢ç›²ç›®é‡å¤æ³¨å…¥ã€‚
-
-ç¼–è¯‘äº§ç‰©è¿˜å¿…é¡»æ»¡è¶³ä¸€æ¡æ ¼å¼ä¸å˜é‡ï¼ˆå‚è€ƒ Headroom CacheAligner çš„ live-zone æ€è·¯ï¼‰ï¼š
-
-> **Context Package å‰ç¼€ç¨³å®šæ€§**ï¼šå¯¹åŒä¸€ Conversationã€åŒä¸€ç›®æ ‡ Binding çš„è¿ç»­ç¼–è¯‘ï¼ŒPackage å¤´éƒ¨ï¼ˆcheckpoint çš„ Goal / Constraints / Key Decisions ä¸ deterministic factsï¼‰å¿…é¡»ä¿æŒå­—èŠ‚çº§ç¨³å®šï¼›æ–°å¢äº‹å®åªå…è®¸è¿½åŠ åˆ°å°¾éƒ¨ delta åŒºï¼Œä¸å¾—é‡æ’æˆ–æ”¹å†™å·²ç¨³å®šå‰ç¼€ã€‚è¿™è®©ç›®æ ‡ CLI çš„ Provider Prompt Cache èƒ½è·¨ Turn å‘½ä¸­ï¼Œé¿å…æ¯æ¬¡å¢é‡ handoff éƒ½è§¦å‘å…¨é‡å‰ç¼€é‡ç®—ã€‚
-
-`native-delta` æ’åœ¨åŸåˆ™é“¾é¦–ä½ï¼Œé™¤ä¿¡æ¯ä¿çœŸå¤–è¿˜æœ‰è¿™å±‚ç¼“å­˜ç»æµå­¦åŸå› ï¼›å‰ç¼€ç¨³å®šæ€§æŠŠå®ƒä»æ’åºåå¥½å‡çº§ä¸ºæ ¼å¼çº¦æŸã€‚
-
-æ¨èæŠŠå…¼å®¹åˆ¤æ–­å»ºæ¨¡æˆæ˜¾å¼ç»“æœï¼Œè€Œä¸æ˜¯ä¸€ä¸ª booleanï¼š
-
-```typescript
-interface CompatibilityReport {
-  sourceProtocol: string;
-  targetProtocol: string;
-  transport:
-    | "native-delta"
-    | "native-history-import"
-    | "native-history-clone"
-    | "user-channel-transcript"
-    | "checkpoint";
-  fidelity: "native" | "semantic" | "lossy" | "checkpoint-required";
-  transformations: ContextTransformation[];
-  unsupportedBlocks: UnsupportedContextBlock[];
-  estimatedTokens: number;
-}
-```
-
-`ContextCompiler` çš„åŸåˆ™é¡ºåºå¿…é¡»å›ºå®šï¼š
-
-```text
-Native Delta
-  > Native History Import
-  > Native History Clone
-  > Portable Transcript
-  > Structured Checkpoint
-```
-
-å³ï¼šNative Capability Firstï¼ŒCompatibility Transform Secondï¼ŒCompaction / Summary Fallbackã€‚
-
-æœªæ¥è‹¥ mossx æ–°å¢ SDK/API Controlled Engine Adapterï¼Œå¯ä»¥å•ç‹¬å¢åŠ  `sdk-portable-replay`ã€‚å®ƒä¸å¾—è¢«ç”¨äºæè¿°ç°æœ‰ Native CLI èƒ½åŠ›ã€‚
-
-### 9.3 Structured Checkpoint å›ºå®šç»“æ„
-
-```markdown
-## Goal
-
-## Constraints & Preferences
-
-## Progress
-
-### Done
-
-### In Progress
-
-### Blocked
-
-## Key Decisions
-
-## Next Steps
-
-## Critical Context
-
-## Files
-
-## Tool Outcomes
-
-## Omissions
-```
-
-è¯¥ç»“æ„å‚è€ƒ pi çš„ compaction checkpointï¼šå¢é‡æ›´æ–°æ—§ checkpointï¼Œä¿ç•™ç²¾ç¡®è·¯å¾„ã€å‡½æ•°åã€é”™è¯¯å’Œæœªå®ŒæˆçŠ¶æ€ã€‚`Omissions` å¿…é¡»æ˜¾å¼åˆ—å‡ºï¼Œé¿å…ç›®æ ‡ CLI è¯¯ä»¥ä¸ºè·å¾—å®Œæ•´ä¸Šä¸‹æ–‡ã€‚
-
-### 9.4 Progressive Context Retrieval
-
-å½“ä½¿ç”¨ `checkpoint` æˆ– `portable-transcript` æ—¶ï¼Œåˆæ¬¡åˆ‡æ¢åªå‘é€æ»¡è¶³å½“å‰ä»»åŠ¡çš„ Context Packageã€‚è‹¥ç›®æ ‡ CLI åç»­éœ€è¦ç»†èŠ‚ï¼Œç”± mossx Host Tool æŒ‰ `ArtifactRef` æˆ– `retrievableRef` æ‹‰å–ï¼š
-
-```text
-Compact Context Package
-  â”œâ”€ checkpoint
-  â”œâ”€ recent portable turns
-  â”œâ”€ atomic tool exchanges
-  â””â”€ artifact/context references
-                â†“ on demand
-        Host-authorized retrieval
-```
-
-è¿™åŒæ—¶å‚è€ƒ pi-chat çš„ `channel.jsonl + transcript delta + chat_history`ï¼šå®Œæ•´å†å²ç‹¬ç«‹ä¿å­˜ï¼Œå½“å‰ Turn åªæ¥æ”¶å¢é‡ï¼Œæ—§å†å²æŒ‰éœ€æ£€ç´¢ï¼›ä¸ä¼šå› ä¸ºæ¨¡å‹çª—å£æœ‰é™è€Œåˆ é™¤äº‹å®æºã€‚
-
-æ£€ç´¢ç»“æœå¿…é¡»æ ‡è®°ä¸º reference contextï¼š
-
-- ä¸æŠŠå†å²é‡Œçš„ `/stop`ã€`/compact`ã€Approval æˆ–å…¶ä»– control message å½“ä½œå½“å‰å‘½ä»¤ï¼›
-- æ£€ç´¢å¿…é¡»ç”±ç›®æ ‡ CLI é€šè¿‡ Host Tool æ˜¾å¼å‘èµ·ï¼ˆåŒ Headroom `headroom_retrieve` çš„æŒ‰éœ€å–å›æ¨¡å‹ï¼‰ï¼›ContextCompiler ä¸å¾—åœ¨åç»­ Package ä¸­è‡ªåŠ¨å†…è”å›å¡« omitted å†…å®¹ï¼›
-- ä¿ç•™ source sessionã€entry idã€author ä¸ timestampï¼›
-- æŸ¥è¯¢ç»“æœå— Workspace/Conversation æƒé™è¾¹ç•Œçº¦æŸï¼›
-- æ£€ç´¢å¤±è´¥ä¸å½±å“ Canonical Logï¼Œä¹Ÿä¸æ¨è¿› sync cursorã€‚
-
-è¯¥æœºåˆ¶ä¹Ÿé¿å… Anthropic æ‰€è¯´çš„å¤š Agent â€œtelephone gameâ€ï¼šäº§ç‰©ä¿å­˜åœ¨ filesystem/artifact storeï¼Œåè°ƒå±‚ä¼ å¼•ç”¨è€Œä¸æ˜¯å¤šæ¬¡è½¬è¿°ã€‚
-
-### 9.5 å½“å‰ 8 Turn / 4000 å­—ç¬¦åŒæ­¥çš„å®šä½
-
-ç°æœ‰ Shared Session çš„ bounded delta sync å¯ä»¥ä¿ç•™ä¸ºè¿‡æ¸¡å®ç°ï¼Œä½†åº”æ ‡è®°ä¸ºï¼š
-
-```text
-Compatibility Handoff V0
-```
-
-å®ƒä¸æ˜¯æœ€ç»ˆ Context Protocolï¼Œåªæ˜¯ `checkpoint` mode çš„ä¸´æ—¶é™çº§å®ç°ï¼Œå› ä¸ºç¼ºå°‘ï¼š
-
-- Tool outcomeï¼›
-- File operationsï¼›
-- Attachmentï¼›
-- Key decisionsï¼›
-- Omission diagnosticsï¼›
-- Durable source referenceï¼›
-- Structured checkpointã€‚
-- Target capability negotiationï¼›
-- Atomic tool exchangeï¼›
-- Artifact retrievalï¼›
-- Projection manifest ä¸ source checksumã€‚
-
-V1 çš„æ–¹å‘ä¸æ˜¯æŠŠ 4000 å­—ç¬¦ä¸Šé™æ”¾å¤§ï¼Œè€Œæ˜¯æ¢æˆ**åˆ†ç±»å‹ç¡®å®šæ€§å‹ç¼©**ï¼ˆè§„åˆ™å‚è€ƒ Headroom ContentRouter / SmartCrusher / CodeCompressorï¼Œä¸å¼•å…¥å…¶ ML å‹ç¼©æ¨¡å‹ï¼‰ï¼š
-
-| å†…å®¹ç±»å‹ | V1 å‹ç¼©ç­–ç•¥ |
-| --- | --- |
-| Tool outcomeï¼ˆJSON / æ•°ç»„ï¼‰ | ä¿ç•™ schemaã€é¦–å°¾æ ·æœ¬è¡Œä¸ countï¼ŒæŠ˜å ä¸­é—´é‡å¤ç»“æ„ |
-| ä»£ç å— / diff | ä¿ç•™ç­¾åã€è·¯å¾„ä¸ hunk headerï¼ŒæŠ˜å å‡½æ•°ä½“å®ç° |
-| æ—¥å¿— / å‘½ä»¤è¾“å‡º | ä¿ç•™ error / warning è¡Œä¸é¦–å°¾è¡Œï¼ŒæŠ˜å é‡å¤è¡Œ |
-| å›¾ç‰‡ / é™„ä»¶ | ä¸å†…è”ï¼Œåªæºå¸¦ `ArtifactRef` |
-| Portable turns | ä¿ç•™ user / assistant è¯­ä¹‰éª¨æ¶ï¼Œè£å‰ª provider-private block å¹¶æ˜¾å¼è®°å½• |
-
-å…¨éƒ¨ä¸ºç¡®å®šæ€§è§„åˆ™å‹ç¼©ï¼Œå¯é€†è·¯å¾„ç”± Â§9.4 Progressive Retrieval å…œåº•ï¼›ä»»ä½•æŠ˜å éƒ½å¿…é¡»è¿›å…¥ `ProjectionManifest.omitted` ä¸ checkpoint çš„ `## Omissions`ã€‚
-
----
-
-## åã€Provider Runtime ä¸ Model Catalog
-
-### 10.1 Runtime Ownership
-
-Provider-scoped Runtime Owner è‡³å°‘åŒ…å«ï¼š
-
-```text
-Workspace Owner + Engine + Provider Profile
-```
-
-å¿…é¡»éš”ç¦»ï¼š
-
-- Processï¼›
-- envï¼›
-- CLI Homeï¼›
-- Active Turnï¼›
-- Pending User Inputï¼›
-- Approval Stateï¼›
-- Interrupt Ownerï¼›
-- Retry/Recoveryã€‚
-
-### 10.2 Provider-scoped Model Catalog
-
-Model é€‰æ‹©å¿…é¡»ç”±å½“å‰ Target çš„ Provider Catalog æä¾›ï¼š
-
-```text
-ExecutionTarget.providerProfileId
-        â†“
-Provider Catalog
-        â†“
-Available Models
-```
-
-ç¦æ­¢ï¼š
-
-- ç”¨é»˜è®¤ Provider Catalog å±•ç¤º managed Provider çš„ Modelï¼›
-- Provider Catalog åŠ è½½å¤±è´¥åé™é»˜æ˜¾ç¤º local/defaultï¼›
-- ä»…å‡­ Model ID åæ¨ Providerï¼›
-- æŠŠ Provider ID ä¸ API Protocol æ··ä¸ºåŒä¸€ä¸ªå­—æ®µã€‚
-
-### 10.4 Control-plane ä¿¡æ¯çš„ UI æŠ•å½±è¾¹ç•Œ
-
-`MOSSX_CONTEXT_PACKAGE:*`ã€`MOSSX_CONTEXT_ACCEPTED:*`ã€package checksum ä¸
-native context prompt æ˜¯ ACK/recovery è¯æ®ï¼Œä¸æ˜¯ç”¨æˆ·æ¶ˆæ¯ã€‚
-
-æŠ•å½±è¾¹ç•Œåˆ†å±‚ï¼ˆ2026-08-07 æ ¡å‡†ï¼Œäº‹å®æºï¼šOpenSpec
-`fix-shared-collab-context-and-sidebar-spawn` follow-up +
-`src/utils/contextProtocol.ts`ï¼‰ï¼š
-
-| è¾¹ç•Œ | è§„åˆ™ | ç¦æ­¢ |
-|------|------|------|
-| **å¹•å¸ƒ / conversation transcript** | ä¸¥æ ¼ã€ç‰ˆæœ¬åŒ– `classifyContextProtocolText` éšè—å®Œæ•´ marker / envelope | ä¸å¾—ç”¨ `includes("MOSSX")` å®½æ³›è§„åˆ™ï¼Œå¦åˆ™åç”¨æˆ·è®¨è®ºåè®®çš„æ­£æ–‡ |
-| **ä¾§æ  thread title / list merge** | è¡Œé¦– `MOSSX_*`ï¼ˆ`isMossxProgramControlTitle`ï¼Œå…¼å®¹ title æˆªæ–­ï¼‰âˆª ä¸¥æ ¼ classify âˆª collab workerï¼›æœ€ç»ˆ `stripHiddenSharedBindingSummaries` | ä¸å¾—æŠŠå®Œæ•´ sha256 body å½“ä¾§æ å¯è¯†åˆ«å‰æï¼›ä¸å¾—è¯¯æ€éè¡Œé¦–ç”¨æˆ·å¥ |
-
-Provider Continuation çš„ç”¨æˆ·æŠ•å½±å¿…é¡»è‡³å°‘åŒ…å«ï¼š
-
-Provider Continuation çš„ç”¨æˆ·æŠ•å½±å¿…é¡»è‡³å°‘åŒ…å«ï¼š
-
-- å¯è¯»æ ‡é¢˜ï¼šä¼˜å…ˆâ€œç»§ç»­ï¼šæ¥æºä¼šè¯æ ‡é¢˜â€ï¼Œä¸å¾—æŠŠ package hash å½“æ ‡é¢˜ã€‚
-- æ¥æºä¸ç›®æ ‡ï¼šEngine + Provider snapshotã€‚
-- æ¥æºå¯¼èˆªï¼šæ¥æºå­˜åœ¨æ—¶å¯ç›´æ¥æ‰“å¼€ï¼›ç¼ºå¤±æ—¶æ˜¾ç¤ºä¸å¯ç”¨ï¼Œä¸è·³é”™ Sessionã€‚
-- äº§å“å†…ç¡®è®¤ï¼šåˆ›å»º side effect å‰æ˜¾ç¤ºæ¥æº/ç›®æ ‡ï¼›degraded æ—¶åœ¨åŒä¸€ domain Dialog
-  å±•ç¤º mode/token/omissions åå†æ¬¡ç¡®è®¤ã€‚ç¦æ­¢ native `alert/window.alert`ã€‚
-
-### 10.3 Credential Resolution
-
-æ¨èä¼˜å…ˆçº§ï¼š
-
-```text
-Turn explicit managed binding
-> Session persisted managed binding
-> explicit local/default
-```
-
-Managed Binding ä¸€æ—¦å­˜åœ¨ï¼Œä¸å…è®¸ ambient env æˆ–å…¨å±€é…ç½®é™é»˜æ¥ç®¡ã€‚
-
----
-
-## åä¸€ã€ç»Ÿä¸€äº‹ä»¶æµä¸æ¶ˆæ¯æŠ•é€’
-
-### 11.1 ä¸‰æ¡£æŠ•é€’è¯­ä¹‰
-
-å€Ÿé‰´ piï¼š
-
-| è¯­ä¹‰ | ä½¿ç”¨åœºæ™¯ | æ—¶æœº |
-| --- | --- | --- |
-| `steer` | è¿è¡Œä¸­çº å | å½“å‰åŸå­æ‰§è¡Œæ®µç»“æŸã€ä¸‹ä¸€å†³ç­–ç‚¹å‰ |
-| `followUp` | æ¥åŠ›ç»§ç»­ | å½“å‰ Run settled å |
-| `nextTurn` | è¢«åŠ¨é“ºå« | ä¸‹ä¸€æ¬¡ç”¨æˆ· Turn å‰ï¼Œä¸ä¸»åŠ¨è§¦å‘ |
-
-è·¨ CLI Handoff é»˜è®¤ä½¿ç”¨ `followUp`ã€‚
-
-### 11.2 Capability-driven Degradation
-
-å¹¶éæ‰€æœ‰ CLI éƒ½æ”¯æŒçœŸæ­£ Mid-turn Injectionã€‚
-
-èƒ½åŠ›ç¤ºä¾‹ï¼š
-
-```text
-input.mid-turn = supported
-input.mid-turn = compat-input
-input.mid-turn = unsupported
-```
-
-é™çº§è§„åˆ™ï¼š
-
-- `supported`ï¼šåŸç”Ÿæ³¨å…¥ã€‚
-- `compat-input`ï¼šinterrupt/resume å°è£…ï¼Œå¹¶æ˜ç¡®å±•ç¤ºã€‚
-- `unsupported`ï¼šé™çº§åˆ° `followUp`ï¼Œä¸å¾—ä¼ªè£…æˆåŸç”Ÿ steerã€‚
-
-### 11.3 ç²¾ç¡® Owner Routing
-
-Interruptã€Approvalã€AskUserQuestionã€Retryã€Compact å¿…é¡»æºå¸¦å®Œæ•´ Ownerï¼š
-
-```text
-Logical Session
-+ Engine
-+ Provider Profile
-+ Native Session
-+ Run
-+ Turn
-```
-
-åªæŒ‰ `workspace + engine` æŸ¥æ‰¾ Ownerï¼Œåœ¨åŒä¸€ Engine å¤š Provider å¹¶è¡Œåå¿…ç„¶ä¸²çº¿ã€‚
-
----
-
-## åäºŒã€æŒä¹…åŒ–ä¸è¿ç§»
-
-### 12.1 SharedSessionMeta æ¼”è¿›
-
-å½“å‰æ¦‚å¿µï¼š
-
-```text
-selectedEngine
-bindingsByEngine
-```
-
-ç›®æ ‡ï¼š
-
-```typescript
-interface SharedSessionMetaV2 {
-  selectedTarget: ExecutionTarget;
-  bindingsByTarget: Record<string, SharedTargetBinding>;
-  schemaVersion: 2;
-}
-```
-
-è¿ç§»ï¼š
-
-```text
-selectedEngine
-â†’ selectedTarget.engine
-
-bindingsByEngine[engine]
-â†’ bindingsByTarget[key(engine, default-provider)]
-```
-
-æ—§ `bindingsByEngine[engine]` ä»…åœ¨ Binding migration æ—¶æ˜ å°„ä¸ºè¯¥ Engine çš„
-local/default Bindingï¼›è¿™ä¸æ„æˆå†å² Turn çš„ Provider/Model è¯æ®ã€‚Legacy Turn æˆ–
-`selectedTarget` ç¼ºå°‘å®Œæ•´ identity æ—¶ç»§ç»­æ˜¾ç¤ºâ€œå†å²é…ç½®æœªçŸ¥â€ï¼Œä¸å¾—ä¼ªé€ æˆ localã€‚
-
-### 12.2 Native Session Origin Metadata
-
-æ–°å¢ Origin æ—¶åº”ä¿æŒç°æœ‰ Catalog Identityï¼š
-
-```text
-stable key = Engine + Owner Workspace + Canonical Session ID
-```
-
-Origin æ˜¯ metadataï¼Œä¸å¾—æ”¹å˜ canonical identityã€‚
-
-### 12.3 Provider åˆ é™¤åçš„å†å²
-
-åˆ é™¤ Provider Profile åï¼š
-
-- å†å² Session ä¿ç•™ã€‚
-- `providerProfileId` ä¿ç•™ã€‚
-- `providerProfileNameSnapshot` ä¿ç•™ã€‚
-- availability å˜ä¸º unavailableã€‚
-- Resume/Send fail closedã€‚
-- ç”¨æˆ·å¯ä»¥æ‰§è¡Œâ€œä½¿ç”¨å…¶ä»– Provider ç»§ç»­â€åˆ›å»ºæ–° Sessionã€‚
-
-### 12.4 Legacy Shared Snapshot è¿ç§»
-
-æ—§ Shared Session ä¸åš destructive rewriteã€‚é‡‡ç”¨ dual-readï¼š
-
-```text
-Shared Session V0
-  snapshot JSONL
-      â†“ Legacy Reader
-  legacy-presentation Canonical Entry
-      â†“
-  V2 UI Projection / ContextCompiler
-
-Shared Session V2
-  conversation.turnCommitted
-      â†“
-  Canonical Event Log V2
-```
-
-è¿ç§»è§„åˆ™ï¼š
-
-- æ—§ snapshot ä¿æŒåŸæ–‡ä»¶ä¸å˜ï¼Œé¦–æ¬¡è¯»å–æ—¶æŒ‰ `legacy-presentation` æŠ•å½±ã€‚
-- ä¸º Legacy Entry æ ‡è®° `fidelity = "presentation-only"`ã€‚
-- æ˜ç¡®è®°å½•æ–‡æœ¬ã€Tool Outputã€Image ç­‰å·²çŸ¥è£å‰ªå’Œç¼ºå¤±é¡¹ã€‚
-- ç¦æ­¢ä¸ºæ—§æ•°æ®ä¼ªé€  Tool Call IDã€Reasoning Signatureã€Provider Response IDã€‚
-- æ–°å†™å…¥åªè¿›å…¥ Event Log V2ï¼›ä¸ç»§ç»­æ‰©å±• V0 snapshot contractã€‚
-- åŒä¸€ Shared Session å¯ä»¥åœ¨è¿ç§»è¾¹ç•Œåç»§ç»­ä½¿ç”¨ï¼›V2 Entry ä»ç¨³å®š migration marker ä¹‹åè¿½åŠ ã€‚
-- è‹¥æ—§ snapshot æ— æ³•è¯æ˜ Provider/Modelï¼Œåªä¿ç•™ Engine provenanceï¼Œä¸çŒœæµ‹ Targetã€‚
-
-è¿™æ¡ç­–ç•¥ä¿ç•™å†å²å¯è¯»æ€§ï¼ŒåŒæ—¶é¿å…â€œä¸ºäº†è¿ç§»è€Œåˆ¶é€ ä¸€ä»½çœ‹ä¼¼å®Œæ•´ã€å®é™…è™šå‡çš„ Canonical Historyâ€ã€‚
-
----
-
-## åä¸‰ã€å®æ–½åŸºçº¿ä¸å½“å‰çŠ¶æ€
-
-æœ¬ç« çš„ P0/P1 æ¸…å•è®°å½• 2026-07-27 å¼€å·¥å‰åŸºçº¿ï¼Œç”¨äºè§£é‡Š Aâ€“D ä¸ºä»€ä¹ˆæ‹†åˆ†ï¼Œä¸ä»£è¡¨ 2026-07-29 ä»æœªå®ç°ã€‚å½“å‰çŠ¶æ€ä»¥ Â§13.6 ä¸ºå‡†ã€‚
-
-### 13.1 2026-07-27 å·²æœ‰èµ„äº§
-
-mossx å·²å…·å¤‡ï¼š
-
-- å¤š CLI Native Runtimeï¼›
-- Claude/Codex/Kimi Provider-scoped Runtimeï¼›
-- Per-session Provider Bindingï¼›
-- Provider-scoped Model Catalogï¼›
-- Workspace Session Catalogï¼›
-- Shared Session ç”¨æˆ·å…¥å£ä¸ logical identityï¼›
-- Claude/Codex Hidden Bindingï¼›
-- Engine Provenanceï¼›
-- å·²æœ‰ `MossxAgentEvent` Bus ä¸ Critical/Normal/Delta laneï¼›
-- å·²æœ‰å¹‚ç­‰ `run.settled` ä¸ Run/Turn/Item identityï¼›
-- å·²æœ‰ Conversation Fact åˆ†ç±» contractï¼›
-- Subagent Sidebar Treeï¼›
-- User Fork ç‹¬ç«‹é¡¶å±‚è¯­ä¹‰ï¼›
-- Provider Profile unavailable/fail-closed è¯­ä¹‰ï¼›
-- App-server compatible frontend event contractã€‚
-
-### 13.2 2026-07-27 P0 ç¼ºå£ï¼ˆå·²ç”± Aâ€“D ä¸æ ¡å‡†ä»»åŠ¡æ”¶å£ï¼‰
-
-- å½“å‰ Shared snapshot æ˜¯å‰ç«¯ Presentation Modelï¼Œä¸æ˜¯ authoritative Canonical Logã€‚
-- ç¼ºå°‘å¯é çš„ `conversation.turnCommitted` ä¸ Run/Turn Assemblerã€‚
-- ç°æœ‰ Event Bus çš„ Delta/Normal delivery å…è®¸ coalesce/dropï¼Œä¸èƒ½ç›´æ¥ä½œä¸º persistence streamã€‚
-- `ExecutionTarget` å°šæœªæˆä¸º Shared Session ä¸€ç­‰å¥‘çº¦ã€‚
-- Shared Send Payload å°šæœªè´¯é€š `providerProfileId`ã€‚
-- `bindingsByEngine` ä¸èƒ½è¡¨è¾¾åŒä¸€ Engine å¤š Providerã€‚
-- Shared Binding ç¼ºå°‘ Target-scoped two-phase cursorã€‚
-- Shared Model Picker æœªå®Œå…¨ç»‘å®š Provider-scoped Catalogã€‚
-- Shared Turn ç¼ºå°‘å®Œæ•´ Provider/Model Snapshotã€‚
-- Pending Rebind åªæŒ‰ workspace/engine æ—¶å­˜åœ¨æ­§ä¹‰ã€‚
-- Interrupt/Recovery/Approval Owner å°šæœªå…¨éƒ¨ Target-awareã€‚
-- Provider Continuation ç¼ºå°‘ç‹¬ç«‹ Origin ç±»å‹ä¸æ ‡ç­¾ã€‚
-- Conversation Family å°šæ—  authoritative persistence contractã€‚
-
-### 13.3 2026-07-27 P1 ç¼ºå£ï¼ˆå·²å®ç°æˆ–æŒ‰ capability æ˜ç¡®é™çº§ï¼‰
-
-- å½“å‰ Context Sync åªæœ‰ bounded text deltaã€‚
-- ç¼ºå°‘ versioned Context Package ä¸ Projection Manifestã€‚
-- ç¼ºå°‘ target-aware ContextCompilerã€‚
-- ç¼ºå°‘ Atomic Tool Exchange ä¸ Artifact Referenceã€‚
-- ç¼ºå°‘ Omission Diagnostics ä¸ Progressive Retrievalã€‚
-- ç¼ºå°‘ Incremental Structured Checkpoint/Compactionã€‚
-- ç¼ºå°‘ç”±ç°æœ‰ `run.settled` é©±åŠ¨çš„ Turn Assembler ä¸ Canonical Commit Sinkã€‚
-- `MossxAgentEvent` envelope å°šæœªç›´æ¥æºå¸¦å®Œæ•´ Provider/Model Target Snapshotï¼ŒAssembler å¿…é¡»é€šè¿‡ Run identity å…³è”ä¸å¯å˜ Snapshotã€‚
-- Runtime Capability ä¸ä¸€è‡´ï¼šCodex å·²æä¾› `thread/inject_items`ï¼ŒClaude/Kimi å½“å‰ Adapter ä»åªèƒ½é‡‡ç”¨ native resumeã€transcript/checkpointã€‚
-- ç¼ºå°‘ Legacy snapshot dual-read ä¸ fidelity æ ‡è®°ã€‚
-
-### 13.4 å½“å‰ P2 ç¼ºå£
-
-- å¤–éƒ¨ RPC/SDKã€‚
-- Plugin Agent Hookã€‚
-- Pipeline/DAG Orchestratorã€‚
-- Conversation Family Sidebar Projectionã€‚
-- è‡ªåŠ¨ Context Projection ç­–ç•¥ä¸å¯æ’æ‹” Summarizerã€‚
-
-### 13.5 é‡å»ºå†³ç­–
-
-Shared Session V2 é‡‡ç”¨â€œä¿ç•™å£³ï¼Œé‡å»ºæ ¸â€ï¼š
-
-| ä¿ç•™ | æ›¿æ¢ |
-| --- | --- |
-| Shared Session äº§å“å…¥å£ | frontend snapshot persistence |
-| logical session id ä¸ Sidebar å•è¡Œè¯­ä¹‰ | `bindingsByEngine` |
-| Lazy Hidden Binding æ€è·¯ | bounded text prefix ä½œä¸ºæ­£å¼ Context Protocol |
-| å·²æœ‰ Engine Adapter ä¸ Event Bus | å•é˜¶æ®µ `last_synced_turn_seq` |
-| Provider Runtime / Model Catalog åŸºç¡€ | engine-only owner routing |
-
-ä¸å»ºè®®åœ¨ V0 ä¸Šç»§ç»­è¿½åŠ  Provider å­—æ®µåç›´æ¥å‘å¸ƒã€‚é‚£ä¼šè®©â€œå¤š Providerâ€å»ºç«‹åœ¨ä¸å¯é  Canonical History å’Œé”™è¯¯ Cursor è¯­ä¹‰ä¹‹ä¸Šï¼Œåç»­è¿ç§»æˆæœ¬æ›´é«˜ã€‚
-
-### 13.6 2026-07-29 å®ç°æ ¡å‡†
-
-A1â€“A3ã€Bã€Cã€D çš„ä»£ç ä¸è‡ªåŠ¨åŒ–å·²å®Œæˆï¼›2026-07-29 åˆä¾æ®çœŸå® Shared Session å›å½’å®Œæˆä¸¤ç»„ä¿®å¤ï¼š
-
-1. è·¨ CLI logical terminal ç»Ÿä¸€ç”± backend exact-Attempt settlement æ”¶å£ï¼Œå¹¶ä¸ Runtime cleanup åˆ†åŸŸ
-2. Canonical delivery ä½¿ç”¨ç»Ÿä¸€ tagged envelopeï¼Œæ—§ type-less row å¯å…¼å®¹ Projection
-3. Shared/Native recovery owner éš”ç¦»ï¼ŒShared failure ä¸å†è¿›å…¥ Native recovery card
-4. Shared history identity å›ºå®šä¸º `shared:<UUID>`ï¼Œæ ‡é¢˜å˜åŒ–ä¸å½±å“æ¢å¤
-
-å½“å‰ä»ä¿ç•™ä»¥ä¸‹è¾¹ç•Œï¼š
-
-- Kimi target acceptance ä¸èƒ½è¯æ˜æ—¶ typed unsupportedï¼Œä¸ä¼ªè£…æˆå¯ç”¨
-- Native Provider Continuation ä»éœ€çœŸå® Desktop Provider smoke
-- Event Log Inspectorã€Conversation Family Sidebar Projectionã€è‡ªåŠ¨ Context policy ä¸ Plugin/Orchestration å±äºåç»­é˜¶æ®µ
-- legacy type-less compatibility æ˜¯åªè¯» decode ç­–ç•¥ï¼Œä¸ä»£è¡¨å…è®¸æ–° writer ç»§ç»­ç”Ÿæˆæ—  tag payload
-
----
-
-## åå››ã€å®æ–½å‰å››é¡¹å­—æ®µçº§å¥‘çº¦
-
-### 14.1 Industry Pattern ä¸ mossx æ€»ä½“å–èˆ
-
-ä¸šå†…æ²¡æœ‰ä¸€ä¸ªé¡¹ç›®åŒæ—¶è§£å†³ mossx çš„å¤š Native CLIã€å¤š Providerã€å• Shared Threadã€‚å¯å¤ç”¨çš„æ˜¯å››ç»„æˆç†Ÿæœºåˆ¶ï¼š
-
-| æ¥æº | æˆç†Ÿåšæ³• | mossx å¸æ”¶ | ä¸ç…§æ¬ |
-| --- | --- | --- | --- |
-| OpenAI Agents SDK Sessions | Run å‰åŠ è½½ Session Historyï¼›Run ååªè¿½åŠ æœ¬ Run æ–° Itemsï¼›SQLiteã€Redisã€SQLAlchemy ç­‰ Storage å¯æ›¿æ¢ | Canonical History ä¸ Model Input åˆ†ç¦»ï¼›åªè¿½åŠ æ–° Fact | mossx ä¸æŠŠæ‰€æœ‰ Runtime éƒ½é™æ ¼æˆ SDK Agent |
-| LangGraph Persistence | æŒ‰ thread/checkpoint ä¿å­˜çŠ¶æ€ï¼›pending writes é˜²æ­¢æ¢å¤æ—¶é‡è·‘å·²æˆåŠŸæ­¥éª¤ | Delivery Pendingã€Acceptedã€Committed åˆ†é˜¶æ®µæŒä¹…åŒ– | Shared Session ä¸æ˜¯ Graphï¼Œä¸å¼•å…¥ Node/Super-step æŠ½è±¡ |
-| Anthropic Managed Agents | Delta æ˜¯ best-effort previewï¼›å®Œæ•´ buffered event æ‰æ˜¯ authoritative record | streaming delta åªé©±åŠ¨ Live UIï¼›Terminal Fact æ‰èƒ½è¿›å…¥ Canonical Commit | mossx ä¸ä¾èµ–å…¶äº‘ç«¯ Session/Sandbox |
-| Codex App Server | `turn/start` request responseã€`turn/started`ã€item lifecycleã€`turn/completed`ï¼›æ”¯æŒ `clientUserMessageId` ä¸ `thread/inject_items` | Codex ä½¿ç”¨å¼ºç±»å‹ ACK å’Œå¯é€‰ Native History Import | ä¸å‡è®¾æ‰€æœ‰å®‰è£…ç‰ˆæœ¬éƒ½æœ‰ç›¸åŒæ–¹æ³•ï¼Œå¿…é¡» runtime probe |
-| Claude Code / Agent SDK | Native resume/forkï¼›stream-json `result`ï¼›`--replay-user-messages` å¯å›æ˜¾ stdin user messageï¼›SDK å¯è¯»å– Session Messages | Claude ç”¨ replay echo åš Input ACKï¼Œç”¨ `result` åš Terminal | å½“å‰ CLI Adapter ä¸ä¼ªé€  arbitrary history import |
-| ACP / Zed External Agents | Protocol Version + Capability negotiationï¼›External Agent æ‹¥æœ‰ runtime/auth/configï¼›Client æŒæœ‰ç»Ÿä¸€ UI | Kimi ç­‰æ”¯æŒ ACP çš„ CLI ä¼˜å…ˆè¯„ä¼°æ ‡å‡† Adapter | ACP ä¸æ›¿ä»£ mossx Canonical Logï¼Œä¹Ÿä¸è‡ªåŠ¨æä¾›è·¨ Agent History |
-| pi | JSONL Tree ä¿ç•™å®Œæ•´å†å²ï¼›Compaction åªæ”¹å˜ Model Contextï¼›æ–° SQLite Storage ä½¿ç”¨ per-session sequenceã€entry tableã€materialized table | Canonical Entryã€Projectionã€Compaction åˆ†å±‚ï¼›SQLite æœ¬åœ°å­˜å‚¨ | ä¸å¤åˆ¶ pi çš„ Tree Entry ä½œä¸º Shared Turn Domain Model |
-| SQLite WAL | Transaction atomicityã€å¹¶å‘ readerã€crash recoveryã€checkpoint | Canonical Eventã€Cursorã€Pending Delivery åŸå­æäº¤ | ä¸æŠŠ WAL æ–‡ä»¶å½“å¤‡ä»½æ ¼å¼ï¼Œä¸éƒ¨ç½²åˆ° Network Filesystem |
-| GitHub Copilot Chat | åŒä¸€ Chat å†…åˆ‡æ¢ Modelï¼›Retry å¯é€‰æ‹©å…¶ä»– Model å¹¶ä¿ç•™ Contextï¼›Provider/Model ç®¡ç†ç‹¬ç«‹ | Next Turn Target Pickerã€å†å² Target Attributionã€æ˜¾å¼è·¨ Target Retry | mossx ç¬¬ä¸€é˜¶æ®µä¸å¯ç”¨ Auto Model Selection æˆ– silent fallback |
-
-mossx çš„æ€»ä½“å–èˆï¼š
-
-```text
-SQLite Canonical Event Log
-        +
-Runtime-specific ACK Adapter
-        +
-Capability-driven Context Compiler
-        +
-Projection-only UI
-```
-
-ä¸æ˜¯ï¼š
-
-```text
-ä¸€ä¸ªé€šç”¨ send(prompt) æ–¹æ³•
-        +
-æ”¶åˆ°ä»»ä½• stdout å°±ç®—æˆåŠŸ
-        +
-å‰ç«¯ itemsByThread åå‘ä¿å­˜å†å²
-```
-
-### 14.2 Canonical Turn Contract
-
-#### 14.2.1 ä¸ºä»€ä¹ˆä¸èƒ½åªä¿å­˜ `conversation.turnCommitted`
-
-è‹¥ç”¨æˆ·ç‚¹å‡»å‘é€åï¼ŒCLI å·²æ”¶åˆ° Promptï¼Œä½† App åœ¨ Terminal å‰å´©æºƒï¼Œåªä¿å­˜ Terminal Fact ä¼šåŒæ—¶ä¸¢å¤±ï¼š
-
-- ç”¨æˆ·åŸå§‹è¾“å…¥ï¼›
-- æœ¬ Turn çš„ Target Snapshotï¼›
-- Context Package æŠ•é€’çŠ¶æ€ï¼›
-- Native Turn/Request Identityï¼›
-- æ˜¯å¦å…è®¸å®‰å…¨ Retry çš„è¯æ®ã€‚
-
-ä¸šå†… Durable Execution çš„å…±åŒåšæ³•æ˜¯ Write Intent Before Side Effectã€‚mossx å¿…é¡»å…ˆæŒä¹…åŒ–ç”¨æˆ·æ„å›¾ï¼Œå†è°ƒç”¨å¤–éƒ¨ Runtimeã€‚
-
-Canonical Fact æœ€å°é›†åˆï¼š
-
-```typescript
-type SharedCanonicalFact =
-  | ConversationTurnRequested
-  | ContextDeliveryPrepared
-  | ContextDeliveryAccepted
-  | ConversationTurnAccepted
-  | ConversationTurnCommitted
-  | ConversationUsageRecorded
-  | ConversationControlFact;
-
-interface ConversationTurnRequested {
-  type: "conversation.turnRequested";
-  logicalTurnId: string;
-  attemptId: string;
-  retryOfAttemptId?: string;
-  input: CanonicalUserInput;
-  target: TurnExecutionSnapshot;
-  requestedAt: number;
-}
-
-interface ContextDeliveryPrepared {
-  type: "context.deliveryPrepared";
-  logicalTurnId: string;
-  attemptId: string;
-  bindingKey: string;
-  packageId: string;
-  sourceChecksum: string;
-  fromSequenceExclusive?: number;
-  throughSequenceInclusive: number;
-  mode: ProjectionManifest["mode"];
-  operation: "context-import" | "prompt-prefix";
-}
-
-interface ContextDeliveryAccepted {
-  type: "context.deliveryAccepted";
-  logicalTurnId: string;
-  attemptId: string;
-  bindingKey: string;
-  packageId: string;
-  nativeRequestId?: string;
-  acceptedAt: number;
-}
-
-interface ConversationTurnAccepted {
-  type: "conversation.turnAccepted";
-  logicalTurnId: string;
-  attemptId: string;
-  clientTurnId: string;
-  bindingKey: string;
-  nativeSessionId: string;
-  nativeTurnId?: string;
-  acceptedAt: number;
-}
-
-interface ConversationTurnCommitted {
-  type: "conversation.turnCommitted";
-  logicalTurnId: string;
-  attemptId: string;
-  inputEntryId: string;
-  assistant: CanonicalAssistantBlocks;
-  atomicToolExchanges: AtomicToolExchange[];
-  artifactRefs: ArtifactRef[];
-  target: TurnExecutionSnapshot;
-  providerPrivateRefs: ProviderPrivateRef[];
-  omissions: CanonicalOmission[];
-  outcome: {
-    status: "completed" | "failed" | "cancelled" | "replaced";
-    errorCode?: string;
-    errorMessage?: string;
-    stopReason?: string;
-  };
-  committedAt: number;
-}
-
-interface ConversationUsageRecorded {
-  type: "conversation.usageRecorded";
-  usageRecordId: string;
-  reportSubjectId: string;
-  revision: number;
-  supersedesUsageRecordId?: string;
-  logicalTurnId: string;
-  attemptId: string;
-  bindingKey: string;
-  nativeSessionId: string;
-  nativeTurnId?: string;
-  target: TurnExecutionSnapshot;
-  usage: {
-    inputTokens?: number;
-    cachedInputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-    providerReportedCost?: {
-      amount: string;
-      currency: string;
-    };
-  };
-  source: "runtime-final" | "provider-report";
-  verification: "verified" | "unverified";
-  observedAt: number;
-}
-
-interface ProviderUsageAggregateRecorded {
-  type: "provider.usageAggregateRecorded";
-  usageRecordId: string;
-  reportSubjectId: string;
-  revision: number;
-  supersedesUsageRecordId?: string;
-  providerProfileId: string;
-  engine?: EngineType;
-  window: {
-    startedAt: number;
-    endedAt: number;
-  };
-  coveredAttemptIds?: string[];
-  usage: {
-    inputTokens?: number;
-    cachedInputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-    providerReportedCost?: {
-      amount: string;
-      currency: string;
-    };
-  };
-  breakdown:
-    | {
-        kind: "provider-authoritative";
-        attempts: Array<{
-          attemptId: string;
-          usage: ConversationUsageRecorded["usage"];
-        }>;
-      }
-    | { kind: "aggregate-only" };
-  observedAt: number;
-}
-```
-
-`ProviderUsageAggregateRecorded` ä¸å±äº `SharedCanonicalFact`ã€‚å®ƒå¯èƒ½è·¨ Shared/Native Sessionï¼Œå¿…é¡»è¿›å…¥ç‹¬ç«‹ã€append-only çš„ Provider Usage Ledgerï¼›Shared Event Log åªé€šè¿‡ `coveredAttemptIds`/Projection å…³è”ï¼Œä¸å¤åˆ¶æˆ–ä¼ªé€  Session ownershipã€‚
-
-`conversation.turnCommitted` çš„ `committed` è¡¨ç¤º Terminal Fact å·²å¯é è½ç›˜ï¼Œä¸è¡¨ç¤º Agent ä¸€å®šæˆåŠŸã€‚å¤±è´¥ã€å–æ¶ˆã€æ›¿æ¢ä¹Ÿå¿…é¡»ä¸”åªèƒ½ Commit ä¸€æ¬¡ã€‚
-
-Usage Attribution æ˜¯ç‹¬ç«‹ Canonical Factï¼š`TurnExecutionSnapshot` è§£é‡Š Engine/Provider/Modelï¼ŒBinding å­—æ®µè§£é‡Šå®é™… Native Ownerã€‚`reportSubjectId` å¿…é¡»æ˜¯ attempt/native-turn scopedï¼Œä¸èƒ½è·¨å¤šä¸ª Attemptï¼›ä¼˜å…ˆä½¿ç”¨ Provider native turn/meter subject idï¼Œç¼ºå¤±æ—¶ä½¿ç”¨ `attemptId + nativeTurnId`ã€‚`revision` å•è°ƒé€’å¢ï¼Œä¿®è®¢å¿…é¡»é€šè¿‡ `supersedesUsageRecordId` æŒ‡å‘ä¸Šä¸€ç‰ˆï¼›`usageRecordId = hash(source + reportSubjectId + revision)`ï¼Œä¸å¾—æŠŠ totals checksum å½“ report identityã€‚
-
-Usage Projection åªè´Ÿè´£æŒ‰ Session/Provider/Model èšåˆå±•ç¤ºï¼Œä¸å¾—åå‘ä¿®æ”¹ Usage Factã€‚é‡å»ºæ—¶æ¯ä¸ª attempt-scoped `reportSubjectId` åªé€‰æ‹©æœ€é«˜æœ‰æ•ˆ revisionï¼›åŒä¸€ Attempt åŒæ—¶å­˜åœ¨ cumulative `runtime-final` ä¸ `provider-report` æ—¶ä»¥ `provider-report` ä¸º authoritativeï¼Œä¸å¾—æŠŠä¸¤ä»½ç´¯è®¡å€¼ç›¸åŠ ã€‚Runtime æœªæä¾›ç¨³å®š attempt-scoped subject/revision æ—¶åªèƒ½è®°å½•å•ç‰ˆ `unverified` usageï¼Œåç»­ä¿®è®¢å¿…é¡»æ˜¾å¼ supersedeï¼Œä¸èƒ½ä½œä¸ºæ–°è´¹ç”¨ç›´æ¥ç´¯åŠ ï¼›å®Œå…¨æ— å¯é  usage æ—¶ä¿æŒ unknownï¼Œä¸åš Token/Cost çŒœæµ‹ã€‚
-
-è·¨å¤šä¸ª Turn çš„ meter/billing-window cumulative report å¿…é¡»å†™æˆ `provider.usageAggregateRecorded`ï¼Œå…¶ ownership æ˜¯ `Provider + Window`ï¼Œä¸æ˜¯æŸä¸ª Conversation Attemptã€‚`coveredAttemptIds` åªè¡¨è¾¾è¦†ç›–å…³ç³»ï¼Œä¸ä»£è¡¨å¯åˆ†æ‘Šï¼›åªæœ‰ Provider è¿”å› authoritative per-attempt breakdown æ—¶ï¼ŒProjection æ‰èƒ½ç”Ÿæˆæˆ–æ ¡å‡† Turn Attributionã€‚`aggregate-only` åªèƒ½å±•ç¤º Provider çº§æ€»è®¡ï¼Œç¦æ­¢æŒ‰ Tokenã€æ—¶é•¿æˆ– Turn æ•°çŒœæµ‹åˆ†æ‘Šã€‚
-
-Provider Aggregate çš„ `usageRecordId = hash(providerProfileId + window.startedAt + window.endedAt + reportSubjectId + revision)`ï¼›Ledger ownershipã€Schema PK ä¸ Retry å¹‚ç­‰é”®å¿…é¡»ä½¿ç”¨åŒä¸€ç»„å­—æ®µã€‚
-
-#### 14.2.2 Turn çŠ¶æ€ä¸äº‹åŠ¡è¾¹ç•Œ
-
-```text
-Tx 1
-  append conversation.turnRequested
-  freeze TurnExecutionSnapshot
-        â†“
-Tx 2aï¼ˆä»…æ–° Bindingï¼‰
-  persist BindingProvisioningState(prepared)
-        â†“
-Runtime Adapter create native session
-        â†“
-Tx 2bï¼ˆæ”¶åˆ° Native Session Identity ACKï¼‰
-  persist nativeSessionId
-  mark Binding ready
-        â†“
-compile Context Package
-        â†“
-Tx 3
-  append context.deliveryPrepared
-  write Binding.pendingDelivery
-        â†“
-Runtime Adapter import/send
-        â†“
-Tx 4ï¼ˆæ”¶åˆ°æ˜ç¡® ACKï¼‰
-  append context.deliveryAccepted / conversation.turnAccepted
-  advance acceptedThroughSequence
-  clear or advance pending phase
-        â†“
-streaming previewï¼ˆä¸è¿› Canonical Logï¼‰
-        â†“
-existing run.settled
-        â†“
-Tx 5
-  append conversation.turnCommitted
-  advance committedThroughSequence
-  clear pendingDelivery
-```
-
-#### 14.2.2.1 Logical Settlement ä¸ Runtime Cleanup å¿…é¡»åˆ†ç¦»
-
-`run.settled` è¡¨è¾¾çš„æ˜¯ Agent ä¸šåŠ¡å›åˆå·²ç»äº§ç”Ÿæœ€ç»ˆç»“æœï¼Œä¸ç­‰äº CLI processã€hookã€
-MCP childã€stdout/stderr pipe æˆ– usage probe å·²æ¸…ç†å®Œæˆã€‚Adapter å¿…é¡»æŠŠä¸¤ç±»æ—¶åˆ»åˆ†å¼€ï¼š
-
-```text
-provider typed final/result
-  â†’ logical run.settled
-  â†’ Shared Attempt assembler + canonical commit
-  â†’ Composer idle
-
-process exit / pipe EOF / stderr drain / post-turn usage
-  â†’ runtime cleanup / supplemental usage
-  â†’ ä¸å¾—é‡æ–°æ‰“å¼€æˆ–å»¶è¿Ÿå·² settled çš„ Shared Attempt
-```
-
-ç¡¬çº¦æŸï¼š
-
-1. Shared-owned Runtime æ”¶åˆ° Provider æ˜ç¡®çš„ typed final/result åï¼Œå¿…é¡»ç«‹å³å½¢æˆ
-   Attempt-owned terminal evidenceï¼›ä¸å¾—ç­‰å¾…ä»…ç”¨äºæ¸…ç†çš„ process exitã€stdio EOFã€
-   hook/MCP descendant é€€å‡ºæˆ– usage graceã€‚
-2. åŒä¸€ä¸ª Adapter å¯ä»¥ä¸º Native Session ä¿ç•™æ—¢æœ‰ cleanup å `TurnCompleted` è¡Œä¸ºï¼›
-   Shared coordinator å¯¹ typed final çš„æå‡åªä½œç”¨äºå·²éªŒè¯ owner çš„ Shared Attemptï¼Œ
-   ç¦æ­¢æ”¹å†™æ™®é€šå•ä¸€ Session çš„ç”Ÿå‘½å‘¨æœŸã€‚
-3. cleanup åè¿Ÿåˆ°çš„ `TurnCompleted`ã€usage æˆ– duplicate final å¿…é¡»æŒ‰
-   `attemptId + runtimeTurnId` å¹‚ç­‰å¸æ”¶ï¼Œä¸èƒ½ç”Ÿæˆç¬¬äºŒä¸ª `run.settled`ã€ç¬¬äºŒæ¬¡
-   `conversation.turnCommitted` æˆ–é‡å¤ Assistant Finalã€‚
-4. åªæœ‰ Provider typed final/result æ‰èƒ½æå‰ settlementã€‚æ­£æ–‡ deltaã€reasoningã€
-   process spawnã€stdin writeã€first tokenã€æç¤ºéŸ³æˆ–â€œè¿›ç¨‹ä»å­˜æ´»/å·²é€€å‡ºâ€éƒ½ä¸æ˜¯
-   terminal authorityã€‚
-5. æ–°å¢ CLI Adapter æ—¶å¿…é¡»åœ¨ capability contract ä¸­åˆ†åˆ«å£°æ˜
-   `logicalTerminalEvidence` ä¸ `cleanupCompletionEvidence`ï¼›è‹¥äºŒè€…æ¥è‡ªåŒä¸€äº‹ä»¶å¯ä»¥åˆå¹¶ï¼Œ
-   è‹¥ä¸åŒåˆ™ Shared æ§åˆ¶æµåªç­‰å¾…å‰è€…ï¼Œcleanup ç‹¬ç«‹æ”¶å°¾ã€‚
-
-äº‹åŠ¡è§„åˆ™ï¼š
-
-1. å¤–éƒ¨ CLI Side Effect ä¹‹å‰ï¼Œ`turnRequested` ä¸è¯¥ Side Effect å¯¹åº”çš„ Intent å¿…é¡»å·²ç» Durableï¼šåˆ›å»º Session å¯¹åº” `BindingProvisioningState(prepared)`ï¼ŒæŠ•é€’ Context/Prompt å¯¹åº” `deliveryPrepared`ã€‚
-2. `TurnExecutionSnapshot` ä¸ `attemptId` åˆ›å»ºåä¸å¯å˜ã€‚
-3. ä¸€ä¸ª `attemptId` æœ€å¤šæ‹¥æœ‰ä¸€ä¸ª `turnAccepted` å’Œä¸€ä¸ª `turnCommitted`ã€‚
-4. æ¯ä¸ª `turnRequested` æœ€ç»ˆå¿…é¡»æœ‰ä¸€ä¸ª Terminal `turnCommitted`ï¼Œæˆ–ä¿æŒä¸ºå¯æ¢å¤çš„ Pendingï¼›ç”¨æˆ·åœ¨å¤–éƒ¨ Side Effect å‰å–æ¶ˆä¹Ÿè¦ Commit cancelled outcomeã€‚
-5. `(sharedSessionId, eventId)`ã€`(sharedSessionId, sequence)`ã€é Usage Fact çš„ `attemptId + factType` å¿…é¡»å…·æœ‰ Unique Constraintï¼›Shared Turn Usage ä½¿ç”¨ `factType + usageRecordId`ã€‚Provider Aggregate Usage ä¸è¿›å…¥ Shared Event Logï¼ŒæŒ‰è§„åˆ™ 12 ç‹¬ç«‹å»é‡ã€‚
-6. streaming deltaã€heartbeatã€processing text åªè¿›å…¥ Live Projectionï¼Œä¸å†™ Canonical Event Logã€‚
-7. Tool lifecycle ç”± ingress-side Assembler èšåˆï¼›`AtomicToolExchange` å¿…é¡»åœ¨ Terminal Commit å‰éªŒè¯é…å¯¹çŠ¶æ€ã€‚
-8. æœªå®Œæˆ Tool Call ä¸èƒ½ä¼ªè£…æˆåŠŸï¼›ä»¥ `incomplete/error` Tool Result æˆ– omission æ˜ç¡®ç»“ç®—ã€‚
-9. Reasoning Signatureã€Encrypted Thinking åªä¿å­˜ opaque private refï¼Œä¸è¿›å…¥æ™®é€š Text Projectionã€‚
-10. UI Row å¿…é¡»ç”± Canonical Fact æˆ– Live Preview æ´¾ç”Ÿï¼Œä¸èƒ½åå‘å†™å› Factã€‚
-11. Turn Usage Fact å¯ä»¥éš Tx 5 ä¸€èµ·å†™å…¥ï¼Œä¹Ÿå¯ä»¥åœ¨ attempt-scoped Provider report åˆ°è¾¾åç‹¬ç«‹è¿½åŠ ï¼›å¿…é¡»ç”¨ `usageRecordId` å¹‚ç­‰ã€ç”¨ `reportSubjectId + revision` é€‰æ‹© authoritative versionï¼Œå¹¶ä¿æŒ `attemptId + bindingKey + nativeSessionId` å½’å±ä¸å˜ã€‚
-12. Provider Aggregate Usage å†™å…¥ç‹¬ç«‹ Provider Usage Ledgerï¼Œå¹¶æŒ‰ `Provider + Window + reportSubjectId + revision` å¹‚ç­‰ï¼›ä¸å¾—ä¸ºäº†å¡«å…… Turn å­—æ®µæŠŠè·¨ Attempt report æŒ‚åˆ°ä»»ä¸€ `attemptId` æˆ– `sharedSessionId`ã€‚
-
-#### 14.2.3 Failure Semantics
-
-| æ•…éšœç‚¹ | Canonical çŠ¶æ€ | æ¢å¤åŠ¨ä½œ |
-| --- | --- | --- |
-| `turnRequested` å‰å¤±è´¥ | æ— æ–° Fact | ç”¨æˆ·å¯ç›´æ¥é‡è¯• |
-| Provisioning Intent åã€Native Identity ACK å‰å¤±è´¥ | Binding ä¸º provisioning/recovery-required | Probe åŸç”Ÿ Sessionï¼›ç¦æ­¢ç›²ç›®å†å»º |
-| Context Compile å¤±è´¥ | æœ‰ `turnRequested`ï¼Œæ—  deliveryï¼ŒCommit failed outcome | æ˜¾ç¤º compile errorï¼›ä¿®å¤åå¤ç”¨åŒä¸€ inputï¼Œåˆ›å»ºæ–° attempt |
-| `deliveryPrepared` åè¿›ç¨‹æœªå¯åŠ¨ | pending æœªæ¥å— | å¯å®‰å…¨é‡è¯•åŒä¸€ package |
-| å¤–éƒ¨è°ƒç”¨å®Œæˆä½† ACK ä¸¢å¤± | pending ambiguous | å¿…é¡» Probeï¼›ç¦æ­¢ç›´æ¥é‡å¤æ³¨å…¥ |
-| ACK å Run å¤±è´¥ | accepted å·²æ¨è¿› | Commit failed outcomeï¼›ä¸å¾—é‡å‘ç›¸åŒ Context |
-| `run.settled` å Tx 5 å¤±è´¥ | Terminal evidence æœª Commit | ä» Runtime final snapshot é‡è¯• Commitï¼Œä¸é‡æ–°æ‰§è¡Œ Agent |
-| App åœ¨ Live Delta ä¸­å´©æºƒ | Delta ä¸¢å¤± | é‡å¼€åè¯»å– Canonical/Native final stateï¼Œä¸æ‹¼æ¥æ®‹ç¼º Preview |
-
-#### 14.2.4 Acceptance Tests
-
-- åœ¨æ¯ä¸ªäº‹åŠ¡è¾¹ç•Œå¼ºæ€ Appï¼Œé‡å¯åä¸å¾—ä¸¢ç”¨æˆ·è¾“å…¥æˆ–é‡å¤å‘é€ã€‚
-- åœ¨ Native Session åˆ›å»ºä¸ Identity Commit ä¹‹é—´å¼ºæ€ Appï¼Œä¸å¾—ç”Ÿæˆç¬¬äºŒä¸ªåŒ Target Bindingã€‚
-- åŒä¸€ `attemptId` é‡æ”¾ Terminal Evidenceï¼Œä¸äº§ç”Ÿç¬¬äºŒä¸ª Commitã€‚
-- Normal/Delta lane å…¨éƒ¨ä¸¢å¼ƒæ—¶ï¼ŒTerminal Commit ä»åŒ…å«å®Œæ•´ Assistant Final ä¸ Tool Outcomeã€‚
-- failed/cancelled Turn å¯æ¢å¤ã€å¯å®¡è®¡ï¼Œä¸æ˜¾ç¤ºä¸ºæˆåŠŸå›å¤ã€‚
-- æ¯ä¸ª `turnRequested` æœ€ç»ˆåªæœ‰ä¸€ä¸ª Terminal Commitï¼›ä¸å­˜åœ¨æ°¸ä¹…æ‚¬ç©ºçš„é Pending Attemptã€‚
-- åŒä¸€ `usageRecordId` é‡æ”¾ä¸é‡å¤è®¡è´¹ï¼›Provider/Model/Native Session å½’å±å¯ä» Fact ç‹¬ç«‹é‡å»ºã€‚
-- åŒä¸€ `reportSubjectId` å¤šä¸ª revision é‡å»ºæ—¶åªé€‰æ‹©æœ€é«˜æœ‰æ•ˆç‰ˆæœ¬ï¼Œsuperseded totals ä¸é‡å¤ç´¯è®¡ã€‚
-- è·¨ Attempt aggregate-only report åªè¿›å…¥ Provider çº§æ€»è®¡ï¼Œä¸äº§ç”Ÿæ¨æµ‹çš„ Turn Attributionã€‚
-- UI Projection åˆ é™¤åå¯ä»¥å®Œå…¨ä» Canonical Log é‡å»ºã€‚
-
-### 14.3 Native CLI Capability / ACK Matrix
-
-#### 14.3.1 ç»Ÿä¸€é˜¶æ®µï¼Œä¸ç»Ÿä¸€å‡ä¿¡å·
-
-æ‰€æœ‰ Adapter å¯¹å¤–æš´éœ²ç›¸åŒé˜¶æ®µï¼š
-
-```typescript
-interface RuntimeDeliveryAdapter {
-  probeCapabilities(runtime: RuntimeIdentity): Promise<RuntimeCapabilities>;
-  importContext?(request: ContextImportRequest): Promise<ContextImportAck>;
-  sendTurn(request: NativeTurnRequest): Promise<NativeTurnAck>;
-  cancelPendingDelivery?(request: PendingDeliveryCancelRequest): Promise<PendingDeliveryCancelAck>;
-  probePendingDelivery(request: PendingDeliveryProbe): Promise<DeliveryProbeResult>;
-}
-
-interface RuntimeCapabilities {
-  historyImport: "structured" | "native-clone" | "none";
-  inputAck: "request-response" | "echo" | "first-event" | "none";
-  runStarted: "explicit" | "inferred";
-  terminal: "explicit" | "process-exit";
-  pendingProbe: "by-client-id" | "by-native-history" | "none";
-  pendingCancel: "explicit-ack" | "terminal-evidence" | "none";
-  images: boolean;
-  tools: boolean;
-  mcp: boolean;
-}
-
-interface RuntimeCapabilitySnapshot {
-  engine: EngineType;
-  binaryIdentity: string;
-  binaryVersion: string;
-  protocolName: string;
-  protocolVersion?: string;
-  schemaFingerprint?: string;
-  discoveredAt: number;
-  capabilities: RuntimeCapabilities;
-}
-```
-
-Capability Cache Key è‡³å°‘åŒ…å« `Engine + binary identity + binary version + protocol/schema fingerprint`ã€‚CLI å‡çº§åå¿…é¡»é‡æ–° Probeï¼›å†å² Turn ä¿ç•™å½“æ—¶ Snapshotï¼Œä¸ç”¨æ–°ç‰ˆæœ¬èƒ½åŠ›åå‘è§£é‡Šæ—§ Turnã€‚
-
-ç»Ÿä¸€é˜¶æ®µï¼š
-
-```text
-prepared
-â†’ context accepted
-â†’ prompt accepted
-â†’ run started
-â†’ run settled
-â†’ canonical committed
-```
-
-ç¦æ­¢æŠŠä»¥ä¸‹ä¿¡å·å½“æˆåŒä¸€ä»¶äº‹ï¼š
-
-- Child Process Spawnedï¼›
-- stdin write returnedï¼›
-- JSON-RPC request acceptedï¼›
-- Runtime emitted first eventï¼›
-- Assistant produced first tokenï¼›
-- Terminal outcome committedã€‚
-
-#### 14.3.2 å½“å‰ Capability Matrix
-
-| Runtime Adapter | History Import | Context/Input ACK | Run Started | Terminal | Ambiguous ACK Probe | mossx å½“å‰ç¼ºå£ |
-| --- | --- | --- | --- | --- | --- | --- |
-| Codex App Server `0.144.6` | `thread/inject_items`ï¼›Responses API Items æŒä¹…åŒ–åˆ° Thread | `thread/inject_items` æˆåŠŸ responseï¼›`turn/start` æˆåŠŸ response è¿”å› Turn | `turn/started` | `turn/completed`ï¼ŒçŠ¶æ€å« completed/interrupted/failed | `clientUserMessageId` å¯å…³è” User Itemï¼›History Import çš„ç¨³å®š item-id/read-back éœ€è¦ Spike éªŒè¯ | æœªè°ƒç”¨ `thread/inject_items`ï¼›æœªç³»ç»Ÿä½¿ç”¨ `clientUserMessageId`ï¼›æœªæŠŠ Provider Target å†™å…¥ envelope |
-| Claude Code `2.1.218` stream-json | å½“å‰ CLI Surface æ—  arbitrary history importï¼›æ”¯æŒ resume/fork | æ¨èå¯ç”¨ `--replay-user-messages`ï¼Œä»¥å›æ˜¾ user message/hash ä½œä¸º ACK | ç¬¬ä¸€ä¸ªæœ‰æ•ˆ assistant/tool eventï¼›System Init åªè¡¨ç¤º Runtime ready | `result` eventï¼›Process Exit åªä½œç¼ºå¤± Result çš„é”™è¯¯å…œåº• | å½“å‰ CLI æ— ç¨³å®š request-id history queryï¼›Agent SDK æ–°ç‰ˆ `get_session_messages` å¯ä½œä¸ºæœªæ¥ Adapter èƒ½åŠ› | å½“å‰å·²ä½¿ç”¨ input/output stream-json + verboseï¼Œä½†æœªå¯ç”¨ replay flagï¼›éœ€è¦ä¸ºè¾“å…¥ç”Ÿæˆ `clientTurnId`/checksum å¹¶å…³è” echo |
-| Kimi Code `0.27.0` prompt stream-json | æ—  | å½“å‰æ— æ˜¾å¼ ACKï¼›`session.resume_hint` æˆ–ç¬¬ä¸€ä¸ªåˆæ³• NDJSON event åªèƒ½ä½œä¸ºå¼± ACK | ç¬¬ä¸€ä¸ª assistant/tool event | Process Exit + æœ‰æ•ˆ output/tool activity | æ—  | ACK è¯­ä¹‰æœ€å¼±ï¼›ä¸é€‚åˆä½œä¸ºé¦–ä¸ª Shared V2 å®Œæ•´å®ç°ç›®æ ‡ |
-| Kimi Code ACP `0.23` | `session/load` å¯æ¢å¤å¹¶ replay è‡ªèº« Historyï¼›ä¸ç­‰äº arbitrary import | `session/prompt` æ˜¯ JSON-RPC requestï¼Œä½†å½“å‰ç¨³å®šåè®®ä»æ˜¯é•¿ Turn requestï¼›ACP v2 RFD æ‰è®¡åˆ’æŠŠ Prompt Accepted ä¸ Completion è§£è€¦ | `session/update` | Prompt response / stop reason | request id + `session/load`ï¼›æ˜¯å¦å·²å¸æ”¶ Prompt ä»éœ€ Spike | å·²æœ‰ initialize capability matrixã€imageã€MCPã€model/thinking/mode configï¼›Provider Management å°šä¸åœ¨ç¨³å®šå®ç°å†…ï¼Œä»ç”± mossx Runtime Binding éš”ç¦» |
-
-#### 14.3.3 Cursor æ¨è¿›æ¡ä»¶
-
-| çŠ¶æ€ | æ¨è¿›æ¡ä»¶ | ä¸å¾—ä½¿ç”¨çš„æ›¿ä»£ä¿¡å· |
-| --- | --- | --- |
-| `pendingDelivery` å†™å…¥ | Context Package å·²ç¼–è¯‘ä¸” Tx 3 Commit | å†…å­˜ä¸­åˆšç”Ÿæˆ package |
-| `acceptedThroughSequence` | Runtime-specific Context ACK | process spawnedã€stdin write success |
-| `conversation.turnAccepted` | Runtime-specific Prompt ACKï¼Œå·²ç»æ‹¿åˆ°å¯æ¢å¤ Native Identity | first tokenï¼ˆé™¤éè¯¥ Adapter æ˜ç¡®åªæœ‰ first-event ACKï¼‰ |
-| `committedThroughSequence` | `conversation.turnCommitted` Tx 5 Commit | `run.settled` ä»…åœ¨å†…å­˜å‡ºç° |
-
-`pendingDelivery` éœ€è¦æ‰©å±•ï¼š
-
-```typescript
-interface PendingDelivery {
-  packageId: string;
-  sourceChecksum: string;
-  throughSequence: number;
-  operation: "context-import" | "prompt-send";
-  phase: "prepared" | "sent-awaiting-ack" | "accepted-awaiting-commit";
-  clientTurnId: string;
-  nativeRequestId?: string;
-  nativeSessionId?: string;
-  nativeTurnId?: string;
-  startedAt: number;
-  lastProbeAt?: number;
-  probeAttempts: number;
-}
-```
-
-#### 14.3.4 Binding Provisioning ä¹Ÿæ˜¯ Durable Operation
-
-Lazy Create Native Session ä¸æ˜¯å†…å­˜åˆå§‹åŒ–ï¼Œè€Œæ˜¯å¯èƒ½åœ¨å¤–éƒ¨ Runtime ç•™ä¸‹é•¿æœŸèº«ä»½çš„ Side Effectã€‚å®ƒå¿…é¡»ç‹¬ç«‹äº `pendingDelivery` æŒä¹…åŒ–ï¼š
-
-```typescript
-interface BindingProvisioningState {
-  operationId: string;
-  bindingKey: string;
-  target: ExecutionTarget;
-  capabilityFingerprint: string;
-  phase:
-    | "prepared"
-    | "started-awaiting-ack"
-    | "ready"
-    | "recovery-required";
-  nativeSessionId?: string;
-  nativeRequestId?: string;
-  startedAt: number;
-  lastProbeAt?: number;
-}
-```
-
-è§„åˆ™ï¼š
-
-1. è°ƒç”¨ `thread/start`ã€`session/new` æˆ–å¯åŠ¨ä¼šåˆ›å»º Session çš„è¿›ç¨‹å‰ï¼Œå…ˆåŸå­å†™å…¥ `phase = prepared`ã€‚
-2. Codex ä»¥ `thread/start` response ä¸­çš„ Thread Identity ä½œä¸ºå¼º ACKã€‚
-3. Claude ä»¥é¦–ä¸ªæºå¸¦çœŸå® Session Identity çš„åˆæ³• Runtime Event ä½œä¸º ACKï¼›Process Spawn ä¸æ˜¯ ACKã€‚
-4. Kimi ACP ä»¥ `session/new` response ä½œä¸º ACKï¼›prompt Adapter çš„ `session.resume_hint` åªèƒ½æŒ‰å®é™…åè®®èƒ½åŠ›æ ‡ä¸º weakã€‚
-5. App åœ¨å¤–éƒ¨ Session å·²åˆ›å»ºã€Identity å°šæœªè½ç›˜æ—¶å´©æºƒï¼Œé‡å¯åå¿…é¡»å…ˆæŒ‰ `operationId/nativeRequestId` Probeã€‚æ— æ³•åˆ¤å®šæ—¶è¿›å…¥ `recovery-required`ï¼Œä¸å¾—è‡ªåŠ¨åˆ›å»ºç¬¬äºŒä¸ª Bindingã€‚
-6. `BindingProvisioningState` ä¸æœ€ç»ˆ Binding éƒ½ä»¥ `Engine + Provider Profile` çš„ `bindingKey` å”¯ä¸€ï¼›åŒä¸€ Key åŒæ—¶æœ€å¤šä¸€ä¸ªæœªç»“ç®— Provisioningã€‚
-
-è¿™ä¿è¯ä¸¤ç±» Pending ä¸æ··æ·†ï¼š
-
-```text
-BindingProvisioningState
-  = â€œNative Session æ˜¯å¦å·²åˆ›å»ºå¹¶ç»‘å®šâ€
-
-PendingDelivery
-  = â€œContext/Prompt æ˜¯å¦å·²è¢«è¯¥ Binding æ¥æ”¶â€
-```
-
-#### 14.3.5 Adapter å®æ–½é¡ºåº
-
-æ¨èé¡ºåºï¼š
-
-1. Codexï¼šACK æœ€å¼ºã€å·²æœ‰ `thread/inject_items`ã€`clientUserMessageId` ä¸å®Œæ•´ Turn lifecycleã€‚
-2. Claudeï¼šå¯ç”¨ `--replay-user-messages`ï¼Œè¡¥é½æ˜ç¡® Input ACKï¼›History ä½¿ç”¨ transcript/checkpointã€‚
-3. Kimiï¼šå…ˆåš ACP Spikeï¼›è‹¥ç»§ç»­ prompt Adapterï¼Œå¿…é¡»æ˜ç¡®æ ‡è®° `ackFidelity = weak`ï¼Œä¸å‡è£… exactly-onceã€‚
-
-æ¯ä¸ª Runtime Adapter å¿…é¡»é€šè¿‡åŒä¸€ Contract Test Suiteï¼š
-
-- request accepted / rejectedï¼›
-- accepted å connection dropï¼›
-- first event å‰ crashï¼›
-- duplicate Terminalï¼›
-- Resume å Probeï¼›
-- Provider A/B ç›¸åŒ Engine å¹¶è¡Œï¼›
-- unsupported capability é™çº§ï¼›
-- schema/version å˜åŒ–ã€‚
-
-### 14.4 Event Log V2 æŒä¹…åŒ–åè®®
-
-#### 14.4.1 æ–¹æ¡ˆæ¯”è¾ƒ
-
-| æ–¹æ¡ˆ | ä¼˜ç‚¹ | ç¼ºç‚¹ | åˆ¤æ–­ |
-| --- | --- | --- | --- |
-| ç»§ç»­ JSONL | å¯è¯»ã€append ç®€å•ã€ä¸æ—§å®ç°æ¥è¿‘ | å¤šè¡¨çŠ¶æ€æ— æ³•åŸå­æäº¤ï¼›sequence/cursor/index/recovery éœ€è¦æ‰‹å†™ï¼›å°¾è¡ŒæŸåå¤„ç†å¤æ‚ | åªä¿ç•™ Legacy Reader ä¸ Export |
-| SQLite WAL | æœ¬åœ°äº‹åŠ¡ã€Unique Constraintã€Crash Recoveryã€Projection Queryã€å• writer/å¤š reader | éœ€è¦ schema migration ä¸ checkpoint ç®¡ç† | **æ¨è** |
-| ç‹¬ç«‹ EventStore/Postgres | å¤šè¿›ç¨‹ä¸åˆ†å¸ƒå¼èƒ½åŠ›å¼º | Desktop Local-first è¿‡é‡ï¼Œå¼•å…¥éƒ¨ç½²å’Œè¿ç»´å®ä½“ | YAGNI |
-
-mossx å·²ä¾èµ– `rusqlite`ï¼Œå› æ­¤é€‰æ‹© SQLite WAL ä¸å¢åŠ  Dependencyã€‚
-
-#### 14.4.2 æ¨è Schema
-
-```sql
-CREATE TABLE shared_sessions_v2 (
-  session_id TEXT PRIMARY KEY,
-  schema_version INTEGER NOT NULL,
-  next_sequence INTEGER NOT NULL,
-  selected_target_json TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
-CREATE TABLE shared_event_log (
-  session_id TEXT NOT NULL,
-  sequence INTEGER NOT NULL,
-  event_id TEXT NOT NULL,
-  fact_type TEXT NOT NULL,
-  logical_turn_id TEXT,
-  attempt_id TEXT,
-  dedupe_key TEXT,
-  payload_json TEXT NOT NULL,
-  payload_checksum TEXT NOT NULL,
-  fidelity TEXT NOT NULL,
-  committed_at INTEGER NOT NULL,
-  PRIMARY KEY (session_id, event_id),
-  UNIQUE (session_id, sequence),
-  FOREIGN KEY (session_id) REFERENCES shared_sessions_v2(session_id)
-);
-
-CREATE UNIQUE INDEX shared_event_attempt_fact
-  ON shared_event_log(session_id, attempt_id, fact_type)
-  WHERE attempt_id IS NOT NULL
-    AND fact_type <> 'conversation.usageRecorded';
-
-CREATE UNIQUE INDEX shared_event_dedupe_key
-  ON shared_event_log(session_id, fact_type, dedupe_key)
-  WHERE dedupe_key IS NOT NULL;
-
-CREATE TABLE shared_binding_state (
-  session_id TEXT NOT NULL,
-  binding_key TEXT NOT NULL,
-  engine TEXT NOT NULL,
-  provider_profile_id TEXT,
-  native_session_id TEXT,
-  accepted_through_sequence INTEGER,
-  committed_through_sequence INTEGER,
-  provisioning_json TEXT,
-  pending_delivery_json TEXT,
-  availability TEXT NOT NULL,
-  updated_at INTEGER NOT NULL,
-  PRIMARY KEY (session_id, binding_key)
-);
-
-CREATE TABLE shared_projection_checkpoint (
-  session_id TEXT NOT NULL,
-  projection_name TEXT NOT NULL,
-  projection_version INTEGER NOT NULL,
-  through_sequence INTEGER NOT NULL,
-  payload_json TEXT NOT NULL,
-  PRIMARY KEY (session_id, projection_name)
-);
-
-CREATE TABLE shared_legacy_import (
-  session_id TEXT PRIMARY KEY,
-  source_path TEXT NOT NULL,
-  source_fingerprint TEXT NOT NULL,
-  imported_through_marker TEXT,
-  status TEXT NOT NULL,
-  imported_at INTEGER
-);
-
-CREATE TABLE provider_usage_aggregate_log (
-  provider_profile_id TEXT NOT NULL,
-  report_subject_id TEXT NOT NULL,
-  revision INTEGER NOT NULL,
-  event_id TEXT NOT NULL UNIQUE,
-  window_started_at INTEGER NOT NULL,
-  window_ended_at INTEGER NOT NULL,
-  payload_json TEXT NOT NULL,
-  payload_checksum TEXT NOT NULL,
-  observed_at INTEGER NOT NULL,
-  PRIMARY KEY (
-    provider_profile_id,
-    window_started_at,
-    window_ended_at,
-    report_subject_id,
-    revision
-  )
-);
-```
-
-Schema æ˜¯ OpenSpec çš„ Logical Contractï¼›å®ç°æ—¶å…è®¸è°ƒæ•´ SQL ç»†èŠ‚ï¼Œä½†å¿…é¡»ä¿ç•™ï¼š
-
-- per-session monotonic sequenceï¼›
-- Event insert ä¸ `shared_sessions_v2.next_sequence` åˆ†é…/æ›´æ–°å¿…é¡»åœ¨åŒä¸€ SQLite transactionï¼›å• Writer Actor æ˜¯è°ƒåº¦çº¦æŸï¼Œè¿™ä¸ªäº‹åŠ¡æ˜¯ crash/concurrency ä¸‹çš„ç¬¬äºŒé“ä¿é™©ï¼›
-- event idempotencyï¼›
-- attempt/fact uniquenessï¼›Turn Usage ä¾‹å¤–ä½¿ç”¨ `dedupe_key = usageRecordId`ï¼›
-- Provider Aggregate Usage ä½¿ç”¨ç‹¬ç«‹ Ledgerï¼Œä»¥ `(provider_profile_id, window_started_at, window_ended_at, report_subject_id, revision)` å¹‚ç­‰ï¼Œä¸ä¼ªé€  `session_id`ï¼›
-- Binding Provisioningã€Cursor ä¸ pending deliveryï¼›
-- rebuildable projectionï¼›
-- explicit legacy import markerã€‚
-
-#### 14.4.3 SQLite Runtime Contract
-
-æ¨èï¼š
-
-```text
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-PRAGMA synchronous = FULL;
-PRAGMA busy_timeout = <bounded value>;
-```
-
-ç†ç”±ï¼š
-
-- Canonical Commit é¢‘ç‡æ˜¯ Turn çº§ï¼Œä¸æ˜¯ Token Delta çº§ï¼Œ`FULL` çš„ fsync æˆæœ¬å¯æ¥å—ã€‚
-- è‹¥ power loss åä¸¢å¤±æœ€è¿‘çš„ accepted cursorï¼Œå¯èƒ½é€ æˆå¤–éƒ¨ CLI é‡å¤æ³¨å…¥ï¼›è¿™é‡Œä¼˜å…ˆæ•°æ®æ­£ç¡®æ€§ã€‚
-- æ‰€æœ‰å†™å…¥é€šè¿‡ä¸€ä¸ª Rust `SharedEventWriter` ä¸²è¡Œ Actorï¼›UI/History ä½¿ç”¨ read connectionã€‚
-- WAL Checkpoint ä½¿ç”¨ SQLite é»˜è®¤ç­–ç•¥èµ·æ­¥ï¼Œç›‘æ§ WAL size åå†è°ƒï¼›ä¸é¢„å…ˆé€ å¤æ‚ schedulerã€‚
-
-ç¡¬è¾¹ç•Œï¼š
-
-- Databaseã€`-wal`ã€`-shm` æ˜¯åŒä¸€è¿è¡Œæ€å•å…ƒï¼›ç¦æ­¢åªå¤åˆ¶ä¸» DB æ–‡ä»¶å½“å¤‡ä»½ã€‚
-- ä½¿ç”¨ SQLite Backup API æˆ–å…³é—­ writer åå¯¼å‡ºã€‚
-- ä¸æŠŠ DB æ”¾åœ¨ Network Filesystemã€‚
-- ä¸å…è®¸ frontend ç›´æ¥å†™è¡¨ã€‚
-- ä¸å…è®¸ Engine Adapter è‡ªå·±åˆ†é… sequenceã€‚
-
-#### 14.4.4 Checksumã€Projection ä¸ Artifact
-
-`payload_checksum`ï¼š
-
-```text
-SHA-256(UTF-8 deterministic-json(schemaVersion + factType + payload))
-```
-
-ç”¨é€”ï¼š
-
-- æ£€æµ‹åº”ç”¨å±‚ serialization/migration é”™è¯¯ï¼›
-- éªŒè¯ Pending Package ä¸ Canonical Source æ˜¯å¦ä¸€è‡´ï¼›
-- ä¸æ›¿ä»£ SQLite page integrityï¼Œä¹Ÿä¸åœ¨ V1 å¼•å…¥ Hash Chainã€‚
-
-`deterministic-json` å¿…é¡»å›ºå®š object key orderingã€number/string encoding ä¸ null/omitted è§„åˆ™ï¼›ä¸å¾—ç›´æ¥ä¾èµ–è¯­è¨€ Map çš„è¿­ä»£é¡ºåºã€‚
-
-Projectionï¼š
-
-- UI Projectionã€Context Checkpointã€Search Index éƒ½æ˜¯å¯åˆ é™¤é‡å»ºçš„ cacheã€‚
-- Projection è®°å½• `projectionVersion + throughSequence`ã€‚
-- Renderer contract å˜åŒ–æ—¶ bump versionï¼Œåå°ä» Event Log rebuildã€‚
-- Projection rebuild ä¸ä¿®æ”¹ Canonical Entryã€‚
-
-Artifactï¼š
-
-- å¤§ Tool Outputã€Imageã€é™„ä»¶ã€Patchã€ç”Ÿæˆæ–‡ä»¶ä¿å­˜åˆ° Artifact Storeã€‚
-- Event Log åªä¿å­˜ hashã€media typeã€sizeã€relative locatorã€redaction metadataã€‚
-- Artifact å†™å…¥å¿…é¡»å…ˆè½ä¸´æ—¶æ–‡ä»¶å¹¶åŸå­ renameï¼Œå†å…è®¸ Canonical Fact å¼•ç”¨ã€‚
-- ç¼ºå¤± Artifact ä¸åˆ é™¤ Factï¼›æ ‡è®° unavailable/corruptã€‚
-
-#### 14.4.4.1 Canonical envelope åªæœ‰ä¸€ä¸ªåºåˆ—åŒ–æƒå¨
-
-`shared_event_log.fact_type` ä¸ `payload_json.type` è¡¨è¾¾åŒä¸€ä¸ª Canonical Fact discriminatorï¼Œä½†æ‰¿æ‹…ä¸åŒèŒè´£ï¼š
-
-| å­—æ®µ | èŒè´£ | çº¦æŸ |
-| --- | --- | --- |
-| `fact_type` | SQLite indexã€å¹‚ç­‰é”®ã€å…¼å®¹ decode discriminator | å¿…é¡»ç”± typed fact æ´¾ç”Ÿï¼Œä¸šåŠ¡è°ƒç”¨æ–¹ä¸å¾—å•ç‹¬æŒ‡å®šå¦ä¸€ç§ç±»å‹ |
-| `payload_json.type` | tagged enum decode ä¸è·¨å±‚ payload contract | æ–°å†™å…¥å¿…é¡»å­˜åœ¨ï¼Œå¹¶ä¸ `fact_type` å®Œå…¨ä¸€è‡´ |
-| `payload_checksum` | immutable payload å®Œæ•´æ€§ | checksum å¯¹åº”å·²è½ç›˜ payloadï¼›å…¼å®¹è¯»å–ä¸å¾—æ”¹å†™ |
-
-æ‰€æœ‰æ–° Fact å¿…é¡»é€šè¿‡ `SharedEventWriter::append_canonical_fact*` ç³»åˆ—å…¥å£å†™å…¥ã€‚éœ€è¦åŒæ—¶æ›´æ–° Binding state æ—¶ï¼Œä¹Ÿå¿…é¡»è°ƒç”¨ Writer æä¾›çš„åŸå­ç»„åˆå…¥å£ã€‚ä¸šåŠ¡æ¨¡å—ä¸å¾—æ‰‹å·¥æ„é€  `NewCanonicalEvent`ã€åˆ é™¤ tagged `type`ï¼Œæˆ–å¤åˆ¶ä¸€å¥— event idã€schema versionã€attempt identity ä¸ serialization è§„åˆ™ã€‚
-
-è¿™æ¡è¾¹ç•Œçš„åŸå› ä¸æ˜¯å‡å°‘é‡å¤ä»£ç ï¼Œè€Œæ˜¯ä¿è¯å››ä¸ªå±æ€§åŒæ—¶æˆç«‹ï¼š
-
-1. typed fact ä¸ durable row ä½¿ç”¨åŒä¸€ä¸ª discriminator
-2. Event ä¸ Binding state ä¿æŒåŒä¸€ SQLite transaction
-3. event idã€attempt id ä¸ logical turn id ä½¿ç”¨ç»Ÿä¸€æ¨å¯¼è§„åˆ™
-4. æ–° CLIã€æ–° Fact æˆ– schema version ä¸ä¼šç»•å¼€ canonical validator
-
-æ—§ç‰ˆæœ¬å¯èƒ½å·²ç»å†™å…¥ç¼ºå°‘ `payload_json.type` çš„ rowã€‚Projection å…è®¸åœ¨ decode boundary åšä»¥ä¸‹å…¼å®¹ï¼š
-
-```text
-payload æ˜¯ JSON object
-  â”œâ”€ å·²æœ‰ typeï¼šå¿…é¡»ä¸ row.fact_type ç›¸ç­‰
-  â””â”€ ç¼ºå°‘ typeï¼šä»…åœ¨å†…å­˜å‰¯æœ¬ä¸­æ³¨å…¥ row.fact_typeï¼Œå†åš typed decode
-
-payload é objectï¼Œæˆ– embedded type ä¸ row.fact_type å†²çª
-  â””â”€ typed projection errorï¼Œfail closed
-```
-
-å…¼å®¹è¯»å–ä¸å¾—æ›´æ–°æ—§ rowã€é‡ç®— checksum æˆ–ä¼ªé€  migration completionã€‚`fact_type` ä¸ payload/checksum åŒå± immutable rowï¼Œé€‚åˆä½œä¸ºç¼ºå¤± tag çš„ decode discriminatorï¼›å®ƒä¸èƒ½è¦†ç›–æ˜¾å¼å†²çªã€‚
-
-Projection error ä¸åˆæ³•ç©ºä¼šè¯æ˜¯ä¸¤ä¸ªçŠ¶æ€ï¼š
-
-- æˆåŠŸè¿”å›ç©º Projectionï¼šè¡¨ç¤ºæ–°å»ºä½†å°šæ— æ¶ˆæ¯çš„ Shared Sessionï¼Œå¯ä»¥æ ‡è®° history loaded
-- Projection error ä¸” Legacy snapshot éç©ºï¼šå…è®¸é™çº§æ˜¾ç¤º Legacy presentationï¼Œå¹¶ä¿ç•™è¯Šæ–­
-- Projection error ä¸” Legacy snapshot ä¸ºç©ºï¼šå¿…é¡»ä¼ æ’­é”™è¯¯å¹¶ä¿æŒå¯é‡è¯•ï¼Œä¸èƒ½ä¼ªè£…æˆâ€œå†å²ä¸ºç©ºâ€
-
-#### 14.4.5 Security ä¸ Privacy
-
-- DB æ–‡ä»¶æƒé™ä½¿ç”¨ `0600`ï¼Œçˆ¶ç›®å½•ä½¿ç”¨ `0700`ï¼›Windows ä½¿ç”¨ç­‰ä»· ACLã€‚
-- API Keyã€OAuth Tokenã€å®Œæ•´ envã€Authorization Header ä¸å¾—è¿›å…¥ Event Payloadã€‚
-- Provider Raw Payload è¿›å…¥ Canonical Fact å‰å¿…é¡»ç»è¿‡ allowlist normalization/redactionã€‚
-- `providerPrivateRefs` ä¿å­˜ opaque encrypted/signature block æ—¶å¿…é¡»æ ‡è®° owning Provider/Modelï¼Œä¸å…è®¸æ™®é€š Search Index æ”¶å½•ã€‚
-- Debug Export é»˜è®¤ç§»é™¤ credentialã€absolute home path ä¸ private reasoning blockã€‚
-- V1 å¤ç”¨ OS file protectionï¼Œä¸å¼•å…¥è‡ªç ” encryptionï¼›è‹¥æœªæ¥éœ€è¦ at-rest encryptionï¼Œé‡‡ç”¨å¯æ›¿æ¢ Storage Wrapper/SQLCipher ç­‰æˆç†Ÿæ–¹æ¡ˆã€‚
-
-#### 14.4.6 Compaction ä¸ Retention
-
-```text
-Canonical Event Log
-  = é»˜è®¤ä¸å›  Model Context è¶…é™è€Œåˆ é™¤
-
-Context Checkpoint
-  = å¯é‡å»ºã€å¯æ›¿æ¢ã€lossy
-
-UI Projection
-  = å¯é‡å»º cache
-```
-
-è¿™ä¸ pi çš„åŸåˆ™ä¸€è‡´ï¼šCompaction æ”¹å˜ active model pathï¼Œä¸åˆ é™¤å®Œæ•´ Session Historyã€‚
-
-ç¬¬ä¸€é˜¶æ®µä¸åš Canonical Retention/Deleteã€‚æœªæ¥è‹¥éœ€è¦ï¼š
-
-- å¿…é¡»æ˜¯æ˜¾å¼ç”¨æˆ·åŠ¨ä½œæˆ–ç‹¬ç«‹ retention policyï¼›
-- å…ˆå¯¼å‡º/å½’æ¡£ï¼Œå†å†™ tombstoneï¼›
-- ä¸å¾—è®© Context Compaction å·å·æ‰¿æ‹…æ•°æ®åˆ é™¤ã€‚
-
-#### 14.4.7 Crashã€Corruption ä¸ Migration
-
-å¯åŠ¨æ¢å¤ï¼š
-
-1. æ£€æŸ¥æœªç»“ç®— `BindingProvisioningState`ï¼Œä¼˜å…ˆæ¢å¤ Native Session Identityã€‚
-2. æ£€æŸ¥æœªç»“ç®— `pendingDelivery`ã€‚
-3. å¯¹æ¯ä¸ª Pending è°ƒç”¨ Runtime Adapter Probeã€‚
-4. è¯»å–æ²¡æœ‰ `turnCommitted` çš„ accepted attemptã€‚
-5. å°è¯•ä» Native final state è¡¥ Commitã€‚
-6. é‡å»ºè½åç‰ˆæœ¬çš„ Projectionã€‚
-
-Integrityï¼š
-
-- æ£€æµ‹åˆ° unclean shutdown æˆ– SQLite error æ—¶æ‰§è¡Œ bounded `PRAGMA quick_check`ã€‚
-- Integrity failure æ—¶è¿›å…¥ read-only recovery modeï¼Œä¸è‡ªåŠ¨åˆ›å»ºç©º DB è¦†ç›–ã€‚
-- å…è®¸ç”¨æˆ·å¯¼å‡ºå¯è¯» Event/Artifactï¼Œå¹¶ä¿ç•™æŸåæ–‡ä»¶ç”¨äºè¯Šæ–­ã€‚
-
-Legacyï¼š
-
-- `source_fingerprint = hash(path + size + mtime + stable content sample)`ã€‚
-- Import ä»¥ `(session_id, source_fingerprint)` å¹‚ç­‰ã€‚
-- æ—§ snapshot åªç”Ÿæˆ `presentation-only` Entryã€‚
-- Import å®Œæˆå†™ `shared_legacy_import.status = completed`ã€‚
-- Legacy æ–‡ä»¶ç»§ç»­åªè¯»ä¿ç•™ï¼Œç›´åˆ°ç”¨æˆ·æ˜¾å¼æ¸…ç†ã€‚
-
-#### 14.4.7.1 Shared history recovery ownership ä¸ç¨³å®šèº«ä»½
-
-Shared history loader åªèƒ½ä½¿ç”¨ä¸¤ç±»æ¥æºï¼š
-
-```text
-Canonical Shared Projection
-  â†’ Legacy Shared presentation snapshotï¼ˆä»…åœ¨å­˜åœ¨å¯å±•ç¤ºå†…å®¹æ—¶é™çº§ï¼‰
-```
-
-å®ƒä¸å¾—ç»§ç»­è°ƒç”¨ Claude/Codex/Kimi Native history resume RPCï¼Œä¹Ÿä¸å¾—è¯»å– Hidden Binding çš„ vendor history æ¥â€œè¡¥â€ Shared Canvasã€‚Native Session çš„ runtime reconnectã€rebind/fork recovery ä¸å¯¹åº”æ¢å¤å¡ç‰‡åªæœåŠ¡ Native threadã€‚
-
-Shared loader å¤±è´¥æ—¶ï¼š
-
-- ä¿æŒ `loaded = false`ï¼Œè®©åç»­é€‰æ‹©æˆ–æ˜¾å¼åˆ·æ–°å¯ä»¥é‡è¯•
-- è®°å½• Shared projection diagnostic
-- ä¸å†™å…¥ Native automatic-recovery failure scope
-- ä¸ç”Ÿæˆ Native recovery cardï¼Œä¹Ÿä¸æä¾›ä¼šæ“ä½œ Native Session çš„æ¢å¤æŒ‰é’®
-
-éšè—å¡ç‰‡åªèƒ½ä¿®æ­£ presentationï¼Œä¸èƒ½ä¿®å¤ recovery ownershipã€‚å®ç°å¿…é¡»åŒæ—¶é˜»æ­¢ Shared thread è¿›å…¥ Native recovery stateã€‚
-
-Shared identity ä½¿ç”¨ä»¥ä¸‹ç¨³å®šæ˜ å°„ï¼š
-
-```text
-durable session id = UUID
-frontend thread id = shared:<UUID>
-title = presentation metadata
-```
-
-åˆ›å»ºã€æ”¹åã€é¦–æ¡æ¶ˆæ¯æ¨å¯¼æ ‡é¢˜ã€Sidebar æ’åºæˆ–æ ‡é¢˜é‡å¤éƒ½ä¸å¾—æ”¹å˜ durable lookup keyã€Projection checkpoint keyã€loader cache scope æˆ– recovery scopeã€‚ç¦æ­¢æŒ‰æ ‡é¢˜ã€æ›´æ–°æ—¶é—´æˆ–å½“å‰ Picker åæ¨ Shared Session identityã€‚
-
-#### 14.4.8 Acceptance Tests
-
-- SQLite transaction ä»»æ„è¯­å¥å¤±è´¥æ—¶ï¼ŒEventã€Sequenceã€Cursor å…¨éƒ¨å›æ»šã€‚
-- 100 æ¬¡é‡å¤å†™åŒä¸€ event/attemptï¼Œä¸äº§ç”Ÿé‡å¤ Factã€‚
-- App åœ¨ Commit fsync å‰åè¢«å¼ºæ€ï¼Œé‡å¯ç»“æœæ»¡è¶³ all-or-nothingã€‚
-- App åœ¨ Native Session åˆ›å»ºåã€Identity Commit å‰è¢«å¼ºæ€ï¼Œä¸é‡å¤åˆ›å»ºåŒä¸€ Target Bindingã€‚
-- åˆ é™¤å…¨éƒ¨ Projection è¡¨åï¼ŒSidebar/Transcript/Context Cursor å¯é‡å»ºã€‚
-- WAL å¢é•¿å¯è§‚æµ‹ï¼›é•¿æ—¶é—´ reader ä¸å¯¼è‡´æ— ç•Œå¢é•¿è€Œæ— è¯Šæ–­ã€‚
-- Legacy Import é‡å¤è¿è¡Œç»“æœä¸€è‡´ã€‚
-- Artifact rename å‰ crash ä¸äº§ç”Ÿæ‚¬ç©ºå¯ç”¨å¼•ç”¨ï¼›rename å Event Commit å¤±è´¥å¯è¢« GC è¯†åˆ«ã€‚
-- æ–°å†™å…¥ Canonical Fact çš„ `payload_json.type` ä¸ row `fact_type` ä¸€è‡´ã€‚
-- æ—§ type-less object payload å¯é‡å»ºï¼›æ˜¾å¼ type å†²çªå’Œé object payload å¿…é¡» fail closedã€‚
-- Projection error + ç©º Legacy ä¸å¾—è¿”å›æˆåŠŸç©ºå†å²ï¼›åˆæ³•ç©º Projection å¿…é¡»æ­£å¸¸å®ŒæˆåŠ è½½ã€‚
-- Shared history failure ä¸å¾—è°ƒç”¨ Native resumeï¼Œä¸å¾—å†™ Native recovery scopeï¼Œä¹Ÿä¸å¾—æ˜¾ç¤º Native recovery cardã€‚
-- Shared title æ›´æ–°å‰åï¼Œloader ä¸ Projection å§‹ç»ˆä½¿ç”¨åŒä¸€ä¸ª `shared:<UUID>`ã€‚
-
-### 14.5 Shared Session UI çŠ¶æ€æœº
-
-#### 14.5.1 ä¸¤ä¸ª Target æ¦‚å¿µ
-
-UI å¿…é¡»åŒæ—¶è¡¨è¾¾ï¼š
-
-```text
-selectedNextTarget
-  = Composer å½“å‰é€‰æ‹©
-  = åªå½±å“ä¸‹ä¸€æ¬¡ Send
-
-activeTurnTarget
-  = TurnExecutionSnapshot
-  = å½“å‰æ‰§è¡Œä¸å†å² Attribution
-  = åˆ›å»ºåä¸å¯å˜
-```
-
-ç¦æ­¢ç”¨ Picker å½“å‰å€¼æ”¹å†™æ­£åœ¨è¿è¡Œæˆ–å·²ç»å®Œæˆçš„ Turn Badgeã€‚
-
-#### 14.5.2 çŠ¶æ€æµ
-
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle --> PreparingContext: Send
-    PreparingContext --> AwaitingAcceptance: package prepared
-    PreparingContext --> DegradedContext: lossy projection requires consent
-    PreparingContext --> TargetUnavailable: provider/runtime unavailable
-    PreparingContext --> Settling: cancel / commit cancelled
-    DegradedContext --> AwaitingAcceptance: user confirms
-    DegradedContext --> Settling: cancel / commit cancelled
-    AwaitingAcceptance --> Running: runtime ACK
-    AwaitingAcceptance --> RecoveryRequired: ACK ambiguous
-    AwaitingAcceptance --> CancelPending: user requests cancel
-    AwaitingAcceptance --> Settling: explicit rejection / commit cancelled
-    CancelPending --> Settling: cancel ACK or terminal evidence
-    CancelPending --> RecoveryRequired: cancel/acceptance ambiguous
-    CancelPending --> Running: cancel rejected, runtime accepted
-    Running --> Settling: run.settled
-    Running --> RecoveryRequired: connection lost
-    Settling --> Idle: canonical commit
-    Settling --> RecoveryRequired: commit failed
-    TargetUnavailable --> Idle: target repaired or changed
-    RecoveryRequired --> Running: probe/recover finds active run
-    RecoveryRequired --> Settling: probe finds terminal run
-    RecoveryRequired --> Settling: probe proves not accepted / commit cancelled
-    RecoveryRequired --> Settling: user abandons unresolved attempt (durable)
-    RecoveryRequired --> Settling: stop+rebuild commits replaced attempts
-    note right of RecoveryRequired
-      Stop alone stays RecoveryRequired until Probe/Rebuild/Abandon settles
-      Never jump RecoveryRequired â†’ Idle without Settling/canonical commit
-    end note
-```
-
-`PreparingContext` / `DegradedContext` çš„ cancel å‘ç”Ÿåœ¨å¤–éƒ¨ Side Effect å‰ï¼Œä½† Tx 1 å·²æœ‰ `turnRequested`ï¼Œå› æ­¤ä»ç» `Settling` å†™å…¥ `turnCommitted(cancelled)` åå›åˆ° Idleã€‚`AwaitingAcceptance` çš„ Cancel åªæ˜¯ cancel requestï¼šAdapter æ”¯æŒ `cancelPendingDelivery` æ—¶è¿›å…¥ `CancelPending`ï¼Œç›´åˆ° cancel ACKã€Terminal Evidence æˆ– Probe å®šæ€§ï¼›èƒ½åŠ›ä¸æ”¯æŒæ—¶ç¦ç”¨ Cancel å¹¶è§£é‡ŠåŸå› ã€‚ambiguous ä¸èƒ½ç›´æ¥å–æ¶ˆä¸ºæœªæŠ•é€’ã€‚
-
-Cancel intent ä¸å•ç‹¬æŒä¹…åŒ–ï¼›App åœ¨ `CancelPending` å´©æºƒåç”± `pendingDelivery + Probe` æ¢å¤å®šæ€§ï¼Œä¸äº§ç”Ÿç¬¬äºŒæ¡ Side Effectã€‚
-
-**æ ¡å‡†ï¼ˆÂ§14.5.7ï¼‰**ï¼š`RecoveryRequired` çš„æˆåŠŸè§£é” **å¿…é¡»** ç» `Settling`ï¼ˆæˆ– reattach å› `Running`ï¼‰ï¼Œ**ç¦æ­¢** å‰ç«¯ç›´æ¥ `RecoveryRequired â†’ Idle`ã€‚Stop è‹¥åªé‡Šæ”¾ Runtime ownership è€Œæœª durable ç»“ç®— attemptï¼ŒçŠ¶æ€ **ä»åœåœ¨** `RecoveryRequired`ã€‚
-
-#### 14.5.3 UI Contract
-
-| çŠ¶æ€ | ä¸»å±•ç¤º | Picker | Composer | ç”¨æˆ·åŠ¨ä½œ |
-| --- | --- | --- | --- | --- |
-| `idle` | `Shared Â· Engine/Provider/Model` | å¯ç”¨ | å¯å‘é€ | é€‰æ‹© Next Target |
-| `preparing-context` | â€œæ­£åœ¨ä¸º Codex/OpenAI å‡†å¤‡ä¸Šä¸‹æ–‡â€ + source range | V1 é”å®š | é”å®š | Cancel |
-| `degraded-context` | æ˜ç¡®åˆ—å‡º omissionsã€modeã€estimated tokens | é”å®š | é”å®š | æŸ¥çœ‹è¯¦æƒ…ã€ç»§ç»­ã€å–æ¶ˆ |
-| `awaiting-acceptance` | â€œæ­£åœ¨äº¤ä»˜ï¼Œå°šæœªç¡®è®¤æ¥æ”¶â€ | é”å®š | é”å®š | capability æ”¯æŒæ—¶ Cancelï¼›ä¸å±•ç¤ºæ™®é€š Retry |
-| `cancel-pending` | â€œæ­£åœ¨ç¡®è®¤å–æ¶ˆç»“æœâ€ + pending phase | é”å®š | é”å®š | Probeï¼›ä¸å±•ç¤ºæ™®é€š Retry |
-| `running` | Assistant Placeholder å›ºå®šæ˜¾ç¤º Active Target | V1 é”å®š | Stop/Steer æŒ‰ capability | Stop |
-| `settling` | â€œæ­£åœ¨ä¿å­˜ç»“æœâ€ | é”å®š | é”å®š | æ— ï¼›çŸ­æ—¶çŠ¶æ€ |
-| `recovery-required` | Shared çŠ¶æ€æ¡ï¼šPending phaseã€Targetã€last probe | é”å®š | é”å®š | **è§ Â§14.5.7**ï¼šProbeã€Stopã€Stopå¹¶é‡å»º Bindingã€durable æ”¾å¼ƒæœ¬è½®ã€æŸ¥çœ‹æŠ€æœ¯è¯¦æƒ…ï¼ˆç¬¬ä¸€é˜¶æ®µæ›¾ä»…å†™ Probe+é‡å»ºï¼Œå‡ºå£è¿‡çª„ï¼‰ |
-| `target-unavailable` | Provider/Runtime unavailable åŸå›  | å¯æ›´æ¢ | Send disabled | ä¿®å¤é…ç½®ã€é€‰æ‹©å…¶ä»– Targetï¼›**ä¸å¾—**æŠ¬å‡ä¸º recovery-requiredï¼ˆæ—  unresolved attempt æ—¶ï¼‰ |
-
-ç¬¬ä¸€é˜¶æ®µ Picker åœ¨é Idle çŠ¶æ€é”å®šã€‚åç»­è‹¥éœ€è¦â€œè¿è¡Œä¸­é¢„é€‰ Next Targetâ€ï¼Œå¿…é¡»å¢åŠ ç‹¬ç«‹ Queue contractï¼Œä¸èƒ½è®©ä¸€ä¸ª Picker åŒæ—¶è¡¨ç¤º Active ä¸ Nextã€‚
-
-ç¬¬ä¸€é˜¶æ®µ `recovery-required` é”å®šæ•´ä¸ª Shared Session Composerï¼Œä¸åªé”å½“å‰ Bindingã€‚åŸå› æ˜¯ Shared Canonical Thread é‡‡ç”¨ä¸¥æ ¼çº¿æ€§é¡ºåºï¼šambiguous Turn å¯èƒ½åœ¨è¿Ÿåˆ° ACK åæˆä¸ºæœ‰æ•ˆå†å²ï¼›è‹¥å…ˆæ”¾è¡Œå…¶ä»– Targetï¼Œæ–° Turn çš„ Context boundary ä¸æœ€ç»ˆ sequence éƒ½ä¼šå¤±å»ç¡®å®šæ€§ã€‚æœªæ¥è‹¥è¦æŒ‰ Binding æ”¾è¡Œï¼Œå¿…é¡»å…ˆå¼•å…¥æ˜¾å¼ Queue/Branch ordering contractã€‚
-
-#### 14.5.4 Turn ä¸ Sidebar Attribution
-
-Sidebarï¼š
-
-```text
-Shared Â· å½“å‰ Next Target
-```
-
-Transcriptï¼š
-
-```text
-User Turn
-Assistant Â· Codex / OpenAI / gpt-*     Completed
-Assistant Â· Claude / OpenRouter / ...  Failed
-```
-
-è§„åˆ™ï¼š
-
-- Badge è¯»å– `TurnExecutionSnapshot`ã€‚
-- Provider è¢«åˆ é™¤åæ˜¾ç¤º Name Snapshot + unavailableã€‚
-- `preparing-context` ä¸åˆ›å»ºç¬¬äºŒæ¡ Sidebar Sessionã€‚
-- Hidden Binding é‡å»ºä¸æ˜¾ç¤º Native Childã€‚
-- Subagent ç»§ç»­ä½¿ç”¨ Parent Treeï¼›Shared internal recovery ä¸å¾—æ˜¾ç¤ºæˆ Subagentã€‚
-
-#### 14.5.5 Retryã€Regenerate ä¸ Rebuild
-
-ä¸šå†… Copilot å…è®¸åŒä¸€ Chat ç”¨å…¶ä»– Model Regenerateã€‚mossx éœ€è¦ä¿ç•™å®¡è®¡æ€§ï¼š
-
-- ACK æ˜ç¡®å¤±è´¥ï¼šå¯ä»¥ç”¨åŒä¸€ Target åˆ›å»ºæ–° `attemptId`ã€‚
-- ACK ä¸ç¡®å®šï¼šå¿…é¡»å…ˆ Probeï¼Œç¦æ­¢ç›´æ¥ Retryã€‚
-- â€œä½¿ç”¨å…¶ä»– Target é‡è¯•â€ï¼šåˆ›å»ºæ–° Turn Attemptï¼Œå¹¶å†™ `retryOfAttemptId`ï¼›ä¸ä¿®æ”¹åŸ Snapshotã€‚
-- å·²å®Œæˆå›ç­”çš„ Regenerateï¼šä¿ç•™æ—§å›ç­”ï¼Œåˆ›å»ºæ–° Attempt/Variantï¼›ç¬¬ä¸€é˜¶æ®µå¯ä»¥åªåœ¨è¯¦æƒ…ä¸­å±•ç¤ºæ—§ Variantã€‚
-- â€œé‡å»º Bindingâ€ï¼šå½’æ¡£æ—§ Binding metadataï¼Œåˆ›å»ºæ–° Native Sessionï¼›Shared Session Identity ä¸å˜ã€‚
-  **å‰ç½®ä¸å‡ºå£è§ Â§14.5.7.3**ï¼šRuntime ä» own å¯¹åº” attempt æ—¶ä¸å¾—æˆåŠŸ Rebuildï¼›é¡»å…ˆ Stop/é‡Šæ”¾æˆ–å…ˆ commit settled terminalã€‚
-- Provider failover å¿…é¡»ç”±ç”¨æˆ·æ˜¾å¼é€‰æ‹©ï¼Œä¸è‡ªåŠ¨æ‰§è¡Œã€‚
-- Rebuild **ä¸æ˜¯** Abandon çš„åŒä¹‰è¯ï¼šRebuild æ¢ Hidden Native Sessionï¼›Abandon åªç»“ç®—æœªå†³ Turn Attemptï¼ˆè§ Â§14.5.7.4ï¼‰ã€‚
-
-#### 14.5.6 UX Acceptance Tests
-
-- Picker åœ¨ Send åå˜åŒ–ä¸ä¼šæ”¹å˜ Active Turn Badgeã€‚
-- Context é™çº§æœªç»ç¡®è®¤ä¸èƒ½å‘é€ã€‚
-- ACK ambiguous æ—¶ UI ä¸å‡ºç°â€œä¸€é”®é‡å‘â€ã€‚
-- ACK ambiguous æ—¶æ•´ä¸ª Shared Session ä¸æ¥å—ä¸‹ä¸€ Turnï¼Œå³ä½¿ç”¨æˆ·åˆ‡æ¢åˆ°å…¶ä»– Targetã€‚
-- App é‡å¯åæ¢å¤åˆ° `running` / `settling` / `recovery-required`ï¼Œè€Œä¸æ˜¯ä¸€å¾‹ `idle`ã€‚
-- Provider åˆ é™¤åå†å² Badge ä»å¯è§£é‡Šã€‚
-- Hidden Binding é‡å»ºå‰å Sidebar å§‹ç»ˆåªæœ‰ä¸€ä¸ª Shared Rowã€‚
-- Retry åˆ°å…¶ä»– Target åï¼ŒåŸå¤±è´¥ Attempt ä¸æ–° Attempt éƒ½å¯å®¡è®¡ã€‚
-
-#### 14.5.7 Recovery Exit Closureï¼ˆ2026-08-04 è®¾è®¡è¡¥ä¸ Â· åŒæ—¥æ ¡å‡†ï¼‰
-
-> **è§¦å‘**ï¼šç¤¾åŒºåé¦ˆ Shared åˆ‡æ¢/å¤±è´¥åæ•´ä¼šè¯é”æ­»ï¼›ç‚¹ã€Œé‡å»ºä¼šè¯è¿æ¥ã€å¾ªç¯æç¤ºã€Œéœ€è¦æ¢å¤ã€ï¼Œåç«¯è¿”å›
-> `recovery-active: attempt â€¦ is still owned by Runtime; Probe/Stop before rebuild`ã€‚
-> **å…³è”å®æ–½ plan**ï¼š[`docs/plans/2026-08-04-shared-session-recovery-exit-closure.md`](../plans/2026-08-04-shared-session-recovery-exit-closure.md)ã€‚
-> **å¹³å°**ï¼šè·¨å¹³å°å¥‘çº¦ï¼ˆmacOS / Linux / Windows åŒä¸€çŠ¶æ€æœºï¼‰ï¼›é Win-onlyã€‚
-> **æ ¡å‡†åŸåˆ™**ï¼š**ä¸æ¨ç¿»** Â§14.5.1â€“14.5.6 ä¸çº¢çº¿ 27/40ï¼›åª **æ”¶çª„ç¼ºå£ã€å¯¹é½æœ¯è¯­ã€é’‰æ­»è¿Ÿåˆ°è¯æ®ä¸çŠ¶æ€è¾¹**ã€‚
-
-##### 14.5.7.0 è®¾è®¡ vs å®ç°ç¼ºå£åˆ¤å®š
-
-| è®®é¢˜ | åŸºçŸ³åŸæ–‡æ˜¯å¦è¦†ç›– | åˆ¤å®š | è¯´æ˜ |
-| ------ | ------------------ | ------ | ------ |
-| `recovery-required` é”æ•´ä¼šè¯ | Â§14.5.3 / Â§8.4 å·²å†™ | **è®¾è®¡å·²æœ‰ Â· ä¿ç•™** | çº¿æ€§é¡ºåºåˆåŒï¼›ambiguous ä¸å¾—æ”¾è¡Œå…¶ä»– Target |
-| `target-unavailable` å¯æ¢ Pickerã€Send disabled | Â§14.5.3 / Â§8.4 å·²å†™ | **è®¾è®¡å·²æœ‰** | ä¸ recovery **åˆ†æ€** |
-| çº¯ target ä¸å¯ç”¨å´è¿›å…¥ recovery é”æ­» | è®¾è®¡è¦æ±‚åˆ†æ€ | **å®ç°é—æ¼ / åˆ†ç±»åå·®** | è‹¥å¤ç°ï¼ŒæŒ‰ Â§14.5.2 è¾¹ä¸ Â§8.4 çº åï¼Œä¸å¾—ç”¨ recovery é¡¶æ›¿ unavailable |
-| ACK ambiguous â†’ å…ˆ Probeã€ç¦ blind retry | Â§14.5.5 / çº¢çº¿ 27 å·²å†™ | **è®¾è®¡å·²æœ‰ Â· å®ç°å¤§ä½“å¯¹é½** | UI å·²æœ‰ã€Œæ£€æŸ¥çŠ¶æ€ã€ |
-| æ˜¾å¼é‡å»º Bindingï¼ˆidentity ä¸å˜ï¼‰ | Â§14.5.5 å·²å†™ | **è®¾è®¡å·²æœ‰ Â· å®ç°å·²æœ‰å‘½ä»¤** | `shared_session_v2_rebuild_binding` |
-| Rebuild å‰ Runtime ä» own attempt å¿…é¡»å…ˆ Stop/é‡Šæ”¾ | **åŸæ–‡æœªå†™æ¸…** | **è®¾è®¡ç¼ºå¤±ï¼ˆæœ¬è¡¥ä¸è¡¥é½ï¼‰** | ä»£ç  fail-closed æ‹’ç» rebuild æ˜¯æ­£ç¡®å®‰å…¨é»˜è®¤ï¼›ä½† UI å‡ºå£æœªè®¾è®¡ |
-| `recovery-required` ä¸‹ç”¨æˆ·åŠ¨ä½œä»… Probe + é‡å»º | Â§14.5.3 åŠ¨ä½œåˆ— | **è®¾è®¡è¿‡çª„ï¼ˆæœ¬è¡¥ä¸æ‰©å±•ï¼‰** | ç¼º Stopã€ç¼º durable æ”¾å¼ƒæœ¬è½®ï¼›ä¸ impact reportã€Œæ— æ”¾å¼ƒ operation ç®¡ç†é¢ã€ä¸€è‡´ |
-| Probe å disposition â†’ Running / Settling | Â§14.5.2 çŠ¶æ€å›¾å·²å†™ | **è®¾è®¡å·²æœ‰** | active reattach / terminal / not-accepted |
-| ç”¨æˆ·æ˜¾å¼ã€Œæ”¾å¼ƒæœ¬è½®ã€â†’ Idle ä¸” durable | **åŸæ–‡æœªå†™** | **è®¾è®¡ç¼ºå¤±ï¼ˆæœ¬è¡¥ä¸è¡¥é½ï¼‰** | å¦åˆ™ unknown / interrupt å¤±è´¥ä¼šæ°¸ä¹…ç§¯å‹é”æ­» |
-| Fail-closed å¿…é¡»é…å¥—**å¯å®Œæˆå‡ºå£** | åˆ†æ•£åœ¨å¤šå¤„ fail-closed å¥ | **åŸåˆ™è¡¥ä¸** | ã€Œå¯å®Œæˆå‡ºå£ã€â‰  fail-openï¼›ä» fail-closedï¼Œä½†æ¯æ¡é”å¿…é¡»æœ‰åˆæ³•ç»ˆæ€è·¯å¾„ |
-| è¿Ÿåˆ° ACK / è¿Ÿåˆ° terminal åœ¨ AbandonÂ·Rebuild ä¹‹å | **åŸæ–‡æœªå†™æ¸…** | **è®¾è®¡ç¼ºå£ï¼ˆÂ§14.5.7.5 æ ¡å‡†ï¼‰** | å¿…é¡»å¸æ”¶/å¿½ç•¥ï¼Œä¸å¾—å¤æ´» Turn æˆ–äºŒæ¬¡æŠ•é€’ |
-| attempt-owner vs binding-owner | å®ç°æœ‰ `findRecoveryOwner` | **è®¾è®¡éœ€æ˜¾å¼åŒ–ï¼ˆÂ§14.5.7.1ï¼‰** | åŠ¨ä½œéš owner ç§ç±»å¯ç”¨ |
-
-**ä¸€å¥è¯**ï¼šåŸºçŸ³æŠŠ **ã€Œä¸ºä½•é”ã€ä¸ã€Œç¦ä»€ä¹ˆã€** å†™æ¸…äº†ï¼›æŠŠ **ã€Œå¦‚ä½•åœ¨æœ‰é™æ­¥å†…åˆæ³•è§£é”ã€** å†™çª„äº†ã€‚  
-æœ¬è¡¥ä¸ **ä¸æ¨ç¿»** çº¿æ€§é”ä¸ç¦ blind retryï¼Œåªè¡¥ **Recovery Exit Ladder**ï¼Œå¹¶æ ¡å‡†æœ¯è¯­/çŠ¶æ€è¾¹/è¿Ÿåˆ°è¯æ®ã€‚
-
-##### 14.5.7.1 æœ¯è¯­ä¸ Owner æ ¡å‡†ï¼ˆç¦æ­¢æ··ç”¨ï¼‰
-
-| æœ¯è¯­ | å«ä¹‰ | å…¸å‹å‘½ä»¤ / è·¯å¾„ | æ˜¯å¦æ”¹ Runtime | æ˜¯å¦å†™ Canonical |
-| ------ | ------ | ----------------- | ---------------- | ------------------ |
-| **Probe Binding** | åªè¯»è¯»å– durable + runtime å¥åº·å¿«ç…§ | `shared_session_v2_probe_binding` | å¦ | å¦ |
-| **Recover Attempt** | æŒ‰ disposition æ¥å› active æˆ–æäº¤ terminal/not-accepted | `shared_session_v2_recover_attempt` | å¯ reattach observer | å¯ commit |
-| **Stop / Interrupt** | å¯¹ **å·²è·¯ç”±çš„ owner attempt** å‘ interrupt | `shared_session_v2_interrupt_turn` | æ˜¯ï¼ˆåœ native turnï¼‰ | ä¸å•ç‹¬ç­‰äº terminalï¼›åç»­ä»è¦ Probe/Recover/Abandon ç»“ç®— |
-| **CancelPending** | ACK å‰ cancel requestï¼ˆÂ§14.5.2ï¼‰ | Adapter `cancelPendingDelivery` | ä¾ capability | æœ€ç»ˆä»ç» Settling |
-| **Rebuild Binding** | å½’æ¡£ Hidden Binding + æ–° provisioning | `shared_session_v2_rebuild_binding` | æ¢ native session | æ˜¯ï¼ˆarchive + replaced attemptsï¼‰ |
-| **Abandon Turn** | ç”¨æˆ·æ˜¾å¼ç»“ç®—æœªå†³ attempt ä¸º cancelled/not-accepted | æ‹Ÿ `abandon_unresolved_attempt` æˆ–ç­‰ä»·ç»„åˆ | å¯ best-effort interrupt | **å¿…é¡»** durable terminal |
-
-UI æ–‡æ¡ˆã€Œæ£€æŸ¥çŠ¶æ€ã€= Probe Binding Â± å¿…è¦æ—¶ Recover Attemptï¼ˆç”¨æˆ·ä»æ„ŸçŸ¥ä¸ºä¸€æ­¥ã€Œæ£€æŸ¥ã€ï¼›å®¡è®¡æ—¥å¿—é¡»åŒºåˆ†ï¼‰ã€‚  
-**ç¦æ­¢** æŠŠ Rebuild è¯´æˆã€Œè§£é”ã€ã€æŠŠ Abandon è¯´æˆã€Œé‡å»ºã€ã€æŠŠ Stop è¯´æˆã€Œå–æ¶ˆå¹¶å› idleã€ã€‚
-
-**Recovery Owner ä¸¤ç§ï¼ˆä¸å®ç° `findRecoveryOwner` å¯¹é½ï¼‰ï¼š**
-
-| Owner kind | å«ä¹‰ | ä¼˜å…ˆåŠ¨ä½œ |
-| ------------ | ------ | ---------- |
-| `attempt` | å­˜åœ¨ in-flight / unresolved attempt | Probe/Recover â†’ Stopï¼ˆè‹¥ active/ownï¼‰â†’ Abandon æˆ–ï¼ˆé‡Šæ”¾åï¼‰Rebuild |
-| `binding` | æ—  in-flight attemptï¼Œä½† Binding `provisioningState=recovery-required` | Probe â†’ æ¡ä»¶æ»¡è¶³å **Rebuild**ï¼›Abandon ä¸é€‚ç”¨æˆ– no-op |
-| `clear` | æ— å¯æ¢å¤ owner | ç›´æ¥ Settlingâ†’Idleï¼ˆè§£é”ï¼‰ |
-| `ambiguous` | å¤š attempt / å¤š recovery binding | fail closedï¼›å±•ç¤ºæŠ€æœ¯è¯¦æƒ…ï¼›ç¦æ­¢ä¸€é”® Abandon/Rebuild å…¨éƒ¨ |
-
-##### 14.5.7.2 å¤±è´¥åˆ†ç±»é“å¾‹ï¼ˆçº åå£å¾„ï¼‰
-
-è¿›å…¥ `recovery-required` **ä»…å½“**å­˜åœ¨æœªå†³çš„ delivery/attempt **æˆ–** binding provisioning æœªå†³é£é™©ï¼ˆACK ambiguousã€cancel ambiguousã€connection lost ä¸”å¯èƒ½å·² acceptedã€commit failed ä¸”å¯èƒ½å·² acceptedã€binding identity ACK ä¸ç¡®å®šç­‰ï¼‰ã€‚
-
-**ä¸å¾—**ä»…å› ä¸‹åˆ—åŸå› è¿›å…¥ `recovery-required`ï¼š
-
-- Provider / Model é…ç½®ä¸å¯ç”¨ã€catalog æ‹’ç»ã€runtime æ˜ç¡® missingï¼ˆ**ä¸”**æ—  unresolved attempt / æ—  recovery bindingï¼‰â†’ **`target-unavailable`**
-- ç½‘å…³/daemon å…¨å±€ä¸å¯è¾¾ä¸”æ—  in-flight Shared attempt â†’ **å…¨å±€è¿é€šæ€§æç¤º**ï¼›ä¸é” Shared recovery
-- `prepare_context` åªè¯»å¤±è´¥ä¸”æ—  durable pending â†’ å› idle æˆ– failed attempt ç»“ç®—ï¼Œä¸æŠ¬å‡ä¸º recovery é”
-
-åˆ‡æ¢ Target æ—¶ï¼šè‹¥ç›®æ ‡ä¸å¯ç”¨ä½† **å°šæœª** ç•™ä¸‹ unresolved attemptï¼Œå¿…é¡»åœåœ¨ `target-unavailable` æˆ– idle å‰æ ¡éªŒå¤±è´¥ï¼Œ**ç¦æ­¢**ä¼ªè£…æˆã€Œéœ€è¦æ¢å¤ã€ã€‚
-
-**æ ¡å‡†**ï¼šç”¨æˆ·å£è¯­ã€Œåˆ‡æ¢å¤±è´¥é”æ­»ã€åœ¨å·¥ç¨‹ä¸Šè¦æ‹†æˆä¸¤é—®â€”â€”(1) æ˜¯å¦å·²æœ‰ unresolved attemptï¼Ÿ(2) è¿˜æ˜¯çº¯ target ä¸å¯ç”¨ï¼Ÿå‰è€…é” recovery æ˜¯åˆåŒï¼›åè€…é” recovery æ˜¯ **å®ç°åå·®**ã€‚
-
-##### 14.5.7.3 Recovery Exit Ladderï¼ˆç”¨æˆ·åŠ¨ä½œåˆåŒï¼‰
-
-æ¨èç”¨æˆ·å¿ƒæ™ºé¡ºåºï¼ˆ**ä¸æ˜¯**å¼ºåˆ¶çŠ¶æ€æœºåªèƒ½ä¸²è¡Œï¼‰ï¼š
-
-```text
-1. æ£€æŸ¥çŠ¶æ€ (Probe Â± Recover)
-2. è‹¥ä» own / active â†’ åœæ­¢æŠ•é€’ (Stop/Interrupt)
-3. ç»‘å®šæŸåæˆ–éœ€æ¢ Native â†’ é‡å»ºè¿æ¥ (Rebuildï¼›own æ—¶ UI å‘ˆç°ã€Œåœæ­¢å¹¶é‡å»ºã€)
-4. ä»æ— æ³•å®šæ€§ / ç”¨æˆ·ä¸è¦è¯¥ Turn â†’ æ”¾å¼ƒæœ¬è½® (Abandonï¼Œç¡®è®¤æ¡†)
-```
-
-| åŠ¨ä½œ | è¯­ä¹‰ | durable / runtime | æˆåŠŸå UI çŠ¶æ€ | å¤±è´¥å |
-| ------ | ------ | ------------------- | --------------- | -------- |
-| **æ£€æŸ¥çŠ¶æ€** | Probeï¼›å¿…è¦æ—¶ Recover | è§æœ¯è¯­è¡¨ | activeâ†’`running`ï¼›terminal/not-acceptedâ†’`settling`â†’`idle`ï¼›clearâ†’`idle`ï¼›unknownâ†’held ä» `recovery-required` | held + åŸå› ï¼›**ä¸**è‡ªåŠ¨ Rebuild |
-| **åœæ­¢æŠ•é€’** | interrupt å½“å‰ attempt owner | é‡Šæ”¾ `owns_attempt`ï¼›**ä¸**è‡ªåŠ¨ç­‰äº Turn å·² cancelled | **ä»ä¸º** `recovery-required`ï¼ˆç›´åˆ° Probe/Abandon/Rebuild ç»“ç®—ï¼‰ | ä¿æŒ recoveryï¼›å±•ç¤º interrupt å¤±è´¥ï¼›å¼•å¯¼ Abandon |
-| **é‡å»ºè¿æ¥** | æ¡ä»¶æ»¡è¶³å `rebuild_binding` | archive binding + replace attempts | ç» `settling`â†’`idle`ï¼›Shared identity ä¸å˜ | `recovery-active`â†’å¯æ“ä½œé”™è¯¯ï¼›ambiguousâ†’fail closed |
-| **æ”¾å¼ƒæœ¬è½®** | durable ç»“ç®— attempt | cancel/not-accepted commit + remove ownership | `settling`â†’`idle`ï¼›é‡å¯ä¸å¤æ´» | ambiguousâ†’fail closedï¼›**accepted+active** é¡»å¼ºè­¦å‘Š |
-
-**å‰ç«¯çŠ¶æ€æœºæ ¡å‡†ï¼ˆå®ç°çº¦æŸï¼Œä¸æ‰©ä¹æ€ï¼‰ï¼š**
-
-- **ä¸æ–°å¢** SharedSend çŠ¶æ€æšä¸¾ã€‚
-- Abandon / Rebuild æˆåŠŸæ˜ å°„åˆ°æ—¢æœ‰äº‹ä»¶ï¼š`commitCancelled` / `probeNotAccepted` / `probeTerminalRun` + `canonicalCommitted` / `terminalCommitted` ç­‰ï¼ˆä¸ç°è¡Œ `sendStateMachine` è¾¹å…¼å®¹ï¼‰ã€‚
-- Stop æˆåŠŸ **ä¸** å•ç‹¬æ–°å¢çŠ¶æ€ï¼›å¯ç”¨ detail/flag è®°å½• `runtimeReleased` ä»¥å¯ç”¨ Rebuild æ–‡æ¡ˆï¼ŒçŠ¶æ€åä»æ˜¯ `recovery-required`ã€‚
-
-**Disposition â†’ æŒ‰é’®å¯ç”¨ï¼ˆæ ¡å‡†çŸ©é˜µï¼‰ï¼š**
-
-| æœ€è¿‘ disposition / owner | æ£€æŸ¥ | åœæ­¢ | é‡å»º | æ”¾å¼ƒæœ¬è½® |
-| -------------------------- | ------ | ------ | ------ | ---------- |
-| `clear` | âœ“ï¼ˆåº”å˜ idleï¼‰ | â€” | â€” | â€” |
-| `not-accepted` / terminal å¯ commit | âœ“ | â€” | å¯é€‰ | âœ“ï¼ˆè‹¥ä»æœª commitï¼‰ |
-| `active` ä¸” owns | âœ“ | âœ“ï¼ˆcapabilityï¼‰ | âœ“ ä»…ä½œã€Œåœæ­¢å¹¶é‡å»ºã€ | âœ“ å¼ºè­¦å‘Š |
-| `unknown` / held | âœ“ | âœ“ best-effort | ç¦ç”¨æˆ–é™çº§ä¸ºã€Œåœæ­¢å¹¶é‡å»ºã€ | âœ“ ä¸»å‡ºå£ |
-| binding-only recovery | âœ“ | â€” | âœ“ ä¸»å‡ºå£ | â€” |
-| `ambiguous` | âœ“ | ç¦ç”¨æ‰¹é‡ | ç¦ç”¨æ‰¹é‡ | ç¦ç”¨æ‰¹é‡ |
-| interrupt capability = none | âœ“ | ç¦ç”¨å¹¶è¯´æ˜ | ç¦ç”¨ç›´æ¥é‡å»ºè‹¥ä» own | âœ“ ä¸»å‡ºå£ |
-
-##### 14.5.7.4 Rebuild å‰ç½®æ¡ä»¶ï¼ˆè§„èŒƒæ€§ï¼‰
-
-`rebuild_binding` å…è®¸æ‰§è¡Œï¼Œå½“ä¸”ä»…å½“å¯¹è¯¥ `bindingKey`ï¼š
-
-1. unresolved attempts â‰¤ 1ï¼ˆ>1 â†’ `recovery-owner-ambiguous`ï¼Œfail closedï¼‰ï¼›ä¸”  
-2. è‹¥å­˜åœ¨ attemptï¼šRuntime **ä¸å†** `owns_attempt`ï¼Œæˆ–å·²æœ‰ settled terminal å¯å…ˆ commitï¼›ä¸”  
-3. ç”¨æˆ·æ„å›¾ä¸º **æ˜¾å¼é‡å»º**ï¼ˆéè‡ªåŠ¨ï¼‰ã€‚
-
-è‹¥ (2) ä¸æ»¡è¶³ï¼šè¿”å›ç»“æ„åŒ–é”™è¯¯ `code=recovery-active`ï¼Œ`hint=stop-before-rebuild`ï¼›  
-UI **å¿…é¡»**æ˜ å°„ä¸ºå¯æ“ä½œæ­¥éª¤ï¼ˆå…ˆ Stop / åœæ­¢å¹¶é‡å»ºï¼‰ï¼Œä¸å¾—åªå¾ªç¯å±•ç¤ºã€Œéœ€è¦æ¢å¤ã€æ ‡é¢˜ã€‚
-
-**ä½•æ—¶éœ€è¦ Rebuild vs åªéœ€ Abandonï¼š**
-
-| æƒ…å†µ | ä¼˜å…ˆ |
-| ------ | ------ |
-| attempt æœªå†³ï¼ŒBinding ä» readyã€Native å¥åº· | **Abandon æˆ– Probe ç»“ç®—**ï¼›ä¸å¿… Rebuild |
-| Binding provisioning æŸå / Native identity ä¸å¯ç”¨ / éœ€æ–° Native Session | **Rebuild**ï¼ˆå…ˆæ»¡è¶³å‰ç½®ï¼‰ |
-| Runtime zombie own ä¸” interrupt å¤±è´¥ | Abandon durable ç»“ç®— + è§†æƒ…å†µå† Rebuild |
-
-Rebuild å®ç°å¯å¯¹ç”¨æˆ·å‘ˆç°ã€Œåœæ­¢å¹¶é‡å»ºã€ï¼ˆç­–ç•¥ Bï¼‰ï¼Œå®¡è®¡é¡»èƒ½åŒºåˆ† Stop ä¸ Rebuild ä¸¤æ­¥ã€‚
-
-##### 14.5.7.5 Abandon è§„èŒƒæ€§ä¸è¿Ÿåˆ°è¯æ®
-
-Abandon æ˜¯ **ç”¨æˆ·æ˜¾å¼ã€å¯å®¡è®¡çš„ Terminal è·¯å¾„**ï¼Œä¸æ˜¯ Retryï¼Œä¹Ÿä¸æ˜¯ Rebuildï¼š
-
-- è¾“å…¥ï¼š`sharedSessionId` + owner `attemptId`ï¼ˆæˆ–å¯å”¯ä¸€æ¨å¯¼çš„ binding+å• attemptï¼‰
-- è¾“å‡ºï¼šcanonical cancelled / not-accepted commit + attempt ä» Runtime coordinator ç§»é™¤
-- å¹‚ç­‰ï¼šåŒä¸€ attempt é‡å¤ Abandon ä¸äº§ç”Ÿç¬¬äºŒå¥—çŸ›ç›¾ terminal
-- ä¸ CancelPendingï¼šè‹¥ä»åœ¨ pre-accept ä¸” Adapter æ”¯æŒ cancel ACKï¼Œ**ä¼˜å…ˆ**æ—¢æœ‰ cancel è·¯å¾„ï¼›Abandon ç”¨äº cancel ä¸å¯ç”¨ã€Probe unknownã€interrupt å¤±è´¥ã€æˆ–ç”¨æˆ·æ˜ç¡®æ”¾å¼ƒ
-- App é‡å¯ï¼šä»…å½“ durable ä»å­˜åœ¨ unresolved evidence æ—¶æ¢å¤ `recovery-required`ï¼›Abandon æˆåŠŸåé‡å¯å¿…é¡»ä¸ºå¯å‘é€ `idle`ï¼ˆæˆ–ç­‰ä»·éé”æ€ï¼‰
-
-**è¿Ÿåˆ°è¯æ®ï¼ˆæ ¡å‡† Â· å¿…é¡»å®ç°ï¼‰ï¼š**
-
-| æ—¶åº | è§„åˆ™ |
-| ------ | ------ |
-| Abandon commit æˆåŠŸåï¼Œè¿Ÿåˆ°çš„ runtime ACK / terminal / tool äº‹ä»¶åˆ°è¾¾ | **ä¸å¾—** å†åˆ›å»ºæ–° user turn æˆ–ç¬¬äºŒæ¬¡ `turnCommitted` æˆåŠŸæ€ï¼›è®° diagnostic / å¸æ”¶ä¸º late observationï¼›UI ä¸å›åˆ° recovery é”æ­»åŒä¸€ attempt |
-| Rebuild æˆåŠŸåï¼Œæ—§ native session è¿Ÿåˆ°äº‹ä»¶ | æŒ‰ archived binding ä¸¢å¼ƒæˆ–åªè¯»è¯Šæ–­ï¼›**ä¸å¾—** å†™å…¥æ–° binding çš„ live turn |
-| Stop æˆåŠŸä½†å°šæœª Abandon/Rebuildï¼Œè¿Ÿåˆ° terminal | Probe/Recover åº”èƒ½ç»“ç®—ä¸º terminal â†’ Settlingï¼ˆä¼˜äºå¼ºè¿«ç”¨æˆ· Abandonï¼‰ |
-
-##### 14.5.7.6 Interrupt èƒ½åŠ›ä¸å¼•æ“å·®å¼‚
-
-- Stop/Interrupt **å¿…é¡»** èµ° Target Owner è·¯ç”±ï¼ˆçº¢çº¿ 10ï¼‰ï¼Œç¦æ­¢ workspace-wide ä¹±æ€ã€‚
-- å½“ Adapter/å¼•æ“ **ä¸æ”¯æŒ** interruptï¼šStop æŒ‰é’®ç¦ç”¨å¹¶è¯´æ˜åŸå› ï¼›**ä¸å¾—** å‡è£… Stop æˆåŠŸå Rebuildï¼›æ­¤æ—¶ **Abandon** ä¸ºä¸»è¦å¯å®Œæˆå‡ºå£ï¼ˆä» durableï¼‰ã€‚
-- `running` æ€ Stop ä¸ `recovery-required` æ€ Stop **å…±ç”¨** interrupt å®ç°ï¼Œä»… UI å…¥å£ä¸åŒã€‚
-
-##### 14.5.7.7 æœ¬è¡¥ä¸éªŒæ”¶ï¼ˆåœ¨ 14.5.6 ä¹‹ä¸Šè¿½åŠ ï¼‰
-
-- çº¯ target ä¸å¯ç”¨ï¼ˆæ—  unresolved attempt / æ—  recovery bindingï¼‰**æ°¸ä¸**è¿›å…¥ `recovery-required`ã€‚
-- `recovery-required` ä¸‹ç”¨æˆ·ç» **â‰¤3 æ¬¡æ˜ç¡®ç‚¹å‡»** å¿…è¾¾ `idle` æˆ– reattach `running`ï¼Œæ— æ— é™ Rebuild æ­»å¾ªç¯ã€‚
-- Runtime own attempt æ—¶å•ç‹¬ Rebuild ä¸å¾—â€œå‡è£…æˆåŠŸâ€ï¼›å¿…é¡» Stop æˆ–ç»“æ„åŒ–å¼•å¯¼ã€‚
-- Abandon åå¼ºåˆ¶æ€è¿›ç¨‹é‡å¯ï¼ŒåŒä¸€ attempt **ä¸å¾—**å†æ¬¡é”æ­»è¯¥ Shared Sessionã€‚
-- Abandon/Rebuild åæ³¨å…¥è¿Ÿåˆ° ACKï¼š**ä¸** åŒå‘ã€**ä¸** çŸ›ç›¾ double commitã€**ä¸** æ— æ•…é‡é”ã€‚
-- Stop å•ç‹¬æˆåŠŸåçŠ¶æ€ä»ä¸º `recovery-required`ï¼ˆç›´åˆ°ç»“ç®—ï¼‰ï¼Œä¸”å®¡è®¡å¯åŒºåˆ† Stop / Rebuild / Abandonã€‚
-- å…¨ç¨‹ä¸äº§ç”Ÿç¬¬äºŒä¸ªåŒåº blind delivery / ç¬¬äºŒä¸ªåŒ Target Bindingï¼ˆæ—¢æœ‰å¼ºæ€æµ‹è¯•ä»æˆç«‹ï¼‰ã€‚
-- å‰ç«¯ **ä¸** æ–°å¢ SharedSend çŠ¶æ€åï¼›åªå¤ç”¨æ—¢æœ‰ transition äº‹ä»¶ã€‚
-
-##### 14.5.7.8 æ˜ç¡®ä¸åœ¨æœ¬è¡¥ä¸èŒƒå›´
-
-- recovery ä¸­æ”¾è¡Œå…¶ä»– Targetï¼ˆéœ€ Queue/Branchï¼ŒÂ§14.5.3 æœªæ¥é¡¹ï¼‰
-- å…¨å±€ã€Œæ‰€æœ‰ locked Shared ä¸€é”®æ²»ç†ã€ç®¡ç†ä¸­å¿ƒï¼ˆäº§å“ backlogï¼›impact report Â§9.1.4ï¼‰
-- é¡¹ç›®å½’æ¡£ã€çª—å£æ‹–æ‹½çƒ­åŒºç­‰é recovery è®®é¢˜
-- æŠŠ CancelPending ä¸ Abandon åˆæˆå•ä¸€äº§å“æŒ‰é’®ï¼ˆå®ç°å¯èšåˆæ–‡æ¡ˆï¼ŒåˆåŒä»åˆ†åŸŸï¼‰
-
-### 14.6 Native Conversation Canvas Compatibility Guardrails
-
-Shared Session V2 é‡å»ºçš„æ˜¯ Session/Execution/Persistence Coreï¼Œä¸æ˜¯é‡å†™ Claude Codeã€Codex ç­‰ç°æœ‰ Native Session çš„å¯¹è¯å¹•å¸ƒã€‚
-
-æ ¸å¿ƒè¾¹ç•Œï¼š
-
-```text
-User-visible Native Session
-  â†’ existing Native History / Engine Events
-  â†’ NativeConversationProjection
-  â†’ existing ConversationItem / Live Channel
-  â†’ existing Conversation Canvas
-
-Shared Session V2
-  â†’ Canonical Event Log + Shared-owned Hidden Binding Events
-  â†’ SharedConversationProjection
-  â†’ compatible ConversationItem / Live Channel
-  â†’ existing Conversation Canvas
-```
-
-äº§å“ä¸Šå¤ç”¨åŒä¸€å¹•å¸ƒï¼›æ•°æ®ä¸Šä¿æŒä¸¤ç§ Sourceã€ä¸¤å¥— Projectionã€‚Renderer ä¸æ„ŸçŸ¥ `BindingProvisioningState`ã€ACKã€Cursorã€Recovery Txï¼Œä¹Ÿä¸æ‰¿æ‹… Canonical Persistenceã€‚
-
-#### 14.6.1 Domain Model ä¸ Presentation Model éš”ç¦»
-
-```typescript
-type ConversationDataSource =
-  | "native-session"
-  | "shared-canonical";
-
-interface ConversationProjection {
-  source: ConversationDataSource;
-  items: ConversationItem[];
-  liveTurn?: LiveTurnProjection;
-  executionBadges?: TurnExecutionBadge[];
-}
-```
-
-ä»¥ä¸Šæ˜¯ Logical Contractï¼Œä¸è¦æ±‚ç¬¬ä¸€é˜¶æ®µç«‹å³å¢åŠ åŒåå…¬å…± Typeã€‚å®ç°å…ˆå¤ç”¨ç°æœ‰ Projection/Selector è¾¹ç•Œï¼›åªæœ‰å®é™…è°ƒç”¨ç‚¹éœ€è¦ç»Ÿä¸€æ—¶æ‰æŠ½è±¡ã€‚
-
-çº¦æŸï¼š
-
-- Canonical Fact æ˜¯ Shared Domain Modelï¼›`ConversationItem` ç»§ç»­æ˜¯ Presentation Modelã€‚
-- User-visible Native Session æ²¿ç”¨ç°æœ‰ History Loaderã€Engine-specific Event Reducer ä¸æ¢å¤è¯­ä¹‰ã€‚
-- Shared-owned Hidden Binding çš„ Runtime Event é€šè¿‡ owner/run identity è¿›å…¥ Shared Assemblerï¼›ä¸èƒ½æŠ•å½±æˆç¬¬äºŒæ¡ Native Conversationã€‚
-- `SharedConversationProjection` å¯ä»¥ç”Ÿæˆå¹•å¸ƒå…¼å®¹çš„ `ConversationItem`ï¼Œä½†ä¸èƒ½æŠŠ UI Item åå‘å†™å› Canonical Logã€‚
-- å¹•å¸ƒç»„ä»¶åªæ¶ˆè´¹ Projection ä¸ Live Stateï¼›ä¸å¾—ç›´æ¥è¯»å– SQLiteã€Binding Cursor æˆ– Runtime ACK çŠ¶æ€ã€‚
-
-#### 14.6.2 çœŸæ­£å¯èƒ½äº§ç”Ÿå›å½’çš„å…±äº«ä½ç½®
-
-| å…±äº«ä½ç½® | å›å½’é£é™© | ä¸“ä¸šç­–ç•¥ | å¿…é¡»ä¿ç•™çš„ Native è¯­ä¹‰ |
-| --- | --- | --- | --- |
-| `MossxAgentEvent` / Event Bus | ä¸º Shared ä¿®æ”¹æ—¢æœ‰ event meaningï¼Œå¯¼è‡´ Native reducerã€approval æˆ– lifecycle æ–­é“¾ | é‡‡ç”¨ additive envelope/ç‹¬ç«‹ Canonical Sinkï¼›æŒ‰ owner/run identity è·¯ç”±ï¼Œä¸æ”¹æ—§ event çš„å«ä¹‰ | Claude/Codex æ—¢æœ‰ event orderã€turn lifecycleã€error/interrupt behavior |
-| `ConversationItem` | æŠŠ ACKã€Cursorã€Persistence å¡å…¥ UI Typeï¼Œæ‰€æœ‰ Renderer è¢«è¿«ç†è§£ Shared Domain | ä¿æŒ Presentation-onlyï¼›Shared æ–°å»º Projection/metadata sidecar | textã€thinkingã€toolã€imageã€patchã€error item çš„ç°æœ‰ shape |
-| `threadItems.ts` | Shared replay/normalization é€»è¾‘æ±¡æŸ“ Native Historyï¼›ç°æœ‰è£å‰ªè¢«è¯¯å½“ Canonical Transform | ç»§ç»­åªåšå±•ç¤ºé€‚é…ï¼›Canonical normalization æ”¾åœ¨ ingress Assembler/ContextCompiler | Native History çš„é¡ºåºã€æ˜¾ç¤ºè£å‰ªã€Tool Output/Image å±•ç¤º |
-| Streaming Store / `liveAssistantTextChannel` | Shared delta é‡æ–° dispatch åˆ°æ ¹ reducerï¼Œå¼•å‘ AppShell æ¸²æŸ“é£æš´æˆ– terminal åé‡å¤æ­£æ–‡ | delta ç»§ç»­å¤–éƒ¨åŒ–ï¼›Canonical Log åªå†™ Turn çº§ Factï¼›Terminal Projection ä¸ Live Text é€šè¿‡ attempt identity å»é‡ | æµå¼é¦–å­—å»¶è¿Ÿã€å…‰æ ‡ã€Stop åæ”¶æŸã€Terminal æ›¿æ¢ |
-| Threads reducer / AppShell root hook chain | æ¯ä¸ª Eventã€Logã€Polling æ›´æ–°æ ¹çŠ¶æ€ï¼›å•æ¬¡æ ¹æ¸²æŸ“å†å²æµ‹é‡æˆæœ¬é«˜ | é«˜é¢‘çŠ¶æ€ä½¿ç”¨ç²¾ç»†è®¢é˜…ï¼›æ ¹é“¾åªæ¥ Turn ç”Ÿå‘½å‘¨æœŸçº§å˜åŒ–ï¼›è½®è¯¢äº‹ä»¶é©±åŠ¨ + â‰¥30s å…œåº• | Native processing/unread/active turn çš„æ—¢æœ‰çŠ¶æ€è½¬æ¢ |
-| Tool / Thinking / Approval / Patch Renderer | ä¸º portable Shared History å‹æ‰ Engine-private ä¿¡æ¯ï¼ŒNative å¹•å¸ƒä¸¢ fidelity | Native Projection ä¿ç•™ Engine-specific blockï¼›Shared Canonical ä¿å­˜ portable block + private refï¼›åªåœ¨è·¨ Target Context Compile æ—¶é™çº§ | Tool pairingã€reasoning visibilityã€permission ownershipã€patch/result çŠ¶æ€ |
-| Session Catalog / Sidebar | Hidden Bindingã€Recovery Attempt è¢«å½“ä½œ Native Child æ˜¾ç¤º | Catalog Projection æŒ‰ `SessionOrigin/OwnerKind` è¿‡æ»¤ï¼›Shared å§‹ç»ˆä¸€ä¸ª Row | Native Root/Subagent/Fork çš„æ—¢æœ‰å±‚çº§ä¸é€‰ä¸­è¡Œä¸º |
-
-#### 14.6.3 å®æ–½ç­–ç•¥ï¼šAdditive Projectionï¼Œä¸åš Big-bang Migration
-
-æ¨èé¡ºåºï¼š
-
-1. å†»ç»“ç°æœ‰ Native Claude/Codex Canvas Contractï¼Œå»ºç«‹ä»£è¡¨æ€§ History ä¸ Live Event fixturesã€‚
-2. æ–°å¢ Shared Canonical Sink å’Œ `SharedConversationProjection`ï¼Œä¸æ›¿æ¢ Native History Sourceã€‚
-3. Shared Projection é€‚é…ç°æœ‰ Renderer æ‰€éœ€ Presentation Shapeï¼›Engine-private UI é€šè¿‡ metadata/ref ä¿çœŸã€‚
-4. ä½¿ç”¨ Shared-only feature flag/route å¼€å¯ V2ï¼›ä¸å¾—ç”¨å…¨å±€ flag æ”¹å†™ Native Sessionã€‚
-5. å¯¹ Shared Session è¿è¡Œ Shadow Projectionï¼šåŒä¸€ Canonical Source ç”Ÿæˆæ–° Projectionï¼Œä¸ Legacy Shared snapshot æ¯”è¾ƒ item count/order/type/checksumï¼›Shadow åªè®°å½• mismatchï¼Œä¸åå‘å†™æ•°æ®ã€‚
-6. Codexã€Claude Native Session åˆ†åˆ«è·‘å†å²åŠ è½½ã€live streamingã€toolã€thinkingã€approvalã€interrupt å›å½’åï¼Œå†æ‰©å¤§ Shared V2 rolloutã€‚
-
-è¿ç§»åŸåˆ™ï¼š
-
-```text
-Native Conversation
-  = no migration
-
-Legacy Shared Conversation
-  = dual-read / explicit import
-
-New Shared Conversation
-  = Canonical Event Log V2
-```
-
-ç¦æ­¢ä¸ºäº†â€œç»Ÿä¸€â€å…ˆæŠŠå…¨éƒ¨ Native Session è¿å…¥ Shared Canonical Pipelineã€‚æœªæ¥è‹¥éœ€è¦ Native Canonicalizationï¼Œå¿…é¡»ä½œä¸ºç‹¬ç«‹ Changeï¼Œé‡æ–°è¯æ˜ fidelityã€resume å’Œ rollbackã€‚
-
-#### 14.6.4 Render Performance Contract
-
-2026-07-08 çš„å†å²å®éªŒå‘ç°ï¼šAppShell æ ¹æ¸²æŸ“å•æ¬¡æ›¾é˜»å¡ä¸»çº¿ç¨‹çº¦ 100â€“350msï¼›è¯¥å€¼éœ€è¦å®æ–½æ—¶é‡æ–°æµ‹é‡ï¼Œä½†äº”æ¡ç»“æ„çº¢çº¿ç»§ç»­æœ‰æ•ˆï¼š
-
-1. streaming delta ä¸è¿›å…¥ AppShell æ ¹ reducerï¼›ç»§ç»­èµ° `liveAssistantTextChannel`ã€‚
-2. Shared Event/Log ä¸ä½¿ç”¨æ•°ç»„è¿½åŠ å‹ root `setState`ã€‚
-3. Canonical Commit ä»¥ Turn/Tx ä¸ºé¢‘ç‡ï¼Œç¦æ­¢é€ delta æŒä¹…åŒ–å¹¶è§¦å‘ Projection rebuildã€‚
-4. Shared background Binding è¿è¡Œæ—¶ï¼Œå…³é—­å…¶ Conversation Canvas åä¸å¾—ç»§ç»­é©±åŠ¨å¯è§å¹•å¸ƒé‡æ¸²æŸ“ã€‚
-5. Store åŒæ­¥é‡‡ç”¨ Event-driven updateï¼Œè½®è¯¢åªä½œ â‰¥30s bounded fallbackã€‚
-
-æ€§èƒ½éªŒæ”¶åˆ†ä¸‰ç§åœºæ™¯ç‹¬ç«‹æµ‹é‡ï¼š
-
-```text
-idle
-background Shared Binding + canvas closed
-foreground Shared streaming
-```
-
-æµ‹é‡æ—¶å…³é—­ react-scan æ”¾å¤§å™¨ï¼›è‹¥å‘ç”Ÿå…¨æ ‘é‡æ¸²æŸ“ï¼Œä½¿ç”¨ React `memoizedUpdaters` ä¸ç°æœ‰å½’å› æ–¹æ³•å®šä½çœŸå® updaterã€‚
-
-#### 14.6.5 Native Canvas Compatibility Acceptance Tests
-
-- æ‰“å¼€æ—§ Claude Native Sessionï¼šHistory item æ•°é‡ã€é¡ºåºã€ç±»å‹ä¸ä¸»è¦å±•ç¤ºå†…å®¹ä¸å˜ã€‚
-- Claude streamingã€Thinkingã€Tool Call/Resultã€Permissionã€Stop/Interrupt å±•ç¤ºä¸å˜ã€‚
-- æ‰“å¼€æ—§ Codex Native Sessionï¼šHistory itemã€Reasoningã€Toolã€Patchã€Error å±•ç¤ºä¸å˜ã€‚
-- Codex live item lifecycle ä¸ Terminal settlement ä¸å›  Shared Canonical Sink é‡å¤ dispatchã€‚
-- User-visible Native Session ä¸åˆ›å»º Shared Hidden Bindingï¼Œä¸è¯»å– Shared Cursorï¼Œä¸ç»è¿‡ ContextCompilerã€‚
-- Shared-owned Hidden Binding ä¸è¿›å…¥ Native Sidebarï¼Œä¸ç›´æ¥ç”Ÿæˆç”¨æˆ·å¯è§ Native Conversationã€‚
-- Shared Terminal Commit ä¸ `liveAssistantTextChannel` æ”¶æŸååªå‡ºç°ä¸€ä¸ª Assistant Finalã€‚
-- åˆ‡æ¢ Next Target ä¸æ¸…ç©ºã€ä¸ remountã€ä¸å…¨é‡é‡å»ºç°æœ‰ Conversation Canvasã€‚
-- åˆ é™¤ Shared UI Projection åé‡å»ºï¼Œitem order/type/checksum ä¸ Commit å‰ä¸€è‡´ã€‚
-- Shared Session åå°è¿è¡Œä¸”å¹•å¸ƒå…³é—­æ—¶ï¼Œä¸äº§ç”ŸæŒç»­ Canvas/AppShell render stormã€‚
-
-### 14.7 Implementation Readiness Checklist
-
-Canonical Logï¼š
-
-- [ ] OpenSpec å®šä¹‰å…¨éƒ¨ Canonical Fact JSON Schemaã€‚
-- [ ] `conversation.usageRecorded` æœ‰ attempt/binding/native identityã€report subject/revision/supersedes ä¸å¹‚ç­‰é”®ã€‚
-- [ ] `provider.usageAggregateRecorded` æœ‰ç‹¬ç«‹ Provider Usage Ledger ä¸ Provider/Window ownershipï¼›aggregate-only ä¸æ¨æµ‹åˆ†æ‘Šåˆ° Turn/Sessionã€‚
-- [ ] `SharedEventWriter` åªæœ‰ä¸€ä¸ª sequence allocator ä¸ write authorityã€‚
-- [ ] Event insert ä¸ `next_sequence` æ›´æ–°åœ¨åŒä¸€ transactionã€‚
-- [ ] Tx 1â€“5 çš„è¾“å…¥ã€è¾“å‡ºã€Unique Constraintã€é”™è¯¯ç æ˜ç¡®ã€‚
-- [ ] ingress-side Assembler èƒ½ä» final snapshot ç»„è£…å®Œæ•´ Tool Exchangeã€‚
-- [ ] Projection å¯ä»¥åˆ é™¤åé‡å»ºã€‚
-- [ ] Legacy Import æœ‰ fingerprintã€markerã€fidelity ä¸ rollback testã€‚
-- [ ] Crash/Power-loss test è¦†ç›–æ¯ä¸ªäº‹åŠ¡è¾¹ç•Œã€‚
-
-Runtime ACKï¼š
-
-- [ ] Runtime Capability ç”±æ¡æ‰‹/schema probe å¾—åˆ°ï¼Œä¸æŒ‰ Engine å¸¸é‡çŒœæµ‹ã€‚
-- [ ] Binding Lazy Create æœ‰ç‹¬ç«‹ durable provisioning stateã€Unique Constraint ä¸ crash recovery testã€‚
-- [ ] Codex Spike éªŒè¯ `thread/inject_items` æ”¯æŒçš„ Item ç±»å‹ã€æŒä¹…åŒ–ã€read-back ä¸ duplicate behaviorã€‚
-- [ ] Codex `clientUserMessageId` è´¯ç©¿ Sendã€Eventã€Recoveryã€‚
-- [ ] Claude å¯ç”¨å¹¶è§£æ `--replay-user-messages`ã€‚
-- [ ] Claude `result` ä¸ Process Exit å†²çªæ—¶ï¼Œä»¥æ˜ç¡® contract settlementã€‚
-- [ ] Kimi ACP Spike éªŒè¯ initialize capabilityã€session load/replayã€prompt lifecycleã€Provider Configã€‚
-- [ ] æ¯ä¸ª Adapter é€šè¿‡ç»Ÿä¸€ ambiguous ACK Contract Testsã€‚
-
-Context Compilerï¼š
-
-- [ ] `NativeHistoryReader` å¯¹ Claude/Codex/Kimi å®šä¹‰ stable cursorã€fingerprintã€fidelityã€typed error ä¸åªè¯»è¾¹ç•Œã€‚
-- [ ] Provider Continuation åœ¨ç›®æ ‡ side effect å‰æŒä¹…åŒ– immutable `NativeHistoryMaterialization`ï¼›unstable cursor fail closedã€‚
-- [ ] äº”ç§ Projection Mode æœ‰ capability predicateã€‚
-- [ ] source Ã— target Compatibility Matrix è‡ªåŠ¨åŒ–ã€‚
-- [ ] `native-delta` æ’é™¤ç›®æ ‡ Binding åŸç”Ÿæ‹¥æœ‰çš„ Entriesã€‚
-- [ ] `native-delta` å¼ºåˆ¶è¦æ±‚ `destination.binding` ä¸ durable attemptâ†’binding lookupã€‚
-- [ ] Tool Call/Result atomic validatorã€‚
-- [ ] Provider-private reasoning/signature redactionã€‚
-- [ ] Artifact size/budget/ref retrieval contractã€‚
-- [ ] `ProjectionManifest` å®Œæ•´è®°å½• transformationã€omissionã€checksumã€‚
-- [ ] checkpoint ACK åæ¨è¿› Cursor çš„æ°¸ä¹… omission è¯­ä¹‰å·²è¢«æ¶ˆè´¹è€…ä¸ UX éªŒæ”¶ã€‚
-
-UIï¼š
-
-- [ ] Store ä¸­åˆ†ç¦» `selectedNextTarget` ä¸ `activeTurnTarget`ã€‚
-- [ ] ä¹ç±» UI state æœ‰æ˜ç¡® persisted/recoverable mappingã€‚
-- [ ] `degraded-context` å¿…é¡»ç”¨æˆ·ç¡®è®¤ã€‚
-- [ ] `recovery-required` æ²¡æœ‰ blind retryã€‚
-- [ ] `cancel-pending` ä»…åœ¨ Runtime cancel ACK/Terminal/Probe å®šæ€§åç»“ç®—ã€‚
-- [ ] Retry/Regenerate ä½¿ç”¨ `logicalTurnId + attemptId`ã€‚
-- [ ] Shared Binding æ°¸ä¸è¿›å…¥ Native Sidebar/Subagent Treeã€‚
-
-Native Canvas Compatibilityï¼š
-
-- [ ] Native ä¸ Shared ä½¿ç”¨ç‹¬ç«‹ Data Source/Projectionï¼Œæœ€ç»ˆé€‚é…åŒä¸€å¹•å¸ƒã€‚
-- [ ] `ConversationItem` ä¿æŒ Presentation-onlyï¼Œä¸æ‰¿è½½ Canonical/ACK/Recovery çŠ¶æ€ã€‚
-- [ ] `MossxAgentEvent` é‡‡ç”¨ additive routingï¼Œä¸ä¿®æ”¹ç°æœ‰ Native event meaningã€‚
-- [ ] `threadItems.ts` ä¸æ‰¿æ‹… Canonical normalization æˆ– Context replayã€‚
-- [ ] streaming delta ç»§ç»­èµ° `liveAssistantTextChannel`ï¼Œä¸è¿›å…¥æ ¹ reducer/Canonical Logã€‚
-- [ ] Claude/Codex Native golden fixtures ä¸ live regression tests å·²å»ºç«‹ã€‚
-- [ ] Shared Terminal ä¸ Live Text æœ‰ attempt-scoped deduplicationã€‚
-- [ ] idle/background/foreground streaming ä¸‰ç§åœºæ™¯å®Œæˆé‡æ–°æµ‹é‡ã€‚
-
-å…¨éƒ¨å‹¾é€‰åï¼Œæ–‡æ¡£æ‰ä» Architecture Foundation è¿›å…¥ Implementation-readyï¼›OpenSpec å¯ä»¥æŠŠæ¯ä¸ª Checkbox è½¬ä¸º Requirement/Scenario/Taskã€‚
-
----
-
-## åäº”ã€åˆ†é˜¶æ®µè·¯çº¿
-
-### Phase 0ï¼šå†»ç»“äº§å“ä¸æ•°æ®å¥‘çº¦
-
-äº¤ä»˜ï¼š
-
-- `ExecutionTarget`
-- `TurnExecutionSnapshot`
-- `SessionOrigin`
-- `ConversationFamilyRef`
-- Binding Key è§„åˆ™
-- Sidebar æ ‡ç­¾è§„åˆ™
-- Hidden Binding å¯è§æ€§è§„åˆ™
-- Native/Shared Data Source ä¸ Conversation Projection éš”ç¦»è§„åˆ™
-- Failure Matrix
-- `conversation.turnRequested`
-- `context.deliveryPrepared/Accepted`
-- `conversation.turnAccepted/Committed`
-- `BindingContextCursor`
-- `BindingProvisioningState`
-- Runtime ACK Capability contract
-- NativeHistoryReader contract
-- NativeHistoryMaterialization / stable source snapshot contract
-- Turn Usage Attribution + Provider Aggregate Usage Fact / Projection contract
-- Legacy fidelity contract
-- Codex `thread/inject_items` Capability Spike
-- Claude `--replay-user-messages` ACK Spike
-- Kimi ACP Capability Spike
-
-éªŒæ”¶ï¼š
-
-- Native/Shared/Subagent/Fork/Continuation äº”ç±»å¯¹è±¡ä¸ä¼šäº’ç›¸è¯¯æŠ•å½±ã€‚
-- Root/Fork/Continuation çš„ Family è¡€ç¼˜å¯è¿½æº¯ï¼ŒSubagent/Shared Binding ä¸è¿›å…¥ Familyã€‚
-- Provider åˆ é™¤åå†å²ä»å¯è§£é‡Šã€‚
-- Model ä¸è¿›å…¥é»˜è®¤ Binding Keyã€‚
-- Provider Continuation å¯ä» Native History åªè¯»ç¼–è¯‘ Contextï¼Œä¸è¦æ±‚ Native Session è¿›å…¥ Shared Canonical Pipelineã€‚
-- ä¸‰ä¸ª Runtime Spike äº§å‡ºå®æµ‹ capability/ACK matrixï¼ŒPhase 1/2 Adapter contract ä¸ä»¥ CLI æ–‡æ¡ˆæˆ–å‡è®¾ä¸ºä¾æ®ã€‚
-- Turn Usage èƒ½æŒ‰ Attemptã€Targetã€Binding ä¸ Native Session ç¨³å®šå½’å±ï¼›è·¨ Turn report åªæŒ‰ Provider/Window å½’å±ã€‚
-
-### Phase 1ï¼šå»ºç«‹ Shared Canonical Event Log V2
-
-äº¤ä»˜ï¼š
-
-- A1 Storageï¼šSQLite WAL Schemaã€`SharedEventWriter`ã€Provider Usage Ledgerã€Unique Constraintsã€sequence transaction ä¸ crash/power-loss testsã€‚
-- A2 Canonical Ingressï¼šrun identity â†’ Snapshot/Binding ç¨³å®šå…³è”ã€fan-out/drop å‰ authoritative sinkã€Run/Turn Assemblerã€`turnRequested â†’ delivery â†’ accepted â†’ committed` Factsã€Turn/Aggregate Usage Factsã€Critical Commit Sinkã€‚
-- A3 Projection/Migrationï¼šCanonical Fact åˆ° UI Item çš„å•å‘ Projectionã€Shared/Native Projection Isolationã€Projection rebuildã€Legacy dual-readã€Canvas regression gateã€‚
-- Binding Provisioningã€Pending Delivery ä¸ Cursor çš„åŸå­æŒä¹…åŒ–ã€‚
-- fidelity/omission metadataã€‚
-
-éªŒæ”¶ï¼š
-
-- Shadow é“¾è·¯ä¸Š UI snapshot ä¸ä½œä¸ºæ–° Turn çš„äº‹å®æºï¼›çœŸå®æµé‡åˆ‡æ¢å±äº Change B éªŒæ”¶ã€‚
-- streaming delta ä¸¢å¤±ä¸å½±å“æœ€ç»ˆ Turn æ¢å¤ã€‚
-- æ‰€æœ‰å¯ç”¨ Engine çš„ Terminal evidence éƒ½é€šè¿‡ç¨³å®š run identity è¿›å…¥åŒä¸€ Assembler/Commit contractã€‚
-- Tool Call/Result ä»¥ Atomic Exchange è½ç›˜ã€‚
-- User Intent åœ¨è°ƒç”¨å¤–éƒ¨ CLI å‰å·²ç» Durableã€‚
-- Native Session åˆ›å»º Intent åœ¨è°ƒç”¨ Runtime å‰å·²ç» Durableã€‚
-- Eventã€Sequenceã€Cursorã€Pending Delivery æŒ‰äº‹åŠ¡ all-or-nothingã€‚
-- App é‡å¯åå¯ç”± Event Log é‡å»º UI Projectionã€‚
-- æ—§ Shared Session å¯è¯»ã€å¯ç»§ç»­ï¼Œä¸é‡å†™æ—§å†å²ã€‚
-- æ—§ Claude/Codex Native Session çš„ Historyã€Streamingã€Toolã€Thinkingã€Approvalã€Patch æ¸²æŸ“æ— è¡Œä¸ºå˜åŒ–ã€‚
-- Shared Terminal Commit ä¸ Live Text ä¸ç”Ÿæˆé‡å¤ Assistant Finalã€‚
-- Shared åå° Binding åœ¨å¹•å¸ƒå…³é—­æ—¶ä¸æŒç»­é©±åŠ¨ AppShell/Canvas æ¸²æŸ“ã€‚
-- A1ã€A2ã€A3 å„è‡ªæœ‰ç‹¬ç«‹éªŒæ”¶ï¼ŒA3 ä¸å¾—æˆä¸ºå­˜å‚¨å±‚ crash correctness çš„å”¯ä¸€éªŒè¯å…¥å£ã€‚
-
-Phase 1 æ˜¯ dark launchï¼šäº¤ä»˜å Shared äº§å“è¡Œä¸ºä¸çœŸå® Send å†™è·¯å¾„ä¿æŒ V0ã€‚Change B æ¥å…¥çœŸå® Send å‰ï¼ŒA2 åªæ¶ˆè´¹ synthetic fixturesï¼Œä»¥åŠä» V0 authoritative final evidence å»ºç«‹çš„ read-only mirrored shadow ingressï¼Œå¹¶å†™å…¥éš”ç¦»çš„ Shadow Canonical Logï¼›A3 åªæ¶ˆè´¹è¯¥ Shadow Logï¼Œä¸ Legacy dual-read Projection å¯¹æ¯”ï¼Œä¸ä½œä¸º ingressï¼Œä¹Ÿä¸å›å†™äº§å“çŠ¶æ€ã€‚ä¸å¾—æŠŠ Phase 1 å®Œæˆè¯¯è§£ä¸º Shared äº§å“æµé‡å·²ç»åˆ‡åˆ° V2ã€‚
-
-### Phase 2ï¼šShared Session æ”¯æŒ CLI Ã— Provider
-
-äº¤ä»˜ï¼š
-
-- `selectedEngine` å‡çº§ä¸º `selectedTarget`ã€‚
-- `bindingsByEngine` å‡çº§ä¸º `bindingsByTarget`ã€‚
-- Shared Send å…¨é“¾è·¯è´¯é€š `providerProfileId`ã€‚
-- Provider-scoped Model Pickerã€‚
-- Turn Provider/Model Provenanceã€‚
-- Target-aware Pending Rebindã€Interruptã€Recoveryã€‚
-- Target-aware Binding Provisioning ä¸ duplicate-create recoveryã€‚
-
-éªŒæ”¶çŸ©é˜µï¼š
-
-```text
-Claude/Official
-â†’ Claude/OpenRouter
-â†’ Codex/OpenAI
-â†’ Claude/Official
-```
-
-å¿…é¡»æ»¡è¶³ï¼š
-
-- ä¸€ä¸ª Shared Sidebar Rowï¼›
-- ä¸‰ä¸ª Hidden Bindingï¼›
-- åˆ‡å› Claude/Official å¤ç”¨åŸ Bindingï¼›
-- æ¯ä¸ª Turn Provenance æ­£ç¡®ï¼›
-- ä»»ä¸€ Provider å¤±è´¥ä¸é‡è·¯ç”±ã€‚
-
-### Phase 3ï¼šContext Package V1
-
-äº¤ä»˜ï¼š
-
-- Canonical Log ä¸ Model Projection åˆ†å±‚ã€‚
-- Versioned Context Package ä¸ Projection Manifestã€‚
-- `native-delta` / `native-history-import` / `native-history-clone` / `portable-transcript` / `checkpoint`ã€‚
-- pi-ai å¼ Compatibility Transformerã€‚
-- Atomic Tool Exchangeã€‚
-- Artifact Store/Reference ä¸ Progressive Retrievalã€‚
-- Target-scoped two-phase cursorã€‚
-- pending delivery recoveryã€‚
-- åŸºäº Phase 0 Spike ç»“è®ºå®ç° Codex/Claude/Kimi Adapterï¼›è‹¥å®æµ‹ capability ä¸æˆç«‹ï¼ŒæŒ‰ Compatibility Matrix é™çº§ï¼Œä¸ä¿®æ”¹æ—¢å®š ACK è¯­ä¹‰æ©ç›–å·®å¼‚ã€‚
-
-éªŒæ”¶ï¼š
-
-- é•¿ä¼šè¯åˆ‡æ¢ä¸ä¾èµ–å›ºå®š 8 Turnã€‚
-- Tool Call/Result ä¸è¢«é”™è¯¯æ‹†æ•£ã€‚
-- Handoff å¯å®¡è®¡ã€å¯é‡æ”¾ã€‚
-- åŒä¸€ Native Binding ä¸é‡å¤æ³¨å…¥å…¶å·²æœ‰å†å²ã€‚
-- `native-delta` ä¸åŒ…å« provenance/attempt mapping å±äºç›®æ ‡ Binding è‡ªèº«çš„ Entriesã€‚
-- checkpoint æ¥å—åé—æ¼å†…å®¹ä¸ä¼šåœ¨åç»­ delta è‡ªåŠ¨è¡¥å‘ï¼Œåªèƒ½æŒ‰ Manifest progressive retrievalã€‚
-- æ¯ä¸ª Runtime æ ¹æ® Capability é€‰æ‹© import/clone/transcript/checkpointï¼Œä¸æŒ‰ Engine åå­—ç¡¬ç¼–ç å‡è®¾ã€‚
-- source Ã— target compatibility matrix è¦†ç›– Thinkingã€Tool IDã€Imageã€Aborted Turnã€‚
-- compile/accept/commit ä¸‰ç§å¤±è´¥ä¸ä¼šé”™è¯¯æ¨è¿›å¯¹åº”æ¸¸æ ‡ã€‚
-- acceptance å Run å¤±è´¥ä¸ä¼šå¯¼è‡´åŒä¸€ Package é‡å¤æ³¨å…¥ã€‚
-
-### Phase 4ï¼šNative Provider Continuation
-
-äº¤ä»˜ï¼š
-
-- â€œä½¿ç”¨å…¶ä»– Provider ç»§ç»­â€å…¥å£ã€‚
-- Claude/Codex/Kimi `NativeHistoryReader` å®ç°ä¸ Contract Testsã€‚
-- ç›®æ ‡ Side Effect å‰æŒä¹…åŒ– immutable Native History materializationã€‚
-- Context Package å¤ç”¨ã€‚
-- æ–° Native Session åˆ›å»ºä¸ Bindingã€‚
-- `provider-continuation` Originã€‚
-- Conversation Family inheritanceã€‚
-- `ä¾›åº”å•†ç»­æ¥` æ ‡ç­¾ã€‚
-- â€œæŸ¥çœ‹æ¥æºä¼šè¯â€å¯¼èˆªã€‚
-
-éªŒæ”¶ï¼š
-
-- åŸ Session ä¸å˜ã€‚
-- æ–° Session é¡¶å±‚æ˜¾ç¤ºã€‚
-- ä¸å†™ `parentThreadId`ã€‚
-- ä¸æ˜¾ç¤º `å­ä»£ç†` æ ‡ç­¾ã€‚
-- Provider Profile ä¸åŒã€‚
-- `familyId` ä¸æ¥æºç›¸åŒï¼Œ`lineageParentSessionId` æŒ‡å‘æ¥æºã€‚
-- åˆ é™¤æ¥æº Session ä¸çº§è”åˆ é™¤ Continuationã€‚
-- æ¥æº Native History ä¸å†™å…¥ Shared Canonical Event Logï¼›Reader é™çº§æˆ– omission å¯¹ç”¨æˆ·å¯è§ã€‚
-
-### Phase 5ï¼šOrchestration Foundation
-
-2026-08-05 æ ¡å‡†ï¼šV1 å·²æŒ‰ conversation-native Agent Squad è½åœ°æœ¬åœ°å®ç°ï¼›automated contract tests å·²è¦†ç›–æ ¸å¿ƒçŠ¶æ€æœºï¼ŒçœŸå® Desktop/CLI smoke å°šæœªå®Œæˆï¼Œå› æ­¤å››ä¸ª OpenSpec change ä¿æŒ activeã€ä¸å¾— archiveã€‚
-
-äº¤ä»˜ï¼š
-
-- Shared Composer send å·¦ä¾§ one-shot `Squad` buttonï¼›ä¸ä½¿ç”¨æ˜¾å¼å‘½ä»¤æˆ–è‡ªåŠ¨æ„å›¾è¯†åˆ«ã€‚
-- Lead äº§ç”Ÿ structured planï¼›ç”¨æˆ·ä¸€æ¬¡ç¡®è®¤åï¼Œmossx æ ¡éªŒå¹¶å°å­˜ exact targetã€budgetã€permission envelope ä¸ Dynamic DAGã€‚
-- Canonical Fact + deterministic `SquadProjectionV1` æ˜¯å”¯ä¸€ durable authorityï¼Œä¸åˆ›å»ºç¬¬äºŒæ¡ authoritative event sinkã€‚
-- ordinary CLI Worker Bindingã€node-scoped Context Packageã€typed outcomeã€attempt-boundary event-driven schedulerã€‚
-- Parallel Analyze + Single Writerï¼›durable workspace mutation leaseã€dirty-preserving Change Fenceã€bounded forward repairã€‚
-- conversation plan/run card + SubAgent åŒå½¢å³ä¾§ inspectorï¼›Worker turns nested-onlyï¼Œsuccessful settlement åªæŠ•å½±ä¸€æ¬¡ final answerã€‚
-- Emergency Stop å…ˆæŒä¹…åŒ– cancel intentï¼Œåª interrupt exact active ownerï¼›ä¸è‡ªåŠ¨ rollbackã€‚
-- `VITE_CCGUI_SQUAD_ORCHESTRATION_V1` / `CCGUI_SQUAD_ORCHESTRATION_V1` kill switch é»˜è®¤å¼€å¯ï¼›å…³é—­åç¦æ­¢æ–° run/approval/dispatchï¼Œä½†å†å²è¯»å–ã€exact-owner Stop ä¸æ—¢æœ‰ attempt terminal settlement ä»å¯ç”¨ã€‚
-
-V1 capability ceilingï¼š
-
-- Codex å…·å¤‡ hard read-only / current-workspace sandboxï¼Œå¯æ‰¿è½½å®Œæ•´ DAGã€‚
-- Claude ä»…åœ¨ `permission-mode=plan` ä¸‹æ‰¿è½½ pure read-only DAGï¼›å« Mutate çš„ plan fail closedã€‚
-- Kimi/Grok/OpenCode å½“å‰ headless adapter ç¼ºå°‘å¯éªŒè¯ hard read-only modeï¼ŒLead side effect å‰æ‹’ç»ã€‚
-- ä¸å®ç° Worktree Executorã€multi-writer mergeã€mid-turn steerã€public Plugin/Pipeline APIï¼›æ§åˆ¶åªå‘ç”Ÿåœ¨ attempt boundaryã€‚
-- Mutate è¦æ±‚ Git workspaceã€‚Change Fenceè¦†ç›– tracked ä¸ non-ignored untracked deltaï¼›ignored path ä¸ä»»æ„ credential read ä¸èƒ½ç”± Git diff å®Œæ•´è¯æ˜ï¼Œå› æ­¤ request/declared path/observed candidate å‘½ä¸­æ•æ„Ÿè¾¹ç•Œå³æ‹’ç»ï¼ŒV1 ä¸æŠŠ prompt policy å®£ç§°ä¸º OS-level read isolationã€‚
-
-éªŒæ”¶ï¼š
-
-- Orchestrator åªæ¶ˆè´¹/è¿½åŠ ç»Ÿä¸€ Canonical Factï¼ŒFrontend store ä»…ä½œ projection cacheã€‚
-- åŒä¸€ Shared Session åªå…è®¸ä¸€ä¸ª active Squadï¼›åŒä¸€ workspace åªå…è®¸ä¸€ä¸ª Mutate leaseï¼Œä¸åŒ workspace å¯å¹¶è¡Œã€‚
-- exact Worker ownerã€attemptã€bindingã€targetã€context package å…¨é“¾è·¯å¯å®¡è®¡ï¼Œç¦æ­¢ fallback åˆ°ç›¸ä¼¼ ownerã€‚
-- Scheduler ä¸ç§’çº§è½®è¯¢ï¼›Worker raw realtime event ä¸è¿›å…¥ root conversation reducerã€‚
-- reload/Stop/crash ambiguity å‡ fail closedï¼›æ—  terminal + unchanged-fence proof æ—¶ä¸å¾—æŒ‰æ—¶é—´å›æ”¶ leaseã€‚
-- Desktop/CLI smoke å®Œæˆå‰ï¼ŒPhase 5 åªè®°ä¸º implemented locally / manual gate pendingã€‚
-
-### Phase 6ï¼šPlugin / Pipeline
-
-åœ¨ Phase 5 V1 ç¨³å®šåå†å¼€æ”¾ public extension surfaceã€‚Phase 5 å†…éƒ¨å·²æœ‰å—æ§ Dynamic DAGï¼Œä¸ç­‰äºå·²ç»æä¾› public Pipeline/DAG APIï¼š
-
-- Agent Event Hooksï¼›
-- Provider/Engine Registrationï¼›
-- Handoff Summarizer Extensionï¼›
-- Pipeline single/parallel/chainï¼›
-- public Pipeline/DAG contractï¼›
-- å¤–éƒ¨ RPC/SDKã€‚
-
-ç¦æ­¢ Plugin Market åå‘å®šä¹‰ Execution Coreã€‚
-
----
-
-## åå…­ã€OpenSpec Change åˆ‡åˆ†å»ºè®®
-
-ä¸è¦æŠŠå…¨éƒ¨èƒ½åŠ›å¡è¿›ä¸€ä¸ªå·¨å‹ Changeã€‚
-
-å­˜å‚¨ã€Canonical Ingressã€Projection/Migration çš„å¤±è´¥æ¨¡å¼ä¸éªŒæ”¶æ–¹å¼ä¸åŒï¼ŒåŸ Change A å¿…é¡»æ‹†æˆ A1/A2/A3ã€‚Provider Continuation ä½œä¸ºåç»­ç‹¬ç«‹ Changeï¼Œä¸é˜»å¡ Shared V2ã€‚
-
-ä¸‰ä¸ª Runtime Spike æ˜¯ Phase 0 çš„çº¯è°ƒç ”ä»»åŠ¡ï¼Œä¸å†™äº§å“ä»£ç ï¼›ç»“è®ºå…ˆäº A2/B/C çš„ Runtime ACKã€Provisioning ä¸ Delivery Adapter contractï¼š
-
-```text
-S1: spike-codex-thread-inject-items
-S2: spike-claude-replay-user-messages
-S3: spike-kimi-acp-session-lifecycle
-```
-
-### Change A1ï¼šestablish-shared-event-storage
-
-- SQLite WAL Logical Schema / Migration
-- `SharedEventWriter` / single sequence allocator
-- Provider Usage Aggregate Ledger
-- Event insert + `next_sequence` atomic transaction
-- Unique Constraints / idempotency keys
-- Binding/Cursor/Pending transactional storage
-- crashã€power-lossã€corruptionã€backup/restore tests
-
-ç‹¬ç«‹éªŒæ”¶ï¼šæ—  UIã€æ—  Runtime Adapter æ—¶å³å¯è¯æ˜ sequence monotonicityã€all-or-nothing ä¸ restart correctnessã€‚
-
-### Change A2ï¼šassemble-shared-canonical-facts
-
-- `conversation.turnRequested/Accepted/Committed`
-- `conversation.usageRecorded`
-- `provider.usageAggregateRecorded`
-- `context.deliveryPrepared/Accepted`
-- Run/Turn Assembler
-- run identity â†’ Snapshot/Binding durable association
-- fan-out/drop å‰ authoritative ingress
-- Phase 1 read-only V0 final-evidence mirror â†’ isolated Shadow Canonical Log
-- Critical Commit Sink
-- Atomic Tool Exchange validation
-- Runtime final snapshot â†’ Canonical Fact contract
-
-`provider.usageAggregateRecorded` è¿›å…¥ A1 Provider Usage Ledgerï¼Œä¸è¿›å…¥ per-session `SharedCanonicalFact`ï¼›A2 åªè´Ÿè´£ normalizationã€revision/supersedes validation ä¸ Projection eventã€‚
-
-å¯é€‰å†…éƒ¨äº¤ä»˜ï¼šread-only Event Log Inspectorã€‚å®ƒæŒ‰ Sessionã€sequenceã€attemptã€fact typeã€binding æŸ¥è¯¢ Shared Event Logï¼Œä¹Ÿå¯æŒ‰ Provider/window/report subject æŸ¥è¯¢ Provider Usage Ledgerï¼Œå¹¶å±•ç¤º checksumã€provenanceã€fidelityã€pending/cursorï¼Œç”¨ feature flag/dev build éš”ç¦»ï¼›ä¸å¾—å†™ SQLiteã€ä¿®æ”¹/ä¿®å¤ Factã€æ¨è¿› Cursorï¼Œæˆ–æˆä¸ºä»»ä½• Projection çš„ authoritative sourceã€‚
-
-ç‹¬ç«‹éªŒæ”¶ï¼šä»¥ synthetic Runtime Events é©±åŠ¨ Assemblerï¼Œè¯æ˜ duplicate Terminalã€dropped deltaã€failed/cancelled outcomeã€Turn Usage Attribution ä¸ Provider Aggregate Usage æ­£ç¡®ï¼›Inspector è‹¥å¯ç”¨ï¼Œå†™æ“ä½œä¸ç”Ÿäº§é»˜è®¤å…¥å£å¿…é¡»ä¸å¯è¾¾ã€‚
-
-### Change A3ï¼šproject-shared-canonical-conversation
-
-- UI Projection
-- Native/Shared Projection Isolation
-- Existing Canvas Compatibility Contract
-- Shadow Canonical Projection vs Legacy dual-read comparison
-- Projection Rebuild
-- Legacy snapshot dual-read
-- fidelity/omission contract
-
-ç‹¬ç«‹éªŒæ”¶ï¼šåˆ é™¤ Projection åå¯é‡å»ºï¼›Legacy/Native Canvas golden fixtures ä¸ render regression gate é€šè¿‡ã€‚
-
-### Change Bï¼šcompose-shared-session-execution-target
-
-èŒƒå›´ï¼š
-
-- Shared `ExecutionTarget`
-- Provider-aware `bindingsByTarget`
-- Durable Binding Provisioning / duplicate-create recovery
-- Provider-scoped Picker/Catalog
-- Turn Snapshot
-- Target-aware routing/rebind/interrupt/approval
-
-### Change Cï¼šadd-shared-context-compiler
-
-èŒƒå›´ï¼š
-
-- Canonical Log / Model Projection boundary
-- Versioned Context Package
-- Target-aware ContextCompiler
-- Native CLI projection modes
-- Runtime Capability / ACK Adapter
-- æ ¹æ® S1/S2/S3 å®æµ‹ç»“æœå®ç° Codex History Import / Claude Input ACK / Kimi ACP Adapter
-- Atomic Tool Exchange / Artifact Reference
-- Two-phase Cursor / Pending Delivery
-- Binding Provisioning Probe
-- Checkpoint/Compaction
-- Context Package å‰ç¼€ç¨³å®šæ€§ä¸åˆ†ç±»å‹ç¡®å®šæ€§å‹ç¼©ï¼ˆÂ§9.2 / Â§9.5ï¼Œæ¨¡å¼å‚è€ƒ Headroomï¼Œä¸å¼•å…¥å…¶ proxy/wrap ä¸ ML æ¨¡å‹ï¼‰
-- `ContextCompressionReport` å‹ç¼©å®æµ‹æŒ‡æ ‡ï¼ˆÂ§5.6ï¼‰
-
-### åç»­ Change Dï¼šadd-native-provider-continuation
-
-èŒƒå›´ï¼š
-
-- Continuation åˆ›å»º
-- NativeHistoryReader adapters / typed error / fidelity tests
-- NativeHistoryMaterialization persistence / retry reuse / unstable-cursor fail-closed
-- SessionOrigin / Conversation Family
-- Sidebar æ ‡ç­¾ä¸æ¥æºå¯¼èˆª
-- ä¸ Subagent/User Fork éš”ç¦»
-
-Change ä¾èµ–ï¼š
-
-```text
-S1/S2/S3 Runtime Spikes
-        â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â†’ A2: Canonical Facts / Commit Sink
-        â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â†’ B: Shared Execution Target
-        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â†’ C: Shared Context Compiler
-
-A1: Event Storage
-        â†“
-A2: Canonical Facts / Commit Sink
-        â†“
-A3: Projection / Migration
-        â†“
-B: Shared Execution Target
-        â†“
-C: Shared Context Compiler
-        â”œâ”€â†’ D: Native Provider Continuation + NativeHistoryReader
-        â””â”€â†’ Future Orchestration / Plugin Hooks / RPC
-```
-
-### 16.1 ä¸ç°æœ‰ OpenSpec å¥‘çº¦çš„å…³ç³»
-
-æ–° Change åº”æ‰©å±•è€Œä¸æ˜¯å¤åˆ¶ç°æœ‰åŸºç¡€ï¼š
-
-| ç°æœ‰å¥‘çº¦ | å¤ç”¨ç‚¹ | æ–°å¢è¾¹ç•Œ |
-| --- | --- | --- |
-| `shared-session-thread` | Shared logical threadã€Hidden Native Binding | V2 Canonical persistence ä¸ Legacy Reader |
-| `shared-session-engine-selection` | Next Turn engine selection | æ‰©å±•ä¸ºå®Œæ•´ `ExecutionTarget` |
-| `conversation-fact-contract` | dialogue/reasoning/tool/control åˆ†ç±» | å¢åŠ  assembled `conversation.turnCommitted` critical fact |
-| `agent-domain-event-runtime` | `MossxAgentEvent` ä¸ delivery lane | å¢åŠ å¯é  Commit Sinkï¼Œä¸æ–°å»º Event Bus |
-| `engine-per-session-provider-binding` | managed Provider fail-closed | Shared `bindingsByTarget` ä¸ Target owner routing |
-
-OpenSpec éªŒæ”¶ä¸å¾—åªæ£€æŸ¥å­—æ®µå­˜åœ¨ã€‚å¿…é¡»åŒæ—¶éªŒè¯ï¼š
-
-- Canonical Fact ä» Engine Event åˆ°æŒä¹…åŒ–ã€UI Projectionã€ContextCompiler çš„ end-to-end data flowã€‚
-- User-visible Native Session ä¿æŒåŸ History/Event/Projection é“¾è·¯ï¼Œä¸è¿›å…¥ Shared Canonical Persistenceã€‚
-- Shared-owned Hidden Binding Event æŒ‰ owner/run identity è¿›å…¥ Shared Assemblerï¼Œä¸æŠ•å½±æˆ Native Conversationã€‚
-- `ConversationItem`ã€`threadItems.ts`ã€`liveAssistantTextChannel` çš„æ—¢æœ‰ Presentation/Streaming Contract ä¸è¢« Shared V2 æ”¹å†™ã€‚
-- åŒä¸€ Engine å¤š Provider çš„ Binding/Process/Approval/Interrupt éš”ç¦»ã€‚
-- Legacy ä¸ V2 dual-readã€‚
-- compileã€acceptanceã€commit ä¸‰ä¸ª failure boundary çš„å¹‚ç­‰æ¢å¤ã€‚
-- Native Binding provisionã€context acceptanceã€terminal commit ä¸‰ç±»å¤–éƒ¨è¾¹ç•Œçš„å¹‚ç­‰æ¢å¤ã€‚
-- Native CLI transcript ä¸ SDK replay çš„ capability wording ä¸æ··æ·†ã€‚
-
----
-
-## åä¸ƒã€éªŒè¯çŸ©é˜µ
-
-### 17.1 Session Projection
-
-| åœºæ™¯ | é¢„æœŸ |
-| --- | --- |
-| Runtime åˆ›å»º Subagent | åµŒå¥—æ˜¾ç¤ºï¼Œå¸¦ `å­ä»£ç†` æ ‡ç­¾ |
-| ç”¨æˆ·åˆ›å»º Fork | é¡¶å±‚æ˜¾ç¤ºï¼Œå¸¦ `Fork` æ ‡ç­¾ |
-| ç”¨æˆ·å°è¯•ä» Shared å†å² Turn Fork | ç¬¬ä¸€é˜¶æ®µæ˜ç¡®ä¸æ”¯æŒï¼›ä¸åˆ›å»º Native Fork æˆ– Hidden Binding |
-| ç”¨æˆ·æ¢ Provider ç»§ç»­ | é¡¶å±‚æ˜¾ç¤ºï¼Œå¸¦ `ä¾›åº”å•†ç»­æ¥` æ ‡ç­¾ |
-| Shared åˆ›å»º Hidden Binding | Sidebar ä¸æ˜¾ç¤º |
-| Provider Continuation å¸¦ sourceSessionId | å¯æŸ¥çœ‹æ¥æºï¼Œä½†ä¸åµŒå¥— |
-| Root/Fork/Continuation | Family å­—æ®µå¯è¿½æº¯ï¼ŒV1 å¯ä»é¡¶å±‚å±•ç¤º |
-| Subagent/Shared Binding | ä¸è¿›å…¥ Conversation Family |
-
-### 17.2 Provider Isolation
-
-| åœºæ™¯ | é¢„æœŸ |
-| --- | --- |
-| åŒ Workspace ä¸¤ä¸ª Claude Provider å¹¶è¡Œ | Process/env/approval/interrupt äº’ä¸å½±å“ |
-| Shared åœ¨åŒä¸€ Engine åˆ‡ Provider | ä½¿ç”¨ä¸¤ä¸ª Hidden Binding |
-| åˆ é™¤ Provider | å†å²ä¿ç•™ï¼ŒResume fail closed |
-| å…¨å±€åˆ‡æ¢ Provider | ä¸å½±å“ managed-bound Session |
-
-### 17.3 Context
-
-| åœºæ™¯ | é¢„æœŸ |
-| --- | --- |
-| åˆ‡åˆ°æ–° Target | æ³¨å…¥ Handoff |
-| åˆ‡å›æ—§ Target | åªåŒæ­¥ç¦»å¼€æœŸé—´æ–°å¢äº‹å® |
-| Context compile å¤±è´¥ | ä¸å†™ pendingï¼Œä¸æ¨è¿›ä»»ä½• Cursor |
-| æŠ•é€’æœªè¢«ç›®æ ‡æ¥å— | ä¸æ¨è¿› accepted |
-| acceptance å Run å¤±è´¥ | accepted å·²æ¨è¿›ï¼Œä¸é‡å¤æ³¨å…¥ï¼›committed ç­‰å¾… Terminal Fact |
-| ACK ä¸ç¡®å®šåé‡å¯ | æ ¹æ® pendingDelivery ä¸ Native History/run identity æ¢å¤ |
-| Canonical Commit å¤±è´¥ | ä¸æ¨è¿› committedï¼Œå¯ä» Terminal Fact é‡è¯•è½ç›˜ |
-| Context è¢«è£å‰ª | `Omissions` å¯è§ |
-| Tool Result å¾ˆé•¿ | ä¿ç•™ç»“æ„åŒ–å¼•ç”¨ï¼ŒSummary æœ‰ç•Œ |
-| Tool call/result è¶…å‡ºé¢„ç®— | æˆå¯¹ä¿ç•™æˆ–æˆå¯¹çœç•¥ |
-| åˆ‡å›åŒä¸€ Hidden Binding | åªæ³¨å…¥ç¼ºå¤± deltaï¼Œä¸é‡æ”¾ Native History |
-| Canonical Entry åŸç”Ÿå±äºç›®æ ‡ Binding | ä» `native-delta` æ’é™¤ï¼Œä¸é‡å¤æ³¨å…¥ |
-| Provider Continuation è¯»å– Native æ¥æº | `NativeHistoryReader` åªè¯»è¾“å‡º canonical-shaped entriesï¼Œä¸å†™ Shared Log |
-| checkpoint ACK åå†åˆ‡å›ç›®æ ‡ | omitted Entries ä¸è‡ªåŠ¨è¡¥å‘ï¼›ä»…æŒ‰ `retrievableRef` æ£€ç´¢ |
-| åŒä¸€ Binding è¿ç»­ handoff | Package å‰ç¼€å­—èŠ‚çº§ç¨³å®šï¼Œä»…å°¾éƒ¨è¿½åŠ  deltaï¼›åˆ†ç±»å‹æŠ˜å å…¨éƒ¨è®¡å…¥ `omitted` |
-| ç›®æ ‡éœ€è¦è¢«çœç•¥ç»†èŠ‚ | é€šè¿‡ retrievable ref æŒ‰éœ€è¯»å– |
-| Codex æ”¯æŒ `thread/inject_items` | Capability probe åä½¿ç”¨ `native-history-import`ï¼ŒJSON-RPC success æ‰æ¨è¿› Context accepted |
-| Codex ç‰ˆæœ¬ä¸æ”¯æŒ Import | è‡ªåŠ¨é™çº§ä¸º transcript/checkpointï¼Œå¹¶åœ¨ Manifest è®°å½•åŸå›  |
-| Claude user message echo | echo checksum åŒ¹é…åæ‰è®°å½• `turnAccepted` |
-| Kimi prompt Adapter é¦–äº‹ä»¶å‰æ–­å¼€ | ä¿æŒ ACK ambiguousï¼Œä¸ç›²ç›®é‡å‘ |
-| ç›®æ ‡ CLI æ”¯æŒåŸç”Ÿ Fork/Clone | ä½¿ç”¨ `native-history-clone`ï¼Œä¸ç¼–è¾‘ vendor history file |
-| æ–° Native Binding å¯æ¥æ”¶ prompt | ä½¿ç”¨ `portable-transcript`ï¼Œæ˜ç¡® user-channel transport |
-| åªæœ‰ Provider-private block ä¸å…¼å®¹ | ä¿ç•™ portable blocksï¼Œæ˜¾å¼è®°å½• lossy transformation/omission |
-| SDK Controlled Adapter è·¨ Provider | æ‰å…è®¸å£°æ˜çœŸæ­£çš„ canonical message replay |
-| å†å²æ£€ç´¢å‘½ä¸­æ—§ control message | åªä½œä¸º reference contextï¼Œä¸æ‰§è¡Œæ§åˆ¶è¯­ä¹‰ |
-
-### 17.4 Recovery
-
-| åœºæ™¯ | é¢„æœŸ |
-| --- | --- |
-| App é‡å¯ | æ¢å¤ Shared selectedTarget ä¸ bindingsByTarget |
-| Hidden Native ID å»¶è¿Ÿç¡®å®š | Target-aware Pending Rebind |
-| Native Session å·²åˆ›å»ºä½† Identity æœª Commit | å…ˆ Probe provisioningï¼›ä¸å¾—ç›²ç›®åˆ›å»ºç¬¬äºŒä¸ª Binding |
-| Provider Profile ä¸å¯ç”¨ | ä¿ç•™ unavailable Targetï¼Œä¸å›é€€ |
-| Continuation æ¥æºè¢«å½’æ¡£ | Continuation ä»å¯ç‹¬ç«‹æ¢å¤ |
-| Subagent metadata å»¶è¿Ÿåˆ°è¾¾ | ä¸é—ªç°ä¸ºé¡¶å±‚ Provider Continuation |
-| Legacy snapshot æ‰“å¼€ | ä»¥ presentation-only fidelity è¯»å–ï¼Œä¸ä¼ªé€ ç¼ºå¤±åè®®äº‹å® |
-| SQLite Projection è¢«åˆ é™¤ | ä» Event Log é‡å»ºï¼Œä¸è¯»å– frontend snapshot åå‘ä¿®å¤ |
-| SQLite Integrity å¤±è´¥ | è¿›å…¥ read-only recoveryï¼Œä¸åˆ›å»ºç©ºåº“è¦†ç›– |
-| Canonical row ç¼ºå°‘ payload type | ä»…åœ¨ decode å†…å­˜å‰¯æœ¬ä¸­ä½¿ç”¨ row `fact_type` è¡¥é½ï¼›ä¸æ”¹å†™ row/checksum |
-| Canonical row type å†²çª | Projection fail closedï¼Œä¸ç”¨ Legacy empty ä¼ªè£…æˆåŠŸ |
-| Shared Projection åŠ è½½å¤±è´¥ | ä¿æŒå¯é‡è¯•ï¼Œä¸è°ƒç”¨ Native resumeï¼Œä¸æ˜¾ç¤º Native recovery card |
-| Shared é¦–æ¡æ¶ˆæ¯æ›´æ–°æ ‡é¢˜ | thread keyã€checkpoint ä¸ recovery scope ä»ä¸ºåŒä¸€ `shared:<UUID>` |
-
-### 17.5 Source Ã— Target å®æ–½å‰éªŒæ”¶çŸ©é˜µ
-
-è‡³å°‘è¦†ç›–ï¼š
-
-```text
-Claude / Provider A
-  â†’ Codex / Provider B
-  â†’ Claude / Provider A
-
-Claude / Provider A
-  â†’ Claude / Provider B
-
-Codex / Provider A
-  â†’ Codex / Provider B
-```
-
-æ¯æ¡é“¾è·¯æ³¨å…¥ä»¥ä¸‹ Canonical Factsï¼š
-
-- æ™®é€š user/assistant textï¼›
-- Tool Call + Tool Resultï¼›
-- è¶…é•¿ Tool Output + ArtifactRefï¼›
-- Image/Attachmentï¼›
-- Provider-private reasoning/signatureï¼›
-- aborted/error Turnï¼›
-- å†å² control messageï¼›
-- App åœ¨ Native Session åˆ›å»ºåã€Binding Identity Commit å‰å´©æºƒï¼›
-- App åœ¨ compile å‰ã€send å ACK å‰ã€ACK å Commit å‰åˆ†åˆ«å´©æºƒã€‚
-
-é€šè¿‡æ ‡å‡†ï¼š
-
-- Hidden Binding æ•°é‡ä¸ `Engine + ProviderProfile` å”¯ä¸€ç»„åˆä¸€è‡´ã€‚
-- åˆ‡å›æ—§ Binding ä¸é‡å¤æ³¨å…¥å·² accepted çš„ Packageã€‚
-- ä¸æ”¯æŒ Image çš„ç›®æ ‡äº§ç”Ÿå¯è§ downgradeï¼Œä¸é™é»˜ä¸¢å¤±ã€‚
-- Tool Call/Result å§‹ç»ˆä¿æŒ atomicã€‚
-- private reasoning/signature ä¸è·¨ä¸å…¼å®¹ Target æ³„éœ²ã€‚
-- aborted/error Assistant Block ä¸è¢«åŒ…è£…æˆæˆåŠŸç»“è®ºã€‚
-- control message åªä½œä¸º reference contextã€‚
-- é‡å¯åç”± `pendingDelivery` å’Œ two-phase cursor å¹‚ç­‰æ¢å¤ã€‚
-
-### 17.6 Native Canvas é˜²å›å½’çŸ©é˜µ
-
-| å¯¹è±¡ | åœºæ™¯ | é¢„æœŸ |
-| --- | --- | --- |
-| Claude Native History | æ‰“å¼€å‡çº§å‰ Session | item order/type/content ä¿æŒï¼›ä¸è¯»å– Shared DB |
-| Claude Native Live | text/thinking/tool/permission/interrupt | ç°æœ‰äº‹ä»¶è¯­ä¹‰ä¸ Renderer behavior ä¸å˜ |
-| Codex Native History | reasoning/tool/patch/error æ··åˆå†å² | Engine-specific fidelity ä¿ç•™ |
-| Codex Native Live | item lifecycle åˆ° `turn/completed` | ä¸å›  Canonical Sink é‡å¤ item/final |
-| Shared Live | delta â†’ terminal commit | Live Text å¹³æ»‘æ”¶æŸï¼Œåªæœ‰ä¸€ä¸ª Assistant Final |
-| Shared Target Switch | Claude â†’ Codex â†’ Claude | å¹•å¸ƒä¸ remountï¼›æ—¢æœ‰ item ä¸é‡å»ºæˆ–é—ªçƒ |
-| Shared Projection | åˆ é™¤ cache å rebuild | item count/order/type/checksum ä¸€è‡´ |
-| Shared Projection | æ—§ type-less delivery row åç»§ç»­åŒ…å« requested/committed facts | å®Œæ•´ user/assistant items å¯é‡å»ºï¼›å†²çªç±»å‹æ‹’ç»è¯»å– |
-| Shared History | æˆåŠŸç©º Projection / Projection error + ç©º Legacy | å‰è€…æ­£å¸¸ loadedï¼›åè€…ä¿æŒ retryable errorï¼Œä¸è¿›å…¥ Native recovery |
-| Shared Identity | é¦–æ¡æ¶ˆæ¯æ”¹åã€æ‰‹åŠ¨æ”¹åã€é‡å¤æ ‡é¢˜ | å§‹ç»ˆæŒ‰ `shared:<UUID>` æ¢å¤åŒä¸€å¹•å¸ƒå†å² |
-| Shared Background | Binding è¿è¡Œã€å¹•å¸ƒå…³é—­ | æ— æŒç»­ Canvas/AppShell render storm |
-| Sidebar | Shared åˆ›å»º/æ¢å¤ Hidden Binding | å§‹ç»ˆä¸€ä¸ª Shared Rowï¼Œä¸å‡ºç° Native Child |
-| Legacy Shared | dual-read åç»§ç»­ | ä¸é‡å†™æ—§ snapshotï¼›æ–° Turn æŒ‰ V2 è¾¹ç•Œè¿½åŠ  |
-
-ç¡¬é—¨ç¦ï¼š
-
-- Native golden fixtures å¤±è´¥ï¼šé˜»æ–­ Shared V2 åˆå¹¶ã€‚
-- Shared å‡ºç° duplicate Assistant Finalã€Tool Exchange æ–­è£‚æˆ– Engine-private block é™é»˜ä¸¢å¤±ï¼šé˜»æ–­ rolloutã€‚
-- foreground streaming é‡æ–°å¼•å…¥é€ delta æ ¹ dispatchï¼šé˜»æ–­ rolloutã€‚
-- background Shared Binding é€ æˆæŒç»­æ ¹æ¸²æŸ“ï¼šé˜»æ–­ rolloutã€‚
-
----
-
-## åå…«ã€Non-goals
-
-ç¬¬ä¸€é˜¶æ®µä¸åšï¼š
-
-- Native Session åŸåœ°çƒ­åˆ‡ Providerï¼›
-- Mid-turn åˆ‡æ¢ CLI/Providerï¼›
-- Prompt è‡ªåŠ¨è·¯ç”±ï¼›
-- Provider å¤±è´¥è‡ªåŠ¨ Fallbackï¼›
-- æŠŠæ‰€æœ‰ Native History è½¬æˆç»Ÿä¸€ Wire Messageï¼›
-- Conversation Family Sidebar æŠ˜å æˆ–åˆ†ç»„ UIï¼›
-- è‡ªåŠ¨åˆ é™¤æ—§ Provider Sessionï¼›
-- è‡ªåŠ¨è¿ç§» Tool Stateï¼›
-- å®Œæ•´ DAGï¼›
-- å…ˆå¼€æ”¾ Plugin API å†è¡¥ Runtime Contractï¼›
-- ä» Shared Session çš„å†å² Turn åˆ›å»º Fork æˆ– Canonical Branchã€‚
-
----
-
-## åä¹ã€è®¾è®¡çº¢çº¿
-
-1. Native managed Provider Binding åˆ›å»ºåä¸å¯å˜ã€‚
-2. Shared Picker åªå½±å“ Next Turnã€‚
-3. ä¸€ä¸ª Turn Attempt åªå…è®¸ä¸€ä¸ª Execution Targetï¼›Regenerate/Retry å¿…é¡»åˆ›å»ºæ–° Attemptã€‚
-4. Provider å¤±è´¥ä¸å¾—é™é»˜å›é€€ã€‚
-5. Historical Turn å¿…é¡»ä½¿ç”¨ Snapshot è§£é‡Šï¼Œä¸èƒ½è¯»å–å½“å‰ Pickerã€‚
-6. `Provider Continuation` ä¸å¾—å†™å…¥ Subagent relationship writerã€‚
-7. `User Fork` ä¸ `Provider Continuation` ä¸å¾—æ˜¾ç¤º `å­ä»£ç†` æ ‡ç­¾ã€‚
-8. Shared Hidden Binding ä¸å¾—è¿›å…¥ç”¨æˆ·å¯è§ Native Sidebarã€‚
-9. Binding Identity é»˜è®¤ä¸åŒ…å« Modelã€‚
-10. Interrupt/Approval/Recovery å¿…é¡»ç²¾ç¡®ç»‘å®š Target Ownerã€‚
-11. Canonical Log å¿…é¡»å®Œæ•´ä¿ç•™ï¼›è·¨ CLI åªç¼–è¯‘ target-aware Model Projectionï¼Œä¸ç›´æ¥çŒåŸå§‹ Wire Historyã€‚
-12. Compileã€acceptanceã€commit ä½¿ç”¨ä¸åŒ Cursor è¾¹ç•Œï¼›ä¸å¾—ç”¨ä¸€ä¸ªâ€œæˆåŠŸ/å¤±è´¥â€å¸ƒå°”å€¼æ¨è¿›åŒæ­¥çŠ¶æ€ã€‚
-13. æ—§ Session ä¸è‡ªåŠ¨åˆ é™¤ã€ä¸è‡ªåŠ¨å½’æ¡£ã€‚
-14. Plugin/Orchestrator å¿…é¡»å»ºç«‹åœ¨ç¨³å®š Event ä¸ Session Contract ä¸Šã€‚
-15. Tool call/result å¿…é¡»ä½œä¸º Atomic Exchange æˆå¯¹è¿›å…¥æˆ–é€€å‡º Projectionã€‚
-16. Conversation Family ä¸å¾—å¤ç”¨ `parentThreadId`ï¼Œä¸å¾—æŒ‰æ ‡é¢˜æˆ–æ—¶é—´æ¨æ–­ã€‚
-17. Subagent ä¸ Shared Binding ä¸å¾—è¿›å…¥ Conversation Familyã€‚
-18. Compatibility Transform å¿…é¡»å…ˆäº Summaryï¼›åªæœ‰èƒ½åŠ›ä¸å…¼å®¹æˆ–é¢„ç®—è¶…é™æ‰èƒ½é™çº§ä¸º Checkpointã€‚
-19. å†å²æ£€ç´¢ç»“æœä¸å¾—é‡æ–°è§¦å‘ commandã€approval æˆ– tool control è¯­ä¹‰ã€‚
-20. Native CLI åªæœ‰åœ¨ runtime capability probe è¯æ˜æ”¯æŒæ—¶æ‰èƒ½ä½¿ç”¨ structured history importï¼›Import Transport ä¸ç­‰äº lossless fidelityã€‚
-21. ä¸å¾—ä¿®æ”¹ vendor history file ä¼ªé€ è·¨ CLI/Provider Historyã€‚
-22. Frontend Presentation Snapshot ä¸å¾—ä½œä¸ºæ–° Shared Turn çš„ authoritative persistence sourceã€‚
-23. Streaming Delta/Normal Event ä¸å¾—ç›´æ¥ä½œä¸º Canonical Commitï¼›å¿…é¡»æŒä¹…åŒ– assembled terminal factã€‚
-24. Legacy migration ä¸å¾—ä¼ªé€  Tool IDã€Reasoning Signatureã€Provider/Model provenanceã€‚
-25. User Intent ä¸å¯¹åº” Operation Intent å¿…é¡»å…ˆäºå¤–éƒ¨ CLI Side Effect æŒä¹…åŒ–ï¼›Session åˆ›å»ºä½¿ç”¨ Provisioning Intentï¼ŒContext/Prompt æŠ•é€’ä½¿ç”¨ Delivery Preparedã€‚
-26. Process Spawnã€stdin writeã€first token ä¸å¾—è¢«æ‰€æœ‰ Adapter ç»Ÿä¸€è§£é‡Šä¸º ACKã€‚
-27. ACK ambiguous æ—¶å¿…é¡» Probeï¼›ä¸å¾—å‘ç”¨æˆ·æä¾›ä¼šç›²ç›®é‡å¤ Side Effect çš„æ™®é€š Retryã€‚
-28. SQLite Event Log åªå…è®¸ Rust Writer å†™å…¥ï¼›Frontendã€Rendererã€Engine Adapter ä¸å¾—ç›´æ¥æ”¹è¡¨æˆ–åˆ†é… sequenceã€‚
-29. Context Compaction ä¸å¾—åˆ é™¤ Canonical Eventï¼›Retention å¿…é¡»æ˜¯ç‹¬ç«‹ã€æ˜¾å¼çš„æ•°æ®ç”Ÿå‘½å‘¨æœŸèƒ½åŠ›ã€‚
-30. Hidden Binding Lazy Create å¿…é¡»å…ˆæŒä¹…åŒ– Provisioning Intentï¼›Identity ACK ä¸ç¡®å®šæ—¶ä¸å¾—ç›²ç›®é‡å¤åˆ›å»ºã€‚
-31. `ConversationItem` åªèƒ½ä½œä¸º Presentation Modelï¼›ä¸å¾—æ‰¿è½½ Canonical Factã€ACKã€Cursor æˆ– Recovery Truthã€‚
-32. Shared V2 ä¸å¾—æ”¹å†™ç°æœ‰ Claude/Codex Native Event çš„å«ä¹‰ã€é¡ºåºä¸ Terminal settlementã€‚
-33. User-visible Native Session ä¸å¾—è¢«è¿«è¿å…¥ Shared Canonical Pipelineï¼Œä¸å¾—ç»è¿‡ Shared ContextCompiler æˆ–åˆ›å»º Shared Bindingã€‚
-34. `threadItems.ts` ä¸å¾—æ‰¿æ‹… Canonical normalizationã€è·¨ Target replay æˆ– Shared persistenceã€‚
-35. streaming delta å¿…é¡»ç»§ç»­å¤–éƒ¨åŒ–ï¼›ä¸å¾—æ¢å¤é€ delta dispatch è¿› AppShell æ ¹ reducer æˆ–é€ delta Canonical Commitã€‚
-36. Shared-owned Hidden Binding å¿…é¡»æŒ‰ owner/run identity è·¯ç”±ï¼›ä¸å¾—æŠ•å½±æˆç¬¬äºŒæ¡ Native Conversation æˆ– Subagentã€‚
-37. Provider Continuation è¯»å– Native æ¥æºå¿…é¡»ç»è¿‡åªè¯» `NativeHistoryReader`ï¼›ä¸å¾—è¦æ±‚ Native Session è¿å…¥ Shared Canonical Pipelineï¼Œä¹Ÿä¸å¾—ä¿®æ”¹ vendor history fileã€‚
-38. `native-delta` å¿…é¡»æ’é™¤ç›®æ ‡ Binding åŸç”Ÿæ‹¥æœ‰çš„ Entriesï¼›Cursor ä¸èƒ½æ›¿ä»£ provenance/attempt-to-binding ownership åˆ¤æ–­ã€‚
-39. checkpoint ACK åé—æ¼å†…å®¹ä¸å¾—é€šè¿‡å›é€€ Cursor è‡ªåŠ¨é‡æ”¾ï¼›åªèƒ½æŒ‰ `ProjectionManifest.omitted` çš„ retrieval contract è·å–ã€‚
-40. Shared Session ä¿æŒ strictly linearï¼›ç¬¬ä¸€é˜¶æ®µä¸å¾—ä»å†å² Turn forkï¼Œä¹Ÿä¸å¾—åœ¨ ambiguous ACK æœªå†³æ—¶æ”¾è¡Œå…¶ä»– Targetã€‚
-41. Model catalog entry `id` ä¸ CLI/API runtime `model` å¿…é¡»åˆ†åŸŸï¼›UI-only id ä¸å¾—è¶Šè¿‡
-    Execution Target boundary è¿›å…¥ runtimeã€‚
-42. ä¸å½“å‰ delivery/bootstrapping ç»‘å®šçš„ structured Provider/API rejection æ˜¯å¼ºè´Ÿ
-    evidenceï¼›ä¸å¾—è¢« prompt/marker persistence æˆ– warning è¦†ç›–ä¸º ACK successã€‚
-43. Provider typed final/result ä¸ CLI process cleanup å¿…é¡»åˆ†åŸŸï¼›Shared Attempt å¿…é¡»ç”±
-    å‰è€…ç«‹å³ settleï¼Œåè€…åªèƒ½è¡¥å…… cleanup/usageï¼Œä¸èƒ½å»¶è¿Ÿæˆ–å¤æ´» Composerã€‚
-44. Canonical Fact æ–°å†™å…¥å¿…é¡»é€šè¿‡ç»Ÿä¸€ Writer ç”Ÿæˆå®Œæ•´ tagged envelopeï¼›ä¸šåŠ¡æ¨¡å—ä¸å¾—æ‰‹å·¥åˆ é™¤
-    `payload_json.type` æˆ–ç»´æŠ¤ç¬¬äºŒå¥— serialization authorityã€‚
-45. æ—§ type-less Canonical row åªå…è®¸åœ¨ Projection decode boundary ä½¿ç”¨ row
-    `fact_type` è¡¥é½ï¼›æ˜¾å¼å†²çªå¿…é¡» fail closedï¼Œå…¼å®¹è¯»å–ä¸å¾—æ”¹å†™ payload/checksumã€‚
-46. Shared history recovery ä¸å¾—è°ƒç”¨ Native resume/rebind/forkï¼Œä¹Ÿä¸å¾—å†™å…¥ Native recovery
-    scope æˆ–æ˜¾ç¤º Native recovery cardã€‚
-47. æˆåŠŸç©º Shared Projection ä¸ Projection error å¿…é¡»åˆ†å¼€è¡¨è¾¾ï¼›Legacy ä¸ºç©ºä¸èƒ½æŠŠé”™è¯¯ä¼ªè£…æˆ
-    æ­£å¸¸ç©ºå†å²ã€‚
-48. Shared durable identity åªèƒ½æ¥è‡ª session UUIDï¼›æ ‡é¢˜ã€æ’åºæ—¶é—´ã€å½“å‰ Target ä¸ Provider
-    label éƒ½ä¸å¾—å‚ä¸ storage lookupã€Projection checkpointã€cache æˆ– recovery keyã€‚
-49. `target-unavailable` ä¸ `recovery-required` ä¸å¾—æ··ç”¨ï¼šæ—  unresolved attempt çš„é…ç½®/runtime
-    ä¸å¯ç”¨åªè¿›å‰è€…ï¼›åè€…ä»…æœåŠ¡æœªå†³ delivery/attempt é£é™©ã€‚
-50. Fail-closed recovery å¿…é¡»é…å¥—**å¯å®Œæˆå‡ºå£**ï¼ˆcompletable exitï¼Œä¸æ˜¯ fail-open æ”¾è¡Œï¼‰ï¼š
-    Probe/Recover å®šæ€§ã€Stop é‡Šæ”¾ Runtime ownershipã€æ¡ä»¶æ»¡è¶³åçš„æ˜¾å¼ Rebuildã€ä»¥åŠç”¨æˆ·
-    æ˜¾å¼ durable Abandonï¼›ç¦æ­¢åªé”ä¸æ”¾ã€‚
-51. Runtime ä» own attempt æ—¶ä¸å¾—æˆåŠŸ Rebuild Bindingï¼›é¡»å…ˆ Stop/é‡Šæ”¾æˆ–èµ°å·² settled commitï¼Œ
-    UI ä¸å¾—æŠŠ `recovery-active` è¡¨ç°ä¸ºæ— é™æ— å‡ºå£ã€Œéœ€è¦æ¢å¤ã€ã€‚
-52. Abandon å¿…é¡» durable ç»“ç®— attempt ä¸”å¯å®¡è®¡ï¼›ç¦æ­¢ä»…æ¸…å‰ç«¯ state å› idleï¼›å¤š owner
-    ambiguous æ—¶ç¦æ­¢ä¸€é”®æ¸…ç©ºã€‚
-53. Recovery æˆåŠŸè§£é”ä¸å¾—è·³è¿‡ Settling/canonical commit ç›´æ¥ Idleï¼›Stop å•ç‹¬æˆåŠŸä¸æ„æˆ
-    Turn å·²ç»“ç®—ã€‚Abandon/Rebuild ä¹‹åçš„è¿Ÿåˆ° ACK/terminal å¿…é¡»å¸æ”¶æˆ–è¯Šæ–­ï¼Œä¸å¾—åŒå‘æˆ–
-    å¤æ´»åŒä¸€ attempt çš„ recovery é”ã€‚
-
----
-
-## äºŒåã€æœ€ç»ˆå†³ç­–
-
-mossx é‡‡ç”¨ä»¥ä¸‹é•¿æœŸäº§å“è¾¹ç•Œï¼š
-
-```text
-Native Session
-  = åŸç”Ÿ CLI ä¼šè¯
-  = åˆ›å»ºæ—¶é€‰æ‹© Provider
-  = Provider Binding ä¸å¯å˜
-  = æ¢ Provider æ—¶åˆ›å»º Provider Continuation
-
-Shared Session
-  = ä¸€ä¸ªç”¨æˆ·å¯è§çš„ Canonical Conversation
-  = æ¯ä¸ª Next Turn å¯åˆ‡æ¢ CLI + Provider + Model
-  = å¤šä¸ªéšè— Native Binding
-  = SQLite WAL Canonical Event Log
-  = Runtime-specific ACK Adapter
-  = Context Compiler + Context Package è´Ÿè´£è·¨ Target è¿ç»­æ€§
-
-Subagent
-  = Runtime-owned Child
-  = å”¯ä¸€ä½¿ç”¨ Parent-Child Sidebar Tree çš„æ‰§è¡Œå…³ç³»
-
-User Fork / Provider Continuation
-  = User-owned Lineage
-  = é¡¶å±‚ Conversation
-  = é€šè¿‡ Origin æ ‡ç­¾ä¸ Conversation Family åŒºåˆ†
-```
-
-è¿™æ¡è·¯çº¿ä¿ç•™ mossx ç›¸æ¯” API Agent å®¢æˆ·ç«¯æœ€æœ‰ä»·å€¼çš„èƒ½åŠ›ï¼š
-
-- çœŸæ­£çš„å¤š CLI Runtimeï¼›
-- Native Session æ¢å¤ï¼›
-- Provider Runtime éš”ç¦»ï¼›
-- Provider-scoped Model Catalogï¼›
-- å¯å®¡è®¡çš„è·¨ CLI åä½œï¼›
-- æœªæ¥ Plugin ä¸ Orchestration çš„ç¨³å®šåœ°åŸºã€‚
-
----
-
-## äºŒåä¸€ã€å‚è€ƒææ–™
-
-- [`mossx-new-cli-onboarding-guide.md`](./mossx-new-cli-onboarding-guide.md)ï¼ˆå…³è”è½åœ°æ–‡æ¡£ï¼šæ–° CLI æ¥å…¥æµç¨‹ï¼‰
-- [`2026-07-27-multi-cli-provider-session-foundation-task-checklist.md`](../plans/2026-07-27-multi-cli-provider-session-foundation-task-checklist.md)ï¼ˆå®æ–½ä»»åŠ¡æ¸…å•ï¼‰
-- [`mossx-plugin-market-and-cli-foundation-design.md`](./mossx-plugin-market-and-cli-foundation-design.md)
-- [`pi-architecture-plugin-marketplace-analysis.md`](./pi-architecture-plugin-marketplace-analysis.md)
-- [`pi-chat-orchestration-research.md`](./pi-chat-orchestration-research.md)
-- [`shared-session-thread` spec](../../openspec/specs/shared-session-thread/spec.md)
-- [`shared-session-engine-selection` spec](../../openspec/specs/shared-session-engine-selection/spec.md)
-- [`conversation-fact-contract` spec](../../openspec/specs/conversation-fact-contract/spec.md)
-- [`agent-domain-event-runtime` spec](../../openspec/specs/agent-domain-event-runtime/spec.md)
-- [`engine-per-session-provider-binding` spec](../../openspec/specs/engine-per-session-provider-binding/spec.md)
-- [`subagent-session-tree-navigation` spec](../../openspec/specs/subagent-session-tree-navigation/spec.md)
-- [`claude-fork-session-support` spec](../../openspec/specs/claude-fork-session-support/spec.md)
-- [`Workspace Session Catalog Contract`](../../dev-guidelines/guides/workspace-session-catalog-contract.md)
-- [`src-tauri/Cargo.toml`](../../src-tauri/Cargo.toml)
-- [`shared_sessions.rs`](../../src-tauri/src/shared_sessions.rs)
-- [`agent_event_bus.rs`](../../src-tauri/src/engine/agent_event_bus.rs)
-- [`codex_core.rs`](../../src-tauri/src/shared/codex_core.rs)
-- [`claude.rs`](../../src-tauri/src/engine/claude.rs)
-- [`kimi.rs`](../../src-tauri/src/engine/kimi.rs)
-- [`ConversationItem`](../../src/types/conversation.ts)
-- [`threadItems.ts`](../../src/utils/threadItems.ts)
-- [`render-jank-knife-experiments-2026-07-08.md`](../perf/render-jank-knife-experiments-2026-07-08.md)
-- [pi-ai: Cross-Provider Handoffs](https://github.com/earendil-works/pi/blob/main/packages/ai/README.md#cross-provider-handoffs)
-- [pi-ai: `transform-messages.ts`](https://github.com/earendil-works/pi/blob/main/packages/ai/src/api/transform-messages.ts)
-- [pi-ai: `cross-provider-handoff.test.ts`](https://github.com/earendil-works/pi/blob/main/packages/ai/test/cross-provider-handoff.test.ts)
-- [pi: Session Format](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/session-format.md)
-- [pi: SQLite Session Storage](https://github.com/earendil-works/pi/tree/main/packages/storage/sqlite-node)
-- [pi-chat](https://github.com/earendil-works/pi-chat)
-- [OpenAI Agents SDK: Sessions](https://openai.github.io/openai-agents-python/sessions/)
-- [Codex App Server Protocol](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)
-- [Claude Code CLI Reference](https://code.claude.com/docs/en/cli-usage)
-- [Claude Agent SDK for Python](https://github.com/anthropics/claude-agent-sdk-python)
-- [Anthropic Managed Agents: Events and Streaming](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
-- [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)
-- [Kimi Code ACP Capability Matrix](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp.html)
-- [Kimi Code Sessions and Context](https://moonshotai.github.io/kimi-code/en/guides/sessions.html)
-- [Agent Client Protocol](https://github.com/agentclientprotocol/agent-client-protocol)
-- [ACP v2 Prompt Lifecycle RFD](https://agentclientprotocol.com/rfds/v2/prompt)
-- [Zed External Agents](https://zed.dev/docs/ai/external-agents)
-
-- [GitHub Copilot: Changing the AI Model](https://docs.github.com/en/copilot/how-tos/use-ai-models/change-the-chat-model)
-- [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
-- [SQLite Write-Ahead Logging](https://www.sqlite.org/wal.html)
-- [SQLite Atomic Commit](https://www.sqlite.org/atomiccommit.html)
-- [OpenAI Agents SDK: Handoffs](https://openai.github.io/openai-agents-python/handoffs/)
-- [OpenAI Agents SDK: Handoff filters](https://openai.github.io/openai-agents-python/ref/extensions/handoff_filters/)
-- [LangGraph: Handoffs](https://docs.langchain.com/oss/python/langchain/multi-agent/handoffs)
-- [AutoGen: Model Context](https://microsoft.github.io/autogen/stable/reference/python/autogen_core.model_context.html)
-- [Anthropic: How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
-- [Headroom: context compression layer for AI agents](https://github.com/headroomlabs-ai/headroom)ï¼ˆCCR å¯é€†å‹ç¼©ã€CacheAligner å‰ç¼€ç¨³å®šã€ContentRouter åˆ†ç±»å‹å‹ç¼©çš„æ¨¡å¼å‚è€ƒï¼›ä¸å¼•å…¥å…¶ proxy/wrap éƒ¨ç½²å½¢æ€ä¸ ML å‹ç¼©æ¨¡å‹ï¼‰
-
-## æœ€è¿‘æ ¡å‡†
-
-### 2026-08-24ï¼šCodex provider binding ä¸ GUI å¯åŠ¨ç¯å¢ƒ
-
-| Trigger | Current implementation fact | OpenSpec / code source |
-| --- | --- | --- |
-| provider binding / Codex runtime launch | GUI å¯åŠ¨ Codex app-server å‰ï¼Œæ ¹æ® effective `CODEX_HOME/config.toml` çš„ `model_providers.*.env_key` ä¸€æ¬¡æ€§æ‰¹é‡è§£æç¼ºå¤±ç¯å¢ƒå˜é‡ï¼ˆå•æ¬¡ allowlisted login shellï¼Œå•ä¸€ 5s è¶…æ—¶ï¼‰ï¼Œä»…æ³¨å…¥ child process | `src-tauri/src/codex/provider_env.rs`; `src-tauri/src/backend/app_server.rs`; `src-tauri/src/bin/cc_gui_daemon.rs`; `openspec/changes/fix-codex-macos-provider-env-key-resolution/` |
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíï~}Ñ:-jZ.¶›­–)Ş³RÒÒĞ§G—S¢&W6V&6€§7FGW3¢–×ÆVÖVçFV@¢ÒÒĞ £ÂÒÒDô2ÔÄ”dT5”4ÄS¢7F—fRÖ&6†—FV7GW&R×&VfW&Væ6RÒÓà£â²”Õõ%DåEĞ£â¢¤Æ–fV7–6ÆS¢7F—fR&6†—FV7GW&R&VfW&Væ6Rv—F‚†—7F÷&–6ÂW†V7WF–öâ6V7F–öç2â¢¢f÷VæFF–öâFV6—6–öç2K¸ŞŠ*²7W'&VçB7V72KÛşyJûÉ¶–×ÆVÖVçFF–öâ6†V6¶Æ—7BKˆâvfRx«nhXú®KùŞyYXènXû.ŠøhÚî8$7W'&VçB6öçG&7BKºR´÷Vå7V2Ö–â7V75Ò‚ââòââö÷Vç7V2÷7V72õ$TDÔRæÖB’KˆîKº>zK‹®Xxn8  ¢2Ö÷77‚ZI¢4Ä’9rZI¢&÷f–FW"KÉ®ŠùŞYû®yû>ŠëîŠê £âXh^Zë{¾Yè¾ûÉ¤&6†—FV7GW&RFV6—6–öâ&V6÷&@£âyIşYŞYiÉşûÉ¦66WFVBò–×ÆVÖVçFVB–â6Æ–6W>ûÉ¾XéşZx²(	4B‹zş{«ş[{.[Ù.j>ûÈÎYî{ºŞKúîZHŞKˆîiKnXú26†ævRxºÎz¸¾kÉN‹ù°£âX‰ŞZx¾iz^iÉşûÉ£##bÓrÓ#p£âiÈ‹ùj
+XxnûÉ£##bÓ’Ó+r7&÷72ÔVæv–æRvVçBFVÆVvF–öîûÈ†FBÖ7&÷72ÖVæv–æRÖvVçBÖFVÆVvF–öæûÈûÉ®YÊiz.iÈ’vVçEö÷&6†W7G&F–öæFöÖ–âKˆ¾Z)îXªvVçB'&–FvRÆöv–6Â6öçG&öÂÆæ^ûÉ·'VçF–ÖR÷6W76–öâ÷W&Ö—76–öâ÷FW&Ö–æÂ÷væW'6†—{º~{ºŞyKVæv–æTÖævW.8Væv–æTFFW%&Vv—7G'86†&VB6W76–öâc"KˆâvVçDWfVçD'W2hÈiÈ8$'&–FvRKˆÒ7vâ÷'6R4Ä8KˆŞX‰¾[»®zÊÎK¨ÎZYrWfVçB'W>ûÈÎK™şKˆŞYºFVÆVvFVB‹>yJˆz®Xªh›XxniØ>™™Šû~k.8$6ÆVFRô6öFW‚õöFW"y¨BÖævVBÔ5ô5G&ç7÷'BXú®k:XZ^XúşKúÆ—fR×GW&â6÷W&6RÆö6F÷.ûÉ´¶–Ö’ô÷Vä6öFRFööÂæÖ7ÖfÇ6VKˆŞKÊ®˜
+XZ^Xú>ûÈÄvVÖ–æ’'VçF–ÖRöÆ–7’{º~{ºÒf–Â6Æ÷6VN8.ŠúnŠxKˆ¾ik’vVçB'&–FvRj
+XxnŠÎ8 £##bÓ‚Ó#b+r’YîXûK»¾Xª6æöæ–6Â&6¶w&÷VæEF6¶—FVÒZY{ªnKˆîKˆ‹zşx«nhŠûÈ†’Ö&6¶w&÷VæB×F6²ÖW‡W&–Væ6VûÈûÉ§’hš[R&r[z^X[~YÊK¨¾K»n[.h©^[ÛK‹¢&6¶w&÷VæEF6²—FVŞûÈ‡7F'N(i&—FVÒ÷7F'FVBò&V6V—B¶æ÷F–f–6F–öî(i&—FVÒö&6¶w&÷VæEF6²÷WFFVNûÈûÈÎX˜ŞzºşKÉ®ŠùŞ{ª~x«nhŠ‚²&6¶w&÷VæEF6´6&BkK¾KÙ>XÚş{¸hh©Xú²6ö×÷6W"YîXûK»¾Xª–ÆÂ²XènXû.˜xŞ‹ÛŞY[›nûÉ·÷7B×6WGFÆR÷'†â˜	®yú^Š*²W"×GW&âf÷'v&FW"KŠ.[È>K‹®[{.yú^{Ë®Xú>ûÈ„"&Vv—7G'’vF6†W""jk+¾ûÈûÈÎŠúnŠxKˆ¾ikj
+XxnŠ‚’&6¶w&÷VæB×F6²ŠÎ8 £âiÈ‹ùj
+XxnûÉ£##bÓ‚Ó#R+rFöÖ–2h	Şˆ>[Ë®[ªnˆNXªhšX‹ûÈ†W‡æB×6†&VBÖFöÖ–2×&V6öæ–ærÖÆ–æ¶vR×Fò×–ûÈûÉ¦æF—fR’6ö×÷6W"h	Şˆ>j>KØŞ[{.YÊ‚FB×’×F†–æ¶–ærÖÆWfVÂ×6VÆV7F÷&ûÈƒ##bÓ‚Ó#^ûÈ‰ŞYËûÈÎKØb6†&VBò7&VFR×6W76–öâFöÖ–2ZûŠùŞjn‹[y¨NiŠşXúnKˆiÚX˜Şzºş™;î‹zşûÈ†FöÖ–4ÖöFVÅ&V6öæ–ærçG6²6ö×÷6W"çG7†y¨BFöÖ–4ÖöFVÅ&V6öæ–æu&Vf²6†&VBF&vWB‡–G&FR&V6öæ6–ÆRVffV7NûÈûÈÎXú®hêR6öFW‚ò6ÆVFRòw&ö¾ûÈÎZû’’y»Nhê^‹ùNz›®j>KØÒòkˆ^z›¢Vff÷'NûÈÎZûÎˆ{NyJh‹~YÊ‚6†&VB6W76–öâ˜’’jŠYè¾yÈ¾KˆŞX‹&V6öæ–æu6VÆV7F86VæB‹ëyXÂ&V6öæ6–ÆRh¨¢Vff÷'Bkˆ^h‰çVÆÎ8.KúîZHŞhêR’XÙ^[É^i8îX‹‹ùZY~XéşZÙXÉnˆNXªûÈ„E4‚òöFW"ò¶–Ö’òw&ö²ò÷Vä6öFRyKYNˆz¢6†ævRŠøNKËûÈûÉ®)FöÖ–4ÖöFVÅ&V6öæ–ærçG6ikZ)â&—fFRVç&–6„ÖöFVÅ&V6öæ–ætf÷$Væv–æVûÈ…’˜şKÊûÈÎKˆŞXùiˆîûÈûÉ¶&W6öÇfTFöÖ–5&V6öæ–æt÷F–öç6ò&V6öæ6–ÆTFöÖ–5&V6öæ–ætVff÷'Fò&W6öÇfTFöÖ–4FVfVÇE&V6öæ–ætVff÷'Fò&W6öÇfTFöÖ–5&V6öæ–ætVff÷'FY¹¾KŠ¢W‡÷'Bhš’Væv–æRÓÓÒ'’&XˆniJşûÈÎKˆâ6öFW‚YÎ[Ú.hûÈYŞKŠÒÆÆ÷vÆ—7BKùŞyY8KˆŞYŞKŠŞ‰ÒFVfVÇN86&–Æ—G’ÖæWWG&ÂKùŞyY’7W'&VçNûÈûÉ¶Vç&–6„ÖöFVÄ–æfõv—F„FöÖ–5&V6öæ–ævKùŞhÈ6öFW‚ÖöæÇ’iz˜ûÈÎKˆŞkiù2W6U&÷f–FW%F&vWD6FÆöt÷væW'2çG6òÖöFVÅ6VÆV7BçG7†æF—fR‹zş[èNûÉ¾)6ö×÷6W"çG7‚FöÖ–4ÖöFVÅ&V6öæ–æu&Vf™Ùâ6öFW‚XˆniJşhšK‹®ûÉ®[Ù2F&vWBæVæv–æRÓÓÒ'’&i{nhÈ’–BöÖöFVÂXË˜XÒ&÷f–FW$ÖöFVÄ6FÆöw5²'’%ÖûÈÎxÂ7W÷'FVE&V6öæ–ætVff÷'G6òFVfVÇE&V6öæ–ætVff÷'FûÉ¾X[nZè>™Ùâ6öFW‚™Ùâ’[É^i8îKùŞhÈ8ÎXú®Z²–BöÖöFVÎ8ŞûÈY	YîX[ÎZëûÈûÉ¶6FÆör˜hºYšyK&÷f–FW$ÖöFVÄ6FÆöw3òæ6öFW†iKK‹¢&÷f–FW$ÖöFVÄ6FÆöw3òå·F&vWBæVæv–æUÖûÈ†6öFW‚ŠÎK‹®KˆŞXùûÈûÉ¾)"6†&VBF&vWB‡–G&FR&V6öæ6–ÆRVffV7Biz˜y›ŞYŞXÙ^hš’6öFW‚Â6ÆVFRÂw&ö²Â–ûÈÎŠê’6†&VB6W76–öâ‡–G&FRi{b’jŠYè¾y¨BVff÷'BK™şhÈ’’ÆÆ÷vÆ—7BiKniY¾ûÉ¾)2Yîzºş™»niKXª‚(	N(	B’%26WE÷F†–æ¶–æuöÆWfVÆòfÆÆ&6²Ò×F†–æ¶–ævKˆâ6†&VBc"F—7F6‚Væv–æU÷6VæEöÖW76vV˜şKÊ÷væW"çF&vWBç&V6öæ–æuöVff÷'FûÈ†6†&VE÷6W76–öå÷c"ç'6äÃCcRy¨B¶–Ö’Âw&ö²Â÷Vä6öFRÂ’ÂöFW&ˆx.ûÈ[{.[KØŞûÈÎiÊÎjÊ{ªşX˜ŞzºşˆNXªûÉ¾)BæF—fR’6ö×÷6W"Y¹î[Ù.(	N(	FW6TFöÖ–5&V6öæ–æu&ö¦V7F–öâÒ—56†&VE6W76–öå&W6öÇfVBÇÂ7&VFU6W76–öåF&vWE–6¶W&Šê’æF—fR‹zş[èNKˆŞ‹[FöÖ–4ÖöFVÅ&V6öæ–æu&VnûÈÆ‡–G&FRVffV7Biz˜iÚK»b—56†&VE6W76–öå&W6öÇfVF[ş‰KÒæF—f^ûÈÆVç&–6‚†VÇW'26öFW‚ÖöæÇ’iz˜KˆŞkiù2æF—fR‹zş[èNûÈŠúnŠx&÷÷6ÂæÖB*~8ÎKˆŞY¹î[Ù"æF—fR{ª.{«ş8ŞûÈ8.K¨¾Zéîk©ûÉ¦7&2öfVGW&W2öÖöFVÇ2öFöÖ–4ÖöFVÅ&V6öæ–ærçG6ikZ)âVç&–6„ÖöFVÅ&V6öæ–ætf÷$Væv–æV²Y¹¾KŠ¢W‡÷'By¨B’XˆniJş87&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2ô6ö×÷6W"çG7†FöÖ–4ÖöFVÅ&V6öæ–æu&Vb™Ùâ6öFW‚XˆniJò²6†&VBF&vWB‡–G&FR&V6öæ6–ÆRVffV7By›ŞYŞXÙ^87&2öfVGW&W2öÖöFVÇ2öFöÖ–4ÖöFVÅ&V6öæ–ærçFW7BçG6ûÈƒ#B66W2Y
+²’Kˆ>j2òÖ†öÆW2òVæ¶æ÷vâÖæWWG&Âò7&÷72ÖVæv–æR–æ†W&—NûÈ87&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2ô6†D–çWD&÷‚÷6VÆV7F÷'2ôÖöFVÅ6VÆV7BçFW7BçG7†ûÈikZ)âBKŠ¢’'V–ÆE&÷f–FW$W†V7WF–öåF&vWB66W>ûÈ87&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2ô6ö×÷6W"ç6†&VB×’×&V6öæ–ærçFW7BçG7†ûÈik[»¢R66W>ûÉ¦6FÆörÆÆ÷vÆ—7Bh©^[ÛòÖ†öÆW2ZÙ™¸bò'VçF–ÖRÖöæÇ’6&–Æ—G’ÖæWWG&ÂòVff÷'B‹h®yXÂ&V6öæ6–ÆRòæF—fRKˆŞkh‹K’&÷f–FW$ÖöFVÄ6FÆöw2Y¹î[Ù.ijŞŠˆûÈ8÷Vå7V2W‡æB×6†&VBÖFöÖ–2×&V6öæ–ærÖÆ–æ¶vR×Fò×–8.jÚNX˜Ò##bÓ‚Ó#B+r6µW6W%VW7F–öâ{¹>zé~Z)>z)Kˆâ6ö×ÆWFVB4²Zû›ÙûÈ†f—‚Ö6·W6W'VW7F–öâ×6WGFÆVÖVçB×FöÖ'7FöæVûÈûÉ®yJh‹~ZéîŠø8ÎzÙNK¨nK™şk*yJ8[ÈZx¾hš~ŠÎK¨nXø[Ëjn8Ş[›Şx^XÚ(	N(	Nh‰X©ş{¹>zé~Xú¢&VÖ÷fR™‰şX‰~8iz6W76–öâ{ªrFöÖ'7Föæ^ûÈÎK‰B6ÆVFRh‰X©ş[©NzÙNXzK˜îKˆÒVÖ—B6ö×ÆWFVC×G'VVûÈÇ&W7VÖR˜xŞiKâş‹ùşX‹—FVÒ÷FööÂ÷&WVW7EW6W$–çWFh¨®YÎš)XÚ˜xŞikXZ^™‰ş8.‰ŞYËKˆ[.ûÉ®)dR6W76–öâ{ª~iÈyXÂ6WGFÆVÖVçBFöÖ'7Föæ^ûÈ„ÔƒÓ#C‚kª.X{¢6ÆV"·&RÖÖ&¾ûÉ¶–FVçF—G’Ò&WVW7EW6W$–çWD–FVçF—G”¶W–ûÈÎ[Šbv÷&·76R²6†&VB÷væW"öGFV×B{»N[ªnûÈûÈÆ66WFVBò7FÆR{¹>zé~KˆîiKnX‹6ö×ÆWFVC×G'VVi{bÖ&¾ûÉ¶W6UF‡&VEW6W$–çWDWfVçG6XZ^™‰şX˜Şj8iúR²&VGV6W"FEW6W$–çWE&WVW7FXøÎ™{™z‚f–ÂÖ6Æ÷6VBKŠ.[È>ûÈ††—7F÷'’&V÷VâYÎŠ*¾hÊûÈûÉ¾™Ùâ7FÆRhùKªNZK‹J^KˆŞXiZ)>z)8KùŞyY˜xŞŠù^8.)$R6ÆVFR&W7öæE÷Fõ÷W6W%ö–çWFh‰X©şûÈ„Ô5öæW6†÷BòæF—fRæ÷F–g’KŠN‹zş[èNûÈYîXi’6W76–öâ{ªr6WGFÆVE÷W6W%ö–çWE÷&WVW7Eö–G6ûÈ†6#C‚kª.X{¢6ÆV.ûÈ[›bVÖ—B&WVW7EW6W$–çWB²6ö×ÆWFVC¢G'VRÂVW7F–öç3¢µÒÖûÈÎKˆî‹h^i{n{¹>zé~‹zş[èB6ö×ÆWFVBŠúŞK˜Zû›ÙûÉ´Ô5&WVW7Eö–BkÈ.z{¾i{bfÆÆ&6²6öÆRv—FW"KªNK¹ûÈÎXøÂ–BYØrÖ&²²VÖ—NûÈ‡6¶—÷7V&Ö—BKˆŞhÈ.jÛ¾ûÈ8.)"æF—fR˜xŞXZRwV&NûÉ¦6öçfW'Eö6µ÷W6W%÷VW7F–öå÷Fõ÷&WVW7FZû[{"6WGFÆVB&WVW7Eö–NûÈ†6²ÓÄFVfVÇD†6†W"‡FööÅö–B“æûÈXú®Xù6ö×ÆWFVC×G'V^8KˆŞk:XhÂVæF–æ~ûÉ·7G&VÒv—BiÚK»niKn{J~K‹¢ÖF6†W2…&WVW7EW6W$–çWB²6ö×ÆWFVC¢fÇ6RÒ–ûÈÆ6ö×ÆWFVByIşYŞYiÉşK¨¾K»nKˆŞXhŞ‹ù²¶–ÆÂ¶Ò×&W7VÖVzØ[è^8.ikFööÅö–BkKîyIşik&WVW7Eö–BK¸ŞXúşjÚ>[‹[Ëz©~ûÉ¾KˆŞiK’6öFW‚iÊÎYËÆâXÚXØşŠêî8izik•>8.K¨¾Zéîk©ûÉ¦7&2÷WF–Ç2÷W6W$–çWE6WGFÆVÖVçEFöÖ'7FöæRçG6Ö&µW6W$–çWE&WVW7E6WGFÆVFò—5W6W$–çWE&WVW7E6WGFÆVF87&2öfVGW&W2÷F‡&VG2ö†öö·2÷·W6UF‡&VEW6W$–çWDWfVçG2çG2ÇW6UF‡&VEW6W$–çWBçG2ÇW6UF‡&VG5&VGV6W"çG7ÖûÈ†FEW6W$–çWE&WVW7F™{™zûÈ87&2÷WF–Ç2÷&WVW7EW6W$–çWD–FVçF—G’çG6&WVW7EW6W$–çWD–FVçF—G”¶W–87&2×FW&’÷7&2öVæv–æRö6ÆVFR÷W6W%ö–çWBç'6&W7öæE÷Fõ÷W6W%ö–çWFòVÖ—E÷W6W%ö–çWE÷&WVW7Eö6ö×ÆWFVFò6öçfW'Eö6µ÷W6W%÷VW7F–öå÷Fõ÷&WVW7FòÖ&µ÷W6W%ö–çWE÷&WVW7E÷6WGFÆVFòF¶U÷6öÆUöÖ7öç7vW%÷v—FW&87&2×FW&’÷7&2öVæv–æRö6ÆVFRç'67G&VÒ—5÷W6W%ö–çWE÷&WVW7FûÈ†6ö×ÆWFVC¢fÇ6VûÈ8.jÚNX˜Ò##bÓ‚Ó#B+r[›nŠÂæF—fR‹zKé¾[©NYXbÖöFVÂ&W6–GVÂjÚ.ŠûÈ†f—‚ÖæF—fR×&ÆÆVÂ×&÷f–FW"ÖÖöFVÂÖ—6öÆF–öæûÈûÉ®yJh‹~ZéîŠø[›nŠÎZI®KŠ®{¹Zé®KˆŞYÂÖævVB&÷f–FW"y¨BæF—fR6ÆVFRKÉ®ŠùŞYîûÈÎY¹îXènXû.KÉ®ŠùŞK¨ÎjÊXù˜h¨®Kˆ®KˆKÉ®ŠùŞKª~Y8jŠYè¾YŞûÈ†Ö–æ”Ö‚ÔÓ6ûÈ[Ù2g&VVf÷&Ò™Ù›¹‚ÒÖÖöFVÆKˆ®˜FVW6VV²’ŠznXùCûÈ†7W÷'FVB’ÖöFVÂæÖW2&RFVW6VV²×cB×&ò÷"FVW6VV²×cBÖfÆ6†ûÈ8.KúîZHŞKºR6VæB‹ëyXÎK‹®YJşKˆ[Ë®X‹n™{™zûÉ®)ÖævVB'VçF–ÖR&W6öÇfW"y¨N‹zKé¾[©NYXb&W6–GVÂY
+şXù[ÈşK¸î8ÎK¸R³6ö¶–Ö’Ò¦8Şhš[^K‹¢¶–Ö’{;²²Ö–æ”Ö‚{;²²[‹ŠxzÊÎKˆikKª~Y8X˜Ş{ÈûÈ†FVW6VV¶övÆÒÖövVæöF÷V&ööÖööç6†÷Fö&&öW&æ–Vö&–6‡Væö–’Öö7FWÖöÆöæv6FûÈûÈÎK‰NK¸^[Ù26FÆör[{º®K‰BÆVvÂæ†2‡fÇVR–ûÈ†6FÆörVçG'’YŞKŠÒò'VçF–ÖRXøŞiúRò&öf–ÆRVçbYk9^™¸nYØ~KÉXXK¨îY
+şXù[ÈşûÈi{nh˜Ò&W—"X‹6FÆörFVfVÇNûÈ†&W—&VC×G'VVûÈûÈÎh¹.{¹Ş8ÎXZ‚VæÆ—7FVB[iØ8ŞKùŞKØşYk9Rg&VVf÷&ŞûÈ†×’Ö÷&r×&÷WFW"×c&86ÆVFRÖ÷W2ÓBÓfKˆŞY¹î[Ù.ûÈûÉ¾)6FÆörz›®z©~K¸ŞiKîŠÂg&VVf÷&ŞûÈÎKˆŞh»şKª~Y8YŞY
+şXù[ÈşŠúşiØ6FÆöriÊ®[{º®i{ny¨NYk9^KÉ®ŠùŞûÉ¾)"6ö×÷6W"G&gB™{{»NhÈ¢×VæF–ærÒ¦™™Zé®ûÈÆf–æÆ—¦VBXènXû.KÉ®ŠùŞKˆŞY>Kˆ®KˆKÉ®ŠùÒG&gB6VÆV7F–öîûÉ¾)26†&VB6VÆV7FVDæW‡EF&vWF‹zş[èN™»nKº>zF–fn8&FW6–vâC2Yîzºò&V6÷&EöVæv–æU÷&÷f–FW%ö&–æF–æuöE÷F†™‹.™Ù›¹Šhny¹nK‹®Xúş˜’ûÈÎiÊÎh›iÊ®‰ŞYËûÈŠz>iéKÉXX{ª~K¸Ò&WVW7Bâ6FÆö~ûÈ8.K¨¾Zéîk©ûÉ¦7&2öfVGW&W2öÖöFVÇ2ö6ÆVFTÖævVE'VçF–ÖTÖöFVÂçG6dõ$T”tåõ%TåD”ÔUõ$U4”ETUô„”åE6ò—4f÷&V–vä6ÆVFU'VçF–ÖU&W6–GVVò&W6öÇfT6ÆVFTÖævVE'VçF–ÖTÖöFVÆ87&2ö×6†VÆÂöFöÖ–ç2÷W6T6†VÆÄ6ö×÷6W$ÖöFVÅ6V7F–öâçG6&W6öÇfVDÖöFVÆ87&2ö×6†VÆÂöFöÖ–ç2÷6VÆV7FVD6ö×÷6W%6W76–öâçG66†÷VÆDÇ”G&gD6ö×÷6W%6VÆV7F–öåFõF‡&VF8KŠNKŠ®YÎYÒçFW7BçG686öÖÖ—B“†3F&68.jÚNX˜Ò##bÓ‚Ó#B+r6†&VBX‰¾[»®›¹ŠêB&÷f–FW"iK8ÎiÈ[¨şX‰~ŠzÊÎKˆš’²&öf–ÆRiØ>Zˆ6FÆöröÖ–æ~8ŞûÈ†f—‚×6†&VBÖ7&VFRÖFVfVÇB×&÷f–FW"Ö6FÆövûÈûÉ¦†æFÆU7F'E6†&VD6öçfW'6F–öæ[È>yJŠ;‚vWDVæv–æTÖöFVÇ2†Væv–æR–ûÈ„6ÆVFRiÊÎYË‹zş[èNY2Væv–æR7FGW2‹ø~iÉò66†^ûÈÎkŠ˜26†—j~8ÎiÊÎYË˜XŞ{Úî8ŞXÛNi‹îzK®‹ø~iÉòÖ–æ”Ö‚iŠ[NûÈÎyJh‹~ZéîŠøXZK‹"Ö–æ”Ö‚ÔÓ>ûÈûÈÎiK‹[&W6öÇfU6†&VE6W76–öä7&VFT–æ—F–ÅF&vWF(	N(	FÆöD÷&FW&VE6†&VD7&VFU&÷f–FW'6XùnKˆâFöÖ–2–6¶W"YÎ[¨şy¨B&÷f–FW"X‰~ŠûÈiÊÎYË6VçF–æVÂKÉXXûÉµöFW"iz&÷f–FW"5%TBY»®Zé¢vÆö&Âö6âXøÂ&öf–Æ^ûÉµ’‰Ò6VçF–æVÎûÈûÈÆ&W6öÇfTf—'7E6†&VD7&VFU&÷f–FW&Zé®zÊÎKˆšûÈ†F—6²öÖævVB6÷W&6R²YŞz{[ú¾xZ~ûÈÎzhjÚ.zÎ{Énz8Îk‹ùÂÆö6Î8Şh‰n8Îk‹ùÎzÊÎKˆKŠ¢ÖævVN8ŞûÈûÈÆÆöDWF†÷&—FF—fTÖöFVÇ4f÷$7&VFU&÷f–FW&hÈ’&öf–ÆRiØ>ZˆXùni[ûÈiÊÎYË6VçF–æVÂ²f÷&6U&Vg&W6ƒ¢G'VV˜xŞŠû²6WGF–æw>ûÉ¶ÖævVB[Šb&÷f–FW%&öf–ÆT–B‹[&÷f–FW"×66÷VBZéîi{b6öæf–~ûÈûÉ´6ÆVFRX‰¾[»®X˜Ò7–æ46ÆVFTÖöFVÄÖ–ætf÷%&öf–ÆR‡&öf–ÆT–B–KˆîkŠ˜>Xˆ~hÚ.YÎk©ûÈZK‹J^KˆŞ™‹¾ijŞX‰¾[»®ûÈûÉ¶'V–ÆE6†&VE6W76–öä–æ—F–ÅF&vWF{¹şKˆKª~X{®ZèÎi[BW†V7WF–öåF&vWNûÈ›¹ŠêBÖöFVÂÒ6FÆör—4FVfVÇFŠÎY
+nX‰šinŠÎ8'VçF–ÖRÒÖöFVÂÇÂ–F8&V6öæ–ærhÈ’F&vWB6&–Æ—G’i*ŞzxÒ–æ†W&—C¦fÇ6^8z›¢6FÆörf–ÂÖ6Æ÷6VBKˆŞ[»®KÉ®ŠùŞûÈ8.h™>[Èiz.iÈKÉ®ŠùŞzÎ‹ëyXÎûÉ¦7&VFRö÷VâXˆnXøûÈÆ‡–G&FR‹zş[èNKˆŞ[é~‹>yJX‰¾[»®›¹ŠêNŠz>ié&W6VVBÆ7B6VÆV7FVEF&vWFûÉ¾˜XŞZY~[^zK®Zû›Ù(	N(	F6†D–çWD&÷†YÊZèÎi[BW†V7WF–öåF&vWBXùXÉni{nZû’6ÆVFRŠR7–æ2Ö–æ~ûÈKˆŞhÊVç7W&^ûÈûÈÆ&W6öÇfT6ÆVFT6FÆötÖöFVÄÆ&VÆò&W6öÇfTÖöFVÄ–Df÷$–6öæih~jKˆîY»îj~iK’6FÆör'VçF–ÖRKÉXX8zh™˜izrÆö6Å7F÷&vRÖ–æry¹niØ>ZˆÖöFVÂæÖöFVÆûÈÆ&÷f–FW$'&æD–6öæŠRÖööç6†÷ByúÒ–B³6ö³2Ó#Sf¶(i"¶–ÖûÈ{ÚîK¨îZëŞk9¾ŠxNX‰X˜ŞûÈ8.K¨¾Zéîk©ûÉ¦7&2ö×6†VÆÂ÷6V7F–öç2ö6÷&R÷W6T6†VÆÅ6V7F–öç2çG6†æFÆU7F'E6†&VD6öçfW'6F–öæ87&2öfVGW&W2÷6†&VB×6W76–öâ÷F&vWB÷&W6öÇfU6†&VE6W76–öä7&VFT–æ—F–ÅF&vWBçG6ûÈ†ÆöD÷&FW&VE6†&VD7&VFU&÷f–FW'6ò&W6öÇfTf—'7E6†&VD7&VFU&÷f–FW&òÆöDWF†÷&—FF—fTÖöFVÇ4f÷$7&VFU&÷f–FW&ò&W6öÇfU6†&VE6W76–öä7&VFT–æ—F–ÅF&vWFûÈ87&2öfVGW&W2÷6†&VB×6W76–öâ÷F&vWBö–æ—F–ÅF&vWBçG6'V–ÆE6†&VE6W76–öä–æ—F–ÅF&vWF87&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2ô6†D–çWD&÷‚ô6†D–çWD&÷‚çG7†ûÈ†W†V7WF–öåF&vWBVffV7NûÈ87&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2ô6†D–çWD&÷‚÷6VÆV7F÷'2ôÖöFVÅ6VÆV7BçG7†ûÈ†&W6öÇfT6ÆVFT6FÆötÖöFVÄÆ&VÆò&W6öÇfTÖöFVÄ–Df÷$–6öæûÈ87&2öfVGW&W2÷fVæF÷'2÷&÷f–FW$'&æD–6öâçG68.jÚNX˜Ò##bÓ‚Ó#B+r6†&VB6öFW‚Kˆ®Kˆ¾ih~h©^[ÛiK‹[÷'F&ÆRG&ç67&—NûÈ†f—‚×6†&VBÖ6öFW‚Ö6öçFW‡B×&ö¦V7F–öæûÈûÉ®)zÊÎKˆik’6öFW‚X[ÎZë’&÷f–FW"KÉ®h¹.{¹Ş{Ë¢&÷f–FW"×&—fFR&V6öæ–æv—FVÒy¨N˜xŞièBÖW76vR÷FööÂ™;îûÈÎK‰NzîZé®h
+~ZK‹J^(	N(	FF‡&VBö–æ¦V7Eö—FV×6ikk9^ZÙYÊKˆŞXhŞKÙÎK‹¢7G'V7GW&VB–×÷'BŠøhÚîûÉ¶6öçFW‡Eö6&–Æ—F–W66öFW‚ˆx.X[>™zÒ7G'V7GW&VEö†—7F÷'•ö–×÷'FòFööÅö†—7F÷'–ò7G&öæuö6öçFW‡Eö6¶ûÈÆ6ö×–ÆW"hÈ’6&–Æ—G’˜hº’÷'F&ÆR×G&ç67&—FûÈ‹h^š(Nzé~Y¹î˜&÷VæFVB6†V6·ö–çFûÈûÈÇFööÂ6ÆÂ÷&W7VÇBhÈ’FöÖ–2—"yÈyZ^[›n{¸òÖæ–fW7BöÖ—76–öâŠë[Ù^ûÈ†6FVv÷'’FööÂÖW†6†ævV8æ÷E&WG&–Wf&Æ^ûÈûÈÇW6W"ö76—7FçBih~iÊÎ8G&ç67&—B'VFvWN86†V6·ö–çBXè¾{ÊKˆâ÷&–v–æÂ×F6²KùŞyYKˆŞXùûÉ¾)6†&VB×&÷f–FW"×&WG'–Xˆn{¾Yšh¨¢–çfÆ–E÷&WVW7EöW'&÷&K‰NY
+²&WV—&VB&V6öæ–ær—FVÖXŠBW&ÖæVçB6öæf–vûÈÎYÂ&–æF–ærKˆŞXhŞˆz®Xª˜xŞŠù^ûÈÃC#’÷F–ÖV÷WBzØi¨.hXˆn{¾KˆŞXùûÉ¾)"Š*¾Y
+nXk>ûÉ®K¸RöÖ—BgVæ7F–öåö6ÆÆûÈ†76—7FçBÖW76vRK¸ŞKéŞ‹YnzxiÈ’&V6öæ–æ~ûÈÎizk9^™zŞYXØşŠêîûÈKˆâ&÷f–FW"×7V6–f–2—FVÒ×66†VÖ&ö&^ûÈizizXšşKÙÎyJhê.kX¾ûÈÎ‹h^ˆÈ>Y»NûÈûÉ¾ZÙ˜xş[{.kiù2&–æF–ærKˆŞX®YÊKØŞKúîZHŞûÈÎ‹[iz.iÈ’&V6÷fW'’W†—BòF&vWB7F–öç>8.K¨¾Zéîk©ûÉ¦7&2×FW&’÷7&2÷6†&VE÷6W76–öå÷c"ç'66öçFW‡Eö6&–Æ—F–W6ûÈ„6öFW‚ˆx"²kX¾ŠùR6öFW…÷6†&VEö6öçFW‡E÷W6W5÷vVµ÷÷'F&ÆU÷G&ç67&—FûÈ87&2×FW&’÷7&2÷6†&VEö6öçFW‡Bö6ö×–ÆW"ç'66VÆV7EöÖöFVòFööÂÖW†6†ævRöÖ—76–öâXˆniJş87&2öfVGW&W2÷6†&VB×6W76–öâ÷&÷f–FW"×&WG'’ö6Æ76–g•6†&VE&÷f–FW%&WG'”W'&÷"çG66Æ76–g•W&ÖæVçF8.jÚNX˜Ò##bÓ‚Ó#B+röFW"XÙRVæv–æRXøÎXˆnXù–Ö×WF&ÆRF—7G&–'WF–öâ&–æF–æ~ûÈ†FB×öFW"ÖGVÂÖF—7G&–'WF–öæûÈûÉ¥öFW"vÆö&ÎûÈ†õ÷öFW%övÆö&ÅõöòöFW&6Æ–òôDU%ô4ôäd”uôD•&òôDU%õU%4ôäÅô44U55õDô´TæòâòçöFW&òöFW"ÖWF‚æ§6öæûÈKˆâöFW"4îûÈ†õ÷öFW%ö6åõöòöFW&6Æ–6æòôDU$4åô4ôäd”uôD•&òôDU$4åõU%4ôäÅô44U55õDô´TæòâòçöFW"Ö6æòöFW"Ö6âÖWF‚æ§6öæûÈ[»®jŠK‹®YÎKˆöFW&Væv–æRKˆ¾y¨NKŠNKŠ¢öFW$F—7G&–'WF–öæûÈÎKˆŞikZ)îšn["Væv–æ^ûÉ¶&÷f–FW%&öf–ÆT–FŠúŞK˜XØ~K‹®KˆŞXúşXù‚F—7G&–'WF–öâ&–æF–ærhÈK˜^XÉn‹ù²æF—fRF‡&VBKˆâ6†&VB&–æF–æ~ûÈÎz›®XÂòõöÆö6Å÷öFW%õöòizröFW#£Ç&sæK¸^KÙÂÆVv7’vÆö&ÂX[ÎZë‹é>XZ^ûÈÎikhÈK˜^XÉnKˆ[è²öFW#£Ç&öf–ÆSã£Ç&sæûÈ†öFW$æF—fU6W76–öä–FVçF—G’æ6æöæ–6Åö–FûÈûÈÅöFW"7V6–Â–G2KˆŞ[é~Š*¾išî˜	¢Æö6Â6VçF–æVÂ[Ù.KˆXÉnK‹¢çVÆÆûÉ·7vâò6VæBòf÷&²ò–çFW''WBò7FGW2òFö7F÷"òvWEöVæv–æUöÖöFVÇ6ò†—7F÷'’Æ—7BÖÆöBÖFVÆWFR{¹şKˆ‹[&W6öÇfU÷öFW%÷&÷f–FW%öÆVæ6…÷&öf–ÆVKª~X{®y¨BöFW%&÷f–FW$ÆVæ6…&öf–ÆVûÈ†&–âò†öÖRò'VçF–ÖR¶W’hÈ’F—7G&–'WF–öâŠz>iéûÈÆöFW%÷'VçF–ÖUö¶W–™©Nzk²ÖævW"÷væW'6†—ûÈûÈÆ†—7F÷'’z8y¹‚&–Ö'’²5fÆÆ&6²YØ~™HjÛ¾[Ù>X˜ÒF—7G&–'WF–öîûÈ†F—7G&–'WF–öåöÆVæ6…÷&öf–ÆW5öæWfW%ö7&÷75÷&VEöF—6µö†—7F÷'–ijŞŠˆKˆŞ‹z‚&ö÷NûÈûÉ¶6FÆörŠÎhÈ’F—7G&–'WF–öâ66÷^ûÈ†66÷U÷öFW%öÖöFVÇ5÷FõöF—7G&–'WF–öæûÈûÈÎK¸^h™>[È–6¶W"òh˜¾XªX‹~ikòXù˜X˜Ş{Ë®yºî[Ù^i{nŠû~k.ûÈÎXˆ~KÉ®ŠùŞ™»b6FÆör•>ûÉµ6†&VBGƒfÆ–FFU÷öFW%öF—7G&–'WF–öåö–FVçF—G–ZûiÊ®yúRöFW"&öf–ÆRf–ÂÖ6Æ÷6VNûÈ†–çfÆ–B×F&vWFûÈÎKˆŞXi’6öçfW'6F–öâçGW&å&WVW7FVFò&–æF–æ~ûÈûÉµT’KùŞhÈXÙRöFW"Kê~jşx‹nXZ^Xú>ûÈ†æWr×6W76–öâ×öFW&6†–ÆG&VâvÆö&Âô4îûÈ’²XÙRfVæF÷"š^XhRvÆö&Âô4â6VvÖVçFVBF'>ûÈXˆ~hÚ.Xú®hÚ.ŠxnY»îûÈÎKˆŞŠznXù&V&–æF–ærò6FÆör&Vg&W6ûÈ8.K¨¾Zéîk©ûÉ¦7&2×FW&’÷7&2öVæv–æR÷öFW%÷&÷f–FW%÷&öf–ÆRç'6ûÈ†öFW$F—7G&–'WF–öæò&W6öÇfU÷öFW%÷&÷f–FW%öÆVæ6…÷&öf–ÆVòöFW%ö6æöæ–6Å÷&÷f–FW%÷&öf–ÆUö–FòöFW$æF—fU6W76–öä–FVçF—G–ûÈ87&2×FW&’÷7&2öVæv–æR÷·öFW"ç'2ÇöFW%öWF‚ç'2Ç7FGW2ç'2ÆÖævW"ç'2ÇöFW%ö†—7F÷'’ç'7Ö87&2×FW&’÷7&2÷6†&VE÷6W76–öå÷c"ç'6fÆ–FFU÷öFW%öF—7G&–'WF–öåö–FVçF—G–87&2öfVGW&W2÷F‡&VG2ö6öç7FçG2ö6öFW…&÷f–FW%&öf–ÆW2çG687&2öfVGW&W2öö†öö·2÷W6U6–FV&$ÖVçW2çG687&2öfVGW&W2÷fVæF÷'2ö6ö×öæVçG2õfVæF÷%6WGF–æw5æVÂçG7†8.jÚNX˜Ò##bÓ‚Ó#B+r’%2iKnXú>Kˆî™˜NK»n™;î‹zşh›jÊûÈ†Væ†æ6R×’ÖæF—fR×'2×6W76–öæiKn[îûÈûÉ®)GW&â{¹>zé~iK’¢®yÈ¾™zx¹~Zû‹Jb¢®(	N(	GG—VBvVçE÷6WGFÆVF‹ùşX‹i{nhÈ8Î‹ù¾zˆ¾kK¾h
+r²K¨¾K»nhê‹ù¾8ŞZû‹Jn{º~{ºŞzØûÈÎXùnKº>Y»®Zé¢F–ÖV÷WNûÈ™[şK»¾XªŠúşiØZéîŠøûÈûÉ¾)%2Xh^ˆNY¹î[Ù.kÈşx+iKnXú>ûÈ{¸hò™HòY»îx˜ròFVÖöîûÈûÉ¾)"XènXû.yJh‹~™˜NY»îK¸â%2–ÖvR&Æö6²‹ùXéşûÈÎ[ŠnY»îhù™zâ‡–G&FRYîyJh‹~k	Nk:KˆŞXhŞ{)‹ùîXªh˜¾[î[{NûÉ¾)2KŠŞih~‹zş[èN™˜NK»nXˆ~x˜ræ–>8Kê~jşj~š)‚Æf–ÆRæÖSæFrk8NkÈş8f÷&²™Ù›¹‚æòÖ÷Šúş‰xşK‹¾{«ş8™[şKÉ®ŠùŞKÉ®ŠùŞj	˜	.[Ù.xˆnj8&W6–FVçBjŠYè¾˜Yè¾kÈ.z{¾ûÈXù˜X˜ŞZû‹JnûÈ86ö×7B™;î‹zòS2xºÎz¸¾‹h^i{b²kK¾‹x2'VâZèXÚ¾i[Nh›XªY»®8.K¨¾Zéîk©ûÉ¦7&2×FW&’÷7&2öVæv–æR÷·’ç'2Ç•÷'2ç'7ÖûÈÆ6öÖÖ—G2vc“#s3ƒ–òFSF#&3ò6fC#–#ƒ&òfF6F##v6òC3†F3“ƒSò6c##ƒvò6cƒ“Ccs–òF3Sf6VfS6òcCfSCcƒ#–ò3cfScs“s8.jÚNX˜Ò##bÓ‚Ó#B+r’%2&W6–FVçByÉş[›nŠÎûÈ†Væ†æ6R×’ÖæF—fR×'2×6W76–öæ*s3>ûÈûÉ¦•6W76–öâç&W6–FVçG6hÈ’6W76–öâ÷67&F6‚Xˆn‹ù¾zˆ¾ûÈÎi*N™Hv÷&·76RXÙ^š9â7v—F6…÷6W76–öæK©.ij^ûÈyJh‹~ZéîŠø8ÎXúnKˆ’KÉ®ŠùŞy¨BGW&âK¸ŞYÊ‹ù¾ŠÎKŠŞ8ŞŠúşKÊN[›nŠÎûÈ8.K¨¾Zéîk©ûÉ¦7&2×FW&’÷7&2öVæv–æR÷’ç'6Vç7W&U÷&W6–FVçFò•÷&W6–FVçEöÖö¶W–8.jÚNX˜Ò##bÓ‚Ó#R+r6ÆVFRôvVÖ–æ’GW&â{¹>zé~8Îh‰X©ò&W7VÇBKÉXXK¨î‹ù¾zˆ¾˜X{®z8ŞûÈ†f—‚×GW&âÖfÇ6RÖf–ÇW&R×&WG'’×7F÷&ÖûÈûÉ®yJh‹~ZéîŠøûÈ‡6†&VB6ÆVFR6öFR²KŠŞ‹ÚÎkŠ˜>ûÈÅv–æF÷w24Ä’"ãã#3>ûÈ[{.ZèÎh‰GW&îûÈ†7F÷÷&V6öãÖVæE÷GW&æ8FööÅ÷W6R™»nh*ÎhÈ.8™»b’W'&÷.ûÈŠ*¾‹ù¾zˆ¾™Ùî™»n˜X{®{û¾h‰GW&äW'&÷.ûÈÎ{¸ò6†&VB&÷f–FW"×&WG'’iKîZJ~K‹¢WFò×&W7VÖRjÛ¾[ê®xêşûÈXÙR6W76–öâb‹ùîXù8jøşiê¢ãc²Fö¶VîûÈ8.KúîZHŞZû›Ù*sBã2ã"iz.iÈŠëîŠêûÈ8Å&ö6W72W†—BXú®KÙÎ{Ë®ZK&W7VÇBy¨N™IŠúşXYÎ[©^8ŞûÈûÉ¦6ÆVFRç'6ikZ)â6u÷7V66W75÷&W7VÇFûÈ†—5öW'&÷"ÒG'VVK‰B7V'G—R™ÙâW'&÷"¦ûÈûÈÎ™Ùî™»n˜X{®™˜Ş{ªrv&âiz^[ù~ûÉ¶vVÖ–æ’ç'6YÎjËâ–çfW'6–öâKºR6u÷GW&åö6ö×ÆWFVFZèXÚ¾ûÉ¶¶–Ö’öw&ö²÷’izkXXhRFW&Ö–æÂjh.[û^KˆŞ˜.yJûÈÆ÷Væ6öFR[{.iÈ’V–W66VE÷v—F†÷WE÷FW&Ö–æÆZèXÚ¾ûÈÇöFW"öG6‚iz˜X{®zY
+nXk>‹zş[èN8.˜XŞZY~ûÉ¦6†&VB×&÷f–FW"×&WG'–Xˆn{¾YšikZ)âW&ÖæVçBV÷FûÈš(Nhš>‹K’şKÙš)ŞKˆŞ‹k>XXK¨âööÂCóC2XŠNZé®ûÈ’²–FVçF–6ÂÖf–ÇW&RxiNijŞûÈYÂ6–væGW&R‹ùî‹JR2jÊXÛ2W††W7FVNûÈ8.K¨¾Zéîk©ûÉ¦7&2×FW&’÷7&2öVæv–æRö6ÆVFRç'6—5÷7V66W75÷&W7VÇEöWfVçF87&2×FW&’÷7&2öVæv–æRövVÖ–æ’ç'687&2öfVGW&W2÷6†&VB×6W76–öâ÷&÷f–FW"×&WG'’÷¶6Æ76–g•6†&VE&÷f–FW%&WG'”W'&÷"çG2Ææ÷FU6†&VE&÷f–FW%&WG'•GW&âçG7Ö8.jÚNX˜Ò##bÓ‚Ó#R+röFW"Bk:XZ^KÉXX{ª~iKnXú>ûÈ†f—‚×öFW"×BÖVçb×&V6VFVæ6VûÈûÉ§7vâk:XZ^iKK‹¢7F÷&VBNûÈ†âòæ66wV’÷öFW"ÖWF‚æ§6öæòöFW"Ö6âÖWF‚æ§6öæûÈ’¢®KÉXXK¨â¢¢Ö÷77‚‹ù¾zˆ²VçnûÈjÚNX˜ÒVçbKÉXXZûÎˆ{Bv–æF÷w2hÈK˜^xêşZ(>Xù˜xş˜î‰KŞŠëî{Úîš^ikNûÈÎyJh‹~8ÎhÚ.ikFö¶VâK¸ŞŠ*¾Šhk.˜xŞikŠêNŠø8ŞûÈûÉ¶öFW%öWF…÷7FGW6ikZ)âVçe&W6VçFi«N™Ë"7F÷&VB¶VçbX[ZÙûÈÎŠëî{Úîš^hùzK¢VçbŠ*¾[ûŞyZ^ûÉ¾XzŞhÚîŠz>iéš®[¨şih~jYÎjÚ^XøŞ‹ÚÎ8.K¨¾Zéîk©ûÉ¦7&2×FW&’÷7&2öVæv–æR÷öFW%öWF‚ç'66VÆV7E÷7vå÷F8.jÚNX˜Ò##bÓ‚Ó#2+r’‹øz{²’ÒÖÖöFR'6™[şš›¾‹ù¾zˆ¾ûÈ†Væ†æ6R×’ÖæF—fR×'2×6W76–öæûÈûÉ¦7&2×FW&’÷7&2öVæv–æR÷•÷'2ç'6&W6–FVçB6Æ–VçNûÈ‡7G&–7B¥4ôäÂò–BX[>ˆBòW‡FVç6–öâT’WFòÖ6æ6VÂòG—VBvVçE÷6WGFÆVF{¸hûÈûÈÆ’ç'6K‹¾‹zş[èB–FÆ^(i&&ö×Fò7G&VÖ–æ~(i&7FVW&ûÈ†GF6†VBGW&â™¨ò'VâYÎ{¹>zé~ûÈûÈÆ&÷'F²'2¶–ÆÂXYÎ[©^ûÈÇ7vâö†æG6†¶RZK‹J^Y¹î˜&–çBÖ§6öîûÈ†fÆÆ&6²Kˆ¾h¹.{¹Ş[›nXùXù˜™‹.XøÎ‹ù¾zˆ¾KªNXøXi’6W76–öâih~K»nûÈûÉ¾Y»îx˜~iK’&6ScB–ÖvW5µÖKÊ‹é>8&6&–Æ—G’ÖG&—‚’ŠÎûÉ¦–çWBæÖ–B×GW&æò6W76–öâæf÷&¶ûÈ†f÷&²×FòÖæWrÖf–ÆRŠúŞK˜ûÈÎ™Ùîj	XhRÆæ^ûÈ’ò6W76–öâçG&VVûÈXú®Šû²²f÷&¾ûÈÅ%2izÆVbÖÖ÷f^ûÈ’ò'2ç6W'fW&XØr7W÷'FVNûÈÆ6W76–öâç7v—F6†KùŞhÈVæ¶æ÷vîûÈÆFööÂæÖ7{»NhÈVç7W÷'FVNûÈ‡W7G&VÒXøÒÔ5z¸¾YË®ûÈ8.X˜Şzºò7&2öfVGW&W2÷’×6W76–öâò¢¦ûÉ®k	Nk:)"f÷&¾ûÈk©ih~iÊÎY¹îZ²6ö×÷6W$G&gE7F÷&^ûÈ8Xú®Šû¾KÉ®ŠùŞj	÷fW&Æ8F"XˆniJò6†—8Kê~jò)$â[ëŞj~86ö×÷6W"ö6ö×7BXZ^Xú>ûÉ¾x«nh‹[fVGW&RÖÆö6ÂZIn˜:‚7F÷&^ûÈÎKˆŞ‹ù²6†VÆÂFöÖ–â&~8.YÎiz^iKnXú>ûÈyJh‹~ZéîkX¾˜	®‹ø~Yâ&Wf–W~ûÈûÉ¥%2VæF–ærXXk:XhÎYîXiûÈ‡&W7öç6RizX‹z¹îhûÈûÉ·GW&â‹h^i{ni‚'VâXZ‚v—FW"KˆjÊ{¹>zér²6WGFÆVFˆx.™‹"GW&äW'&÷"˜xŞXùûÉ¶Ö—6ÖF6‚öÆ–vâˆx"GW&äW'&÷"XøÎXùj™šNûÉ¶–çFW''WB‚–z›®™{.KˆŞXhÒ&÷'B³'2w&6^ûÉ¾Kê~jòÆ—fRF—6²Æ—7B[Ù.KˆXÉnŠR&VçE6W76–öä–FûÈ†–æFW‚[ú¾xZ~Yîik[»®kKîyIşKÉ®ŠùŞk8NkÈşKúîZHŞûÈûÉ¾j	š¹KªîiKkøkK¾‹zş[èN‹z‚ÆæR‹Jş˜	®iù>ˆ›"²GW&â{¹>iÙşˆz®XªX‹~ik8.jÚNX˜Ò##bÓ‚Ó#"+r6†&VBÖ÷væVBæF—fRKê~jşk8NkÈşiKnXú>ûÈ†f—‚×6†&VBÖ÷væVBÖæF—fR×6–FV&"ÖÆV¶ûÉ¦Æ—fRF‡&VB÷7F'FVFhÈ’W†V7WF–öâF&vWBŠêBVæF–æ~ûÉµöFW"{¸höFW#£Ç&öf–ÆSã£Ç&sæûÉ¶Vç7W&UF‡&VFŠêB6†&VBÖ÷væVBˆÎKˆŞ™Ú&VçBç7F'G5v—F‚‚'6†&VC¢"–ûÉ¶†–FRiÊ®[{º®KˆŞiKîX{®ikw&ö²÷’÷öFW"–æFW‚ŠÎûÈ8.YÎizR+röFW"‹ù²6†&VBiJşhÈ™¸nYûÈ†Væ&ÆR×öFW"×6†&VB×F&vWFûÉ®X˜ŞYîzºşXøÎ™¸nY‚²6öçFW‡B÷'VçF–ÖRÖ¶W’÷&÷f—6–öæ–ær÷6VæBö–çFW''WBŠ^ˆx"²6æöæ–6Âf7BVæv–æRié®K‹â²Y¹¾{ªr–6¶W"yºî[Ù^ûÉ·'VçF–ÖRÖöæÇ’jŠYè¾yºî[Ù^Xù˜‹zş[èNhÈz›®yºî[ÙR²ÆÆ÷riKîŠÎûÈ8.YÎizR+röFW"†—7F÷'’K‹¾˜	®˜>Xˆ~hÚ.ûÉ®z8y¹‚§6öæÂ&–Ö'ûÈ†âòçöFW"÷&ö¦V7G2óÆ7vB×6ÇVsâò¢æ§6öæÆûÈÄw&ö²õ’ô¶–Ö’æF—fT†—7F÷'•&VFW"[Ú.hûÈ’²56W76–öâöÆ—7Fö6W76–öâöÆöFfÆÆ&6¾ûÉ¶FVÆWFRK¸Ş‹[56W76–öâöFVÆWFVûÈ{ª.{«ò#KˆŞXùûÈ8.YÎizR+röFW"'VçF–ÖR6öçG&7Bj
+XxnûÉ§&WVW7FVBÖöFVÂ÷&V6öæ–ærVff÷'Bf–ÂÖ6Æ÷6VNûÉ¶6æ6VÂXXXùb7F÷&V6öã¢&6æ6VÆÆVB&G—VBFW&Ö–æÎ8K¸R'2Yâ¶–ÆÂiÊ®{¹>zér6†–ÆNûÉ·&ö×BW6vRæ–çWEFö¶Vç6ò÷WGWEFö¶Vç6h©^[ÛVæ–f–VBW6v^ûÉ¶f÷&µ6W76–öä–F‹zşyK56W76–öâöf÷&¶ûÉ·7FGW2öÖöFVÂ&ö&RKˆâ'VçF–ÖRX[yJ‚&W6öÇfVB†öÖUöF—&8.YÎizR+röFW"›¸N˜yGW&âŠ^˜x~ûÈ‡öFW&6Æ’ãã#‚²Bk:XZ^ûÈÇ&ö&Sbóró‚óûÈûÉ¦6&–Æ—G’ÖG&—‚7G&VÖ–ærç&V6öæ–ævò7G&VÖ–ærçFööÂÖ÷WGWFò–çWBæÖ–B×GW&æò6W76–öâæf÷&¶yKVæ¶æ÷vâXØr7W÷'FVNûÉ¶6æ6VÂ4²XØ~{ª~K‹®ZéîkX¾ûÈ†7F÷&V6öã¢&6æ6VÆÆVB&ûÈûÉ´5W6vR6†RÆ—f^ûÈ…B‹JnXû~™»nXÎûÈÎ™Ùî™»nXÎK¸Ş[è^ZéîkX¾ûÈûÉ¶6W76–öâçG&VVKùŞhÈVæ¶æ÷vîûÉ¾K¸ŞKˆŞ‹ù²6†&VN8.jÚNX˜Ò##bÓ‚Ó#+röFW"h‰K‹®zÊÂ’KŠ¢æF—fRVæv–æ^ûÈzÊÎY¹¾iÚXØşŠêîixò7×7FF–öûÈÇ7vâ×W"×GW&â²56W76–öâ÷&W7VÖVûÈûÉ¾zÊÎKˆiÉşKˆŞ‹ù²6†&VNûÉµ7–¶RKˆîj
+XxnŠÎŠxKˆ¾Š‚öFW"iÚyºî8.jÚNX˜Ò##bÓ‚Ó’+rE4‚6ö×÷6W"K»¾XªiÚòXÚyJxêşhêR†÷7B6W76–öâ÷&ö¦V7F–öæûÉ¦FöF÷686öçFW‡E&W77W&V86öçFW‡D'&V¶F÷væKˆâ&–ÆÆVBFö¶VåW6vVò6W76–öå7FG6xºÎz¸²Æ7B×v–ç>ûÉ¾z›¢FöF÷6kˆ^z›¢7FæF–ærÆî8.jÚNX˜Ò##bÓ‚Ó~ûÉ¤E4‚vöÂ6öçF–çVF–öîûÉ¦6ö×ÆWFVB†÷GW&âöVæFKˆŞŠz>{¹ûÉ´vöÂ7F—fVh©X‹bGW&ä6ö×ÆWFVFûÉ¶6÷W&6Ræ¶–æBÓÓÒ&vöÂ&h©^[ÛK‹¢G6‚ÖvöÆh©XúXÚ8.YÎizR6W76–öâ–æFW‚iÈyXÂE4‚w&—FW"XZRf—'7B×–çN8.jÚNX˜Ò##bÓ‚Ó^ûÉ¤E4‚h‰K‹®zÊÂrKŠ¢æF—fRVæv–æ^ûÈ†G6‚Ö†÷7B×'6²XZ[G6‚vV&7WW'f—6÷.ûÈûÉ¾zÊÎKˆiÉşKˆŞ‹ù²6†&VNûÉ·VæF–æri˜¾XØrò7væVB†÷7B˜X{®Y¹îiKbòKê~jòv÷&·76Rh‰Y™¸n[{.hÈ’Ã"iKnXú>ûÉ¾j
+XxnŠÎŠxKˆ¾Š‚E4‚iÚyºà£â˜.yJˆÈ>Y»NûÉ¤æF—fR6W76–öî86†&VB6W76–öî8&÷f–FW"'VçF–Ö^86W76–öâ6FÆö~86–FV&"&ö¦V7F–öî8iÊ®iÚRÇVv–âò÷&6†W7G&F–öà£âj[ø>Xk>zÙnûÉ¤æF—fR6W76–öâKùŞhÈXéşyIş‹ª¾K»ŞûÉµ6†&VB6W76–öâh›şh¸^‹z‚4Ä8‹z‚&÷f–FW"y¨N˜	GW&âXˆ~hÚ  ¢ÒÒĞ ¢22™»n8[Ù>X˜ŞZéîxëj
+Xx` ®iÊÎih~{º~{ºŞKÙÎK‹®ZI¢4Ä’KÉ®ŠùŞy¨BE.8.XéşZx²6†ævR(	4>8.8>8B[{.[Ù.j>ûÉ¾hŠ®ˆ{2##bÓ‚ÓnûÈÄæF—fRõ6†&VBy¨NYî{ºŞKúîZHŞ8X[ÎZë8†6RR7VBKˆâ×VÇF’ÖvVçB6öÆÆ"KºR´÷Vå7V2Ö–â7V75Ò‚ââòââö÷Vç7V2÷7V72õ$TDÔRæÖB8Zû[©B6†ævRKˆîKº>zK‹®XxnûÈÎKˆŞ[©NY¹îXih‰8ÎXéş‹zş{«şiÊ®Zéîxë8Ş8  §ÂZY{ªn™Ú"Â[Ù>X˜ŞKº>zK¨¾ZéâÂK¨¾Zéîk©À§ÂÒÒÒÒÒÒÒÒÂÒÒÒÒÒÒÒÒÒÒÒÒÒÒÂÒÒÒÒÒÒÒÒÀ§Â'V–ÇBÖ–âVæv–æW2ÂûÉ¤6ÆVFRô6öFW‚ôvVÖ–æ’ôw&ö²ô¶–Ö’ô÷Vä6öFRõ’ôE4‚ò¢¥öFW"¢¢Â7&2öfVGW&W2öVæv–æRöVæv–æT–G2æ§6öæ87&2÷G—W2öVæv–æRçG6Væv–æUG—V87&2×FW&’÷7&2öVæv–æRöÖöBç'6Væv–æUG—S£¥öFW&À§ÂöFW"&÷Fö6öÂò'VçF–ÖRÂzÊÎY¹¾iÚ'V–ÇF–âXØşŠêîixò7×7FF–öûÈÆW†V7WF–öäÖöFVÃ¢öæR×6†÷FûÈ‚¢§7vâ×W"×GW&â¢®ûÉ¦öFW&6Æ’ÒÖ7ûÈ„vÆö&ÎûÈ’òöFW&6Æ–6âÒÖ7ûÈ„4îûÈXøÎXˆnXùûÈÎXZ˜:‹ùŠÎ‹zş[èN{¸ò&W6öÇfU÷öFW%÷&÷f–FW%öÆVæ6…÷&öf–ÆVŠz>iéW"ÖF—7G&–'WF–öâ&–âò6öæf–rVçbòBVçbò†öÖ^ûÈÆöFW%6W76–öâæF—7G&–'WF–öæ²öFW%÷'VçF–ÖUö¶W–™©Nzk²'VçF–ÖR÷væW'6†—ûÈƒ##bÓ‚Ó#BFB×öFW"ÖGVÂÖF—7G&–'WF–öæûÈ(i"–æ—F–Æ—¦R(i"6W76–öâöæWvò6W76–öâ÷&W7VÖVò6W76–öâöf÷&¶(i"&WVW7FVB6WEöÖöFVÆö6WEö6öæf–uö÷F–öæh‰X©şYâ(i"6WEöÖöFR'—75W&Ö—76–öç6(i"6W76–öâ÷&ö×F(i"¥4ôâÕ%2&W7öç6RXÛ2G—VBFW&Ö–æÎûÈûÉ·&WVW7FVB6WGF–ærW'&÷"f–ÂÖ6Æ÷6VNûÉ¶6æ6VÂXù˜6W76–öâö6æ6VÆYîKùŞyY’&VFW"zØ’G—VB&W7öç6^ûÈƒ'2vF6†FörXú¢¶–ÆÂXéòGW&âK¸Ò7F—fRy¨B6†–ÆNûÈûÉ·W6vRXú®h©^[Û–çWEFö¶Vç6ò÷WGWEFö¶Vç6ûÈÎKˆŞh¨¢öÖWFçV÷F[Ù2&–ÆÆ–æ~ûÉ¶–çWD6³¢&f—'7BÖWfVçB&ûÉ¾zÊÎKˆiÉşKˆŞ‹ù²6†&VNûÈ‡–6¶W"F—6&ÆVB²&V6öîûÈûÉµBk:XZ^KÉXX{ªr7F÷&VBNûÈ„vÆö&ÂöFW"ÖWF‚æ§6öæò4âöFW"Ö6âÖWF‚æ§6öæûÈ“â‹ù¾zˆ²VçnûÈƒ##bÓ‚Ó#Rf—‚×öFW"×BÖVçb×&V6VFVæ6VûÈ’Â7&2×FW&’÷7&2öVæv–æR÷öFW"ç'687&2×FW&’÷7&2öVæv–æR÷öFW%÷&÷f–FW%÷&öf–ÆRç'6ûÈ†öFW$F—7G&–'WF–öæò&W6öÇfU÷öFW%÷&÷f–FW%öÆVæ6…÷&öf–ÆVûÈ87&2×FW&’÷7&2öVæv–æRöFFW%÷&Vv—7G'’ç'6Væv–æU&÷Fö6öÄfÖ–Ç“£¤77FF–ö87&2öfVGW&W2öVæv–æRöVæv–æT–G2æ§6öæ8÷Vå7V2†&FVâ×öFW"ÖæF—fR×'VçF–ÖRÖ6öçG&7G68Fö72÷&W6V&6‚öÖ÷77‚×öFW"Ö6&–Æ—G’×7–¶RæÖFÀ§ÂöFW"–FVçF—G’ò†—7F÷'’òÖöFVÇ2ÂF‡&VBöFW#£Ç&öf–ÆSã£Ç&sæûÈ†öFW$æF—fU6W76–öä–FVçF—G’æ6æöæ–6Åö–FûÉ¾z›®XÂòõöÆö6Å÷öFW%õöòizröFW#£Ç&sæK¸^KÙÂÆVv7’vÆö&ÂX[ÎZë‹é>XZ^ûÈ’òöFW"×VæF–ærÓÇWV–CæûÉ¶6W76–öâöæWvò6W76–öâöf÷&¶YØ~Kº^yÉşZéâ6†–ÆB6W76–öä–B˜	®‹ør6W76–öå7F'FVFi˜¾XØ~ûÈzhjÚ.XøÎŠÂòzhjÚ.KÊ®˜
+–NûÈûÉ¶†—7F÷'’‹[¢®z8y¹‚§6öæÂ&–Ö'’²5fÆÆ&6²¢®ûÉ¦Æ—7BöÆöFhÈ’F—7G&–'WF–öâXˆb&ö÷NûÈ„vÆö&ÂâòçöFW&ò4ââòçöFW"Ö6æûÈXXŠû²&ö¦V7G2óÆ7vB×6ÇVsâóÇ6W76–öä–Câæ§6öæÆûÈ†Væ6öFU÷öFW%÷&ö¦V7E÷6ÇVvûÈÄæF—fT†—7F÷'•&VFW"[Ú.hûÉ·&VF&ÆRV×G’¥4ôäÂiŠòWF†÷&—FF—fR6ögBÖV×GûÉ¾K¸^iÊÎYË{Ë®ZK8KˆŞXúşŠû¾h‰nXZhÙşYØşi{nY¹î˜5ûÈ†fÆÆ&6²™HjÛ¾YÎKˆF—7G&–'WF–öîûÈÎKˆŞ‹z‚&ö÷NûÈûÈûÈÆFVÆWFRK¸Ş‹[56W76–öâöFVÆWFVûÈ{ª.{«ò#ûÉ®Xú®Šû²fVæF÷"ih~K»nûÈûÉ´5kh‹K{ª®[è¾ûÉ¤¥4ôâÕ%2&W7VÇBKˆâ6W76–öâ÷WFFVKªN™IûÈÎŠû¾X‹&W7öç6R[ø^š¾{ºŞŠû¾ˆ{2–FÆRXhŞiKnXú>ûÈ[îXÈ^hŠ®ijŞZéîŠøc“3s&cs†ûÈûÉ¾jŠYè¾yºî[ÙRÒ5ÖöFVÇ2æf–Æ&ÆTÖöFVÇ6²6öæf–t÷F–öç2ç&V6öæ–æuöVff÷'FK‰NhÈ’F—7G&–'WF–öâ66÷^ûÈ†66÷U÷öFW%öÖöFVÇ5÷FõöF—7G&–'WF–öæûÈÎXˆ~KÉ®ŠùŞ™»b6FÆör•>ûÈûÈÇ7FGW2öÖöFVÂ÷'VçF–ÖRKÛşyJYÎKˆ&W6öÇfVB†öÖUöF—&ûÈ‡'VçF–ÖRÖöæÇûÈÎKˆŞ‹ù¾™ÙhfÆÆ&6²&÷7FW.ûÈûÉ¾iØ>™™GF6‚Yâ'—75W&Ö—76–öç6²6W76–öâ÷&WVW7E÷W&Ö—76–öæXYÎ[©RWFòÖ&÷f^ûÈÆg2ò¦™™v÷&·76^ûÉ¾iÊ®y›¾[ÙR(i"æ÷BÖWF†VçF–6FVBŠø®ijŞhÈ~Y	öFW&6Æ’Æöv–æÂ7&2×FW&’÷7&2öVæv–æR÷·öFW"ÇöFW%ö†—7F÷'’ÇöFW%÷&÷f–FW%÷&öf–ÆWÒç'687&2×FW&’÷7&2öVæv–æR÷7FGW2ç'6FWFV7E÷öFW%÷7FGW5÷v—F…ö†öÖV87&2×FW&’÷7&2öVæv–æRö6öÖÖæG2ç'68÷Vå7V2†&FVâ×öFW"ÖæF—fR×'VçF–ÖRÖ6öçG&7G6À§Â’&÷Fö6öÂò'VçF–ÖRÂ’ÒÖÖöFR'6™[şš›¾‹ù¾zˆ¾ûÈ‚¢§&W6–FVçBW"v÷&·76R9r6W76–öâ¢®ûÉ¦•6W76–öâç&W6–FVçG6ÖûÈÎYÂv÷&·76RZI¢’j~zÛîyÉş[›nŠÎûÉ¾YÎKÉ®ŠùŞK¨ÎjÊXù˜7FVW&ûÈ8&–FÆR&ö×Fò7G&VÖ–ær7FVW&ûÈ†GF6†VB7FVW"GW&â™¨ò'VâYÎ{¹>zé~8z›®ih~iÊÎûÈûÉ·G—VBvVçE÷6WGFÆVFÒGW&â{¸hûÈÆ&W7öç6Rç7V66W76K¸^Xù~ynûÉ·6WGFÆR‹ùşX‹i{nyÈ¾™zx¹~hÈ8Î‹ù¾zˆ¾kK¾h
+r²K¨¾K»nhê‹ù¾8ŞZû‹JnûÈÎzhY»®Zé¢F–ÖV÷WBŠúşiØ™[şK»¾XªûÈƒ##bÓ‚Ó#NûÈûÉ¶&÷'F²'2w&6RiÊ¢6WGFÆRh˜Ò¶–ÆÎûÉ¶W‡FVç6–öâT’&WVW7BKˆ[è²WFòÖ6æ6VÎûÉ·7vâö†æG6†¶RZK‹J^Y¹î˜’Ò×&–çBÒÖÖöFR§6öæ7vâ×W"×GW&îûÈ†fÆÆ&6²h¹.{¹ŞYÎKÉ®ŠùŞ[›nXù‹ù¾zˆ¾KªNXøXiûÈ8'G&VR÷7FG2ö6ö×7Böf÷&²hÈ’6W76–öâXùb&W6–FVçNûÉ¶f÷&²ö6ö×7BXú®hÊiÊÎKÉ®ŠùÒ'Vî8.yJh‹~™˜NY»â&6ScB–ÖvW5µÖXù˜8XènXû.{¸ò%2–ÖvR&Æö6²‹ùXéş8Kê~jşj~š)Xš^zk¾™˜NK»nXÈ^Š8RF~8KŠŞih~‹zş[èNhÈZÙ~zÊn‹ëyXÎZHNynûÈƒ##bÓ‚Ó#Bh›jÊûÈ8&f÷&²Ò¢¦f÷&²×FòÖæWrÖf–ÆR²f÷&²×F†Vâ×7v—F6‚Ö&6²¢®ûÈ†f÷&²Yîz¸¾XÛ>Xˆ~Y¹îk©ih~K»nûÉ¾iÊÎKÉ®ŠùÒGW&â‹ù¾ŠÎKŠŞzhjÚ.ûÉµ%2izÆVbÖÖ÷f^ûÈûÉ¾XŠ™šNKÉ®ŠùÒG&÷÷&W6–FVçFXú®iØŠú^‹ù¾zˆ¾8"¢®kKîyIşKÉ®ŠùŞixò¢®ûÉ®ih~K»nZKB&VçE6W76–öæ(i"6FÆör&VçE6W76–öä–FûÈ‡6W76–öâÖ–æFW‚KˆâÆ—fRF—6²Æ—7BXøÎ˜	®˜>[Ù.KˆXÉnûÈÎ{Ë®KˆXÛ>k8NkÈşšn[.ŠÎûÈ(i"W6UF‡&VE&÷w6Kê~jş™©‰xşkKîyIşŠÎûÈKˆŞXÚšn[.K™şKˆŞ[XÎZY~ûÈÎKˆâ7V$vVçBKˆZHNŠêi[XˆnYùşûÈûÈÎKŠŞ™{NZûŠùŞXË®8ÎKˆ®Kˆ¾Xû>8ÖFö6¾ûÈ†”6öçfW'6F–öåG&VU7Æ—F’xºÎz¸¾ZëYšûÈY[›bFW&—fVBÆæW>ûÈX[Kª¾X˜Ş{È–BXë¾˜xŞhê^XˆnXøx+ûÈ’²kKîyIòÆæR{¸ò7F÷&RŠû~k"öå6VÆV7EF‡&VB‹{>‹ÚÂ²køkK¾‹zş[èN‹z‚ÆæR‹Jş˜	®iù>ˆ›"²GW&â{¹>iÙşˆz®XªX‹~ikûÉ¾j	ÒvWE÷G&VVXú®Šû²²f÷&¾ûÉ¶6ö×7BK¨¾K»n{¸ò&riŠX‹6æöæ–6ÂF‡&VBö6ö×7F–ærÂ6ö×7FVBÂ6ö×7F–öäf–ÆVFÂ7&2×FW&’÷7&2öVæv–æR÷·’ç'2Ç•÷'2ç'7Ö87&2×FW&’÷7&2öVæv–æRöWfVçG2ç'6&r’ˆx.87&2öfVGW&W2÷’×6W76–öâò¢¦87&2öfVGW&W2öÆ–÷WBö6ö×öæVçG2ôFW6·F÷Æ–÷WBçG7†87&2öfVGW&W2öö†öö·2÷W6UF‡&VE&÷w2çG68÷Vå7V2Væ†æ6R×’ÖæF—fR×'2×6W76–öæ8Fö72öFW6–vç2÷’ÖæF—fRÖfVGW&W2öf–æÂ×&V6öÖÖVæFVBæ‡FÖÆÀ§Â’&6¶w&÷VæB×F6²—FVÒZY{ªnûÈƒ##bÓ‚Ó#b’Ö&6¶w&÷VæB×F6²ÖW‡W&–Væ6VûÈ’Â’hš[^YîXû[z^X[~ûÈ†&u÷'Væö&uöFVÆVvFVö&u÷'Vå÷•öGFW7FVFögW6–öåò¦ûÈYÊ‚’ç'6Kˆˆx.hºnhŠ®K‹¢¢¦6æöæ–6Â&6¶w&÷VæEF6¶—FVÒ¢®ûÈÎXùnKº>išî˜	®[z^X[~XÚûÉ§FööÂ7F'B(i"Væv–æTWfVçC£¤&6¶w&÷VæEF6µ7F'FVF(i"6W'fW"—FVÒ÷7F'FVFûÈ†—FVÒçG—SÖ&6¶w&÷VæEF6¶ûÈÆFööÂ÷F—FÆVÖ&r[z^X[~YŞûÈÆ–çWBö&wVÖVçG6Ş[z^X[~Xø.i[ûÈÆ7FGW3×7F'FVFûÈûÉ·FööÂVæB&V6V—NûÈ†&W7VÇBæFWF–Ç2çF6¶{¹>ièNXÉnKÉXX‚òih~iÊÎXYÎ[©^ûÈKˆîhš[RÆ&6¶w&÷VæB×F6²Öæ÷F–f–6F–öãæûÈ†ÖW76vU÷7F'F&öÆSÖ7W7FöÒ7W7FöÕG—SÖ&6¶w&÷VæB×F6²Öæ÷F–f–6F–öæûÈÎXú®hºbÖW76vU÷7F'NûÈÆÖW76vUöVæB[Ù"÷F†W.ûÈ(i"Væv–æTWfVçC£¤&6¶w&÷VæEF6µWFFVG·6÷W&6S§&V6V—BÂæ÷F–f–6F–öçÖ(i"6W'fW"—FVÒö&6¶w&÷VæEF6²÷WFFVFûÈ†FööÄ–F¶F6¶6æöæ–6Â6æ6†÷B¶6÷W&6VûÉ¶æ÷F–f–6F–öâ‹zş[èFFööÄ–CÖçVÆÆhÈ’F6²æ–FX[>ˆNûÈ8.X˜ŞzºşKÉ®ŠùŞ{ª~x«nhŠûÈ†ÖW76vW2fVGW&R7F÷&^ûÈÆ&6¶w&÷VæEF6µ7F÷&RçG6jŠYÙ~{ªrÖ²K¨¾K»nš›Xª‚²x˜iÊÎXû~Šê.™ˆ^ûÈÂ¢®™Ùâ6†VÆÂ&r¢®ûÈKˆ‹zş{»NhªNûÉ¦—FVÒ÷7F'FVB[˜.zØy›¾Šë(i"öä&6¶w&÷VæEF6µWFFVF‡W6UF‡&VD—FVÔWfVçG2’Y[›n[ú¾xZr(i"Yh‰—FVÒ‹[—FVÒ÷WFFVFYÎ‹zòW6W'NûÉ¶FööÄ&Æö6µ&VæFW&W&hÈ’FööÅG—SÖ&6¶w&÷VæEF6¶XˆnXù&6¶w&÷VæEF6´6&FûÈ‹ùŠÎKŠŞkK¾KÙ2VÆ6VBiÊÎYËF–6¾8{¸hXéşYËh©XúÖW76vRÖvVçB×F6²ÖföÆFûÈÅ&VæFW"W&b{ª.{«şYŠxNûÈûÉ¶6ö×÷6W%'Vå7FGW57G&—8ÎYîXûK»¾Xª8×–ÆÎûÈ†W6T&6¶w&÷VæEF6µ–ÆÆW6U7–æ4W‡FW&æÅ7F÷&RK¨¾K»nš›XªûÈÆÆ—fRF÷B²'Vææ–ær÷F÷FÆûÈÎizK»¾XªKˆŞXÚKØŞûÈ’²[YË[^[ÈXˆn{¸N™Ú.iÛşûÈ‡'Vææ–ærYÊKˆ¢ş{¸hYÊKˆ²²W†—B6öFR²iú^yÈ¾iz^[ùr&WfVÎûÈ8.XènXû.˜xŞ‹ÛŞûÉ¦•ö†—7F÷'’ç'6h¨¢&r6ÆÂ÷&W7VÇBh©^[Û&6¶w&÷VæEF6¶8˜	®yú^h©^[Û&6¶w&÷VæEF6´æ÷F–f–6F–öæûÈÎX˜Şzºö”†—7F÷'•'6W&š(Nhš¾høşhÈ’F6´–BY[›nKˆ{¾XZ^Xú2(i"XÙ^[Êh©XúXÚ™I®Zé¢6ÆÂKØŞ{ÚîûÈZÚNXKò6ÆÂKˆŞk‹.iù>8˜	®yú^kKˆŞh‰ŠÎûÈ8"¢¥õ5BÕ4UEDÄR[{.yú^{Ë®Xú2¢®ûÉ®K»¾Xª™[şK¨îiKn[âGW&âi{nXX‚6WGFÆ^ûÈÎ˜	®yú^ŠznXù’÷'†â'VîûÈ†æWuö÷'†æYh‰GW&åö–NûÈŠ*²W"×GW&âf÷'v&FW"‹ø~kºNKŠ.[È>ûÈÎZéîi{nh©XúYÊ‚KˆŞŠhny¹nûÈÄ"˜	®˜>ûÈ‡&Vv—7G'’vF6†W.ûÈÅ.ûÈjk+²Â7&2×FW&’÷7&2öVæv–æR÷·’ç'2ÆWfVçG2ç'2Ç•ö†—7F÷'’ç'2ÆvVçEöWfVçEö'W2ç'7Ö87&2öfVGW&W2öÖW76vW2÷WF–Ç2ö&6¶w&÷VæEF6µ7F÷&RçG687&2öfVGW&W2öÖW76vW2÷&÷w2ö6ö×öæVçG2ô&6¶w&÷VæEF6´6&BçG7†87&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2÷'Vâ×7FGW2÷´6ö×÷6W%'Vå7FGW57G&—çG7‚ÇW6T&6¶w&÷VæEF6µ–ÆÂçG7Ö87&2öfVGW&W2÷F‡&VG2÷¶†öö·2÷W6UF‡&VD—FVÔWfVçG2çG2Æ†öö·2÷W6UF‡&VDWfVçD†æFÆW'2çG2ÆÆöFW'2÷”†—7F÷'•'6W"çG7Ö87&2öfVGW&W2öö†öö·2÷W6T6W'fW$WfVçG2çG687&2öfVGW&W2öVæv–æR×F6²Ö÷WGWBö6öçG&7G2övVçEF6´æ÷F–f–6F–öâçG68÷Vå7V2’Ö&6¶w&÷VæB×F6²ÖW‡W&–Væ6VÀ§ÂE4‚&÷Fö6öÂò'VçF–ÖRÂzÊÎKˆiÚ'V–ÇF–âXØşŠêîˆx"G6‚Ö†÷7B×'6ûÈÆW†V7WF–öäÖöFVÃ¢W'6—7FVçFûÉ¾XZ[©NyJKˆKŠ¢G6‚vV&ûÈ†F÷B[{.iÈ’3ƒûÈÎY
+nX‰’7vîûÉ¶F÷FVBKˆŞiØûÈ’Â7&2×FW&’÷7&2öVæv–æRöFFW%÷&Vv—7G'’ç'6'V–ÇF–äVæv–æU&÷Fö6öÆ87&2×FW&’÷7&2öVæv–æRöG6‚÷¶†÷7BÇ7WW'f—6÷"Ç6W76–öâÆWfVçG2Æ†—7F÷'—Òç'68÷Vå7V2FBÖG6‚ÖVæv–æVÀ§ÂE4‚–FVçF—G’ò4²ÂF‡&VBG6ƒ£Ç6W76–öä–CæòG6‚×VæF–ærÓÇWV–CæûÉ¶6W76–öâæ7&VFVz¸¾XÛ>‹ùNY¹îyÉşZéâ6W76–öä–NûÉ¾šin‹ÚîYÊ‚&ö×BX˜ŞyJ‚VæF–ærF‡&VB–BXù6W76–öå7F'FVFûÈÆ×W‚&–æBX‹G6ƒ£ÆæF—fSæûÉ¶g&öçFVæBF‡&VB÷7F'FVF²4²66†Ri˜¾XØ~ûÈÎzhjÚ.XøÎŠÎ8"¢§FW&Ö–æÂô4¾ûÈƒ##bÓ‚Ó~ûÈ’¢®ûÉ¦6ö×ÆWFVB†÷Xú¢æ÷F–g’v—FW.8KˆŞŠz>{¹ûÉ´vöÂ7F—fVh©X‹bGW&ä6ö×ÆWFVFûÉ¶W6VFö6ö×ÆWFVö6ÆV"Š^XùûÉ¶&Æö6¶VFXùGW&ä6ö×ÆWFVBKØnKùŞhÈ{¹Zé®ûÉ¶6æ6VÆÆVBöW'&÷"ö–çFW''WBö&6†—fR÷6‡WFF÷vâh˜ÒVæ&–æN8&6÷W&6Ræ¶–æBÓÓÒ&vöÂ&h©^[ÛK‹¢G6‚ÖvöÆh©XúXÚûÈz›®k	Nk:8XúşŠx8›¹ŠêNXúşh©XúûÈûÉ¾X[nZè2–æ¦V7FVB¶–æG2K¸Ş™©‰xòÂ7&2×FW&’÷7&2öVæv–æRöG6‚÷¶ÖöBÇ6W76–öâÆWfVçG2Æ†—7F÷'—Òç'687&2öfVGW&W2öö†öö·2÷W6T6W'fW$WfVçG2çG687&2öfVGW&W2÷F‡&VG2ö†öö·2÷W6UF‡&VEGW&äWfVçG2çG687&2öfVGW&W2÷F‡&VG2öFFW'2öG6…&VÇF–ÖTFFW"çG687&2öfVGW&W2÷F‡&VG2öÆöFW'2öG6„†—7F÷'•'6W"çG687&2öfVGW&W2öÖW76vW2ö6ö×öæVçG2ö6öçFW‡BôG6„vöÄ6öçFW‡E7VÖÖ'”6&BçG7†8÷Vå7V2FBÖG6‚ÖvöÂÖ6öçF–çVF–öæ8Fö72÷&W6V&6‚öÖ÷77‚ÖG6‚Ö6&–Æ—G’×7–¶RæÖFÀ§ÂE4‚†÷7BÆ–fV7–6ÆRòÆ—7BÂW†—E&WVW7FVFXú¢G&÷ö†÷7B‚–iØ7væVNûÉ¶F÷FVBKùŞyY8.Kê~jòÆ—7EöG6…÷6W76–öç6yJ‚v÷&·76Ræ7&VFVy¨B6W76–öä–G2Ò&6†—fVE6W76–öä–G6ûÈÎzhjÚ"7vB7Vff—‚òz›¢7vBXZXË˜XŞûÉµ6W76–öâ–æFW‚iÈyXÂw&—FW.ûÈ†7–æ5öG6…öVæv–æVò&÷w5ög&öÕöG6…÷7VÖÖ&–W6ûÈXø.Kˆâf—'7B×–çB{J.[É^ûÈÆ†÷7BKˆŞXúş‹ëâ6ögBÖV×G’Â7&2×FW&’÷7&2öVæv–æRöG6‚÷7WW'f—6÷"ç'66†÷VÆEö¶–ÆÅö†÷7F87&2×FW&’÷7&2öÆ–"ç'6W†—E&WVW7FVF87&2×FW&’÷7&2öVæv–æRöG6‚ö†—7F÷'’ç'687&2×FW&’÷7&2÷6W76–öåö–æFW‚÷¶6öÖÖæG2Çw&—FW'7Òç'687&2öfVGW&W2÷F‡&VG2ö†öö·2÷W6UF‡&VD7F–öç2çG6À§ÂE4‚ÖöFVÇ2ò6öæf–rÂjŠYè¾iŠòE4‚·&÷f–FW"ÆÖöFVÇÖK¨ÎXX>{¸NûÈÆ6FÆöriÚ^ˆz¢õ5Bö’öÆÆÒæÖöFVÇ6ûÉ¶Ö÷77‚KˆŞXi’DE4…ô„ôÔV6WGF–æw2ö7&VFVçF–Ç2Â7&2×FW&’÷7&2öVæv–æRöG6‚öÖöBç'6ÆöEöG6…öÖöFVÇ687&2×FW&’÷7&2öVæv–æRöG6…÷&÷f–FW%÷&öf–ÆRç'687&2×FW&’÷7&2÷G—W2ç'6G6„&–âöG6„†÷7BöG6…÷'BöG6„WFõ7F'FÀ§ÂæF—fR&VæFW&–ær&ö¦V7F–öâÂKˆ>[É^i8îYNiÈ’&VÇF–ÖRFFW"²†—7F÷'’ÆöFW.ûÈ„E4ûÉ¦G6…&VÇF–ÖTFFW&òG6„†—7F÷'”ÆöFW&ûÈ8$E4‚vöÂk:XZ^‹[&W6VçFF–öäÖWFFF¶–æBG6‚ÖvöÆûÈÎKˆŞikZ)â6öçfW'6F–öä—FVÒ¶–æNûÈÎK™şKˆŞZHŞyJ‚6öFW‚övöÆ8"¢¤E4‚6ö×÷6W"h©^[ÛûÈƒ##bÓ‚ÓûÈ’¢®ûÉ¦×W‚ò†—7F÷'’hêRFöF÷6ò6öçFW‡E&W77W&Vò6öçFW‡D'&V¶F÷væûÉ¾K»¾Xª–ÆÂKºRG6…FöF÷6K‹®iØ>ZˆûÈ†µÖkˆ^z›®ûÈÆçVÆÆh˜ŞY¹î˜FöFõw&—FRhš¾høşûÈûÉ¾XÚyJxêşXˆnZÙÖ&ö¦V7FVEFö¶Vç2óò&W77W&UFö¶Vç6ûÈÎXˆnjøÓÖ6öçFW‡Ev–æF÷vûÈÎKˆXˆn{²†WW&—7F–2[ŠbæûÉ¶&–ÆÆVBFö¶VåW6vVKˆŞ[é~Xk.hèXÚyJ‚òFöF÷2Â7&2×FW&’÷7&2öVæv–æRöG6‚÷¶WfVçG2Æ†—7F÷'—Òç'687&2öfVGW&W2öö†öö·2÷W6T6W'fW$WfVçG2çG687&2öfVGW&W2÷F‡&VG2ö†öö·2÷·W6UF‡&VG5&VGV6W"ÇW6UF‡&VEGW&äWfVçG7ÒçG687&2öfVGW&W2÷F‡&VG2öÆöFW'2öG6„†—7F÷'”ÆöFW"çG687&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2÷´6ö×÷6W"çG7‚Ä6†D–çWD&÷‚ô6ÆVFT6öçFW‡D6&BçG7‡Ö8÷Vå7V2v—&RÖG6‚×FöF÷2ÖæBÖ6öçFW‡B×W6vVÀ§Â6ÆVFRGW&â6WGFÆVÖVçBòFW&Ö–æÂÂ7G&VÒÖ§6öâh‰X©ò&W7VÇFûÈ†—5öW'&÷"ÒG'VVK‰B7V'G—R™ÙâW'&÷"¦ûÈK‹¢GW&â{¸hiØ>ZˆûÉ¾‹ù¾zˆ¾˜X{®zXú®YÊ{Ë®ZKh‰X©ò&W7VÇBi{nKÙÎ™IŠúşXYÎ[©^ûÈƒ##bÓ‚Ó#RX˜ŞK‹®ZéîxëKˆâ*sBã2ã"ŠëîŠêy»h)nûÉ®™Ùî™»n˜X{®iziÚK»nY
+nXk>[{.ZèÎh‰GW&îûÈ8$vVÖ–æ’YÎièNûÉ¦6u÷GW&åö6ö×ÆWFVFZèXÚ¾˜X{®zj8iú^8&¶–Ö’öw&ö²÷’izkXXhRFW&Ö–æÎûÈÎ˜X{®zK¸ŞiŠşYJşKˆ{¸hKúXûrÂ7&2×FW&’÷7&2öVæv–æRö6ÆVFRç'6—5÷7V66W75÷&W7VÇEöWfVçFò6WGFÆRwV&N87&2×FW&’÷7&2öVæv–æRövVÖ–æ’ç'68÷Vå7V2f—‚×GW&âÖfÇ6RÖf–ÇW&R×&WG'’×7F÷&ÖÀ§Â6ÆVFR6µW6W%VW7F–öâ4²ò6WGFÆVÖVçBFöÖ'7FöæRÂh‰X©ò&W7öæE÷Fõ÷W6W%ö–çWNûÈ„Ô5öæW6†÷BòæF—fRæ÷F–g’KŠN‹zş[èNûÈ”ÕU5BVÖ—B&WVW7EW6W$–çWB²6ö×ÆWFVC¢G'VRÂVW7F–öç3¢µÒŞûÈÎKˆî‹h^i{n{¹>zé~‹zş[èNZû›ÙûÉ·6W76–öâ{ªr6WGFÆVE÷W6W%ö–çWE÷&WVW7Eö–G>ûÈ†6#C‚kª.X{¢6ÆV.ûÈhÊæF—fR˜xŞXZ^(	N(	N[{.{¹>zér&WVW7Eö–BYÊ‚6öçfW'Bi{nXú®Xù6ö×ÆWFVC×G'V^8KˆŞk:XhÂVæF–æ~ûÉ·7G&VÒK¸R6ö×ÆWFVCÖfÇ6R‹ù²¶–ÆÂ²Ò×&W7VÖRv—N8$dRiÈyXÂ6WGFÆVÖVçBFöÖ'7Föæ^ûÈ„ÔƒÓ#CûÈûÉ¦66WFVBò7FÆRò6ö×ÆWFVB{¹>zé~XiZ)>z)ûÈÎXZ^™‰şX˜Ò²FEW6W$–çWE&WVW7BXøÎ™{™z‚f–ÂÖ6Æ÷6VBh©X‹nYÂ–FVçF—GûÈ‡v÷&·76R²6†&VB÷væW"öGFV×B²&WVW7Eö–NûÈ‹ùşX‹ş˜xŞiKâö†—7F÷'’&V÷VîûÉ¾™Ùâ7FÆRhùKªNZK‹J^KˆŞXiZ)>z)8Xúş˜xŞŠù^ûÈƒ##bÓ‚Ó#Bf—‚Ö6·W6W'VW7F–öâ×6WGFÆVÖVçB×FöÖ'7Föæ^ûÈ’Â7&2×FW&’÷7&2öVæv–æRö6ÆVFR÷W6W%ö–çWBç'6&W7öæE÷Fõ÷W6W%ö–çWFò6öçfW'Eö6µ÷W6W%÷VW7F–öå÷Fõ÷&WVW7FòVÖ—E÷W6W%ö–çWE÷&WVW7Eö6ö×ÆWFVFò6WGFÆVE÷W6W%ö–çWE÷&WVW7Eö–G687&2×FW&’÷7&2öVæv–æRö6ÆVFRç'67G&VÒ—5÷W6W%ö–çWE÷&WVW7F87&2÷WF–Ç2÷W6W$–çWE6WGFÆVÖVçEFöÖ'7FöæRçG687&2öfVGW&W2÷F‡&VG2ö†öö·2÷·W6UF‡&VEW6W$–çWDWfVçG2çG2ÇW6UF‡&VG5&VGV6W"çG7Ö8÷Vå7V2f—‚Ö6·W6W'VW7F–öâ×6WGFÆVÖVçB×FöÖ'7FöæVÀ§Â6†&VB&÷f–FW"&WG'’Xˆn{¾KˆîxiNijÒÂ˜XŞš)ŞKˆŞ‹k>{¾ûÈš(Nhš>‹K’şKÙš)ŞKˆŞ‹k2ö–ç7Vff–6–VçB&Ææ6RÂV÷FöV÷FW†6VVFVFûÈ“ÒW&ÖæVçFV÷FûÈÎXXK¨âööÂCóC>ûÉ¾YÎKˆ6W&–W2‹ùî{ºÒ2jÊ–FVçF–6Âf–ÇW&R6–væGW&^ûÈ†¶–æB²æ÷&ÖÆ—¦VBÖW76vRX˜Ş{ÈûÈXÛ2W††W7FVBxiNijŞûÈÎxºÎz¸¾K¨âÖ„GFV×G>ûÉ´6öFW‚{Ë¢&V6öæ–ær—FVÒXØşŠêî™IŠúşûÈ†–çfÆ–E÷&WVW7EöW'&÷&K‰NY
+²&WV—&VB&V6öæ–ær—FVÖûÈ“ÒW&ÖæVçF6öæf–vûÈÎzhjÚ.YÂ&–æF–ærˆz®Xª˜xŞŠù^ûÈƒ##bÓ‚Ó#Ff—‚×6†&VBÖ6öFW‚Ö6öçFW‡B×&ö¦V7F–öæûÈ’Â7&2öfVGW&W2÷6†&VB×6W76–öâ÷&÷f–FW"×&WG'’÷¶6Æ76–g•6†&VE&÷f–FW%&WG'”W'&÷"çG2Ææ÷FU6†&VE&÷f–FW%&WG'•GW&âçG2Ç&÷f–FW%&WG'•öÆ–7’çG7Ö8÷Vå7V2f—‚×GW&âÖfÇ6RÖf–ÇW&R×&WG'’×7F÷&Öòf—‚×6†&VBÖ6öFW‚Ö6öçFW‡B×&ö¦V7F–öæÀ§Â6†&VBF&vWB&÷VæF'’Â6ÆVFRô6öFW‚ô¶–Ö’ôw&ö²ô÷Vä6öFRõ’ò¢¥öFW"¢®ûÉ´vVÖ–æ’¢®KˆâE4‚¢¢hé.™šNûÈ‡–6¶W"F—6&ÆVB²&V6öîûÉ¾zhjÚ"æ÷&ÖÆ—¦Rh‰6ÆVFRYîXiXZR&–æF–æ~ûÈ8%öFW.ûÈƒ##bÓ‚Ó#"Væ&ÆR×öFW"×6†&VB×F&vWFûÈûÉ¤¶–Ö’YÎj>XxnXZ^ûÈ‡G—VBFW&Ö–æÂö6æ6VÂ²‹z‹ù¾zˆ²&W7VÖR²6W76–öâöÆ—7F&ö&RZéîkX¾ûÈÇ7–¶R*s2ü*sNûÈûÉ¶–çWD6³¢&f—'7BÖWfVçB&[ËŠúŞK˜ûÉ¶6öçFW‡B‹[W6W"6†ææVÎûÈ†7G&öæuö6öçFW‡Eö6³¢fÇ6VûÈûÉ¶6æöæ–6Âf7BVæv–æRié®K‹îûÈ…GW&äW†V7WF–öå6æ6†÷Bò&÷f–FW%&—fFU&VnûÈYÎjÚ^Xª'öFW"&8$6öFW‚6†&VNûÈƒ##bÓ‚Ó#Bf—‚×6†&VBÖ6öFW‚Ö6öçFW‡B×&ö¦V7F–öæûÈûÉ¦F‡&VBö–æ¦V7Eö—FV×6ikk9^XúşyJ‚(š7G'V7GW&VB–×÷'BXØşŠêîZèXZŠøhÚîûÈÆ7G'V7GW&VEö†—7F÷'•ö–×÷'FòFööÅö†—7F÷'–ò7G&öæuö6öçFW‡Eö6¶XZ‚fÇ6^ûÈÎ‹z‚&–æF–ær6öçFW‡BKˆ[è²÷'F&ÆRG&ç67&—Bò&÷VæFVB6†V6·ö–çNûÈÇFööÂW†6†ævRhÈ’FöÖ–2—"öÖ—76–öâ‹ù²Öæ–fW7N8%öFW"6†&VBF&vWB&÷f–FW%&öf–ÆT–FXÛ2–Ö×WF&ÆRF—7G&–'WF–öâ&–æF–æ~ûÈÅGƒfÆ–FFU÷öFW%öF—7G&–'WF–öåö–FVçF—G–ZûiÊ®yúR&öf–ÆRf–ÂÖ6Æ÷6VNûÈ†–çfÆ–B×F&vWFûÈÎKˆŞ‰ÒGW&å&WVW7FVBò&–æF–æ~ûÈûÈƒ##bÓ‚Ó#BFB×öFW"ÖGVÂÖF—7G&–'WF–öæûÈ’Â6†&VE6W76–öäVæv–æW2çG687&2×FW&’÷7&2÷6†&VE÷6W76–öå÷c"ç'66öçFW‡Eö6&–Æ—F–W6òfÆ–FFU÷öFW%öF—7G&–'WF–öåö–FVçF—G–87&2×FW&’÷7&2÷6†&VEö6öçFW‡Bö6ö×–ÆW"ç'687&2×FW&’÷7&2÷6†&VE÷6W76–öç2ç'687&2×FW&’÷7&2÷6†&VEöWfVçEöÆörö6æöæ–6Â÷fÆ–FF÷"ç'68÷Vå7V2FBÖG6‚ÖVæv–æVòFB×öFW"ÖVæv–æVòVæ&ÆR×öFW"×6†&VB×F&vWFÀ§ÂvVÖ–æ’'VçF–ÖRÂ&Vv—7G'’KŠŞZÙYÊûÈÎKØb'VçF–ÖRöÆ–7’›¹ŠêBF—6&ÆVBÂ7&2×FW&’÷7&2öVæv–æU÷öÆ–7’ç'6À§Â&÷f–FW"6VÆV7F–öâÂæF—fRXéşZÙ˜hºûÉµ6†&VB˜	GW&âF&vWN8"¢¥6†&VBX‰¾[»®›¹ŠêB&÷f–FW.ûÈƒ##bÓ‚Ó#Bf—‚×6†&VBÖ7&VFRÖFVfVÇB×&÷f–FW"Ö6FÆövûÈ’¢®ûÉ®ŠúR4Ä’iÈ[¨ò&÷f–FW"X‰~ŠzÊÎKˆšûÈš®[¨şYÂFöÖ–2–6¶W.ûÈÎiÊÎYË6VçF–æVÂKÉXXûÉµöFW"Y»®Zé¢vÆö&Âö6â&öf–Æ^ûÈûÈÎX[bÖöFVÇ2öÖ–ær[ø^š²&öf–ÆRiØ>ZˆXùni[(	N(	NiÊÎYËf÷&6U&Vg&W6†˜xŞŠû²6WGF–æw>8ÖævVB&÷f–FW"×66÷VBZéîi{b6öæf–~ûÈÎzhjÚ.Š;‚vWEöVæv–æUöÖöFVÇ2†Væv–æR–Y>XZ[7FGW266†^ûÉ¾h™>[Èiz.iÈKÉ®ŠùŞY¹îi‹âÆ7B6VÆV7FVEF&vWFûÈÎzhjÚ.yJX‰¾[»®›¹ŠêB&W6VVN8&ÖævVB6VæB‹ëyXÂ&W6öÇfT6ÆVFTÖævVE'VçF–ÖTÖöFVÆZû‹zKé¾[©NYXb&W6–GVÎûÈ†ÆVvÆK‰NYŞKŠŞKª~Y8YŞY
+şXù[ÈşûÈ—&W—"X‹6FÆörFVfVÇNûÈÆg&VVf÷&ÒKˆâ6†&VBF&vWBŠúŞK˜KˆŞXùûÈƒ##bÓ‚Ó#Bf—‚ÖæF—fR×&ÆÆVÂ×&÷f–FW"ÖÖöFVÂÖ—6öÆF–öæûÈ’Â6Æ÷6RÖæF—fR×6W76–öâ×&÷f–FW"Ö7&VFRÖ&–æF–ævKˆâ6†&VBF&vWB6öçG&7G>87&2öfVGW&W2÷6†&VB×6W76–öâ÷F&vWB÷&W6öÇfU6†&VE6W76–öä7&VFT–æ—F–ÅF&vWBçG687&2ö×6†VÆÂ÷6V7F–öç2ö6÷&R÷W6T6†VÆÅ6V7F–öç2çG6†æFÆU7F'E6†&VD6öçfW'6F–öæ87&2öfVGW&W2öÖöFVÇ2ö6ÆVFTÖævVE'VçF–ÖTÖöFVÂçG6À§Â6†&VB6VæBT’x«nhiË¢ÂK™Şh²&V6÷fW'’W†—BÆFFW.ûÈ…&ö&Rõ7F÷şXÎjÚ.[›n˜xŞ[»¢şiKî[È>iÊÎ‹ÚîûÈ’Â6VæE7FFTÖ6†–æRçG686†&VE6VæE7FGW4&"çG7†86†&VE÷6W76–öå÷c"ç'6À§Â&V6÷fW'’W†—B6Æ÷7W&RÂ¢®ŠëîŠêŠx*sBãRãr¢®ûÉ¾[{.Zéîxë[›niKnXú>ûÈ„÷Vå7V2f—‚×6†&VB×6W76–öâ×&V6÷fW'’ÖW†—BÖ6Æ÷7W&VûÈ’Â&æFöâGW&&ÆR²7F÷Ö&Vf÷&R×&V'V–ÆB²gW6RF—6&ÆVB&V6öç2À§Â6†&VBKˆ®Kˆ¾ih~{ºŞhêR–çFVw&—G’ÂæF—fRKˆŞXúşKúi{nzhjÚ.X~Šëâ†—7F÷'’[{.YÊ‚æF—fRXh^ûÉ·¦W&ò×G&ç6fW"KˆŞzØK¨îXúò&VÖFW&–Æ—¦^ûÉ¶V×G’Ö6öçFW‡BÖ†æFöffK‹®KˆzØ’&V6÷fW'’™IŠúş{¾XŠ²Â÷Vå7V2f—‚×6†&VBÖ6öçFW‡B×&W7VÖRÖ–çFVw&—G–86†&VEö6öçFW‡Bö6ö×–ÆW"ç'68&V6÷fW'”W'&÷$ÖçG6À§ÂFöÖ–2jŠYè¾(iNh	Şˆ>[Ë®[ªnˆNXª‚Â&V6öæ–ær÷F–öç2òVff÷'ByK¢§F&vWBjŠYè²6&–Æ—G’¢¢š›XªûÈÎzhjÚ.yJXZ[7F—fTVæv–æVj>KØŞXi.XX^ûÉµ6†&VBX‰ŞZx¾XÉnzhjÚ.Y¹î‰ÒæF—fRh	Şˆ>j>KØŞûÉ¾[É^i8îŠhny¹b6öFW‚ò6ÆVFRòw&ö²ò¢¥’¢®ûÈ„E4‚òöFW"ò¶–Ö’òw&ö²ò÷Vä6öFR[è^YNˆz¢6†ævRŠøNKËûÈ’ÂFöÖ–4ÖöFVÅ&V6öæ–ærçG68–æ—F–ÅF&vWBçG686ö×÷6W"çG7‚FöÖ–4ÖöFVÅ&V6öæ–æu&Vf8÷Vå7V2f—‚×6†&VBÖFöÖ–2ÖÖöFVÂ×&V6öæ–ærÖÆ–æ¶vV²W‡æB×6†&VBÖFöÖ–2×&V6öæ–ærÖÆ–æ¶vR×Fò×–À§ÂyJh‹~™˜NY»â6æöæ–6Âh©^[ÛÂyJh‹~™˜NY»îXÙ^k	Nk:h©^[ÛûÈÅ6†&VBXènXû.KˆŞKŠ.Y»âÂ6†&VE÷&ö¦V7F–öâ÷&ö¦V7F÷"ç'68÷Vå7V2f—‚×6†&VB×W6W"Ö–ÖvRÖ'V&&ÆR×&ö¦V7F–öæÀ§Â7&VFR×6W76–öâ›¹ŠêNyºîjrÂ7&VFR×6W76–öâFöÖ–2–6¶W"K‹®XZ˜:‚FöÖ–2[É^i8îûÈY
+²w&ö²ô¶–Ö’ô÷Vä6öF^ûÈ—6VVB›¹ŠêBW†V7WF–öåF&vWNûÈÎKˆŞK¸R6ÆVFRö6öFW‚Â&W6öÇfTFVfVÇD7&VF–öäW†V7WF–öåF&vWBçG6À§ÂvVçB7VBcXZ^Xú>Kˆî[Ú.hÂK¸R6†&VB6W76–öâi‹îzK¢6VæB[znKêröæR×6†÷B7VF'WGFöîûÉ·Æâ÷'Vâ6&ByYYÊ‚6öçfW'6F–öîûÈÎŠúnh8^ZHŞyJ‚7V$vVçBXû>KêrgVÆÂÖ†V–v‡B–ç7V7F÷"†÷7BÂ7&2öfVGW&W2ö6ö×÷6W"ö6ö×öæVçG2ô6ö×÷6W"çG7†87&2öfVGW&W2÷7VBÖ÷&6†W7G&F–öâò¢¦86öçfW'6F–öä–ç7V7F÷%7Æ—BçG7†À§Â7VB6öçG&öÂWF†÷&—G’ÂÆVBXú®hùX{¢7G'V7GW&VBG–æÖ–2D~ûÉ¶Ö÷77‚fÆ–FF÷.86æöæ–6Âf7N8GW&&ÆR&ö¦V7F–öâKˆâ6öÖÖæB&÷VæF'’Xk>Zé®XúşY
+nhš~ŠÎûÉ¾YÎKˆ6†&VB6W76–öâiÈZI®KˆKŠ¢7F—fR'VâÂ7&2×FW&’÷7&2÷7VEö÷&6†W7G&F–öâ÷·G—W2ÇfÆ–FF÷"Ç&ö¦V7F–öâÆ6öÖÖæG2ÇÆåö6öÖÖæG7Òç'68÷Vå7V2FB×6†&VB×7VBÖ6öçG&öÂ×ÆæVÀ§Â7VBW†V7WF–öâ&÷VæF'’ÂcK‹¢&ÆÆVÂæÇ—¦R²6–ævÆRw&—FW.ûÉ¾XZ˜:‚v÷&¶W"6VÂX‹6ö×÷6W"[Ù>X˜ÒW†7BF&vWN8$6öFW‚Xúşhš~ŠÎZèÎi[BD~ûÉ´6ÆVFRK¸RW&R&VBÖöæÇ’D~ûÉ´¶–Ö’ôw&ö²ô÷Vä6öFRYº{Ë®[	Xúşš¨ÎŠø†&B&VBÖöæÇ’ÖöFRYÊ‚ÆVB6–FRVffV7BX˜Òf–Â6Æ÷6VBÂ7&2×FW&’÷7&2÷7VEö÷&6†W7G&F–öâ÷·66†VGVÆW"Ç7W÷'GÒç'686†&VE÷6W76–öå÷c"ç'68÷Vå7V2FB×6†&VB×7VB×v÷&¶W"ÖW†V7WF–öæÀ§Â7VB×WFF–öâ÷&V6÷fW'’Âv÷&·76RUT”B²6æöæ–6Â&ö÷BXøÎ˜xŞ[Ù.KˆûÉ¶GW&&ÆRÆV6RizF–ÖRÖ&6VBW‡—'ûÉ´v—BF—'G’&6VÆ–æR²6†ævRfVæ6^ûÉµ7F÷XXXi’6æ6VÂ–çFVçNûÈÎXhÒ&W7BÖVff÷'B–çFW''WBW†7B÷væW.ûÉ¾zhjÚ.ˆz®Xª‚&öÆÆ&6²÷&W6WB÷7F6‚Â7&2×FW&’÷7&2÷7VEö÷&6†W7G&F–öâ÷·66÷RÇ7F÷ö6öÖÖæG7Òç'686†&VEöWfVçEöÆör÷w&—FW"ç'68÷Vå7V2†&FVâ×6†&VB×7VB×&V6÷fW'–À§Â7VB6öçfW'6F–öâ&ö¦V7F–öâÂh˜iÈ’v÷&¶W"GW&îûÈY
+²7–çF†W6—¦^ûÈKùŞhÈæW7FVBÖöæÇûÉ¾Xú®iÈ’7V66W76gVÂ7VE'Vå6WGFÆVFh©^[ÛKˆjÊF÷ÖÆWfVÂf–æÎûÉ¶6†V6·ö–çB–æ7&VÖVçFÂ&WÆ’KˆŞk8NkÈòv÷&¶W"ÖW76vRÂ7&2×FW&’÷7&2÷6†&VE÷&ö¦V7F–öâ÷&ö¦V7F÷"ç'687&2öfVGW&W2÷7VBÖ÷&6†W7G&F–öâ÷'VçF–ÖR÷7VD6öçfW'6F–öä'&–FvRçG6À§Â×VÇF’ÖvVçB6öÆÆ"'VçF–ÖR6öçFW‡BÂ¢®K¸^XØşKÙÎZÙYÊi{b¢®ûÉ¦7VBææöFT÷WF6öÖU&V6÷&FVBæ÷WF6öÖRæ&öG–ûÈ†6VNûÈ{¸ò6öçFW‡B6ö×–ÆW"h©^[ÛK‹¢÷'F&ÆR76—7FçBiÚyºîûÉ²¢®zhjÚ"¢¢FW7F–æF–öâÖ÷væVBò7VB×v÷&¶W"GFV×BX™N™šNY	îhè’7FvRF–vW7NûÉ¶6öÆÆ"6öçG&öÂ'&–Vf–ærW6W"GW&âXúòöÖ—76–öâÂvVçEö÷&6†W7G&F–öâö6öÖÖæG2ç'686†&VEö6öçFW‡Bö6ö×–ÆW"ç'68÷Vå7V2f—‚×6†&VBÖ6öÆÆ"Ö6öçFW‡BÖæB×6–FV&"×7væÀ§Â×VÇF’ÖvVçB7FvRhš~ŠÂF&vWBÂjøò7FvR&Vv–å÷7FvU÷GW&â‚g7FvRçF&vWB–²7VBv÷&¶W"&–æF–æt¶WûÉ¾iÊÎYËWfVçBÆörjZû’Æâö6ÆVF^8–×ÆVÖVçBö6öFW8&Wf–Wröw&ö²Xˆb&–æF–ær¢®yÉşZéîhš~ŠÂ¢¢ÂvVçEö÷&6†W7G&F–öâ÷¶6öÖÖæG2Ç7W÷'GÒç'686†&VE÷6W76–öå÷c"æ&Vv–å÷7VE÷v÷&¶W%÷GW&åö6÷&V86†&VBÖWfVçBÖÆör×c"ç7Æ—FS6À§Â7&÷72ÖVæv–æRvVçB'&–Fv^ûÈƒ##bÓ’ÓFBÖ7&÷72ÖVæv–æRÖvVçBÖFVÆVvF–öæûÈ’ÂFF—F—fRÆöv–6Â6öçG&öÂÆæRKØŞK¨îiz.iÈ’vVçEö÷&6†W7G&F–öã£¦'&–FvVûÉ¶–Ö×WF&ÆRFVÆVvF–öâ'VâKùŞZÙ‚&ö÷B÷&VçBöFWF86öçF–çVF–öâ÷&WG'8g&÷¦VâF&vWN8&6¶–æröæF—fR÷'VçF–ÖR–FVçF—G’Kˆâæ÷&ÖÆ—¦VB&W7VÇNûÈÆF—6²Öf—'7BW'6—7F^7çİ-¢G§²ÚîÆ­yÖ–6ÂWfVçBÆörc ¦  ®zhjÚ.K‹®K¨n(	Î{¹şKˆ(	ŞXXh¨®XZ˜:‚æF—fR6W76–öâ‹øXZR6†&VB6æöæ–6Â—VÆ–æ^8.iÊ®iÚ^ˆº^™ÈŠhæF—fR6æöæ–6Æ—¦F–öîûÈÎ[ø^š¾KÙÎK‹®xºÎz¸²6†æv^ûÈÎ˜xŞikŠøiˆâf–FVÆ—G8&W7VÖRY(Â&öÆÆ&6¾8  ¢2222BãbãB&VæFW"W&f÷&Öæ6R6öçG&7@ £##bÓrÓ‚y¨NXènXû.Zéîš¨ÎXùxëûÉ¤6†VÆÂjk‹.iù>XÙ^jÊi»î™‹¾ZîK‹¾{«şzˆ¾{ªb(	33S×>ûÉ¾Šú^XÎ™ÈŠhZéîikŞi{n˜xŞikkX¾˜xşûÈÎKØnK©NiÚ{¹>ièN{ª.{«ş{º~{ºŞiÈiXûÉ  £â7G&VÖ–ærFVÇFKˆŞ‹ù¾XZR6†VÆÂj’&VGV6W.ûÉ¾{º~{ºŞ‹[Æ—fT76—7FçEFW‡D6†ææVÆ8 £"â6†&VBWfVçBôÆörKˆŞKÛşyJi[{¸N‹ûŞXªYè²&ö÷B6WE7FFV8 £2â6æöæ–6Â6öÖÖ—BKºRGW&âõG‚K‹®š)xè~ûÈÎzhjÚ.˜	FVÇFhÈK˜^XÉn[›nŠznXù&ö¦V7F–öâ&V'V–ÆN8 £Bâ6†&VB&6¶w&÷VæB&–æF–ær‹ùŠÎi{nûÈÎX[>™zŞX[b6öçfW'6F–öâ6çf2YîKˆŞ[é~{º~{ºŞš›XªXúşŠx[™^[ˆ>˜xŞk‹.iù>8 £Râ7F÷&RYÎjÚ^˜x~yJ‚WfVçBÖG&—fVâWFF^ûÈÎ‹ÚîŠú.Xú®KÙÂ(šS32&÷VæFVBfÆÆ&6¾8  ®h
+~ˆ;Şš¨ÎiKnXˆnKˆzxŞYË®išşxºÎz¸¾kX¾˜xşûÉ  ¦FW‡@¦–FÆP¦&6¶w&÷VæB6†&VB&–æF–ær²6çf26Æ÷6V@¦f÷&Vw&÷VæB6†&VB7G&VÖ–æp¦  ®kX¾˜xşi{nX[>™zÒ&V7B×66âiKîZJ~YšûÉ¾ˆº^XùyIşXZj	˜xŞk‹.iù>ûÈÎKÛşyJ‚&V7BÖVÖö—¦VEWFFW'6KˆîxëiÈ[Ù.Yºikk9^Zé®KØŞyÉşZéâWFFW.8  ¢2222BãbãRæF—fR6çf26ö×F–&–Æ—G’66WFæ6RFW7G0 ¢Òh™>[Èizr6ÆVFRæF—fR6W76–öîûÉ¤†—7F÷'’—FVÒi[˜xş8š®[¨ş8{¾Yè¾KˆîK‹¾Šh[^zK®Xh^ZëKˆŞXù8 ¢Ò6ÆVFR7G&VÖ–æ~8F†–æ¶–æ~8FööÂ6ÆÂõ&W7VÇN8W&Ö—76–öî87F÷ô–çFW''WB[^zK®KˆŞXù8 ¢Òh™>[Èizr6öFW‚æF—fR6W76–öîûÉ¤†—7F÷'’—FVŞ8&V6öæ–æ~8FööÎ8F68W'&÷"[^zK®KˆŞXù8 ¢Ò6öFW‚Æ—fR—FVÒÆ–fV7–6ÆRKˆâFW&Ö–æÂ6WGFÆVÖVçBKˆŞYº6†&VB6æöæ–6Â6–æ²˜xŞZHÒF—7F68 ¢ÒW6W"×f—6–&ÆRæF—fR6W76–öâKˆŞX‰¾[»¢6†&VB†–FFVâ&–æF–æ~ûÈÎKˆŞŠû¾Xùb6†&VB7W'6÷.ûÈÎKˆŞ{¸ş‹ør6öçFW‡D6ö×–ÆW.8 ¢Ò6†&VBÖ÷væVB†–FFVâ&–æF–ærKˆŞ‹ù¾XZRæF—fR6–FV&.ûÈÎKˆŞy»Nhê^yIşh‰yJh‹~XúşŠxæF—fR6öçfW'6F–öî8 ¢Ò6†&VBFW&Ö–æÂ6öÖÖ—BKˆâÆ—fT76—7FçEFW‡D6†ææVÆiKniÙşYîXú®X{®xëKˆKŠ¢76—7FçBf–æÎ8 ¢ÒXˆ~hÚ"æW‡BF&vWBKˆŞkˆ^z›®8KˆÒ&VÖ÷VçN8KˆŞXZ˜xş˜xŞ[»®xëiÈ’6öçfW'6F–öâ6çf>8 ¢ÒXŠ™šB6†&VBT’&ö¦V7F–öâYî˜xŞ[»®ûÈÆ—FVÒ÷&FW"÷G—Rö6†V6·7VÒKˆâ6öÖÖ—BX˜ŞKˆˆ{N8 ¢Ò6†&VB6W76–öâYîXû‹ùŠÎK‰N[™^[ˆ>X[>™zŞi{nûÈÎKˆŞKª~yIşhÈ{ºÒ6çf2ô6†VÆÂ&VæFW"7F÷&Ş8  ¢222Bãr–×ÆVÖVçFF–öâ&VF–æW726†V6¶Æ—7@ ¤6æöæ–6ÂÆö~ûÉ  ¢Ò²Ò÷Vå7V2Zé®K˜XZ˜:‚6æöæ–6Âf7B¥4ôâ66†VÖ8 ¢Ò²Ò6öçfW'6F–öâçW6vU&V6÷&FVFiÈ’GFV×Bö&–æF–æröæF—fR–FVçF—G8&W÷'B7V&¦V7B÷&Wf—6–öâ÷7WW'6VFW2Kˆî[˜.zØ™Jî8 ¢Ò²Ò&÷f–FW"çW6vTvw&VvFU&V6÷&FVFiÈxºÎz¸²&÷f–FW"W6vRÆVFvW"Kˆâ&÷f–FW"õv–æF÷r÷væW'6†—ûÉ¶vw&VvFRÖöæÇ’KˆŞhêkX¾Xˆni®X‹GW&âõ6W76–öî8 ¢Ò²Ò6†&VDWfVçEw&—FW&Xú®iÈKˆKŠ¢6WVVæ6RÆÆö6F÷"Kˆâw&—FRWF†÷&—G8 ¢Ò²ÒWfVçB–ç6W'BKˆâæW‡E÷6WVVæ6Vi»NikYÊYÎKˆG&ç67F–öî8 ¢Ò²ÒG‚(	3Ry¨N‹é>XZ^8‹é>X{®8Væ—VR6öç7G&–çN8™IŠúşziˆîzî8 ¢Ò²Ò–æw&W72×6–FR76VÖ&ÆW"ˆ;ŞK¸âf–æÂ6æ6†÷B{¸NŠ8^ZèÎi[BFööÂW†6†æv^8 ¢Ò²Ò&ö¦V7F–öâXúşKº^XŠ™šNYî˜xŞ[»®8 ¢Ò²ÒÆVv7’–×÷'BiÈ’f–ævW'&–çN8Ö&¶W.8f–FVÆ—G’Kˆâ&öÆÆ&6²FW7N8 ¢Ò²Ò7&6‚õ÷vW"ÖÆ÷72FW7BŠhny¹njøşKŠ®K¨¾Xª‹ëyXÎ8  ¥'VçF–ÖR4¾ûÉ  ¢Ò²Ò'VçF–ÖR6&–Æ—G’yKhúh˜²÷66†VÖ&ö&R[é~X‹ûÈÎKˆŞhÈ’Væv–æR[‹˜xşxÉÎkX¾8 ¢Ò²Ò&–æF–ærÆ§’7&VFRiÈxºÎz¸²GW&&ÆR&÷f—6–öæ–ær7FF^8Væ—VR6öç7G&–çBKˆâ7&6‚&V6÷fW'’FW7N8 ¢Ò²Ò6öFW‚7–¶Rš¨ÎŠøF‡&VBö–æ¦V7Eö—FV×6iJşhÈy¨B—FVÒ{¾Yè¾8hÈK˜^XÉn8&VBÖ&6²KˆâGWÆ–6FR&V†f–÷.8 ¢Ò²Ò6öFW‚6Æ–VçEW6W$ÖW76vT–F‹Jşz›ò6VæN8WfVçN8&V6÷fW'8 ¢Ò²Ò6ÆVFRY
+şyJ[›nŠz>iéÒ×&WÆ’×W6W"ÖÖW76vW68 ¢Ò²Ò6ÆVFR&W7VÇFKˆâ&ö6W72W†—BXk.z¨i{nûÈÎKº^iˆîzâ6öçG&7B6WGFÆVÖVçN8 ¢Ò²Ò¶–Ö’57–¶Rš¨ÎŠø–æ—F–Æ—¦R6&–Æ—G86W76–öâÆöB÷&WÆ8&ö×BÆ–fV7–6Æ^8&÷f–FW"6öæf–~8 ¢Ò²ÒjøşKŠ¢FFW"˜	®‹ø~{¹şKˆÖ&–wV÷W24²6öçG&7BFW7G>8  ¤6öçFW‡B6ö×–ÆW.ûÉ  ¢Ò²ÒæF—fT†—7F÷'•&VFW&Zû’6ÆVFRô6öFW‚ô¶–Ö’Zé®K˜’7F&ÆR7W'6÷.8f–ævW'&–çN8f–FVÆ—G8G—VBW'&÷"KˆîXú®Šû¾‹ëyXÎ8 ¢Ò²Ò&÷f–FW"6öçF–çVF–öâYÊyºîjr6–FRVffV7BX˜ŞhÈK˜^XÉb–Ö×WF&ÆRæF—fT†—7F÷'”ÖFW&–Æ—¦F–öæûÉ·Vç7F&ÆR7W'6÷"f–Â6Æ÷6VN8 ¢Ò²ÒK©NzxÒ&ö¦V7F–öâÖöFRiÈ’6&–Æ—G’&VF–6F^8 ¢Ò²Ò6÷W&6R9rF&vWB6ö×F–&–Æ—G’ÖG&—‚ˆz®XªXÉn8 ¢Ò²ÒæF—fRÖFVÇFhé.™šNyºîjr&–æF–ærXéşyIşhº^iÈy¨BVçG&–W>8 ¢Ò²ÒæF—fRÖFVÇF[Ë®X‹nŠhk"FW7F–æF–öâæ&–æF–ævKˆâGW&&ÆRGFV×N(i&&–æF–ærÆöö·W8 ¢Ò²ÒFööÂ6ÆÂõ&W7VÇBFöÖ–2fÆ–FF÷.8 ¢Ò²Ò&÷f–FW"×&—fFR&V6öæ–ær÷6–væGW&R&VF7F–öî8 ¢Ò²Ò'F–f7B6—¦Rö'VFvWB÷&Vb&WG&–WfÂ6öçG&7N8 ¢Ò²Ò&ö¦V7F–öäÖæ–fW7FZèÎi[NŠë[ÙRG&ç6f÷&ÖF–öî8öÖ—76–öî86†V6·7VŞ8 ¢Ò²Ò6†V6·ö–çB4²Yîhê‹ù²7W'6÷"y¨NkK˜RöÖ—76–öâŠúŞK˜[{.Š*¾kh‹Kˆ^KˆâU‚š¨ÎiKn8  ¥TûÉ  ¢Ò²Ò7F÷&RKŠŞXˆnzk²6VÆV7FVDæW‡EF&vWFKˆâ7F—fUGW&åF&vWF8 ¢Ò²ÒK™Ş{²T’7FFRiÈiˆîzâW'6—7FVB÷&V6÷fW&&ÆRÖ–æ~8 ¢Ò²ÒFVw&FVBÖ6öçFW‡F[ø^š¾yJh‹~zîŠêN8 ¢Ò²Ò&V6÷fW'’×&WV—&VFk*iÈ’&Æ–æB&WG'8 ¢Ò²Ò6æ6VÂ×VæF–ævK¸^YÊ‚'VçF–ÖR6æ6VÂ4²õFW&Ö–æÂõ&ö&RZé®h
+~Yî{¹>zé~8 ¢Ò²Ò&WG'’õ&VvVæW&FRKÛşyJ‚Æöv–6ÅGW&ä–B²GFV×D–F8 ¢Ò²Ò6†&VB&–æF–ærkKˆŞ‹ù¾XZRæF—fR6–FV&"õ7V&vVçBG&V^8  ¤æF—fR6çf26ö×F–&–Æ—GûÉ  ¢Ò²ÒæF—fRKˆâ6†&VBKÛşyJxºÎz¸²FF6÷W&6Rõ&ö¦V7F–öîûÈÎiÈ{¸˜.˜XŞYÎKˆ[™^[ˆ>8 ¢Ò²Ò6öçfW'6F–öä—FVÖKùŞhÈ&W6VçFF–öâÖöæÇûÈÎKˆŞh›ş‹ÛÒ6æöæ–6Âô4²õ&V6÷fW'’x«nh8 ¢Ò²ÒÖ÷77„vVçDWfVçF˜x~yJ‚FF—F—fR&÷WF–æ~ûÈÎKˆŞKúîiKxëiÈ’æF—fRWfVçBÖVæ–æ~8 ¢Ò²ÒF‡&VD—FV×2çG6KˆŞh›şh¸R6æöæ–6Âæ÷&ÖÆ—¦F–öâh‰b6öçFW‡B&WÆ8 ¢Ò²Ò7G&VÖ–ærFVÇF{º~{ºŞ‹[Æ—fT76—7FçEFW‡D6†ææVÆûÈÎKˆŞ‹ù¾XZ^j’&VGV6W"ô6æöæ–6ÂÆö~8 ¢Ò²Ò6ÆVFRô6öFW‚æF—fRvöÆFVâf—‡GW&W2KˆâÆ—fR&Vw&W76–öâFW7G2[{.[»®z¸¾8 ¢Ò²Ò6†&VBFW&Ö–æÂKˆâÆ—fRFW‡BiÈ’GFV×B×66÷VBFVGWÆ–6F–öî8 ¢Ò²Ò–FÆRö&6¶w&÷VæBöf÷&Vw&÷VæB7G&VÖ–ærKˆzxŞYË®išşZèÎh‰˜xŞikkX¾˜xş8  ®XZ˜:X»î˜YîûÈÎih~j>h˜ŞK¸â&6†—FV7GW&Rf÷VæFF–öâ‹ù¾XZR–×ÆVÖVçFF–öâ×&VGûÉ´÷Vå7V2XúşKº^h¨®jøşKŠ¢6†V6¶&÷‚‹ÚÎK‹¢&WV—&VÖVçBõ66Væ&–òõF6¾8  ¢ÒÒĞ ¢22XØK©N8Xˆn™‹një^‹zş{«ğ ¢222†6RûÉ®Xk¾{¹>Kª~Y8Kˆîi[hÚîZY{ª` ®KªNK¹ûÉ  ¢ÒW†V7WF–öåF&vWF ¢ÒGW&äW†V7WF–öå6æ6†÷F ¢Ò6W76–öä÷&–v–æ ¢Ò6öçfW'6F–öäfÖ–Ç•&Vf ¢Ò&–æF–ær¶W’ŠxNX‰¢Ò6–FV&"j~zÛîŠxNX‰¢Ò†–FFVâ&–æF–ærXúşŠxh
+~ŠxNX‰¢ÒæF—fRõ6†&VBFF6÷W&6RKˆâ6öçfW'6F–öâ&ö¦V7F–öâ™©Nzk¾ŠxNX‰¢Òf–ÇW&RÖG&—€¢Ò6öçfW'6F–öâçGW&å&WVW7FVF ¢Ò6öçFW‡BæFVÆ—fW'•&W&VBô66WFVF ¢Ò6öçfW'6F–öâçGW&ä66WFVBô6öÖÖ—GFVF ¢Ò&–æF–æt6öçFW‡D7W'6÷& ¢Ò&–æF–æu&÷f—6–öæ–æu7FFV ¢Ò'VçF–ÖR4²6&–Æ—G’6öçG&7@¢ÒæF—fT†—7F÷'•&VFW"6öçG&7@¢ÒæF—fT†—7F÷'”ÖFW&–Æ—¦F–öâò7F&ÆR6÷W&6R6æ6†÷B6öçG&7@¢ÒGW&âW6vRGG&–'WF–öâ²&÷f–FW"vw&VvFRW6vRf7Bò&ö¦V7F–öâ6öçG&7@¢ÒÆVv7’f–FVÆ—G’6öçG&7@¢Ò6öFW‚F‡&VBö–æ¦V7Eö—FV×66&–Æ—G’7–¶P¢Ò6ÆVFRÒ×&WÆ’×W6W"ÖÖW76vW64²7–¶P¢Ò¶–Ö’56&–Æ—G’7–¶P ®š¨ÎiKnûÉ  ¢ÒæF—fRõ6†&VBõ7V&vVçBôf÷&²ô6öçF–çVF–öâK©N{¾Zû‹KˆŞKÉ®K©.y»Šúşh©^[Û8 ¢Ò&ö÷Bôf÷&²ô6öçF–çVF–öây¨BfÖ–Ç’Š{ÉXúş‹ûŞkªşûÈÅ7V&vVçBõ6†&VB&–æF–ærKˆŞ‹ù¾XZRfÖ–Ç8 ¢Ò&÷f–FW"XŠ™šNYîXènXû.K¸ŞXúşŠz>˜x®8 ¢ÒÖöFVÂKˆŞ‹ù¾XZ^›¹ŠêB&–æF–ær¶W8 ¢Ò&÷f–FW"6öçF–çVF–öâXúşK¸âæF—fR†—7F÷'’Xú®Šû¾{ÉnŠù6öçFW‡NûÈÎKˆŞŠhk"æF—fR6W76–öâ‹ù¾XZR6†&VB6æöæ–6Â—VÆ–æ^8 ¢ÒKˆKŠ¢'VçF–ÖR7–¶RKª~X{®ZéîkX²6&–Æ—G’ô4²ÖG&—ûÈÅ†6Ró"FFW"6öçG&7BKˆŞKºR4Ä’ih~jh‰nX~ŠëîK‹®KéŞhÚî8 ¢ÒGW&âW6vRˆ;ŞhÈ’GFV×N8F&vWN8&–æF–ærKˆâæF—fR6W76–öâz‹>Zé®[Ù.[îûÉ¾‹z‚GW&â&W÷'BXú®hÈ’&÷f–FW"õv–æF÷r[Ù.[î8  ¢222†6RûÉ®[»®z¸²6†&VB6æöæ–6ÂWfVçBÆörc  ®KªNK¹ûÉ  ¢Ò7F÷&v^ûÉ¥5Æ—FRtÂ66†VÖ86†&VDWfVçEw&—FW&8&÷f–FW"W6vRÆVFvW.8Væ—VR6öç7G&–çG>86WVVæ6RG&ç67F–öâKˆâ7&6‚÷÷vW"ÖÆ÷72FW7G>8 ¢Ò"6æöæ–6Â–æw&W7>ûÉ§'Vâ–FVçF—G’(i"6æ6†÷Bô&–æF–ærz‹>Zé®X[>ˆN8fâÖ÷WBöG&÷X˜ÒWF†÷&—FF—fR6–æ¾8'VâõGW&â76VÖ&ÆW.8GW&å&WVW7FVB(i"FVÆ—fW'’(i"66WFVB(i"6öÖÖ—GFVFf7G>8GW&âôvw&VvFRW6vRf7G>87&—F–6Â6öÖÖ—B6–æ¾8 ¢Ò2&ö¦V7F–öâôÖ–w&F–öîûÉ¤6æöæ–6Âf7BX‹T’—FVÒy¨NXÙ^Y	&ö¦V7F–öî86†&VBôæF—fR&ö¦V7F–öâ—6öÆF–öî8&ö¦V7F–öâ&V'V–ÆN8ÆVv7’GVÂ×&VN86çf2&Vw&W76–öâvF^8 ¢Ò&–æF–ær&÷f—6–öæ–æ~8VæF–ærFVÆ—fW'’Kˆâ7W'6÷"y¨NXéşZÙhÈK˜^XÉn8 ¢Òf–FVÆ—G’ööÖ—76–öâÖWFFF8  ®š¨ÎiKnûÉ  ¢Ò6†F÷r™;î‹zşKˆ¢T’6æ6†÷BKˆŞKÙÎK‹®ikGW&ây¨NK¨¾Zéîk©ûÉ¾yÉşZéîkX˜xşXˆ~hÚ.[îK¨â6†ævR"š¨ÎiKn8 ¢Ò7G&VÖ–ærFVÇFKŠ.ZKKˆŞ[ÛY8ŞiÈ{¸‚GW&âh.ZHŞ8 ¢Òh˜iÈY
+şyJ‚Væv–æRy¨BFW&Ö–æÂWf–FVæ6R˜;Ş˜	®‹ø~z‹>Zé¢'Vâ–FVçF—G’‹ù¾XZ^YÎKˆ76VÖ&ÆW"ô6öÖÖ—B6öçG&7N8 ¢ÒFööÂ6ÆÂõ&W7VÇBKºRFöÖ–2W†6†ævR‰Şy¹8 ¢ÒW6W"–çFVçBYÊ‹>yJZIn˜:‚4Ä’X˜Ş[{.{¸òGW&&Æ^8 ¢ÒæF—fR6W76–öâX‰¾[»¢–çFVçBYÊ‹>yJ‚'VçF–ÖRX˜Ş[{.{¸òGW&&Æ^8 ¢ÒWfVçN86WVVæ6^87W'6÷.8VæF–ærFVÆ—fW'’hÈK¨¾XªÆÂÖ÷"Öæ÷F†–æ~8 ¢Ò˜xŞY
+şYîXúşyKWfVçBÆör˜xŞ[»¢T’&ö¦V7F–öî8 ¢Òizr6†&VB6W76–öâXúşŠû¾8Xúş{º~{ºŞûÈÎKˆŞ˜xŞXiiz~XènXû.8 ¢Òizr6ÆVFRô6öFW‚æF—fR6W76–öây¨B†—7F÷'87G&VÖ–æ~8FööÎ8F†–æ¶–æ~8&÷fÎ8F6‚k‹.iù>izŠÎK‹®XùXÉn8 ¢Ò6†&VBFW&Ö–æÂ6öÖÖ—BKˆâÆ—fRFW‡BKˆŞyIşh‰˜xŞZHÒ76—7FçBf–æÎ8 ¢Ò6†&VBYîXû&–æF–ærYÊ[™^[ˆ>X[>™zŞi{nKˆŞhÈ{ºŞš›Xª‚6†VÆÂô6çf2k‹.iù>8 ¢Ò8.82YNˆz®iÈxºÎz¸¾š¨ÎiKnûÈÄ2KˆŞ[é~h‰K‹®ZÙX*["7&6‚6÷'&V7FæW72y¨NYJşKˆš¨ÎŠøXZ^Xú>8  ¥†6RiŠòF&²ÆVæ6ûÉ®KªNK¹Yâ6†&VBKª~Y8ŠÎK‹®KˆîyÉşZéâ6VæBXi‹zş[èNKùŞhÈc8$6†ævR"hê^XZ^yÉşZéâ6VæBX˜ŞûÈÄ"Xú®kh‹K’7–çF†WF–2f—‡GW&W>ûÈÎKº^Xø®K¸âcWF†÷&—FF—fRf–æÂWf–FVæ6R[»®z¸¾y¨B&VBÖöæÇ’Ö—'&÷&VB6†F÷r–æw&W7>ûÈÎ[›nXiXZ^™©Nzk¾y¨B6†F÷r6æöæ–6ÂÆö~ûÉ´2Xú®kh‹KŠúR6†F÷rÆö~ûÈÎKˆâÆVv7’GVÂ×&VB&ö¦V7F–öâZûjùNûÈÎKˆŞKÙÎK‹¢–æw&W7>ûÈÎK™şKˆŞY¹îXiKª~Y8x«nh8.KˆŞ[é~h¨¢†6RZèÎh‰ŠúşŠz>K‹¢6†&VBKª~Y8kX˜xş[{.{¸şXˆ~X‹c.8  ¢222†6R.ûÉ¥6†&VB6W76–öâiJşhÈ4Ä’9r&÷f–FW  ®KªNK¹ûÉ  ¢Ò6VÆV7FVDVæv–æVXØ~{ª~K‹¢6VÆV7FVEF&vWF8 ¢Ò&–æF–æw4'”Væv–æVXØ~{ª~K‹¢&–æF–æw4'•F&vWF8 ¢Ò6†&VB6VæBXZ™;î‹zş‹Jş˜	¢&÷f–FW%&öf–ÆT–F8 ¢Ò&÷f–FW"×66÷VBÖöFVÂ–6¶W.8 ¢ÒGW&â&÷f–FW"ôÖöFVÂ&÷fVææ6^8 ¢ÒF&vWBÖv&RVæF–ær&V&–æN8–çFW''WN8&V6÷fW'8 ¢ÒF&vWBÖv&R&–æF–ær&÷f—6–öæ–ærKˆâGWÆ–6FRÖ7&VFR&V6÷fW'8  ®š¨ÎiKnyú™‹^ûÉ  ¦FW‡@¤6ÆVFRôöff–6–À®(i"6ÆVFRô÷Vå&÷WFW ®(i"6öFW‚ô÷Vä®(i"6ÆVFRôöff–6–À¦  ®[ø^š¾kº‹k>ûÉ  ¢ÒKˆKŠ¢6†&VB6–FV&"&÷~ûÉ°¢ÒKˆKŠ¢†–FFVâ&–æF–æ~ûÉ°¢ÒXˆ~Y¹â6ÆVFRôöff–6–ÂZHŞyJXéò&–æF–æ~ûÉ°¢ÒjøşKŠ¢GW&â&÷fVææ6RjÚ>zîûÉ°¢ÒK»¾Kˆ&÷f–FW"ZK‹J^KˆŞ˜xŞ‹zşyK8  ¢222†6R>ûÉ¤6öçFW‡B6¶vRc ®KªNK¹ûÉ  ¢Ò6æöæ–6ÂÆörKˆâÖöFVÂ&ö¦V7F–öâXˆn[.8 ¢ÒfW'6–öæVB6öçFW‡B6¶vRKˆâ&ö¦V7F–öâÖæ–fW7N8 ¢ÒæF—fRÖFVÇFòæF—fRÖ†—7F÷'’Ö–×÷'FòæF—fRÖ†—7F÷'’Ö6ÆöæVò÷'F&ÆR×G&ç67&—Fò6†V6·ö–çF8 ¢Ò’Ö’[Èò6ö×F–&–Æ—G’G&ç6f÷&ÖW.8 ¢ÒFöÖ–2FööÂW†6†æv^8 ¢Ò'F–f7B7F÷&Rõ&VfW&Væ6RKˆâ&öw&W76—fR&WG&–WfÎ8 ¢ÒF&vWB×66÷VBGvò×†6R7W'6÷.8 ¢ÒVæF–ærFVÆ—fW'’&V6÷fW'8 ¢ÒYû®K¨â†6R7–¶R{¹>Šë®Zéîxë6öFW‚ô6ÆVFRô¶–Ö’FFW.ûÉ¾ˆº^ZéîkX²6&–Æ—G’KˆŞh‰z¸¾ûÈÎhÈ’6ö×F–&–Æ—G’ÖG&—‚™˜Ş{ª~ûÈÎKˆŞKúîiKiz.Zé¢4²ŠúŞK˜hêy¹n[zî[È.8  ®š¨ÎiKnûÉ  ¢Ò™[şKÉ®ŠùŞXˆ~hÚ.KˆŞKéŞ‹YnY»®Zé¢‚GW&î8 ¢ÒFööÂ6ÆÂõ&W7VÇBKˆŞŠ*¾™IŠúşh¸niZ>8 ¢Ò†æFöfbXúşZêŠê8Xúş˜xŞiKî8 ¢ÒYÎKˆæF—fR&–æF–ærKˆŞ˜xŞZHŞk:XZ^X[n[{.iÈXènXû.8 ¢ÒæF—fRÖFVÇFKˆŞXÈ^Y
+²&÷fVææ6RöGFV×BÖ–ær[îK¨îyºîjr&–æF–ærˆz®‹ª¾y¨BVçG&–W>8 ¢Ò6†V6·ö–çBhê^Xù~Yî˜~kÈşXh^ZëKˆŞKÉ®YÊYî{ºÒFVÇFˆz®XªŠ^XùûÈÎXú®ˆ;ŞhÈ’Öæ–fW7B&öw&W76—fR&WG&–WfÎ8 ¢ÒjøşKŠ¢'VçF–ÖRjhÚâ6&–Æ—G’˜hº’–×÷'Bö6ÆöæR÷G&ç67&—Bö6†V6·ö–çNûÈÎKˆŞhÈ’Væv–æRYŞZÙ~zÎ{ÉnzX~Šëî8 ¢Ò6÷W&6R9rF&vWB6ö×F–&–Æ—G’ÖG&—‚Šhny¹bF†–æ¶–æ~8FööÂ”N8–Öv^8&÷'FVBGW&î8 ¢Ò6ö×–ÆRö66WBö6öÖÖ—BKˆzxŞZK‹J^KˆŞKÉ®™IŠúşhê‹ù¾Zû[©Nk‹j~8 ¢Ò66WFæ6RYâ'VâZK‹J^KˆŞKÉ®ZûÎˆ{NYÎKˆ6¶vR˜xŞZHŞk:XZ^8  ¢222†6RNûÉ¤æF—fR&÷f–FW"6öçF–çVF–öà ®KªNK¹ûÉ  ¢Ò(	ÎKÛşyJX[nK¹b&÷f–FW"{º~{ºŞ(	ŞXZ^Xú>8 ¢Ò6ÆVFRô6öFW‚ô¶–Ö’æF—fT†—7F÷'•&VFW&ZéîxëKˆâ6öçG&7BFW7G>8 ¢Òyºîjr6–FRVffV7BX˜ŞhÈK˜^XÉb–Ö×WF&ÆRæF—fR†—7F÷'’ÖFW&–Æ—¦F–öî8 ¢Ò6öçFW‡B6¶vRZHŞyJ8 ¢ÒikæF—fR6W76–öâX‰¾[»®Kˆâ&–æF–æ~8 ¢Ò&÷f–FW"Ö6öçF–çVF–öæ÷&–v–î8 ¢Ò6öçfW'6F–öâfÖ–Ç’–æ†W&—Fæ6^8 ¢ÒKé¾[©NYXn{ºŞhêVj~zÛî8 ¢Ò(	Îiú^yÈ¾iÚ^k©KÉ®ŠùŞ(	ŞZûÎˆŠ®8  ®š¨ÎiKnûÉ  ¢ÒXéò6W76–öâKˆŞXù8 ¢Òik6W76–öâšn[.i‹îzK®8 ¢ÒKˆŞXi’&VçEF‡&VD–F8 ¢ÒKˆŞi‹îzK¢ZÙKº>yfj~zÛî8 ¢Ò&÷f–FW"&öf–ÆRKˆŞYÎ8 ¢ÒfÖ–Ç”–FKˆîiÚ^k©y»YÎûÈÆÆ–æVvU&VçE6W76–öä–FhÈ~Y	iÚ^k©8 ¢ÒXŠ™šNiÚ^k©6W76–öâKˆŞ{ª~ˆNXŠ™šB6öçF–çVF–öî8 ¢ÒiÚ^k©æF—fR†—7F÷'’KˆŞXiXZR6†&VB6æöæ–6ÂWfVçBÆö~ûÉµ&VFW"™˜Ş{ª~h‰böÖ—76–öâZûyJh‹~XúşŠx8  ¢222†6R^ûÉ¤÷&6†W7G&F–öâf÷VæFF–öà £##bÓ‚ÓRj
+XxnûÉ¥c[{.hÈ’6öçfW'6F–öâÖæF—fRvVçB7VB‰ŞYËiÊÎYËZéîxëûÉ¶WFöÖFVB6öçG&7BFW7G2[{.Šhny¹nj[ø>x«nhiË®ûÈÎyÉşZéâFW6·F÷ô4Ä’6Öö¶R[	®iÊ®ZèÎh‰ûÈÎYºjÚNY¹¾KŠ¢÷Vå7V26†ævRKùŞhÈ7F—f^8KˆŞ[ér&6†—f^8  ®KªNK¹ûÉ  ¢Ò6†&VB6ö×÷6W"6VæB[znKêröæR×6†÷B7VF'WGFöîûÉ¾KˆŞKÛşyJi‹î[ÈşYŞKºNh‰nˆz®XªhHşY»îŠønXŠ¾8 ¢ÒÆVBKª~yIò7G'V7GW&VBÆîûÉ¾yJh‹~KˆjÊzîŠêNYîûÈÆÖ÷77‚j
+š¨Î[›n[ZÙ‚W†7BF&vWN8'VFvWN8W&Ö—76–öâVçfVÆ÷RKˆâG–æÖ–2D~8 ¢Ò6æöæ–6Âf7B²FWFW&Ö–æ—7F–27VE&ö¦V7F–öåciŠşYJşKˆGW&&ÆRWF†÷&—GûÈÎKˆŞX‰¾[»®zÊÎK¨ÎiÚWF†÷&—FF—fRWfVçB6–æ¾8 ¢Ò÷&F–æ'’4Ä’v÷&¶W"&–æF–æ~8æöFR×66÷VB6öçFW‡B6¶v^8G—VB÷WF6öÖ^8GFV×BÖ&÷VæF'’WfVçBÖG&—fVâ66†VGVÆW.8 ¢Ò&ÆÆVÂæÇ—¦R²6–ævÆRw&—FW.ûÉ¶GW&&ÆRv÷&·76R×WFF–öâÆV6^8F—'G’×&W6W'f–ær6†ævRfVæ6^8&÷VæFVBf÷'v&B&W—.8 ¢Ò6öçfW'6F–öâÆâ÷'Vâ6&B²7V$vVçBYÎ[Ú.Xû>Kêr–ç7V7F÷.ûÉµv÷&¶W"GW&ç2æW7FVBÖöæÇûÈÇ7V66W76gVÂ6WGFÆVÖVçBXú®h©^[ÛKˆjÊf–æÂç7vW.8 ¢ÒVÖW&vVæ7’7F÷XXhÈK˜^XÉb6æ6VÂ–çFVçNûÈÎXú¢–çFW''WBW†7B7F—fR÷væW.ûÉ¾KˆŞˆz®Xª‚&öÆÆ&6¾8 ¢Òd•DUô44uT•õ5TEôõ$4„U5E$D”ôåõcò44uT•õ5TEôõ$4„U5E$D”ôåõc¶–ÆÂ7v—F6‚›¹ŠêN[ÈY
+şûÉ¾X[>™zŞYîzhjÚ.ik'Vâö&÷fÂöF—7F6ûÈÎKØnXènXû.Šû¾Xùn8W†7BÖ÷væW"7F÷Kˆîiz.iÈ’GFV×BFW&Ö–æÂ6WGFÆVÖVçBK¸ŞXúşyJ8  ¥c6&–Æ—G’6V–Æ–æ~ûÉ  ¢Ò6öFW‚X[~ZHr†&B&VBÖöæÇ’ò7W'&VçB×v÷&·76R6æF&÷ûÈÎXúşh›ş‹ÛŞZèÎi[BD~8 ¢Ò6ÆVFRK¸^YÊ‚W&Ö—76–öâÖÖöFS×ÆæKˆ¾h›ş‹ÛÒW&R&VBÖöæÇ’D~ûÉ¾Y
+²×WFFRy¨BÆâf–Â6Æ÷6VN8 ¢Ò¶–Ö’ôw&ö²ô÷Vä6öFR[Ù>X˜Ò†VFÆW72FFW"{Ë®[	Xúşš¨ÎŠø†&B&VBÖöæÇ’ÖöF^ûÈÄÆVB6–FRVffV7BX˜Şh¹.{¹Ş8 ¢ÒKˆŞZéîxëv÷&·G&VRW†V7WF÷.8×VÇF’×w&—FW"ÖW&v^8Ö–B×GW&â7FVW.8V&Æ–2ÇVv–âõ—VÆ–æRûÉ¾hê~X‹nXú®XùyIşYÊ‚GFV×B&÷VæF'8 ¢Ò×WFFRŠhk"v—Bv÷&·76^8$6†ævRfVæ6^Šhny¹bG&6¶VBKˆâæöâÖ–væ÷&VBVçG&6¶VBFVÇFûÉ¶–væ÷&VBF‚KˆîK»¾hHò7&VFVçF–Â&VBKˆŞˆ;ŞyKv—BF–fbZèÎi[NŠøiˆîûÈÎYºjÚB&WVW7BöFV6Æ&VBF‚öö'6W'fVB6æF–FFRYŞKŠŞiXşhIş‹ëyXÎXÛ>h¹.{¹ŞûÈÅcKˆŞh¨¢&ö×BöÆ–7’Zê>z{K‹¢õ2ÖÆWfVÂ&VB—6öÆF–öî8  ®š¨ÎiKnûÉ  ¢Ò÷&6†W7G&F÷"Xú®kh‹K’ş‹ûŞXª{¹şKˆ6æöæ–6Âf7NûÈÄg&öçFVæB7F÷&RK¸^KÙÂ&ö¦V7F–öâ66†^8 ¢ÒYÎKˆ6†&VB6W76–öâXú®XXŠëKˆKŠ¢7F—fR7VNûÉ¾YÎKˆv÷&·76RXú®XXŠëKˆKŠ¢×WFFRÆV6^ûÈÎKˆŞYÂv÷&·76RXúş[›nŠÎ8 ¢ÒW†7Bv÷&¶W"÷væW.8GFV×N8&–æF–æ~8F&vWN86öçFW‡B6¶vRXZ™;î‹zşXúşZêŠêûÈÎzhjÚ"fÆÆ&6²X‹y»KËÂ÷væW.8 ¢Ò66†VGVÆW"KˆŞzy.{ª~‹ÚîŠú.ûÉµv÷&¶W"&r&VÇF–ÖRWfVçBKˆŞ‹ù¾XZR&ö÷B6öçfW'6F–öâ&VGV6W.8 ¢Ò&VÆöBõ7F÷ö7&6‚Ö&–wV—G’YØrf–Â6Æ÷6VNûÉ¾izFW&Ö–æÂ²Væ6†ævVBÖfVæ6R&ööbi{nKˆŞ[é~hÈi{n™{NY¹îiKbÆV6^8 ¢ÒFW6·F÷ô4Ä’6Öö¶RZèÎh‰X˜ŞûÈÅ†6RRXú®ŠëK‹¢–×ÆVÖVçFVBÆö6ÆÇ’òÖçVÂvFRVæF–æ~8  ¢222†6RnûÉ¥ÇVv–âò—VÆ–æP ®YÊ‚†6RRcz‹>Zé®YîXhŞ[ÈiKâV&Æ–2W‡FVç6–öâ7W&f6^8%†6RRXh^˜:[{.iÈXù~hêrG–æÖ–2D~ûÈÎKˆŞzØK¨î[{.{¸şhùKé²V&Æ–2—VÆ–æRôDrûÉ  ¢ÒvVçBWfVçB†öö·>ûÉ°¢Ò&÷f–FW"ôVæv–æR&Vv—7G&F–öîûÉ°¢Ò†æFöfb7VÖÖ&—¦W"W‡FVç6–öîûÉ°¢Ò—VÆ–æR6–ævÆR÷&ÆÆVÂö6†–îûÉ°¢ÒV&Æ–2—VÆ–æRôDr6öçG&7NûÉ°¢ÒZIn˜:‚%2õ4D¾8  ®zhjÚ"ÇVv–âÖ&¶WBXøŞY	Zé®K˜’W†V7WF–öâ6÷&^8  ¢ÒÒĞ ¢22XØXZŞ8÷Vå7V26†ævRXˆ~Xˆn[»®Šêà ®KˆŞŠhh¨®XZ˜:ˆ;ŞX©¾Zî‹ù¾KˆKŠ®[zYè²6†æv^8  ®ZÙX*86æöæ–6Â–æw&W7>8&ö¦V7F–öâôÖ–w&F–öây¨NZK‹J^jŠ[ÈşKˆîš¨ÎiKnik[ÈşKˆŞYÎûÈÎXéò6†ævR[ø^š¾h¸nh‰ô"ô>8%&÷f–FW"6öçF–çVF–öâKÙÎK‹®Yî{ºŞxºÎz¸²6†æv^ûÈÎKˆŞ™‹¾Zâ6†&VBc.8  ®KˆKŠ¢'VçF–ÖR7–¶RiŠò†6Ry¨N{ªş‹>z	NK»¾XªûÈÎKˆŞXiKª~Y8Kº>zûÉ¾{¹>Šë®XXK¨â"ô"ô2y¨B'VçF–ÖR4¾8&÷f—6–öæ–ærKˆâFVÆ—fW'’FFW"6öçG&7NûÉ  ¦FW‡@¥3¢7–¶RÖ6öFW‚×F‡&VBÖ–æ¦V7BÖ—FV×0¥3#¢7–¶RÖ6ÆVFR×&WÆ’×W6W"ÖÖW76vW0¥33¢7–¶RÖ¶–Ö’Ö7×6W76–öâÖÆ–fV7–6ÆP¦  ¢2226†ævRûÉ¦W7F&Æ—6‚×6†&VBÖWfVçB×7F÷&vP ¢Ò5Æ—FRtÂÆöv–6Â66†VÖòÖ–w&F–öà¢Ò6†&VDWfVçEw&—FW&ò6–ævÆR6WVVæ6RÆÆö6F÷ ¢Ò&÷f–FW"W6vRvw&VvFRÆVFvW ¢ÒWfVçB–ç6W'B²æW‡E÷6WVVæ6VFöÖ–2G&ç67F–öà¢ÒVæ—VR6öç7G&–çG2ò–FV×÷FVæ7’¶W—0¢Ò&–æF–ærô7W'6÷"õVæF–ærG&ç67F–öæÂ7F÷&vP¢Ò7&68÷vW"ÖÆ÷7>86÷''WF–öî8&6·W÷&W7F÷&RFW7G0 ®xºÎz¸¾š¨ÎiKnûÉ®izT8iz'VçF–ÖRFFW"i{nXÛ>XúşŠøiˆâ6WVVæ6RÖöæ÷Föæ–6—G8ÆÂÖ÷"Öæ÷F†–ærKˆâ&W7F'B6÷'&V7FæW7>8  ¢2226†ævR.ûÉ¦76VÖ&ÆR×6†&VBÖ6æöæ–6ÂÖf7G0 ¢Ò6öçfW'6F–öâçGW&å&WVW7FVBô66WFVBô6öÖÖ—GFVF ¢Ò6öçfW'6F–öâçW6vU&V6÷&FVF ¢Ò&÷f–FW"çW6vTvw&VvFU&V6÷&FVF ¢Ò6öçFW‡BæFVÆ—fW'•&W&VBô66WFVF ¢Ò'VâõGW&â76VÖ&ÆW ¢Ò'Vâ–FVçF—G’(i"6æ6†÷Bô&–æF–ærGW&&ÆR76ö6–F–öà¢ÒfâÖ÷WBöG&÷X˜ÒWF†÷&—FF—fR–æw&W70¢Ò†6R&VBÖöæÇ’cf–æÂÖWf–FVæ6RÖ—'&÷"(i"—6öÆFVB6†F÷r6æöæ–6ÂÆöp¢Ò7&—F–6Â6öÖÖ—B6–æ°¢ÒFöÖ–2FööÂW†6†ævRfÆ–FF–öà¢Ò'VçF–ÖRf–æÂ6æ6†÷B(i"6æöæ–6Âf7B6öçG&7@ ¦&÷f–FW"çW6vTvw&VvFU&V6÷&FVF‹ù¾XZR&÷f–FW"W6vRÆVFvW.ûÈÎKˆŞ‹ù¾XZRW"×6W76–öâ6†&VD6æöæ–6Äf7FûÉ´"Xú®‹Iş‹J2æ÷&ÖÆ—¦F–öî8&Wf—6–öâ÷7WW'6VFW2fÆ–FF–öâKˆâ&ö¦V7F–öâWfVçN8  ®Xúş˜Xh^˜:KªNK¹ûÉ§&VBÖöæÇ’WfVçBÆör–ç7V7F÷.8.Zè>hÈ’6W76–öî86WVVæ6^8GFV×N8f7BG—^8&–æF–æriú^Šú"6†&VBWfVçBÆö~ûÈÎK™şXúşhÈ’&÷f–FW"÷v–æF÷r÷&W÷'B7V&¦V7Biú^Šú"&÷f–FW"W6vRÆVFvW.ûÈÎ[›n[^zK¢6†V6·7VŞ8&÷fVææ6^8f–FVÆ—G8VæF–ærö7W'6÷.ûÈÎyJ‚fVGW&RfÆröFWb'V–ÆB™©Nzk¾ûÉ¾KˆŞ[é~Xi’5Æ—F^8KúîiK’şKúîZHÒf7N8hê‹ù²7W'6÷.ûÈÎh‰nh‰K‹®K»¾KÙR&ö¦V7F–öây¨BWF†÷&—FF—fR6÷W&6^8  ®xºÎz¸¾š¨ÎiKnûÉ®KºR7–çF†WF–2'VçF–ÖRWfVçG2š›Xª‚76VÖ&ÆW.ûÈÎŠøiˆâGWÆ–6FRFW&Ö–æÎ8G&÷VBFVÇF8f–ÆVBö6æ6VÆÆVB÷WF6öÖ^8GW&âW6vRGG&–'WF–öâKˆâ&÷f–FW"vw&VvFRW6vRjÚ>zîûÉ´–ç7V7F÷"ˆº^Y
+şyJûÈÎXii8ŞKÙÎKˆîyIşKª~›¹ŠêNXZ^Xú>[ø^š¾KˆŞXúş‹ëî8  ¢2226†ævR>ûÉ§&ö¦V7B×6†&VBÖ6æöæ–6ÂÖ6öçfW'6F–öà ¢ÒT’&ö¦V7F–öà¢ÒæF—fRõ6†&VB&ö¦V7F–öâ—6öÆF–öà¢ÒW†—7F–ær6çf26ö×F–&–Æ—G’6öçG&7@¢Ò6†F÷r6æöæ–6Â&ö¦V7F–öâg2ÆVv7’GVÂ×&VB6ö×&—6öà¢Ò&ö¦V7F–öâ&V'V–Æ@¢ÒÆVv7’6æ6†÷BGVÂ×&V@¢Òf–FVÆ—G’ööÖ—76–öâ6öçG&7@ ®xºÎz¸¾š¨ÎiKnûÉ®XŠ™šB&ö¦V7F–öâYîXúş˜xŞ[»®ûÉ´ÆVv7’ôæF—fR6çf2vöÆFVâf—‡GW&W2Kˆâ&VæFW"&Vw&W76–öâvFR˜	®‹ø~8  ¢2226†ævR.ûÉ¦6ö×÷6R×6†&VB×6W76–öâÖW†V7WF–öâ×F&vW@ ®ˆÈ>Y»NûÉ  ¢Ò6†&VBW†V7WF–öåF&vWF ¢Ò&÷f–FW"Öv&R&–æF–æw4'•F&vWF ¢ÒGW&&ÆR&–æF–ær&÷f—6–öæ–æròGWÆ–6FRÖ7&VFR&V6÷fW'¢Ò&÷f–FW"×66÷VB–6¶W"ô6FÆöp¢ÒGW&â6æ6†÷@¢ÒF&vWBÖv&R&÷WF–ær÷&V&–æBö–çFW''WBö&÷fÀ ¢2226†ævR>ûÉ¦FB×6†&VBÖ6öçFW‡BÖ6ö×–ÆW  ®ˆÈ>Y»NûÉ  ¢Ò6æöæ–6ÂÆöròÖöFVÂ&ö¦V7F–öâ&÷VæF'¢ÒfW'6–öæVB6öçFW‡B6¶vP¢ÒF&vWBÖv&R6öçFW‡D6ö×–ÆW ¢ÒæF—fR4Ä’&ö¦V7F–öâÖöFW0¢Ò'VçF–ÖR6&–Æ—G’ò4²FFW ¢ÒjhÚâ3õ3"õ32ZéîkX¾{¹>iéÎZéîxë6öFW‚†—7F÷'’–×÷'Bò6ÆVFR–çWB4²ò¶–Ö’5FFW ¢ÒFöÖ–2FööÂW†6†ævRò'F–f7B&VfW&Væ6P¢ÒGvò×†6R7W'6÷"òVæF–ærFVÆ—fW'¢Ò&–æF–ær&÷f—6–öæ–ær&ö&P¢Ò6†V6·ö–çBô6ö×7F–öà¢Ò6öçFW‡B6¶vRX˜Ş{Èz‹>Zé®h
+~KˆîXˆn{¾Yè¾zîZé®h
+~Xè¾{ÊûÈŒ*s’ã"ò*s’ã^ûÈÎjŠ[ÈşXø.ˆ2†VG&ööŞûÈÎKˆŞ[É^XZ^X[b&÷‡’÷w&KˆâÔÂjŠYè¾ûÈ¢Ò6öçFW‡D6ö×&W76–öå&W÷'FXè¾{ÊZéîkX¾hÈ~j~ûÈŒ*sRãnûÈ ¢222Yî{ºÒ6†ævRNûÉ¦FBÖæF—fR×&÷f–FW"Ö6öçF–çVF–öà ®ˆÈ>Y»NûÉ  ¢Ò6öçF–çVF–öâX‰¾[» ¢ÒæF—fT†—7F÷'•&VFW"FFW'2òG—VBW'&÷"òf–FVÆ—G’FW7G0¢ÒæF—fT†—7F÷'”ÖFW&–Æ—¦F–öâW'6—7FVæ6Rò&WG'’&WW6RòVç7F&ÆRÖ7W'6÷"f–ÂÖ6Æ÷6V@¢Ò6W76–öä÷&–v–âò6öçfW'6F–öâfÖ–Ç¢Ò6–FV&"j~zÛîKˆîiÚ^k©ZûÎˆŠ ¢ÒKˆâ7V&vVçBõW6W"f÷&²™©Nzk° ¤6†ævRKéŞ‹YnûÉ  ¦FW‡@¥3õ3"õ32'VçF–ÖR7–¶W0¢)IÎ)H)H)H)H)H)H)H)H)H)H)H)H)H)H(i"#¢6æöæ–6Âf7G2ò6öÖÖ—B6–æ°¢)IÎ)H)H)H)H)H)H)H)H)H)H)H)H)H)H(i"#¢6†&VBW†V7WF–öâF&vW@¢)IN)H)H)H)H)H)H)H)H)H)H)H)H)H)H(i"3¢6†&VB6öçFW‡B6ö×–ÆW  ¤¢WfVçB7F÷&vP¢(i0¤#¢6æöæ–6Âf7G2ò6öÖÖ—B6–æ°¢(i0¤3¢&ö¦V7F–öâòÖ–w&F–öà¢(i0¤#¢6†&VBW†V7WF–öâF&vW@¢(i0¤3¢6†&VB6öçFW‡B6ö×–ÆW ¢)IÎ)H(i"C¢æF—fR&÷f–FW"6öçF–çVF–öâ²æF—fT†—7F÷'•&VFW ¢)IN)H(i"gWGW&R÷&6†W7G&F–öâòÇVv–â†öö·2ò%0¦  ¢222bãKˆîxëiÈ’÷Vå7V2ZY{ªny¨NX[>{;° ®ik6†ævR[©Nhš[^ˆÎKˆŞiŠşZHŞX‹nxëiÈYû®zûÉ  §ÂxëiÈZY{ªbÂZHŞyJx+’ÂikZ)î‹ëyXÂÀ§ÂÒÒÒÂÒÒÒÂÒÒÒÀ§Â6†&VB×6W76–öâ×F‡&VFÂ6†&VBÆöv–6ÂF‡&VN8†–FFVâæF—fR&–æF–ærÂc"6æöæ–6ÂW'6—7FVæ6RKˆâÆVv7’&VFW"À§Â6†&VB×6W76–öâÖVæv–æR×6VÆV7F–öæÂæW‡BGW&âVæv–æR6VÆV7F–öâÂhš[^K‹®ZèÎi[BW†V7WF–öåF&vWFÀ§Â6öçfW'6F–öâÖf7BÖ6öçG&7FÂF–ÆöwVR÷&V6öæ–ær÷FööÂö6öçG&öÂXˆn{²ÂZ)îXª76VÖ&ÆVB6öçfW'6F–öâçGW&ä6öÖÖ—GFVF7&—F–6Âf7BÀ§ÂvVçBÖFöÖ–âÖWfVçB×'VçF–ÖVÂÖ÷77„vVçDWfVçFKˆâFVÆ—fW'’ÆæRÂZ)îXªXúş™Ú6öÖÖ—B6–æ¾ûÈÎKˆŞik[»¢WfVçB'W2À§ÂVæv–æR×W"×6W76–öâ×&÷f–FW"Ö&–æF–ævÂÖævVB&÷f–FW"f–ÂÖ6Æ÷6VBÂ6†&VB&–æF–æw4'•F&vWFKˆâF&vWB÷væW"&÷WF–ærÀ ¤÷Vå7V2š¨ÎiKnKˆŞ[é~Xú®j8iú^ZÙ~jë^ZÙYÊ8.[ø^š¾YÎi{nš¨ÎŠøûÉ  ¢Ò6æöæ–6Âf7BK¸âVæv–æRWfVçBX‹hÈK˜^XÉn8T’&ö¦V7F–öî86öçFW‡D6ö×–ÆW"y¨BVæB×FòÖVæBFFfÆ÷~8 ¢ÒW6W"×f—6–&ÆRæF—fR6W76–öâKùŞhÈXéò†—7F÷'’ôWfVçBõ&ö¦V7F–öâ™;î‹zşûÈÎKˆŞ‹ù¾XZR6†&VB6æöæ–6ÂW'6—7FVæ6^8 ¢Ò6†&VBÖ÷væVB†–FFVâ&–æF–ærWfVçBhÈ’÷væW"÷'Vâ–FVçF—G’‹ù¾XZR6†&VB76VÖ&ÆW.ûÈÎKˆŞh©^[Ûh‰æF—fR6öçfW'6F–öî8 ¢Ò6öçfW'6F–öä—FVÖ8F‡&VD—FV×2çG68Æ—fT76—7FçEFW‡D6†ææVÆy¨Niz.iÈ’&W6VçFF–öâõ7G&VÖ–ær6öçG&7BKˆŞŠ*²6†&VBc"iKXi8 ¢ÒYÎKˆVæv–æRZI¢&÷f–FW"y¨B&–æF–ærõ&ö6W72ô&÷fÂô–çFW''WB™©Nzk¾8 ¢ÒÆVv7’Kˆâc"GVÂ×&VN8 ¢Ò6ö×–Æ^866WFæ6^86öÖÖ—BKˆKŠ¢f–ÇW&R&÷VæF'’y¨N[˜.zØh.ZHŞ8 ¢ÒæF—fR&–æF–ær&÷f—6–öî86öçFW‡B66WFæ6^8FW&Ö–æÂ6öÖÖ—BKˆ{¾ZIn˜:‹ëyXÎy¨N[˜.zØh.ZHŞ8 ¢ÒæF—fR4Ä’G&ç67&—BKˆâ4D²&WÆ’y¨B6&–Æ—G’v÷&F–ærKˆŞk{~kxn8  ¢ÒÒĞ ¢22XØKˆ>8š¨ÎŠøyú™‹P ¢222rã6W76–öâ&ö¦V7F–öà §ÂYË®išòÂš(NiÉòÀ§ÂÒÒÒÂÒÒÒÀ§Â'VçF–ÖRX‰¾[»¢7V&vVçBÂ[XÎZY~i‹îzK®ûÈÎ[ŠbZÙKº>yfj~zÛâÀ§ÂyJh‹~X‰¾[»¢f÷&²Âšn[.i‹îzK®ûÈÎ[Šbf÷&¶j~zÛâÀ§ÂyJh‹~[	ŞŠù^K¸â6†&VBXènXû"GW&âf÷&²ÂzÊÎKˆ™‹një^iˆîzîKˆŞiJşhÈûÉ¾KˆŞX‰¾[»¢æF—fRf÷&²h‰b†–FFVâ&–æF–ærÀ§ÂyJh‹~hÚ"&÷f–FW"{º~{ºÒÂšn[.i‹îzK®ûÈÎ[ŠbKé¾[©NYXn{ºŞhêVj~zÛâÀ§Â6†&VBX‰¾[»¢†–FFVâ&–æF–ærÂ6–FV&"KˆŞi‹îzK¢À§Â&÷f–FW"6öçF–çVF–öâ[Šb6÷W&6U6W76–öä–BÂXúşiú^yÈ¾iÚ^k©ûÈÎKØnKˆŞ[XÎZYrÀ§Â&ö÷Bôf÷&²ô6öçF–çVF–öâÂfÖ–Ç’ZÙ~jë^Xúş‹ûŞkªşûÈÅcXúşK¸Şšn[.[^zK¢À§Â7V&vVçBõ6†&VB&–æF–ærÂKˆŞ‹ù¾XZR6öçfW'6F–öâfÖ–Ç’À ¢222rã"&÷f–FW"—6öÆF–öà §ÂYË®išòÂš(NiÉòÀ§ÂÒÒÒÂÒÒÒÀ§ÂYÂv÷&·76RKŠNKŠ¢6ÆVFR&÷f–FW"[›nŠÂÂ&ö6W72öVçbö&÷fÂö–çFW''WBK©.KˆŞ[ÛY8ÒÀ§Â6†&VBYÊYÎKˆVæv–æRXˆr&÷f–FW"ÂKÛşyJKŠNKŠ¢†–FFVâ&–æF–ærÀ§ÂXŠ™šB&÷f–FW"ÂXènXû.KùŞyYûÈÅ&W7VÖRf–Â6Æ÷6VBÀ§ÂXZ[Xˆ~hÚ"&÷f–FW"ÂKˆŞ[ÛY8ÒÖævVBÖ&÷VæB6W76–öâÀ ¢222rã26öçFW‡@ §ÂYË®išòÂš(NiÉòÀ§ÂÒÒÒÂÒÒÒÀ§ÂXˆ~X‹ikF&vWBÂk:XZR†æFöfbÀ§ÂXˆ~Y¹îizrF&vWBÂXú®YÎjÚ^zk¾[ÈiÉş™{NikZ)îK¨¾ZéâÀ§Â6öçFW‡B6ö×–ÆRZK‹JRÂKˆŞXi’VæF–æ~ûÈÎKˆŞhê‹ù¾K»¾KÙR7W'6÷"À§Âh©^˜	.iÊ®Š*¾yºîj~hê^XùrÂKˆŞhê‹ù²66WFVBÀ§Â66WFæ6RYâ'VâZK‹JRÂ66WFVB[{.hê‹ù¾ûÈÎKˆŞ˜xŞZHŞk:XZ^ûÉ¶6öÖÖ—GFVBzØ[èRFW&Ö–æÂf7BÀ§Â4²KˆŞzîZé®Yî˜xŞY
+òÂjhÚâVæF–ætFVÆ—fW'’KˆâæF—fR†—7F÷'’÷'Vâ–FVçF—G’h.ZHÒÀ§Â6æöæ–6Â6öÖÖ—BZK‹JRÂKˆŞhê‹ù²6öÖÖ—GFVNûÈÎXúşK¸âFW&Ö–æÂf7B˜xŞŠù^‰Şy¹‚À§Â6öçFW‡BŠ*¾Š8Xš¢ÂöÖ—76–öç6XúşŠxÀ§ÂFööÂ&W7VÇB[è™[òÂKùŞyY{¹>ièNXÉn[É^yJûÈÅ7VÖÖ'’iÈyXÂÀ§ÂFööÂ6ÆÂ÷&W7VÇB‹h^X{®š(NzérÂh‰ZûKùŞyYh‰nh‰ZûyÈyZRÀ§ÂXˆ~Y¹îYÎKˆ†–FFVâ&–æF–ærÂXú®k:XZ^{Ë®ZKFVÇFûÈÎKˆŞ˜xŞiKâæF—fR†—7F÷'’À§Â6æöæ–6ÂVçG'’XéşyIş[îK¨îyºîjr&–æF–ærÂK¸âæF—fRÖFVÇFhé.™šNûÈÎKˆŞ˜xŞZHŞk:XZRÀ§Â&÷f–FW"6öçF–çVF–öâŠû¾XùbæF—fRiÚ^k©ÂæF—fT†—7F÷'•&VFW&Xú®Šû¾‹é>X{¢6æöæ–6Â×6†VBVçG&–W>ûÈÎKˆŞXi’6†&VBÆörÀ§Â6†V6·ö–çB4²YîXhŞXˆ~Y¹îyºîjrÂöÖ—GFVBVçG&–W2KˆŞˆz®XªŠ^XùûÉ¾K¸^hÈ’&WG&–Wf&ÆU&Vfj8{J"À§ÂYÎKˆ&–æF–ær‹ùî{ºÒ†æFöfbÂ6¶vRX˜Ş{ÈZÙ~ˆ¨.{ª~z‹>Zé®ûÈÎK¸^[î˜:‹ûŞXªFVÇFûÉ¾Xˆn{¾Yè¾h©XúXZ˜:ŠêXZRöÖ—GFVFÀ§Âyºîj~™ÈŠhŠ*¾yÈyZ^{¸nˆ¨"Â˜	®‹ør&WG&–Wf&ÆR&VbhÈ™ÈŠû¾XùbÀ§Â6öFW‚iJşhÈF‡&VBö–æ¦V7Eö—FV×6Â6&–Æ—G’&ö&RYîKÛşyJ‚æF—fRÖ†—7F÷'’Ö–×÷'FûÈÄ¥4ôâÕ%27V66W72h˜Şhê‹ù²6öçFW‡B66WFVBÀ§Â6öFW‚x˜iÊÎKˆŞiJşhÈ–×÷'BÂˆz®Xª™˜Ş{ª~K‹¢G&ç67&—Bö6†V6·ö–çNûÈÎ[›nYÊ‚Öæ–fW7BŠë[Ù^XéşYºÀ§Â6ÆVFRW6W"ÖW76vRV6†òÂV6†ò6†V6·7VÒXË˜XŞYîh˜ŞŠë[ÙRGW&ä66WFVFÀ§Â¶–Ö’&ö×BFFW"šinK¨¾K»nX˜ŞijŞ[ÈÂKùŞhÈ4²Ö&–wV÷W>ûÈÎKˆŞy».yºî˜xŞXùÀ§Âyºîjr4Ä’iJşhÈXéşyIòf÷&²ô6ÆöæRÂKÛşyJ‚æF—fRÖ†—7F÷'’Ö6ÆöæVûÈÎKˆŞ{Én‹éfVæF÷"†—7F÷'’f–ÆRÀ§ÂikæF—fR&–æF–ærXúşhê^iKb&ö×BÂKÛşyJ‚÷'F&ÆR×G&ç67&—FûÈÎiˆîzâW6W"Ö6†ææVÂG&ç7÷'BÀ§ÂXú®iÈ’&÷f–FW"×&—fFR&Æö6²KˆŞX[ÎZë’ÂKùŞyY’÷'F&ÆR&Æö6·>ûÈÎi‹î[ÈşŠë[ÙRÆ÷77’G&ç6f÷&ÖF–öâööÖ—76–öâÀ§Â4D²6öçG&öÆÆVBFFW"‹z‚&÷f–FW"Âh˜ŞXXŠëZ;iˆîyÉşjÚ>y¨B6æöæ–6ÂÖW76vR&WÆ’À§ÂXènXû.j8{J.YŞKŠŞizr6öçG&öÂÖW76vRÂXú®KÙÎK‹¢&VfW&Væ6R6öçFW‡NûÈÎKˆŞhš~ŠÎhê~X‹nŠúŞK˜’À ¢222rãB&V6÷fW' §ÂYË®išòÂš(NiÉòÀ§ÂÒÒÒÂÒÒÒÀ§Â˜xŞY
+òÂh.ZHÒ6†&VB6VÆV7FVEF&vWBKˆâ&–æF–æw4'•F&vWBÀ§Â†–FFVâæF—fR”B[»n‹ùşzîZé¢ÂF&vWBÖv&RVæF–ær&V&–æBÀ§ÂæF—fR6W76–öâ[{.X‰¾[»®KØb–FVçF—G’iÊ¢6öÖÖ—BÂXX‚&ö&R&÷f—6–öæ–æ~ûÉ¾KˆŞ[é~y».yºîX‰¾[»®zÊÎK¨ÎKŠ¢&–æF–ærÀ§Â&÷f–FW"&öf–ÆRKˆŞXúşyJ‚ÂKùŞyY’Væf–Æ&ÆRF&vWNûÈÎKˆŞY¹î˜À§Â6öçF–çVF–öâiÚ^k©Š*¾[Ù.j2Â6öçF–çVF–öâK¸ŞXúşxºÎz¸¾h.ZHÒÀ§Â7V&vVçBÖWFFF[»n‹ùşX‹‹ëâÂKˆŞ™z®xëK‹®šn["&÷f–FW"6öçF–çVF–öâÀ§ÂÆVv7’6æ6†÷Bh™>[ÈÂKºR&W6VçFF–öâÖöæÇ’f–FVÆ—G’Šû¾XùnûÈÎKˆŞKÊ®˜
+{Ë®ZKXØşŠêîK¨¾ZéâÀ§Â5Æ—FR&ö¦V7F–öâŠ*¾XŠ™šBÂK¸âWfVçBÆör˜xŞ[»®ûÈÎKˆŞŠû¾Xùbg&öçFVæB6æ6†÷BXøŞY	KúîZHÒÀ§Â5Æ—FR–çFVw&—G’ZK‹JRÂ‹ù¾XZR&VBÖöæÇ’&V6÷fW'ûÈÎKˆŞX‰¾[»®z›®[©>Šhny¹bÀ§Â6æöæ–6Â&÷r{Ë®[	–ÆöBG—RÂK¸^YÊ‚FV6öFRXh^ZÙXšşiÊÎKŠŞKÛşyJ‚&÷rf7E÷G—VŠ^›ÙûÉ¾KˆŞiKXi’&÷rö6†V6·7VÒÀ§Â6æöæ–6Â&÷rG—RXk.z¨Â&ö¦V7F–öâf–Â6Æ÷6VNûÈÎKˆŞyJ‚ÆVv7’V×G’KÊ®Š8^h‰X©òÀ§Â6†&VB&ö¦V7F–öâXª‹ÛŞZK‹JRÂKùŞhÈXúş˜xŞŠù^ûÈÎKˆŞ‹>yJ‚æF—fR&W7VÖ^ûÈÎKˆŞi‹îzK¢æF—fR&V6÷fW'’6&BÀ§Â6†&VBšiniÚkhhşi»Nikj~š)‚ÂF‡&VB¶W86†V6·ö–çBKˆâ&V6÷fW'’66÷RK¸ŞK‹®YÎKˆ6†&VC£ÅUT”CæÀ ¢222rãR6÷W&6R9rF&vWBZéîikŞX˜Şš¨ÎiKnyú™‹P ®ˆ{>[	Šhny¹nûÉ  ¦FW‡@¤6ÆVFRò&÷f–FW"¢(i"6öFW‚ò&÷f–FW" ¢(i"6ÆVFRò&÷f–FW" ¤6ÆVFRò&÷f–FW"¢(i"6ÆVFRò&÷f–FW"  ¤6öFW‚ò&÷f–FW"¢(i"6öFW‚ò&÷f–FW" ¦  ®jøşiÚ™;î‹zşk:XZ^Kº^Kˆ²6æöæ–6Âf7G>ûÉ  ¢Òišî˜	¢W6W"ö76—7FçBFW‡NûÉ°¢ÒFööÂ6ÆÂ²FööÂ&W7VÇNûÉ°¢Ò‹h^™[òFööÂ÷WGWB²'F–f7E&VnûÉ°¢Ò–ÖvRôGF6†ÖVçNûÉ°¢Ò&÷f–FW"×&—fFR&V6öæ–ær÷6–væGW&^ûÉ°¢Ò&÷'FVBöW'&÷"GW&îûÉ°¢ÒXènXû"6öçG&öÂÖW76v^ûÉ°¢ÒYÊ‚æF—fR6W76–öâX‰¾[»®Yî8&–æF–ær–FVçF—G’6öÖÖ—BX˜Ş[Jk¨>ûÉ°¢ÒYÊ‚6ö×–ÆRX˜Ş86VæBYâ4²X˜Ş84²Yâ6öÖÖ—BX˜ŞXˆnXŠ¾[Jk¨>8  ®˜	®‹ø~j~XxnûÉ  ¢Ò†–FFVâ&–æF–æri[˜xşKˆâVæv–æR²&÷f–FW%&öf–ÆVYJşKˆ{¸NYKˆˆ{N8 ¢ÒXˆ~Y¹îizr&–æF–ærKˆŞ˜xŞZHŞk:XZ^[{"66WFVBy¨B6¶v^8 ¢ÒKˆŞiJşhÈ–ÖvRy¨Nyºîj~Kª~yIşXúşŠxF÷væw&F^ûÈÎKˆŞ™Ù›¹KŠ.ZK8 ¢ÒFööÂ6ÆÂõ&W7VÇBZx¾{¸KùŞhÈFöÖ–>8 ¢Ò&—fFR&V6öæ–ær÷6–væGW&RKˆŞ‹zKˆŞX[ÎZë’F&vWBk8N™Ë.8 ¢Ò&÷'FVBöW'&÷"76—7FçB&Æö6²KˆŞŠ*¾XÈ^Š8^h‰h‰X©ş{¹>Šë®8 ¢Ò6öçG&öÂÖW76vRXú®KÙÎK‹¢&VfW&Væ6R6öçFW‡N8 ¢Ò˜xŞY
+şYîyKVæF–ætFVÆ—fW'–Y(ÂGvò×†6R7W'6÷"[˜.zØh.ZHŞ8  ¢222rãbæF—fR6çf2™‹.Y¹î[Ù.yú™‹P §ÂZû‹ÂYË®išòÂš(NiÉòÀ§ÂÒÒÒÂÒÒÒÂÒÒÒÀ§Â6ÆVFRæF—fR†—7F÷'’Âh™>[ÈXØ~{ª~X˜Ò6W76–öâÂ—FVÒ÷&FW"÷G—Rö6öçFVçBKùŞhÈûÉ¾KˆŞŠû¾Xùb6†&VBD"À§Â6ÆVFRæF—fRÆ—fRÂFW‡B÷F†–æ¶–ær÷FööÂ÷W&Ö—76–öâö–çFW''WBÂxëiÈK¨¾K»nŠúŞK˜Kˆâ&VæFW&W"&V†f–÷"KˆŞXù‚À§Â6öFW‚æF—fR†—7F÷'’Â&V6öæ–ær÷FööÂ÷F6‚öW'&÷"k{~YXènXû"ÂVæv–æR×7V6–f–2f–FVÆ—G’KùŞyY’À§Â6öFW‚æF—fRÆ—fRÂ—FVÒÆ–fV7–6ÆRX‹GW&âö6ö×ÆWFVFÂKˆŞYº6æöæ–6Â6–æ²˜xŞZHÒ—FVÒöf–æÂÀ§Â6†&VBÆ—fRÂFVÇF(i"FW&Ö–æÂ6öÖÖ—BÂÆ—fRFW‡B[›>k¹iKniÙşûÈÎXú®iÈKˆKŠ¢76—7FçBf–æÂÀ§Â6†&VBF&vWB7v—F6‚Â6ÆVFR(i"6öFW‚(i"6ÆVFRÂ[™^[ˆ>KˆÒ&VÖ÷VçNûÉ¾iz.iÈ’—FVÒKˆŞ˜xŞ[»®h‰n™z®x8À§Â6†&VB&ö¦V7F–öâÂXŠ™šB66†RYâ&V'V–ÆBÂ—FVÒ6÷VçBö÷&FW"÷G—Rö6†V6·7VÒKˆˆ{BÀ§Â6†&VB&ö¦V7F–öâÂizrG—RÖÆW72FVÆ—fW'’&÷rYî{º~{ºŞXÈ^Y
+²&WVW7FVBö6öÖÖ—GFVBf7G2ÂZèÎi[BW6W"ö76—7FçB—FV×2Xúş˜xŞ[»®ûÉ¾Xk.z¨{¾Yè¾h¹.{¹ŞŠû¾XùbÀ§Â6†&VB†—7F÷'’Âh‰X©şz›¢&ö¦V7F–öâò&ö¦V7F–öâW'&÷"²z›¢ÆVv7’ÂX˜Şˆ^jÚ>[‹‚ÆöFVNûÉ¾Yîˆ^KùŞhÈ&WG'–&ÆRW'&÷.ûÈÎKˆŞ‹ù¾XZRæF—fR&V6÷fW'’À§Â6†&VB–FVçF—G’ÂšiniÚkhhşiKYŞ8h˜¾XªiKYŞ8˜xŞZHŞj~š)‚ÂZx¾{¸hÈ’6†&VC£ÅUT”Cæh.ZHŞYÎKˆ[™^[ˆ>XènXû"À§Â6†&VB&6¶w&÷VæBÂ&–æF–ær‹ùŠÎ8[™^[ˆ>X[>™zÒÂizhÈ{ºÒ6çf2ô6†VÆÂ&VæFW"7F÷&ÒÀ§Â6–FV&"Â6†&VBX‰¾[»¢şh.ZHÒ†–FFVâ&–æF–ærÂZx¾{¸KˆKŠ¢6†&VB&÷~ûÈÎKˆŞX{®xëæF—fR6†–ÆBÀ§ÂÆVv7’6†&VBÂGVÂ×&VBYî{º~{ºÒÂKˆŞ˜xŞXiizr6æ6†÷NûÉ¾ikGW&âhÈ’c"‹ëyXÎ‹ûŞXªÀ ®zÎ™zzhûÉ  ¢ÒæF—fRvöÆFVâf—‡GW&W2ZK‹J^ûÉ®™‹¾ijÒ6†&VBc"Y[›n8 ¢Ò6†&VBX{®xëGWÆ–6FR76—7FçBf–æÎ8FööÂW†6†ævRijŞŠ8.h‰bVæv–æR×&—fFR&Æö6²™Ù›¹KŠ.ZKûÉ®™‹¾ijÒ&öÆÆ÷WN8 ¢Òf÷&Vw&÷VæB7G&VÖ–ær˜xŞik[É^XZ^˜	FVÇFj’F—7F6ûÉ®™‹¾ijÒ&öÆÆ÷WN8 ¢Ò&6¶w&÷VæB6†&VB&–æF–ær˜
+h‰hÈ{ºŞjk‹.iù>ûÉ®™‹¾ijÒ&öÆÆ÷WN8  ¢ÒÒĞ ¢22XØXZ¾8æöâÖvöÇ0 ®zÊÎKˆ™‹një^KˆŞX®ûÉ  ¢ÒæF—fR6W76–öâXéşYËx:ŞXˆr&÷f–FW.ûÉ°¢ÒÖ–B×GW&âXˆ~hÚ"4Ä’õ&÷f–FW.ûÉ°¢Ò&ö×Bˆz®Xª‹zşyKûÉ°¢Ò&÷f–FW"ZK‹J^ˆz®Xª‚fÆÆ&6¾ûÉ°¢Òh¨®h˜iÈ’æF—fR†—7F÷'’‹ÚÎh‰{¹şKˆv—&RÖW76v^ûÉ°¢Ò6öçfW'6F–öâfÖ–Ç’6–FV&"h©Xúh‰nXˆn{¸BTûÉ°¢Òˆz®XªXŠ™šNizr&÷f–FW"6W76–öîûÉ°¢Òˆz®Xª‹øz{²FööÂ7FF^ûÉ°¢ÒZèÎi[BD~ûÉ°¢ÒXX[ÈiKâÇVv–â’XhŞŠR'VçF–ÖR6öçG&7NûÉ°¢ÒK¸â6†&VB6W76–öây¨NXènXû"GW&âX‰¾[»¢f÷&²h‰b6æöæ–6Â'&æ68  ¢ÒÒĞ ¢22XØK™Ş8ŠëîŠê{ª.{«ğ £âæF—fRÖævVB&÷f–FW"&–æF–ærX‰¾[»®YîKˆŞXúşXù8 £"â6†&VB–6¶W"Xú®[ÛY8ÒæW‡BGW&î8 £2âKˆKŠ¢GW&âGFV×BXú®XXŠëKˆKŠ¢W†V7WF–öâF&vWNûÉµ&VvVæW&FRõ&WG'’[ø^š¾X‰¾[»®ikGFV×N8 £Bâ&÷f–FW"ZK‹J^KˆŞ[é~™Ù›¹Y¹î˜8 £Râ†—7F÷&–6ÂGW&â[ø^š¾KÛşyJ‚6æ6†÷BŠz>˜x®ûÈÎKˆŞˆ;ŞŠû¾Xùn[Ù>X˜Ò–6¶W.8 £bâ&÷f–FW"6öçF–çVF–öæKˆŞ[é~XiXZR7V&vVçB&VÆF–öç6†—w&—FW.8 £râW6W"f÷&¶Kˆâ&÷f–FW"6öçF–çVF–öæKˆŞ[é~i‹îzK¢ZÙKº>yfj~zÛî8 £‚â6†&VB†–FFVâ&–æF–ærKˆŞ[é~‹ù¾XZ^yJh‹~XúşŠxæF—fR6–FV&.8 £’â&–æF–ær–FVçF—G’›¹ŠêNKˆŞXÈ^Y
+²ÖöFVÎ8 £â–çFW''WBô&÷fÂõ&V6÷fW'’[ø^š¾{+îzî{¹Zé¢F&vWB÷væW.8 £â6æöæ–6ÂÆör[ø^š¾ZèÎi[NKùŞyYûÉ¾‹z‚4Ä’Xú®{ÉnŠùF&vWBÖv&RÖöFVÂ&ö¦V7F–öîûÈÎKˆŞy»Nhê^xÎXéşZx²v—&R†—7F÷'8 £"â6ö×–Æ^866WFæ6^86öÖÖ—BKÛşyJKˆŞYÂ7W'6÷"‹ëyXÎûÉ¾KˆŞ[é~yJKˆKŠ®(	Îh‰X©òşZK‹J^(	Ş[ˆ>[	NXÎhê‹ù¾YÎjÚ^x«nh8 £2âizr6W76–öâKˆŞˆz®XªXŠ™šN8KˆŞˆz®Xª[Ù.j>8 £BâÇVv–âô÷&6†W7G&F÷"[ø^š¾[»®z¸¾YÊz‹>Zé¢WfVçBKˆâ6W76–öâ6öçG&7BKˆ®8 £RâFööÂ6ÆÂ÷&W7VÇB[ø^š¾KÙÎK‹¢FöÖ–2W†6†ævRh‰Zû‹ù¾XZ^h‰n˜X{¢&ö¦V7F–öî8 £bâ6öçfW'6F–öâfÖ–Ç’KˆŞ[é~ZHŞyJ‚&VçEF‡&VD–FûÈÎKˆŞ[é~hÈj~š)h‰ni{n™{NhêijŞ8 £râ7V&vVçBKˆâ6†&VB&–æF–ærKˆŞ[é~‹ù¾XZR6öçfW'6F–öâfÖ–Ç8 £‚â6ö×F–&–Æ—G’G&ç6f÷&Ò[ø^š¾XXK¨â7VÖÖ'ûÉ¾Xú®iÈˆ;ŞX©¾KˆŞX[ÎZëh‰nš(Nzé~‹h^™™h˜Şˆ;Ş™˜Ş{ª~K‹¢6†V6·ö–çN8 £’âXènXû.j8{J.{¹>iéÎKˆŞ[é~˜xŞikŠznXù6öÖÖæN8&÷fÂh‰bFööÂ6öçG&öÂŠúŞK˜8 £#âæF—fR4Ä’Xú®iÈYÊ‚'VçF–ÖR6&–Æ—G’&ö&RŠøiˆîiJşhÈi{nh˜Şˆ;ŞKÛşyJ‚7G'V7GW&VB†—7F÷'’–×÷'NûÉ´–×÷'BG&ç7÷'BKˆŞzØK¨âÆ÷76ÆW72f–FVÆ—G8 £#âKˆŞ[é~KúîiK’fVæF÷"†—7F÷'’f–ÆRKÊ®˜
+‹z‚4Ä’õ&÷f–FW"†—7F÷'8 £#"âg&öçFVæB&W6VçFF–öâ6æ6†÷BKˆŞ[é~KÙÎK‹®ik6†&VBGW&ây¨BWF†÷&—FF—fRW'6—7FVæ6R6÷W&6^8 £#2â7G&VÖ–ærFVÇFôæ÷&ÖÂWfVçBKˆŞ[é~y»Nhê^KÙÎK‹¢6æöæ–6Â6öÖÖ—NûÉ¾[ø^š¾hÈK˜^XÉb76VÖ&ÆVBFW&Ö–æÂf7N8 £#BâÆVv7’Ö–w&F–öâKˆŞ[é~KÊ®˜
+FööÂ”N8&V6öæ–ær6–væGW&^8&÷f–FW"ôÖöFVÂ&÷fVææ6^8 £#RâW6W"–çFVçBKˆîZû[©B÷W&F–öâ–çFVçB[ø^š¾XXK¨îZIn˜:‚4Ä’6–FRVffV7BhÈK˜^XÉnûÉµ6W76–öâX‰¾[»®KÛşyJ‚&÷f—6–öæ–ær–çFVçNûÈÄ6öçFW‡Bõ&ö×Bh©^˜	.KÛşyJ‚FVÆ—fW'’&W&VN8 £#bâ&ö6W727vî87FF–âw&—F^8f—'7BFö¶VâKˆŞ[é~Š*¾h˜iÈ’FFW"{¹şKˆŠz>˜x®K‹¢4¾8 £#râ4²Ö&–wV÷W2i{n[ø^š²&ö&^ûÉ¾KˆŞ[é~Y	yJh‹~hùKé¾KÉ®y».yºî˜xŞZHÒ6–FRVffV7By¨Nišî˜	¢&WG'8 £#‚â5Æ—FRWfVçBÆörXú®XXŠë‚'W7Bw&—FW"XiXZ^ûÉ´g&öçFVæN8&VæFW&W.8Væv–æRFFW"KˆŞ[é~y»Nhê^iKŠh‰nXˆn˜XÒ6WVVæ6^8 £#’â6öçFW‡B6ö×7F–öâKˆŞ[é~XŠ™šB6æöæ–6ÂWfVçNûÉµ&WFVçF–öâ[ø^š¾iŠşxºÎz¸¾8i‹î[Èşy¨Ni[hÚîyIşYŞYiÉşˆ;ŞX©¾8 £3â†–FFVâ&–æF–ærÆ§’7&VFR[ø^š¾XXhÈK˜^XÉb&÷f—6–öæ–ær–çFVçNûÉ´–FVçF—G’4²KˆŞzîZé®i{nKˆŞ[é~y».yºî˜xŞZHŞX‰¾[»®8 £3â6öçfW'6F–öä—FVÖXú®ˆ;ŞKÙÎK‹¢&W6VçFF–öâÖöFVÎûÉ¾KˆŞ[é~h›ş‹ÛÒ6æöæ–6Âf7N84¾87W'6÷"h‰b&V6÷fW'’G'WF8 £3"â6†&VBc"KˆŞ[é~iKXixëiÈ’6ÆVFRô6öFW‚æF—fRWfVçBy¨NY
+¾K˜8š®[¨şKˆâFW&Ö–æÂ6WGFÆVÖVçN8 £32âW6W"×f—6–&ÆRæF—fR6W76–öâKˆŞ[é~Š*¾‹ú¾‹øXZR6†&VB6æöæ–6Â—VÆ–æ^ûÈÎKˆŞ[é~{¸ş‹ør6†&VB6öçFW‡D6ö×–ÆW"h‰nX‰¾[»¢6†&VB&–æF–æ~8 £3BâF‡&VD—FV×2çG6KˆŞ[é~h›şh¸R6æöæ–6Âæ÷&ÖÆ—¦F–öî8‹z‚F&vWB&WÆ’h‰b6†&VBW'6—7FVæ6^8 £3Râ7G&VÖ–ærFVÇF[ø^š¾{º~{ºŞZIn˜:XÉnûÉ¾KˆŞ[é~h.ZHŞ˜	FVÇFF—7F6‚‹ù²6†VÆÂj’&VGV6W"h‰n˜	FVÇF6æöæ–6Â6öÖÖ—N8 £3bâ6†&VBÖ÷væVB†–FFVâ&–æF–ær[ø^š¾hÈ’÷væW"÷'Vâ–FVçF—G’‹zşyKûÉ¾KˆŞ[é~h©^[Ûh‰zÊÎK¨ÎiÚæF—fR6öçfW'6F–öâh‰b7V&vVçN8 £3râ&÷f–FW"6öçF–çVF–öâŠû¾XùbæF—fRiÚ^k©[ø^š¾{¸ş‹ø~Xú®Šû²æF—fT†—7F÷'•&VFW&ûÉ¾KˆŞ[é~Šhk"æF—fR6W76–öâ‹øXZR6†&VB6æöæ–6Â—VÆ–æ^ûÈÎK™şKˆŞ[é~KúîiK’fVæF÷"†—7F÷'’f–Æ^8 £3‚âæF—fRÖFVÇF[ø^š¾hé.™šNyºîjr&–æF–ærXéşyIşhº^iÈy¨BVçG&–W>ûÉ´7W'6÷"KˆŞˆ;Şi»şKº2&÷fVææ6RöGFV×B×FòÖ&–æF–ær÷væW'6†—XŠNijŞ8 £3’â6†V6·ö–çB4²Yî˜~kÈşXh^ZëKˆŞ[é~˜	®‹ø~Y¹î˜7W'6÷"ˆz®Xª˜xŞiKîûÉ¾Xú®ˆ;ŞhÈ’&ö¦V7F–öäÖæ–fW7BæöÖ—GFVFy¨B&WG&–WfÂ6öçG&7Bˆë~Xùn8 £Câ6†&VB6W76–öâKùŞhÈ7G&–7FÇ’Æ–æV.ûÉ¾zÊÎKˆ™‹një^KˆŞ[é~K¸îXènXû"GW&âf÷&¾ûÈÎK™şKˆŞ[é~YÊ‚Ö&–wV÷W24²iÊ®Xk>i{niKîŠÎX[nK¹bF&vWN8 £CâÖöFVÂ6FÆörVçG'’–FKˆâ4Ä’ô’'VçF–ÖRÖöFVÆ[ø^š¾XˆnYùşûÉµT’ÖöæÇ’–BKˆŞ[é~‹h®‹øp¢W†V7WF–öâF&vWB&÷VæF'’‹ù¾XZR'VçF–Ö^8 £C"âKˆî[Ù>X˜ÒFVÆ—fW'’ö&ö÷G7G&–ær{¹Zé®y¨B7G'V7GW&VB&÷f–FW"ô’&V¦V7F–öâiŠş[Ë®‹Iğ¢Wf–FVæ6^ûÉ¾KˆŞ[é~Š*²&ö×BöÖ&¶W"W'6—7FVæ6Rh‰bv&æ–ærŠhny¹nK‹¢4²7V66W7>8 £C2â&÷f–FW"G—VBf–æÂ÷&W7VÇBKˆâ4Ä’&ö6W726ÆVçW[ø^š¾XˆnYùşûÉµ6†&VBGFV×B[ø^š¾yK¢X˜Şˆ^z¸¾XÛ26WGFÆ^ûÈÎYîˆ^Xú®ˆ;ŞŠ^XXR6ÆVçW÷W6v^ûÈÎKˆŞˆ;Ş[»n‹ùşh‰nZHŞkK²6ö×÷6W.8 £CBâ6æöæ–6Âf7BikXiXZ^[ø^š¾˜	®‹ø~{¹şKˆw&—FW"yIşh‰ZèÎi[BFvvVBVçfVÆ÷^ûÉ¾K‰®XªjŠYÙ~KˆŞ[é~h˜¾[z^XŠ™š@¢–ÆöEö§6öâçG—Vh‰n{»NhªNzÊÎK¨ÎZYr6W&–Æ—¦F–öâWF†÷&—G8 £CRâizrG—RÖÆW726æöæ–6Â&÷rXú®XXŠëYÊ‚&ö¦V7F–öâFV6öFR&÷VæF'’KÛşyJ‚&÷p¢f7E÷G—VŠ^›ÙûÉ¾i‹î[ÈşXk.z¨[ø^š²f–Â6Æ÷6VNûÈÎX[ÎZëŠû¾XùnKˆŞ[é~iKXi’–ÆöBö6†V6·7VŞ8 £Cbâ6†&VB†—7F÷'’&V6÷fW'’KˆŞ[é~‹>yJ‚æF—fR&W7VÖR÷&V&–æBöf÷&¾ûÈÎK™şKˆŞ[é~XiXZRæF—fR&V6÷fW'¢66÷Rh‰ni‹îzK¢æF—fR&V6÷fW'’6&N8 £Crâh‰X©şz›¢6†&VB&ö¦V7F–öâKˆâ&ö¦V7F–öâW'&÷"[ø^š¾Xˆn[ÈŠ‹ëîûÉ´ÆVv7’K‹®z›®KˆŞˆ;Şh¨®™IŠúşKÊ®Š8^h‰ ¢jÚ>[‹z›®XènXû.8 £C‚â6†&VBGW&&ÆR–FVçF—G’Xú®ˆ;ŞiÚ^ˆz¢6W76–öâUT”NûÉ¾j~š)8hé.[¨şi{n™{N8[Ù>X˜ÒF&vWBKˆâ&÷f–FW ¢Æ&VÂ˜;ŞKˆŞ[é~Xø.Kˆâ7F÷&vRÆöö·W8&ö¦V7F–öâ6†V6·ö–çN866†Rh‰b&V6÷fW'’¶W8 £C’âF&vWB×Væf–Æ&ÆVKˆâ&V6÷fW'’×&WV—&VFKˆŞ[é~k{~yJûÉ®izVç&W6öÇfVBGFV×By¨N˜XŞ{Úâ÷'VçF–ÖP¢KˆŞXúşyJXú®‹ù¾X˜Şˆ^ûÉ¾Yîˆ^K¸^iÈŞXªiÊ®Xk2FVÆ—fW'’öGFV×Bš8î™š8 £Sâf–ÂÖ6Æ÷6VB&V6÷fW'’[ø^š¾˜XŞZYr¢®XúşZèÎh‰X{®Xú2¢®ûÈ†6ö×ÆWF&ÆRW†—NûÈÎKˆŞiŠòf–ÂÖ÷VâiKîŠÎûÈûÉ ¢&ö&Rõ&V6÷fW"Zé®h
+~87F÷˜x®iKâ'VçF–ÖR÷væW'6†—8iÚK»nkº‹k>Yîy¨Ni‹î[Èò&V'V–ÆN8Kº^Xø®yJh‹p¢i‹î[ÈòGW&&ÆR&æFöîûÉ¾zhjÚ.Xú®™HKˆŞiKî8 £Sâ'VçF–ÖRK¸Ò÷vâGFV×Bi{nKˆŞ[é~h‰X©ò&V'V–ÆB&–æF–æ~ûÉ¾š¾XX‚7F÷ş˜x®iKîh‰n‹[[{"6WGFÆVB6öÖÖ—NûÈÀ¢T’KˆŞ[é~h¨¢&V6÷fW'’Ö7F—fVŠxëK‹®iz™™izX{®Xú>8Î™ÈŠhh.ZHŞ8Ş8 £S"â&æFöâ[ø^š²GW&&ÆR{¹>zérGFV×BK‰NXúşZêŠêûÉ¾zhjÚ.K¸^kˆ^X˜Şzºò7FFRY¹â–FÆ^ûÉ¾ZI¢÷væW ¢Ö&–wV÷W2i{nzhjÚ.Kˆ™Jîkˆ^z›®8 £S2â&V6÷fW'’h‰X©şŠz>™HKˆŞ[é~‹{>‹ør6WGFÆ–ærö6æöæ–6Â6öÖÖ—By»NhêR–FÆ^ûÉµ7F÷XÙ^xºÎh‰X©şKˆŞièNh‰ ¢GW&â[{.{¹>zé~8$&æFöâõ&V'V–ÆBK˜¾Yîy¨N‹ùşX‹4²÷FW&Ö–æÂ[ø^š¾YiKnh‰nŠø®ijŞûÈÎKˆŞ[é~XøÎXùh‰`¢ZHŞkK¾YÎKˆGFV×By¨B&V6÷fW'’™H8  ¢ÒÒĞ ¢22K¨ÎXØ8iÈ{¸Xk>zÙ` ¦Ö÷77‚˜x~yJKº^Kˆ¾™[şiÉşKª~Y8‹ëyXÎûÉ  ¦FW‡@¤æF—fR6W76–öà¢ÒXéşyIò4Ä’KÉ®ŠùĞ¢ÒX‰¾[»®i{n˜hº’&÷f–FW ¢Ò&÷f–FW"&–æF–ærKˆŞXúşXù€¢ÒhÚ"&÷f–FW"i{nX‰¾[»¢&÷f–FW"6öçF–çVF–öà ¥6†&VB6W76–öà¢ÒKˆKŠ®yJh‹~XúşŠxy¨B6æöæ–6Â6öçfW'6F–öà¢ÒjøşKŠ¢æW‡BGW&âXúşXˆ~hÚ"4Ä’²&÷f–FW"²ÖöFVÀ¢ÒZI®KŠ®™©‰xòæF—fR&–æF–æp¢Ò5Æ—FRtÂ6æöæ–6ÂWfVçBÆöp¢Ò'VçF–ÖR×7V6–f–24²FFW ¢Ò6öçFW‡B6ö×–ÆW"²6öçFW‡B6¶vR‹Iş‹J>‹z‚F&vWB‹ùî{ºŞh
+p ¥7V&vVç@¢Ò'VçF–ÖRÖ÷væVB6†–Æ@¢ÒYJşKˆKÛşyJ‚&VçBÔ6†–ÆB6–FV&"G&VRy¨Nhš~ŠÎX[>{;° ¥W6W"f÷&²ò&÷f–FW"6öçF–çVF–öà¢ÒW6W"Ö÷væVBÆ–æVvP¢Òšn["6öçfW'6F–öà¢Ò˜	®‹ør÷&–v–âj~zÛîKˆâ6öçfW'6F–öâfÖ–Ç’XË®Xˆ`¦  ®‹ùiÚ‹zş{«şKùŞyY’Ö÷77‚y»jùB’vVçBZê.h‹~zºşiÈiÈK»~XÎy¨Nˆ;ŞX©¾ûÉ  ¢ÒyÉşjÚ>y¨NZI¢4Ä’'VçF–Ö^ûÉ°¢ÒæF—fR6W76–öâh.ZHŞûÉ°¢Ò&÷f–FW"'VçF–ÖR™©Nzk¾ûÉ°¢Ò&÷f–FW"×66÷VBÖöFVÂ6FÆö~ûÉ°¢ÒXúşZêŠêy¨N‹z‚4Ä’XØşKÙÎûÉ°¢ÒiÊ®iÚRÇVv–âKˆâ÷&6†W7G&F–öây¨Nz‹>Zé®YËYû®8  ¢ÒÒĞ ¢22K¨ÎXØKˆ8Xø.ˆ>iÙii ¢Ò¶Ö÷77‚ÖæWrÖ6Æ’Ööæ&ö&F–ærÖwV–FRæÖFÒ‚âöÖ÷77‚ÖæWrÖ6Æ’Ööæ&ö&F–ærÖwV–FRæÖBûÈX[>ˆN‰ŞYËih~j>ûÉ®ik4Ä’hê^XZ^kXzˆ¾ûÈ¢Ò¶##bÓrÓ#rÖ×VÇF’Ö6Æ’×&÷f–FW"×6W76–öâÖf÷VæFF–öâ×F6²Ö6†V6¶Æ—7BæÖFÒ‚ââ÷Æç2ó##bÓrÓ#rÖ×VÇF’Ö6Æ’×&÷f–FW"×6W76–öâÖf÷VæFF–öâ×F6²Ö6†V6¶Æ—7BæÖBûÈZéîikŞK»¾Xªkˆ^XÙ^ûÈ¢Ò¶Ö÷77‚×ÇVv–âÖÖ&¶WBÖæBÖ6Æ’Öf÷VæFF–öâÖFW6–vâæÖFÒ‚âöÖ÷77‚×ÇVv–âÖÖ&¶WBÖæBÖ6Æ’Öf÷VæFF–öâÖFW6–vâæÖB¢Ò¶’Ö&6†—FV7GW&R×ÇVv–âÖÖ&¶WGÆ6RÖæÇ—6—2æÖFÒ‚â÷’Ö&6†—FV7GW&R×ÇVv–âÖÖ&¶WGÆ6RÖæÇ—6—2æÖB¢Ò¶’Ö6†BÖ÷&6†W7G&F–öâ×&W6V&6‚æÖFÒ‚â÷’Ö6†BÖ÷&6†W7G&F–öâ×&W6V&6‚æÖB¢Ò¶6†&VB×6W76–öâ×F‡&VF7V5Ò‚ââòââö÷Vç7V2÷7V72÷6†&VB×6W76–öâ×F‡&VB÷7V2æÖB¢Ò¶6†&VB×6W76–öâÖVæv–æR×6VÆV7F–öæ7V5Ò‚ââòââö÷Vç7V2÷7V72÷6†&VB×6W76–öâÖVæv–æR×6VÆV7F–öâ÷7V2æÖB¢Ò¶6öçfW'6F–öâÖf7BÖ6öçG&7F7V5Ò‚ââòââö÷Vç7V2÷7V72ö6öçfW'6F–öâÖf7BÖ6öçG&7B÷7V2æÖB¢Ò¶vVçBÖFöÖ–âÖWfVçB×'VçF–ÖV7V5Ò‚ââòââö÷Vç7V2÷7V72övVçBÖFöÖ–âÖWfVçB×'VçF–ÖR÷7V2æÖB¢Ò¶Væv–æR×W"×6W76–öâ×&÷f–FW"Ö&–æF–æv7V5Ò‚ââòââö÷Vç7V2÷7V72öVæv–æR×W"×6W76–öâ×&÷f–FW"Ö&–æF–ær÷7V2æÖB¢Ò¶7V&vVçB×6W76–öâ×G&VRÖæf–vF–öæ7V5Ò‚ââòââö÷Vç7V2÷7V72÷7V&vVçB×6W76–öâ×G&VRÖæf–vF–öâ÷7V2æÖB¢Ò¶6ÆVFRÖf÷&²×6W76–öâ×7W÷'F7V5Ò‚ââòââö÷Vç7V2÷7V72ö6ÆVFRÖf÷&²×6W76–öâ×7W÷'B÷7V2æÖB¢Ò¶v÷&·76R6W76–öâ6FÆör6öçG&7FÒ‚ââòââöFWbÖwV–FVÆ–æW2öwV–FW2÷v÷&·76R×6W76–öâÖ6FÆörÖ6öçG&7BæÖB¢Ò¶7&2×FW&’ô6&vòçFöÖÆÒ‚ââòââ÷7&2×FW&’ô6&vòçFöÖÂ¢Ò¶6†&VE÷6W76–öç2ç'6Ò‚ââòââ÷7&2×FW&’÷7&2÷6†&VE÷6W76–öç2ç'2¢Ò¶vVçEöWfVçEö'W2ç'6Ò‚ââòââ÷7&2×FW&’÷7&2öVæv–æRövVçEöWfVçEö'W2ç'2¢Ò¶6öFW…ö6÷&Rç'6Ò‚ââòââ÷7&2×FW&’÷7&2÷6†&VBö6öFW…ö6÷&Rç'2¢Ò¶6ÆVFRç'6Ò‚ââòââ÷7&2×FW&’÷7&2öVæv–æRö6ÆVFRç'2¢Ò¶¶–Ö’ç'6Ò‚ââòââ÷7&2×FW&’÷7&2öVæv–æRö¶–Ö’ç'2¢Ò¶6öçfW'6F–öä—FVÖÒ‚ââòââ÷7&2÷G—W2ö6öçfW'6F–öâçG2¢Ò¶F‡&VD—FV×2çG6Ò‚ââòââ÷7&2÷WF–Ç2÷F‡&VD—FV×2çG2¢Ò¶&VæFW"Ö¦æ²Ö¶æ–fRÖW‡W&–ÖVçG2Ó##bÓrÓ‚æÖFÒ‚ââ÷W&b÷&VæFW"Ö¦æ²Ö¶æ–fRÖW‡W&–ÖVçG2Ó##bÓrÓ‚æÖB¢Ò·’Ö“¢7&÷72Õ&÷f–FW"†æFöfg5Ò†‡GG3¢òöv—F‡V"æ6öÒöV&VæF–Â×v÷&·2÷’ö&Æö"öÖ–â÷6¶vW2ö’õ$TDÔRæÖB67&÷72×&÷f–FW"Ö†æFöfg2¢Ò·’Ö“¢G&ç6f÷&ÒÖÖW76vW2çG6Ò†‡GG3¢òöv—F‡V"æ6öÒöV&VæF–Â×v÷&·2÷’ö&Æö"öÖ–â÷6¶vW2ö’÷7&2ö’÷G&ç6f÷&ÒÖÖW76vW2çG2¢Ò·’Ö“¢7&÷72×&÷f–FW"Ö†æFöfbçFW7BçG6Ò†‡GG3¢òöv—F‡V"æ6öÒöV&VæF–Â×v÷&·2÷’ö&Æö"öÖ–â÷6¶vW2ö’÷FW7Bö7&÷72×&÷f–FW"Ö†æFöfbçFW7BçG2¢Ò·“¢6W76–öâf÷&ÖEÒ†‡GG3¢òöv—F‡V"æ6öÒöV&VæF–Â×v÷&·2÷’ö&Æö"öÖ–â÷6¶vW2ö6öF–ærÖvVçBöFö72÷6W76–öâÖf÷&ÖBæÖB¢Ò·“¢5Æ—FR6W76–öâ7F÷&vUÒ†‡GG3¢òöv—F‡V"æ6öÒöV&VæF–Â×v÷&·2÷’÷G&VRöÖ–â÷6¶vW2÷7F÷&vR÷7Æ—FRÖæöFR¢Ò·’Ö6†EÒ†‡GG3¢òöv—F‡V"æ6öÒöV&VæF–Â×v÷&·2÷’Ö6†B¢Ò´÷Vä’vVçG24D³¢6W76–öç5Ò†‡GG3¢òö÷Væ’æv—F‡V"æ–òö÷Væ’ÖvVçG2×—F†öâ÷6W76–öç2ò¢Ò´6öFW‚6W'fW"&÷Fö6öÅÒ†‡GG3¢òöv—F‡V"æ6öÒö÷Væ’ö6öFW‚ö&Æö"öÖ–âö6öFW‚×'2ö×6W'fW"õ$TDÔRæÖB¢Ò´6ÆVFR6öFR4Ä’&VfW&Væ6UÒ†‡GG3¢òö6öFRæ6ÆVFRæ6öÒöFö72öVâö6Æ’×W6vR¢Ò´6ÆVFRvVçB4D²f÷"—F†öåÒ†‡GG3¢òöv—F‡V"æ6öÒöçF‡&÷–72ö6ÆVFRÖvVçB×6F²×—F†öâ¢Ò´çF‡&÷–2ÖævVBvVçG3¢WfVçG2æB7G&VÖ–æuÒ†‡GG3¢ò÷ÆFf÷&Òæ6ÆVFRæ6öÒöFö72öVâöÖævVBÖvVçG2öWfVçG2ÖæB×7G&VÖ–ær¢Ò´¶–Ö’6öFR4Ä•Ò†‡GG3¢òöv—F‡V"æ6öÒôÖööç6†÷D’ö¶–Ö’Ö6öFR¢Ò´¶–Ö’6öFR56&–Æ—G’ÖG&—…Ò†‡GG3¢òöÖööç6†÷F’æv—F‡V"æ–òö¶–Ö’Ö6öFRöVâ÷&VfW&Væ6Rö¶–Ö’Ö7æ‡FÖÂ¢Ò´¶–Ö’6öFR6W76–öç2æB6öçFW‡EÒ†‡GG3¢òöÖööç6†÷F’æv—F‡V"æ–òö¶–Ö’Ö6öFRöVâöwV–FW2÷6W76–öç2æ‡FÖÂ¢Ò´vVçB6Æ–VçB&÷Fö6öÅÒ†‡GG3¢òöv—F‡V"æ6öÒövVçF6Æ–VçG&÷Fö6öÂövVçBÖ6Æ–VçB×&÷Fö6öÂ¢Ò´5c"&ö×BÆ–fV7–6ÆR$dEÒ†‡GG3¢òövVçF6Æ–VçG&÷Fö6öÂæ6öÒ÷&fG2÷c"÷&ö×B¢Òµ¦VBW‡FW&æÂvVçG5Ò†‡GG3¢ò÷¦VBæFWböFö72ö’öW‡FW&æÂÖvVçG2 ¢Ò´v—D‡V"6÷–Æ÷C¢6†æv–ærF†R’ÖöFVÅÒ†‡GG3¢òöFö72æv—F‡V"æ6öÒöVâö6÷–Æ÷Bö†÷r×F÷2÷W6RÖ’ÖÖöFVÇ2ö6†ævR×F†RÖ6†BÖÖöFVÂ¢Ò´Æætw&‚W'6—7FVæ6UÒ†‡GG3¢òöFö72æÆæv6†–âæ6öÒö÷72÷—F†öâöÆævw&‚÷W'6—7FVæ6R¢Òµ5Æ—FRw&—FRÔ†VBÆövv–æuÒ†‡GG3¢ò÷wwrç7Æ—FRæ÷&r÷vÂæ‡FÖÂ¢Òµ5Æ—FRFöÖ–26öÖÖ—EÒ†‡GG3¢ò÷wwrç7Æ—FRæ÷&röFöÖ–66öÖÖ—Bæ‡FÖÂ¢Ò´÷Vä’vVçG24D³¢†æFöfg5Ò†‡GG3¢òö÷Væ’æv—F‡V"æ–òö÷Væ’ÖvVçG2×—F†öâö†æFöfg2ò¢Ò´÷Vä’vVçG24D³¢†æFöfbf–ÇFW'5Ò†‡GG3¢òö÷Væ’æv—F‡V"æ–òö÷Væ’ÖvVçG2×—F†öâ÷&VböW‡FVç6–öç2ö†æFöfeöf–ÇFW'2ò¢Ò´Æætw&ƒ¢†æFöfg5Ò†‡GG3¢òöFö72æÆæv6†–âæ6öÒö÷72÷—F†öâöÆæv6†–âö×VÇF’ÖvVçBö†æFöfg2¢Ò´WFôvVã¢ÖöFVÂ6öçFW‡EÒ†‡GG3¢òöÖ–7&÷6ögBæv—F‡V"æ–òöWFövVâ÷7F&ÆR÷&VfW&Væ6R÷—F†öâöWFövVåö6÷&RæÖöFVÅö6öçFW‡Bæ‡FÖÂ¢Ò´çF‡&÷–3¢†÷rvR'V–ÇB÷W"×VÇF’ÖvVçB&W6V&6‚7—7FVÕÒ†‡GG3¢ò÷wwræçF‡&÷–2æ6öÒöVæv–æVW&–ærö×VÇF’ÖvVçB×&W6V&6‚×7—7FVÒ¢Ò´†VG&ööÓ¢6öçFW‡B6ö×&W76–öâÆ–W"f÷"’vVçG5Ò†‡GG3¢òöv—F‡V"æ6öÒö†VG&ööÖÆ'2Ö’ö†VG&ööÒûÈ„45"Xúş˜nXè¾{Ê866†TÆ–væW"X˜Ş{Èz‹>Zé®86öçFVçE&÷WFW"Xˆn{¾Yè¾Xè¾{Êy¨NjŠ[ÈşXø.ˆ>ûÉ¾KˆŞ[É^XZ^X[b&÷‡’÷w&˜:{Û.[Ú.hKˆâÔÂXè¾{ÊjŠYè¾ûÈ ¢22iÈ‹ùj
+Xx` ¢222##bÓ’ÓûÉ¤7&÷72ÔVæv–æRvVçBFVÆVvF–öà §ÂG&–vvW"Â7W'&VçB–×ÆVÖVçFF–öâf7BÂ÷Vå7V2ò6öFR6÷W&6RÀ§ÂÒÒÒÂÒÒÒÂÒÒÒÀ§Â÷&6†W7G&F–öâ÷'VçF–ÖR÷væW'6†—ÂvVçB'&–FvRK¸^hº^iÈ’FVÆVvF–öâöw&‚6öçG&öÂf7G>ûÉ¾YB4Ä’&ö6W7>8æF—fR6W76–öî8&÷f–FW"&–æF–æ~8W&Ö—76–öâ&W7öç6RKˆâFW&Ö–æÂ'6W"K¸ŞyKW†—7F–ærVæv–æTÖævW"÷'VçF–ÖRõ6†&VBc"÷væW"hÈiÈ’Â7&2×FW&’÷7&2övVçEö÷&6†W7G&F–öâö'&–FvR÷·6W'f–6RÆF—7F6†W"Æ6öçG&öÂÆ&÷fÇÒç'6²7&2×FW&’÷7&2övVçEö÷&6†W7G&F–öâ÷¶w&…ö6ö÷&F–æF÷"Ç66†VGVÆW'Òç'6À§ÂvVçBÖf6–ærÔ5ô5ÂKˆ>KŠ®[z^X[~y¨NK‰®Xª˜¾‹éXú®YÊ‚Ö7övFWv’ÓâvVçD'&–FvU6W'f–6Rô7FFVûÉ´6ÆVFRô6öFW‚õöFW"KÛşyJYNˆz¢W†—7F–ærG&ç7÷'Bk:XZ^K‰NKˆŞŠhny¹nyJh‹~˜XŞ{Úî8&&V&W"²v÷&·76R²W†7BÆ—fRGW&â÷'VçF–ÖRÆö6F÷"Šz>ié6÷W&6^ûÉ¶ÆVv7’ö–FÆRöÖ&–wV÷W2÷7FÆR&÷WFRf–Â6Æ÷6VBÂ7&2×FW&’÷7&2övVçEö÷&6†W7G&F–öâö'&–FvR÷¶Ö7övFWv’ÆÖ7÷'VçF–ÖRÆÖ7÷6÷W&6WÒç'6²7&2×FW&’÷7&2öVæv–æR÷¶6ÆVFRö6·W6W%öÖ7Æ6öFW…ö'&–FvUöÖ7ÇöFW%ö'&–FvUöÖ7Òç'6À§ÂWfVçBö&÷fÂ÷&W7VÇBÂFVÆVvFVBWfVçBZHŞyJ‚&ö6W72×v–FRvVçDWfVçD'W2[›n˜xŞ[Ù.[â–Ö×WF&ÆR'&–FvR'VîûÉ¶6æöæ–6Â6öçfW'6F–öâçGW&ä6öÖÖ—GFVFiŠò&W7VÇBf7B6÷W&6^ûÉ´&÷fÅ&WVW7Bô&÷fÅ&W6öÇfVBXú®YÎjÚRv—F–æt&÷fÂÆ–fV7–6Æ^ûÈÎKˆŞikZ)â&÷fÂ6öçG&öÂF‚Â7&2×FW&’÷7&2övVçEö÷&6†W7G&F–öâö'&–FvR÷¶F—7F6†W"Æ&÷fÂÇ&W6VçFF–öçÒç'6²7&2×FW&’÷7&2öVæv–æRövVçEöWfVçEö'W2ç'6À  ¢222##bÓ‚Ó#NûÉ¤6öFW‚&÷f–FW"&–æF–ærKˆâuT’Y
+şXªxêşZ(0 §ÂG&–vvW"Â7W'&VçB–×ÆVÖVçFF–öâf7BÂ÷Vå7V2ò6öFR6÷W&6RÀ§ÂÒÒÒÂÒÒÒÂÒÒÒÀ§Â&÷f–FW"&–æF–ærò6öFW‚'VçF–ÖRÆVæ6‚ÂuT’Y
+şXª‚6öFW‚×6W'fW"X˜ŞûÈÎjhÚâVffV7F—fR4ôDU…ô„ôÔRö6öæf–rçFöÖÆy¨BÖöFVÅ÷&÷f–FW'2â¢æVçeö¶W–KˆjÊh
+~h›˜xşŠz>ié{Ë®ZKxêşZ(>Xù˜xşûÈXÙ^jÊÆÆ÷vÆ—7FVBÆöv–â6†VÆÎûÈÎXÙ^KˆW2‹h^i{nûÈûÈÎK¸^k:XZR6†–ÆB&ö6W72Â7&2×FW&’÷7&2ö6öFW‚÷&÷f–FW%öVçbç'6²7&2×FW&’÷7&2ö&6¶VæBö÷6W'fW"ç'6²7&2×FW&’÷7&2ö&–âö65öwV•öFVÖöâç'6²÷Vç7V2ö6†ævW2öf—‚Ö6öFW‚ÖÖ6÷2×&÷f–FW"ÖVçbÖ¶W’×&W6öÇWF–öâöÀ 

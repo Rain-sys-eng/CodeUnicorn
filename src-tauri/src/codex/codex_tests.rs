@@ -110,6 +110,7 @@ fn shared_control_response_resolves_the_exact_managed_codex_runtime() {
     .expect("shared route");
 
     assert_eq!(route.engine, EngineType::Codex);
+    assert_eq!(route.shared_thread_id, "shared:session-control");
     assert_eq!(route.provider_runtime_key, runtime_key);
     assert_eq!(route.provider_profile_id.as_deref(), Some("provider-a"));
 }

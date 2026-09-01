@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  listSharedSessions,
   persistSharedSessionSelectedTarget,
   setSharedSessionSelectedEngine,
   sharedSessionV2DispatchTurn,
@@ -72,6 +73,57 @@ describe("startSharedSession", () => {
         engine: "claude",
       },
     });
+  });
+});
+
+describe("listSharedSessions", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("filters canonical Agent Bridge backing lanes from the ordinary Shared list", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([
+        { id: "ordinary", threadId: "shared:ordinary" },
+        { id: "bridge", threadId: "shared:bridge" },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "1:control",
+          kind: "systemNotice",
+          content: {
+            text: "Control: agent-bridge.internal-backing-session",
+          },
+          fidelity: "canonical",
+          checksum: "checksum-1",
+        },
+      ]);
+
+    const sessions = await listSharedSessions("ws-1");
+
+    expect(sessions).toEqual([
+      { id: "ordinary", threadId: "shared:ordinary" },
+    ]);
+    expect(invoke).toHaveBeenNthCalledWith(1, "list_shared_sessions", {
+      workspaceId: "ws-1",
+    });
+    expect(invoke).toHaveBeenCalledWith("load_shared_projection", {
+      workspaceId: "ws-1",
+      threadId: "shared:bridge",
+    });
+  });
+
+  it("does not hide an ordinary session when its projection cannot be read", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([{ id: "ordinary", threadId: "shared:ordinary" }])
+      .mockRejectedValueOnce(new Error("projection unavailable"));
+
+    const sessions = await listSharedSessions("ws-1");
+
+    expect(sessions).toEqual([
+      { id: "ordinary", threadId: "shared:ordinary" },
+    ]);
   });
 });
 

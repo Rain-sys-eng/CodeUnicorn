@@ -12,6 +12,7 @@ pub(crate) mod agent_event_bus;
 #[cfg(test)]
 mod capability_matrix;
 pub mod claude;
+pub(crate) mod claude_bridge_mcp;
 pub mod claude_history;
 #[cfg(test)]
 mod claude_history_delete_tests;
@@ -29,6 +30,7 @@ pub(crate) mod claude_history_subagents;
 pub(crate) mod claude_message_content;
 pub(crate) mod cli_image_input;
 pub(crate) mod codex_adapter;
+pub(crate) mod codex_bridge_mcp;
 pub(crate) mod codex_prompt_service;
 pub mod commands;
 pub mod dsh;
@@ -55,6 +57,7 @@ pub mod pi_rpc;
 pub(crate) mod pi_history;
 pub(crate) mod pi_provider_profile;
 pub mod qoder;
+pub(crate) mod qoder_bridge_mcp;
 pub(crate) mod qoder_auth;
 pub mod qoder_history;
 pub(crate) mod qoder_provider_profile;

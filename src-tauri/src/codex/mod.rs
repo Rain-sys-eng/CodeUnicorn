@@ -1976,6 +1976,7 @@ pub(crate) async fn skills_list(
 pub(crate) struct SharedControlResponseRoute {
     workspace_id: String,
     engine: EngineType,
+    shared_thread_id: String,
     provider_runtime_key: String,
     provider_profile_id: Option<String>,
     native_thread_id: String,
@@ -2049,7 +2050,7 @@ pub(crate) fn resolve_shared_control_response_route(
         return Err("shared control response Provider Profile owner mismatch".to_string());
     }
     let expected_engine =
-        crate::shared_sessions::ensure_supported_shared_session_engine(owner.engine)?.icon();
+        crate::shared_sessions::ensure_supported_shared_worker_engine(owner.engine)?.icon();
     if owner.execution_target_snapshot.engine.trim() != expected_engine {
         return Err("shared control response target engine owner mismatch".to_string());
     }
@@ -2064,6 +2065,7 @@ pub(crate) fn resolve_shared_control_response_route(
     Ok(Some(SharedControlResponseRoute {
         workspace_id: workspace_id.to_string(),
         engine: owner.engine,
+        shared_thread_id,
         provider_runtime_key,
         provider_profile_id,
         native_thread_id,
@@ -2119,7 +2121,42 @@ async fn respond_to_shared_control_request(
             )
             .await
         }
+        EngineType::Dsh => {
+            let request = crate::engine::dsh::parse_control_request(&request_id).ok_or_else(|| {
+                "shared DSH control request has invalid runtime identity".to_string()
+            })?;
+            let settings = state.app_settings.lock().await.clone();
+            let runtime = crate::engine::dsh::runtime_settings_from_app(&settings);
+            crate::engine::dsh::respond_to_control(&runtime, request, &result).await
+        }
         _ => Err("shared control response owner uses an unsupported engine".to_string()),
+    }
+}
+
+fn publish_shared_approval_resolution(
+    state: &AppState,
+    route: &SharedControlResponseRoute,
+    request_id: Value,
+    approved: bool,
+) {
+    let event = crate::engine::events::EngineEvent::ApprovalResolved {
+        workspace_id: route.workspace_id.clone(),
+        request_id,
+        approved,
+    };
+    if !state.engine_manager.agent_event_bus().publish_engine_event(
+        route.engine,
+        &route.shared_thread_id,
+        Some(&route.native_thread_id),
+        &route.runtime_turn_id,
+        Some(&route.runtime_turn_id),
+        &event,
+    ) {
+        log::warn!(
+            "[agent-bridge] approval resolution was accepted by the runtime but not published (workspace={} turn={})",
+            route.workspace_id,
+            route.runtime_turn_id
+        );
     }
 }
 
@@ -2138,6 +2175,15 @@ pub(crate) async fn respond_to_server_request(
     app: AppHandle,
 ) -> Result<(), String> {
     let is_user_input_response = result.get("answers").is_some();
+    let approval_decision = if is_user_input_response {
+        None
+    } else {
+        match result.get("decision").and_then(Value::as_str) {
+            Some("accept") => Some(true),
+            Some("decline") => Some(false),
+            _ => None,
+        }
+    };
     let normalized_thread_id = normalize_control_identity(thread_id.as_deref());
     let normalized_turn_id = normalize_control_identity(turn_id.as_deref());
     let provider_profile_id = normalize_control_identity(provider_profile_id.as_deref());
@@ -2181,7 +2227,11 @@ pub(crate) async fn respond_to_server_request(
         normalized_turn_id.as_deref(),
     )?;
     if let Some(route) = shared_route.as_ref() {
+        let approval_request_id = approval_decision.map(|_| request_id.clone());
         respond_to_shared_control_request(&state, route, request_id, result).await?;
+        if let (Some(approved), Some(request_id)) = (approval_decision, approval_request_id) {
+            publish_shared_approval_resolution(&state, route, request_id, approved);
+        }
         if is_user_input_response && route.engine == EngineType::Codex && !is_local_plan_prompt {
             let session = {
                 let sessions = state.sessions.lock().await;

@@ -1,5 +1,22 @@
 export default {
   "multiAgent": {
+    "bridge": {
+      "retry": "重試",
+      "retrying": "正在重試…",
+      "retryFailed": "重試失敗",
+      "openSession": "開啟工作階段",
+      "viewResult": "檢視結果",
+      "viewDiff": "檢視差異",
+      "resultTitle": "委派執行結果",
+      "diffTitle": "委派執行差異",
+      "close": "關閉",
+      "summary": "摘要",
+      "error": "錯誤",
+      "branch": "分支",
+      "artifact": "產物",
+      "changedFiles": "變更檔案",
+      "noResultDetails": "沒有更多結果詳細資料。"
+    },
     "entry": {
       "label": "協作",
       "pill": "協作 · {{name}}",

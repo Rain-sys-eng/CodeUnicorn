@@ -161,7 +161,8 @@ impl<E: EventSink> EventSink for DeferredStartupEventSink<E> {
 
 #[allow(unused_imports)]
 pub(crate) use crate::backend::app_server_cli::{
-    apply_codex_app_server_args, apply_codex_app_server_args_with_settings, build_cli_path_env,
+    apply_codex_app_server_args, apply_codex_app_server_args_with_settings,
+    apply_codex_app_server_args_with_settings_and_runtime_overrides, build_cli_path_env,
     build_codex_app_server_args, build_codex_command_from_launch_context,
     build_codex_command_with_bin, build_codex_path_env, build_engine_environment_diagnosis,
     can_retry_wrapper_compatibility_launch, can_retry_wrapper_launch, check_cli_binary,
@@ -495,6 +496,9 @@ pub(crate) struct WorkspaceSession {
     /// Provider-scoped Runtime owner key。App-server event 只能在此 scope
     /// 内与 Shared attempt 的 native/session/turn identity 匹配。
     pub(crate) provider_runtime_key: String,
+    /// Opaque process-scoped locator minted by CodeUnicorn for the managed MCP route. It is never
+    /// accepted from tool arguments and is intentionally distinct from the provider runtime key.
+    mcp_runtime_locator: String,
     pub(crate) child: Mutex<Child>,
     pub(crate) stdin: Mutex<ChildStdin>,
     pub(crate) wrapper_kind: String,
@@ -529,6 +533,60 @@ pub(crate) struct WorkspaceSession {
 }
 
 impl WorkspaceSession {
+    pub(crate) fn mcp_runtime_locator(&self) -> &str {
+        &self.mcp_runtime_locator
+    }
+
+    /// Resolve the only live Codex thread+turn owner for a managed MCP call.
+    ///
+    /// A provider-scoped app-server may host multiple native threads. The HTTP MCP request itself
+    /// does not carry a trustworthy thread id, so concurrent active turns are ambiguous and must
+    /// fail closed instead of guessing which Agent issued the call.
+    pub(crate) async fn mcp_active_turn_owner(&self) -> Result<Option<(String, String)>, String> {
+        let active_turns = self.active_turns.lock().await;
+        let mut owners = active_turns
+            .iter()
+            .filter_map(|(thread_id, turn_id)| {
+                let thread_id = thread_id.trim();
+                let turn_id = turn_id.trim();
+                if thread_id.is_empty() || turn_id.is_empty() {
+                    return None;
+                }
+                Some((thread_id.to_string(), turn_id.to_string()))
+            })
+            .collect::<Vec<_>>();
+        owners.sort();
+        match owners.as_slice() {
+            [] if active_turns.is_empty() => Ok(None),
+            [] => Err(
+                "Agent Bridge MCP Codex runtime has active work without an exact thread+turn identity"
+                    .to_string(),
+            ),
+            [owner] if active_turns.len() == 1 => Ok(Some(owner.clone())),
+            _ => Err(format!(
+                "Agent Bridge MCP Codex runtime has ambiguous active turn ownership: {} active turns",
+                active_turns.len()
+            )),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn set_mcp_active_turn_for_test(
+        &self,
+        thread_id: &str,
+        turn_id: Option<&str>,
+    ) {
+        let mut active_turns = self.active_turns.lock().await;
+        match turn_id {
+            Some(turn_id) => {
+                active_turns.insert(thread_id.to_string(), turn_id.to_string());
+            }
+            None => {
+                active_turns.remove(thread_id);
+            }
+        }
+    }
+
     pub(crate) fn runtime_generation(&self) -> String {
         match self.process_id {
             Some(process_id) => format!("pid:{process_id}:startedAt:{}", self.started_at_ms),
@@ -1273,13 +1331,30 @@ async fn spawn_workspace_session_once<E: EventSink>(
     let effective_codex_home = codex_home
         .clone()
         .or_else(crate::codex::home::resolve_default_codex_home);
-    apply_codex_app_server_args_with_settings(
+    let mcp_runtime_locator = uuid::Uuid::new_v4().simple().to_string();
+    let managed_mcp_server = if launch_options.launch_mode == CodexAppServerLaunchMode::Normal {
+        crate::engine::claude::askuser_mcp_global()
+    } else {
+        None
+    };
+    let managed_mcp_overrides = managed_mcp_server
+        .map(|server| server.codex_bridge_config_overrides(&entry.id, mcp_runtime_locator.as_str()))
+        .unwrap_or_default();
+    apply_codex_app_server_args_with_settings_and_runtime_overrides(
         &mut command,
         codex_args.as_deref(),
         launch_options,
         &app_settings,
         effective_codex_home.as_deref(),
+        &managed_mcp_overrides,
     )?;
+    if let Some(server) = managed_mcp_server {
+        server.apply_codex_bridge_bearer_token(&mut command);
+    } else if launch_options.launch_mode == CodexAppServerLaunchMode::Normal {
+        log::warn!(
+            "[codex] managed Agent Bridge MCP server is not ready; Codex caller tools unavailable for this runtime"
+        );
+    }
     command.current_dir(&entry.path);
     if let Some(codex_home) = codex_home {
         command.env("CODEX_HOME", codex_home);
@@ -1306,6 +1381,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
     let session = Arc::new(WorkspaceSession {
         entry: entry.clone(),
         provider_runtime_key,
+        mcp_runtime_locator,
         child: Mutex::new(child),
         stdin: Mutex::new(stdin),
         wrapper_kind: launch_context.wrapper_kind.to_string(),
@@ -1448,6 +1524,7 @@ pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSessio
     Arc::new(WorkspaceSession {
         entry: make_test_workspace_entry(id),
         provider_runtime_key: id.to_string(),
+        mcp_runtime_locator: format!("test-runtime-{id}"),
         child: Mutex::new(child),
         stdin: Mutex::new(stdin),
         wrapper_kind: "direct".to_string(),
