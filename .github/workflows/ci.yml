@@ -93,9 +93,12 @@ jobs:
             src/backend/app_server_cli.rs \
             src/backend/app_server_tests.rs \
             src/codex/session_runtime.rs \
+            src/bin/cc_gui_daemon/engine_bridge.rs \
             src/engine/claude/askuser_mcp.rs \
             src/engine/codex_bridge_mcp.rs \
             src/engine/mod.rs \
+            src/engine/qoder.rs \
+            src/engine/qoder_bridge_mcp.rs \
             src/shared_event_log/canonical/validator.rs \
             src/shared_session_v2.rs \
             src/command_registry.rs \

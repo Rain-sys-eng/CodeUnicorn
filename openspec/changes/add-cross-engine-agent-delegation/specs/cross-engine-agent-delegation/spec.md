@@ -208,6 +208,15 @@ Target Agent 的 text/tool/approval/terminal events SHALL 通过现有 AgentEven
 - **AND** unrelated user-defined MCP servers MUST remain available
 - **AND** helper runtimes with session hooks disabled MUST NOT receive Agent Bridge caller tools
 
+#### Scenario: Qoder caller is bound to one live ACP turn
+
+- **WHEN** CodeUnicorn-managed Qoder ACP session receives the built-in Bridge MCP descriptor
+- **THEN** descriptor MUST use ACP `mcpServers` HTTP shape with the authenticated runtime route
+- **AND** CodeUnicorn MUST mint a fresh opaque locator for the spawned turn and retain it beside that exact child process
+- **AND** gateway MUST resolve the locator to one live `runtimeTurnId + native sessionId + provider profile` owner
+- **AND** missing native session、stale locator、workspace mismatch 或 ambiguous locator MUST fail closed
+- **AND** descriptor MUST NOT rewrite Qoder's user config directory or bypass existing runtime permission/approval control
+
 #### Scenario: Internal backing session is not user-visible
 
 - **WHEN** Agent Bridge 使用 Shared V2 session 作为 delegated runtime backing lane

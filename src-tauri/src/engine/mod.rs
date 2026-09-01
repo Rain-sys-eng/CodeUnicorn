@@ -57,6 +57,7 @@ pub mod pi_rpc;
 pub(crate) mod pi_history;
 pub(crate) mod pi_provider_profile;
 pub mod qoder;
+pub(crate) mod qoder_bridge_mcp;
 pub(crate) mod qoder_auth;
 pub mod qoder_history;
 pub(crate) mod qoder_provider_profile;

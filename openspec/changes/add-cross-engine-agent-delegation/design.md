@@ -136,6 +136,8 @@ cancelled 时自动删除 worktree：成功现场留给用户检查/显式 merge
 
 `agent_list/agent_delegate/agent_status/agent_wait/agent_result/agent_send/agent_cancel` handler 只做 validation/source identity resolution 与 Bridge service 调用，禁止直接 spawn CLI。
 
+Claude/Codex/Qoder 共用同一个 process-global bearer-authenticated loopback server，但保留各自 transport 注入方式：Claude 使用既有 runtime `--mcp-config`，Codex 使用 process-scoped `-c` overlay + child env bearer，Qoder 使用 existing ACP `session/new|resume|fork.mcpServers` HTTP descriptor。Qoder descriptor 只经 managed child stdin 传递，per-turn locator 与 live child/native ACP session 共同证明 source；不写 Qoder config、不从 tool arguments 接受 identity。Kimi/OpenCode 当前 capability matrix 明确为 `mcp=false`，不得为了表面 parity 伪造 MCP ingress；Gemini 仍受 compile-time runtime gate 约束。
+
 ### 9. Event attribution 复用 AgentEventBus
 
 Target engine events 继续进入现有 `AgentEventBus`，以 delegated `run_id` 归属；不创建平行 streaming event system。

@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::engine::claude::ClaudeSessionManager;
+use crate::engine::EngineManager;
 
 use super::models::AgentEndpoint;
 
@@ -179,6 +180,67 @@ pub async fn resolve_codex_mcp_source(
     })
 }
 
+/// Resolve a Qoder caller from its per-turn ACP MCP descriptor.
+///
+/// CodeUnicorn creates a fresh opaque locator before spawning each Qoder ACP turn and records it
+/// beside the managed child process. The MCP descriptor is delivered in `session/new|resume|fork`
+/// over that child's stdin. A caller is authorized only after the same live process has acquired an
+/// exact native ACP session id; workspace-only, stale and ambiguous locators all fail closed.
+pub async fn resolve_qoder_mcp_source(
+    engine_manager: &EngineManager,
+    workspace_id: &str,
+    runtime_locator: Option<&str>,
+) -> Result<ResolvedMcpSource, String> {
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() {
+        return Err("Agent Bridge MCP source workspace is required".to_string());
+    }
+    let runtime_locator = runtime_locator
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "Agent Bridge tools require the Qoder runtime-bound MCP endpoint".to_string()
+        })?;
+
+    let mut owners = Vec::new();
+    for session in engine_manager.get_qoder_sessions(workspace_id).await {
+        if let Some((runtime_turn_id, raw_session_id)) =
+            session.mcp_active_turn_owner(runtime_locator).await?
+        {
+            owners.push((
+                session.provider_profile_id(),
+                runtime_turn_id,
+                raw_session_id,
+            ));
+        }
+    }
+    let (provider_profile_id, runtime_turn_id, raw_session_id) = match owners.len() {
+        0 => {
+            return Err(format!(
+                "Agent Bridge MCP Qoder source runtime is not active for workspace {workspace_id}"
+            ))
+        }
+        1 => owners.pop().expect("one Qoder MCP owner"),
+        _ => {
+            return Err(format!(
+                "Agent Bridge MCP Qoder runtime locator is ambiguous for workspace {workspace_id}"
+            ))
+        }
+    };
+    let logical_session_id =
+        crate::engine::qoder_provider_profile::canonical_qoder_native_session_id(
+            &raw_session_id,
+            Some(provider_profile_id),
+        )?;
+
+    resolve_trusted_runtime_binding(TrustedMcpRuntimeBinding {
+        engine_id: "qoder".to_string(),
+        logical_session_id,
+        native_session_id: Some(raw_session_id),
+        runtime_turn_id,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,6 +297,19 @@ mod tests {
         .await
         .expect_err("unknown locator must fail closed");
         assert!(error.contains("source runtime is not active"));
+    }
+
+    #[tokio::test]
+    async fn unknown_qoder_runtime_locator_is_rejected() {
+        let manager = EngineManager::new();
+        let error = resolve_qoder_mcp_source(
+            &manager,
+            "workspace-1",
+            Some("attacker-supplied-locator"),
+        )
+        .await
+        .expect_err("unknown Qoder locator must fail closed");
+        assert!(error.contains("Qoder source runtime is not active"));
     }
 
     #[tokio::test]

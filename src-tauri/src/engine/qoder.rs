@@ -131,16 +131,22 @@ struct ActiveQoderChildProcess {
     child: Child,
     stdin: std::sync::Arc<Mutex<Option<ChildStdin>>>,
     acp_session_id: Option<String>,
+    mcp_runtime_locator: String,
     #[allow(dead_code)]
     started_at_ms: u64,
 }
 
 impl ActiveQoderChildProcess {
-    fn new(child: Child, stdin: std::sync::Arc<Mutex<Option<ChildStdin>>>) -> Self {
+    fn new(
+        child: Child,
+        stdin: std::sync::Arc<Mutex<Option<ChildStdin>>>,
+        mcp_runtime_locator: String,
+    ) -> Self {
         Self {
             child,
             stdin,
             acp_session_id: None,
+            mcp_runtime_locator,
             started_at_ms: unix_timestamp_ms_for_process_diagnostics(),
         }
     }
@@ -1300,6 +1306,37 @@ impl QoderSession {
         self.session_id.read().await.clone()
     }
 
+    pub(crate) fn provider_profile_id(&self) -> &'static str {
+        self.distribution.provider_profile_id()
+    }
+
+    /// Resolve the exact live ACP turn and native session that owns a managed MCP locator.
+    /// The locator is minted per spawned turn and never accepted from tool arguments.
+    pub(crate) async fn mcp_active_turn_owner(
+        &self,
+        runtime_locator: &str,
+    ) -> Result<Option<(String, String)>, String> {
+        let active = self.active_processes.lock().await;
+        let mut owners = active
+            .iter()
+            .filter(|(_, process)| process.mcp_runtime_locator == runtime_locator)
+            .map(|(turn_id, process)| {
+                process
+                    .acp_session_id
+                    .as_ref()
+                    .map(|session_id| (turn_id.clone(), session_id.clone()))
+                    .ok_or_else(|| {
+                        "Agent Bridge MCP Qoder runtime has no native session identity".to_string()
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        match owners.as_mut_slice() {
+            [] => Ok(None),
+            [owner] => Ok(Some(owner.clone())),
+            _ => Err("Agent Bridge MCP Qoder runtime locator is ambiguous".to_string()),
+        }
+    }
+
     async fn set_session_id(&self, id: Option<String>) {
         *self.session_id.write().await = id;
     }
@@ -1348,6 +1385,15 @@ impl QoderSession {
         params: SendMessageParams,
         turn_id: &str,
     ) -> Result<String, String> {
+        let mcp_runtime_locator = uuid::Uuid::new_v4().simple().to_string();
+        let managed_mcp_servers = crate::engine::claude::askuser_mcp_global()
+            .map(|server| {
+                vec![server.qoder_bridge_mcp_server(
+                    &self.workspace_id,
+                    &mcp_runtime_locator,
+                )]
+            })
+            .unwrap_or_default();
         let prompt_blocks = match assemble_prompt_blocks(
             &params.text,
             params.images.as_deref(),
@@ -1382,7 +1428,7 @@ impl QoderSession {
             let mut active = self.active_processes.lock().await;
             active.insert(
                 turn_id.to_string(),
-                ActiveQoderChildProcess::new(child, stdin),
+                ActiveQoderChildProcess::new(child, stdin, mcp_runtime_locator),
             );
         }
 
@@ -1419,7 +1465,7 @@ impl QoderSession {
                     "session/fork",
                     json!({
                         "cwd": cwd,
-                        "mcpServers": [],
+                        "mcpServers": managed_mcp_servers,
                         "sessionId": session_id,
                     }),
                     QODER_SESSION_RESUME_TIMEOUT,
@@ -1430,7 +1476,7 @@ impl QoderSession {
                     "session/resume",
                     json!({
                         "cwd": cwd,
-                        "mcpServers": [],
+                        "mcpServers": managed_mcp_servers,
                         "sessionId": session_id,
                     }),
                     QODER_SESSION_RESUME_TIMEOUT,
@@ -1441,7 +1487,7 @@ impl QoderSession {
                     "session/new",
                     json!({
                         "cwd": cwd,
-                        "mcpServers": [],
+                        "mcpServers": managed_mcp_servers,
                     }),
                     QODER_SESSION_NEW_TIMEOUT,
                 )
@@ -2060,6 +2106,12 @@ mod tests {
     async fn rejected_model_stops_before_session_prompt() {
         use std::os::unix::fs::PermissionsExt;
 
+        crate::engine::claude::init_askuser_mcp_global(std::sync::Arc::new(
+            crate::engine::claude::ClaudeSessionManager::new(),
+        ))
+        .await
+        .expect("start managed MCP server");
+
         let fixture_dir =
             std::env::temp_dir().join(format!("mossx-qoder-model-reject-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&fixture_dir).expect("create fixture directory");
@@ -2122,6 +2174,9 @@ done
         let trace = fs::read_to_string(&trace_path).expect("read ACP trace");
         assert!(trace.contains("session/set_model"), "{trace}");
         assert!(!trace.contains("session/prompt"), "{trace}");
+        assert!(trace.contains("mcp/qoder/ws/"), "{trace}");
+        assert!(trace.contains("Authorization"), "{trace}");
+        assert!(trace.contains("Bearer "), "{trace}");
         fs::remove_dir_all(&fixture_dir).expect("remove fixture directory");
     }
 

@@ -10,10 +10,11 @@
 //! # Transport
 //! Streamable-HTTP: provider-aware sessions use
 //! `POST /mcp/:workspace_id/:runtime_locator`; Codex app-server runtimes use the
-//! separate `POST /mcp/codex/:workspace_id/:runtime_locator` route. The workspace-only endpoint
-//! remains for local Claude AskUserQuestion compatibility. All routes speak JSON-RPC (`initialize`,
-//! `tools/list`, `tools/call`) and respond `application/json`. No SSE stream is
-//! needed for request/response. Verified against CLI v2.1.201.
+//! separate `POST /mcp/codex/:workspace_id/:runtime_locator` route, and Qoder ACP runtimes use
+//! `POST /mcp/qoder/:workspace_id/:runtime_locator`. The workspace-only endpoint remains for local
+//! Claude AskUserQuestion compatibility. All routes speak JSON-RPC (`initialize`, `tools/list`,
+//! `tools/call`) and respond `application/json`. No SSE stream is needed for request/response.
+//! Verified against CLI v2.1.201.
 //!
 //! # Identity boundary
 //! Agent Bridge tools are accepted only on the provider-aware route. The bearer
@@ -62,6 +63,7 @@ pub const MCP_SERVER_NAME: &str = "ccgui";
 pub const ASK_TOOL_NAME: &str = "AskUserQuestion";
 pub const CODEX_BRIDGE_MCP_SERVER_NAME: &str = "codeunicorn_agent_bridge";
 pub const CODEX_BRIDGE_MCP_BEARER_TOKEN_ENV: &str = "CODEUNICORN_AGENT_BRIDGE_MCP_TOKEN";
+pub const QODER_BRIDGE_MCP_SERVER_NAME: &str = "CodeUnicorn Agent Bridge";
 
 /// Process-global handle to the running server, set once at app startup.
 /// The CLI spawn wiring reads this to build the per-workspace `--mcp-config`.
@@ -124,6 +126,10 @@ impl AskUserMcpServer {
             .route(
                 "/mcp/codex/:workspace_id/:runtime_locator",
                 post(handle_codex_runtime_mcp),
+            )
+            .route(
+                "/mcp/qoder/:workspace_id/:runtime_locator",
+                post(handle_qoder_runtime_mcp),
             )
             .route(
                 "/mcp/:workspace_id/:runtime_locator",
@@ -199,6 +205,25 @@ impl AskUserMcpServer {
     pub fn apply_codex_bridge_bearer_token(&self, command: &mut tokio::process::Command) {
         command.env(CODEX_BRIDGE_MCP_BEARER_TOKEN_ENV, self.token.as_ref());
     }
+
+    /// ACP-native HTTP descriptor injected into one Qoder session handshake.
+    ///
+    /// The descriptor is process/turn scoped and travels only over the managed child's stdin. It
+    /// neither rewrites Qoder's config directory nor removes any provider-owned MCP configuration.
+    pub fn qoder_bridge_mcp_server(&self, workspace_id: &str, runtime_locator: &str) -> Value {
+        json!({
+            "name": QODER_BRIDGE_MCP_SERVER_NAME,
+            "type": "http",
+            "url": format!(
+                "http://127.0.0.1:{}/mcp/qoder/{}/{}",
+                self.port, workspace_id, runtime_locator
+            ),
+            "headers": [{
+                "name": "Authorization",
+                "value": format!("Bearer {}", self.token),
+            }],
+        })
+    }
 }
 
 fn ask_tool_definition() -> Value {
@@ -251,12 +276,22 @@ fn all_tool_definitions() -> Vec<Value> {
 enum McpIngress {
     Claude,
     Codex,
+    Qoder,
 }
 
 fn tool_definitions_for_ingress(ingress: McpIngress) -> Vec<Value> {
     match ingress {
         McpIngress::Claude => all_tool_definitions(),
         McpIngress::Codex => crate::engine::codex_bridge_mcp::tool_definitions(),
+        McpIngress::Qoder => crate::engine::qoder_bridge_mcp::tool_definitions(),
+    }
+}
+
+fn ingress_handles_bridge_tool(ingress: McpIngress, tool_name: &str) -> bool {
+    match ingress {
+        McpIngress::Claude => crate::engine::claude_bridge_mcp::handles_tool(tool_name),
+        McpIngress::Codex => crate::engine::codex_bridge_mcp::handles_tool(tool_name),
+        McpIngress::Qoder => crate::engine::qoder_bridge_mcp::handles_tool(tool_name),
     }
 }
 
@@ -331,6 +366,23 @@ async fn handle_codex_runtime_mcp(
         workspace_id,
         Some(runtime_locator),
         McpIngress::Codex,
+        state,
+        headers,
+        msg,
+    )
+    .await
+}
+
+async fn handle_qoder_runtime_mcp(
+    Path((workspace_id, runtime_locator)): Path<(String, String)>,
+    State(state): State<McpServerState>,
+    headers: HeaderMap,
+    Json(msg): Json<Value>,
+) -> McpResponse {
+    handle_mcp_request_for_ingress(
+        workspace_id,
+        Some(runtime_locator),
+        McpIngress::Qoder,
         state,
         headers,
         msg,
@@ -440,7 +492,7 @@ async fn handle_mcp_request_for_ingress(
                 };
             }
 
-            if crate::agent_orchestration::bridge::mcp_gateway::handles_tool(tool_name) {
+            if ingress_handles_bridge_tool(ingress, tool_name) {
                 let result = match ingress {
                     McpIngress::Claude => {
                         crate::engine::claude_bridge_mcp::call_tool(
@@ -454,6 +506,15 @@ async fn handle_mcp_request_for_ingress(
                     }
                     McpIngress::Codex => {
                         crate::engine::codex_bridge_mcp::call_tool(
+                            &workspace_id,
+                            runtime_locator.as_deref(),
+                            tool_name,
+                            arguments,
+                        )
+                        .await
+                    }
+                    McpIngress::Qoder => {
+                        crate::engine::qoder_bridge_mcp::call_tool(
                             &workspace_id,
                             runtime_locator.as_deref(),
                             tool_name,
@@ -547,6 +608,20 @@ mod tests {
                 == "mcp_servers.codeunicorn_agent_bridge.bearer_token_env_var=\"CODEUNICORN_AGENT_BRIDGE_MCP_TOKEN\""
         }));
         assert!(overrides.iter().all(|value| !value.contains("test-token")));
+    }
+
+    #[test]
+    fn qoder_bridge_registration_uses_acp_http_shape_without_writing_config() {
+        let descriptor = server_at(4899).qoder_bridge_mcp_server("ws-42", "qoder-runtime-a");
+        assert_eq!(descriptor["name"], QODER_BRIDGE_MCP_SERVER_NAME);
+        assert_eq!(descriptor["type"], "http");
+        assert_eq!(
+            descriptor["url"],
+            "http://127.0.0.1:4899/mcp/qoder/ws-42/qoder-runtime-a"
+        );
+        assert_eq!(descriptor["headers"][0]["name"], "Authorization");
+        assert_eq!(descriptor["headers"][0]["value"], "Bearer test-token");
+        assert!(descriptor.get("command").is_none());
     }
 
     #[test]
@@ -688,6 +763,44 @@ mod tests {
         assert!(payload["error"]["message"]
             .as_str()
             .is_some_and(|message| message.contains("unknown tool")));
+    }
+
+    #[tokio::test]
+    async fn qoder_tools_list_exposes_only_the_seven_bridge_tools() {
+        if !crate::engine::qoder_bridge_mcp::AVAILABLE {
+            return;
+        }
+        let response = handle_mcp_request_for_ingress(
+            "workspace-1".to_string(),
+            Some("runtime-1".to_string()),
+            McpIngress::Qoder,
+            test_state(Arc::new(ClaudeSessionManager::new())),
+            authorized_headers(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": "tools/list",
+                "params": {}
+            }),
+        )
+        .await;
+        let payload = json_response(response);
+        let tools = payload["result"]["tools"]
+            .as_array()
+            .expect("Qoder tools/list result");
+        assert_eq!(tools.len(), 7);
+        assert!(!tools.iter().any(|tool| tool["name"] == ASK_TOOL_NAME));
+        for expected in [
+            crate::engine::qoder_bridge_mcp::AGENT_LIST_TOOL,
+            crate::engine::qoder_bridge_mcp::AGENT_DELEGATE_TOOL,
+            crate::engine::qoder_bridge_mcp::AGENT_STATUS_TOOL,
+            crate::engine::qoder_bridge_mcp::AGENT_WAIT_TOOL,
+            crate::engine::qoder_bridge_mcp::AGENT_RESULT_TOOL,
+            crate::engine::qoder_bridge_mcp::AGENT_SEND_TOOL,
+            crate::engine::qoder_bridge_mcp::AGENT_CANCEL_TOOL,
+        ] {
+            assert!(tools.iter().any(|tool| tool["name"] == expected));
+        }
     }
 
     #[tokio::test]

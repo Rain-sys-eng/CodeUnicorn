@@ -2,7 +2,7 @@
 
 - [x] 1.1 创建 `add-cross-engine-agent-delegation` proposal/design/tasks/spec delta。
 - [x] 1.2 校准落位：复用现有 `agent_orchestration` domain，在其下新增 `bridge/`，不创建平行 orchestrator。
-- [ ] 1.3 将 change 加入 active change index，并在实现推进时维护 progress/gate。
+- [x] 1.3 将 change 加入 active change index，并在实现推进时维护 progress/gate。
 - [ ] 1.4 收口前回写 multi-CLI foundation ADR 最近校准与事实源。
 
 ## 2. Agent Bridge Core
@@ -43,7 +43,7 @@
 - [x] 6.1 新增 bridge MCP transport adapter：复用现有 bearer-authenticated、runtime-bound Claude managed HTTP MCP server；Bridge handler 保持独立于 MCP transport，不直接 spawn CLI。
 - [x] 6.2 暴露 `agent_list` / `agent_delegate` / `agent_status` / `agent_wait` / `agent_result` / `agent_send` / `agent_cancel`；`agent_wait` 单次调用 hard cap 30 秒，所有 run control 均做 workspace/source ownership 校验。`agent_delegate/agent_send` 在 durable run 已创建后即使 dispatch 失败也返回该 terminal run；若 settlement 本身缺失，MCP error 必须显式携带已创建 `runId`。
 - [x] 6.3 source identity 不进入 tool schema；当前 Claude ingress 从 CodeUnicorn-minted runtime locator + live active turn + native session 解析可信 source，legacy workspace-only route 对 Bridge fail closed。其他 engine 在接入 6.4 前必须实现等价 runtime-bound resolver。
-- [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools。Codex managed app-server 现通过 process-scoped `-c` overlay 接同一 bearer-authenticated loopback server，不写用户 config；CodeUnicorn-minted runtime locator 只在唯一 live `threadId + turnId` 时解析 source，idle/incomplete/concurrent turns 均 fail closed，Codex route 不暴露 Claude-only AskUserQuestion。对应 transport/source/config tests 已加入但当前 executor 无 Rust toolchain，须以 CI 编译结果为准；Kimi/OpenCode 等剩余 ingress 仍待逐一证明等价 runtime-bound identity。**
+- [ ] 6.4 将 bridge MCP 提供给所有支持 MCP 的 CodeUnicorn-managed engine，且不覆盖用户配置。**Claude managed MCP server 的 `tools/list/tools/call` 已接 7 个 Bridge tools。Codex managed app-server 通过 process-scoped `-c` overlay 接同一 bearer-authenticated loopback server，不写用户 config；CodeUnicorn-minted runtime locator 只在唯一 live `threadId + turnId` 时解析 source，idle/incomplete/concurrent turns 均 fail closed，Codex route 不暴露 Claude-only AskUserQuestion。Qoder 已按 existing ACP `mcpServers` HTTP descriptor 接入 per-turn authenticated route，locator 只匹配 exact live child + native ACP session + provider profile，不写用户 config。Kimi/OpenCode 当前 capability matrix 为 `mcp=false`，不伪造 ingress；Gemini 仍由 compile-time policy 禁用。对应 transport/source/config tests 已加入，须以 CI 编译结果收口本项。**
 
 ## 7. Context Policy
 
@@ -74,7 +74,7 @@
 
 ## 11. Validation / Closure
 
-- [ ] 11.1 Rust focused tests + rustfmt check（仅改动文件）。**当前 executor 无 `cargo`/`rustfmt`；系统 apt 安装也因容器 setgroups/setegid 权限被拒，故保持未完成且不把静态审查冒充编译证据。**
+- [ ] 11.1 Rust focused tests + rustfmt check（仅改动文件）。**当前 executor 无 `cargo`/`rustfmt`；GitHub CI 首轮已真实发现 daemon 裁剪 binary 缺少 Bridge module boundary，现已增加 daemon fail-closed stubs 并等待下一轮 CI 复验，故保持未完成。**
 - [x] 11.2 frontend focused tests + typecheck + runtime contracts/governance gates。**Agent Bridge/UI/i18n/compatibility focused 37 tests 通过；`NODE_OPTIONS=--max-old-space-size=4096 npm run typecheck`、`npm run check:runtime-contracts` 与 production `vite build` 通过。Build 仅有既存 dynamic-import/chunk-size/CSS utility warning，无本 change error。**
 - [ ] 11.3 MCP contract tests、parallel/cancel/recovery integration tests、fake-engine tests。**已加入 managed Claude transport contract coverage：authenticated `tools/list` 精确枚举七个 Bridge tools、legacy route fail closed、unknown runtime locator、bearer rejection 与 unknown-tool JSON-RPC error。Gateway 新增窄 `AgentBridgeMcpBackend` seam，production implementation 仍只调用 existing `AppState` dispatcher/control；deterministic fake runtime 已覆盖七工具 delegate→status→wait/result→send→cancel 闭环、Approval accept/reject、continuation backing/native/binding reuse、nested exact runtime parent、cross-source/workspace fail closed 与 stale-runtime durable recovery projection。当前 executor 缺少 Rust toolchain，新增 Rust tests 尚未实际执行，且仍缺 graph coordinator + fake `AppState` 的 parallel fan-out integration，因此本项不提前打勾。**
 - [ ] 11.4 手工验收 Claude→Codex、Codex→Claude、并行三 Agent、nested delegation、worktree isolation。
